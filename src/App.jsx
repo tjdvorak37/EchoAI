@@ -186,8 +186,23 @@ function App() {
     return session.email.split('@')[0]
   }, [session])
 
-  const getStatusBadgeClass = (status) =>
-    ['active', 'approved', 'posted'].includes(status) ? 'badge' : 'badge warning'
+  const getStatusBadgeClass = (status) => {
+    const normalized = (status || '').toLowerCase()
+
+    if (['active', 'approved', 'posted', 'healthy', 'resolved'].includes(normalized)) {
+      return 'badge success'
+    }
+
+    if (['pending', 'medium', 'token refresh due'].includes(normalized)) {
+      return 'badge pending'
+    }
+
+    if (['denied', 'deactivated', 'declined', 'high', 'open'].includes(normalized)) {
+      return 'badge risk'
+    }
+
+    return 'badge info'
+  }
 
   const isAdminUser = session?.role === 'admin'
   const canViewManagementBoard = ['admin', 'manager', 'it'].includes(session?.role || '')
@@ -1109,7 +1124,7 @@ function App() {
 
       <main>
         {activeTab === 'dashboard' && (
-          <section className="panel">
+          <section className="panel panel-dashboard">
             <h2>Overview</h2>
             <p className="panel-note">
               Build morning campaigns once, then deploy automatically throughout the day.
@@ -1129,7 +1144,7 @@ function App() {
             </div>
 
             <div className="split">
-              <article className="sub-panel">
+              <article className="sub-panel tone-ocean">
                 <h3>Connected channels</h3>
                 {connectedAccounts.map((account) => (
                   <div key={account.id} className="list-row">
@@ -1137,14 +1152,14 @@ function App() {
                       <p>{account.platform}</p>
                       <span>{account.accountName}</span>
                     </div>
-                    <span className={account.status === 'healthy' ? 'badge' : 'badge warning'}>
+                    <span className={getStatusBadgeClass(account.status)}>
                       {account.status}
                     </span>
                   </div>
                 ))}
               </article>
 
-              <article className="sub-panel">
+              <article className="sub-panel tone-sun">
                 <h3>Upcoming queue</h3>
                 {scheduledPosts.slice(0, 4).map((post) => (
                   <div key={post.id} className="list-row">
@@ -1161,13 +1176,13 @@ function App() {
         )}
 
         {activeTab === 'repost' && (
-          <section className="panel">
+          <section className="panel panel-repost">
             <h2>Company Repost Center</h2>
             <p className="panel-note">
               Review company posts, approve or decline syndication, and auto-repost for non-technical users.
             </p>
 
-            <article className="sub-panel">
+            <article className="sub-panel tone-indigo">
               <div className="toggle-row">
                 <div>
                   <h3>Auto approval for company posts</h3>
@@ -1187,7 +1202,7 @@ function App() {
 
             {isAdminUser && (
               <div className="split">
-                <article className="sub-panel">
+                <article className="sub-panel tone-sunrise">
                   <h3>Publish Company Main Post</h3>
                   <form className="composer" onSubmit={handlePublishCompanyPost}>
                     <label>
@@ -1238,7 +1253,7 @@ function App() {
                   </form>
                 </article>
 
-                <article className="sub-panel">
+                <article className="sub-panel tone-ocean">
                   <h3>Add Company Social Account</h3>
                   <form className="composer" onSubmit={handleAddCompanySocialAccount}>
                     <label>
@@ -1283,7 +1298,7 @@ function App() {
             {repostError && <p className="auth-message auth-error">{repostError}</p>}
 
             <div className="split">
-              <article className="sub-panel">
+              <article className="sub-panel tone-violet">
                 <h3>Company social accounts</h3>
                 {companySocialAccounts.map((account) => (
                   <div key={account.id} className="list-row">
@@ -1293,14 +1308,14 @@ function App() {
                         {account.platform} • {account.accountName}
                       </span>
                     </div>
-                    <span className="badge">main account</span>
+                    <span className="badge info">main account</span>
                   </div>
                 ))}
               </article>
 
-              <article className="sub-panel">
+              <article className="sub-panel tone-amber">
                 <h3>Approval board</h3>
-                <p className="muted">Pending notifications: {pendingRepostCount}</p>
+                <p className="muted text-pending">Pending notifications: {pendingRepostCount}</p>
                 {repostQueue.length === 0 && (
                   <p className="muted">No company posts have been submitted yet.</p>
                 )}
@@ -1348,7 +1363,7 @@ function App() {
               </article>
             </div>
 
-            <article className="sub-panel">
+            <article className="sub-panel tone-ocean">
               <h3>Company main page posts</h3>
               {companyMainPosts.map((post) => (
                 <div key={post.id} className="list-row">
@@ -1392,7 +1407,7 @@ function App() {
               ))}
             </article>
 
-            <article className="sub-panel">
+            <article className="sub-panel tone-mint">
               <h3>My repost history</h3>
               {userReposts.length === 0 && (
                 <p className="muted">Approved company posts will appear here after reposting.</p>
@@ -1407,7 +1422,7 @@ function App() {
                       <span>{repost.caption}</span>
                     </div>
                     <div className="queue-meta">
-                      <span className="badge">{repost.status}</span>
+                      <span className={getStatusBadgeClass(repost.status)}>{repost.status}</span>
                       <span>{new Date(repost.postedAt).toLocaleString()}</span>
                     </div>
                   </div>
@@ -1418,7 +1433,7 @@ function App() {
         )}
 
         {activeTab === 'scheduler' && (
-          <section className="panel">
+          <section className="panel panel-scheduler">
             <h2>Post Scheduler</h2>
             <p className="panel-note">
               Draft once and publish to every selected channel on your target date and time.
@@ -1489,7 +1504,7 @@ function App() {
               </button>
             </form>
 
-            <article className="sub-panel">
+            <article className="sub-panel tone-sun">
               <h3>Scheduled queue</h3>
               {scheduledPosts.map((post) => (
                 <div key={post.id} className="list-row">
@@ -1499,7 +1514,7 @@ function App() {
                   </div>
                   <div className="queue-meta">
                     <span>{new Date(post.scheduledAt).toLocaleString()}</span>
-                    <span className={post.status === 'scheduled' ? 'badge' : 'badge warning'}>
+                    <span className={getStatusBadgeClass(post.status === 'scheduled' ? 'pending' : post.status)}>
                       {post.status}
                     </span>
                   </div>
@@ -1510,14 +1525,14 @@ function App() {
         )}
 
         {activeTab === 'assistant' && (
-          <section className="panel">
+          <section className="panel panel-assistant">
             <h2>AI Message Studio</h2>
             <p className="panel-note">
               Generate marketing copy, image concepts, and app suggestions from a single prompt.
             </p>
 
             <div className="split">
-              <article className="sub-panel">
+              <article className="sub-panel tone-indigo">
                 <h3>Prompt builder</h3>
                 <textarea
                   rows="5"
@@ -1544,7 +1559,7 @@ function App() {
                 </button>
               </article>
 
-              <article className="sub-panel">
+              <article className="sub-panel tone-mint">
                 <h3>AI output</h3>
                 {aiSuggestions.length === 0 && (
                   <p className="muted">Generate content to see campaign-ready ideas here.</p>
@@ -1563,7 +1578,7 @@ function App() {
         )}
 
         {activeTab === 'integrations' && (
-          <section className="panel">
+          <section className="panel panel-integrations">
             <h2>Integrations and 3rd Party Tools</h2>
             <p className="panel-note">
               Extend workflows with sync connectors, webhook triggers, and analytics tools.
@@ -1607,13 +1622,13 @@ function App() {
         )}
 
         {activeTab === 'admin' && canViewManagementBoard && (
-          <section className="panel">
+          <section className="panel panel-admin">
             <h2>IT / Management Oversight</h2>
             <p className="panel-note">
               Monitor incidents, review risk, and resolve technical issues before campaigns fail.
             </p>
 
-            <article className="sub-panel">
+            <article className="sub-panel tone-ocean">
               <h3>Employee Search</h3>
               <label>
                 Search by name, email, company, or role
@@ -1672,7 +1687,7 @@ function App() {
                   Order: {employeeSortOrder === 'asc' ? 'Ascending' : 'Descending'}
                 </button>
               </div>
-              <p className="muted">Matching employees: {filteredTeamMembers.length}</p>
+              <p className="muted text-info">Matching employees: {filteredTeamMembers.length}</p>
               <div className="admin-pagination">
                 <button
                   type="button"
@@ -1700,7 +1715,7 @@ function App() {
 
             {adminError && <p className="auth-message auth-error">{adminError}</p>}
 
-            <article className="sub-panel">
+            <article className="sub-panel tone-rose">
               <h3>Issue desk</h3>
               {alerts.map((alert) => (
                 <div key={alert.id} className="list-row">
@@ -1709,7 +1724,7 @@ function App() {
                     <span>{alert.owner}</span>
                   </div>
                   <div className="queue-meta">
-                    <span className={alert.priority === 'high' ? 'badge warning' : 'badge'}>
+                    <span className={getStatusBadgeClass(alert.priority)}>
                       {alert.priority}
                     </span>
                     <button
@@ -1725,7 +1740,7 @@ function App() {
               ))}
             </article>
 
-            <article className="sub-panel">
+            <article className="sub-panel tone-amber">
               <h3>Account access requests</h3>
               {accessRequests.length === 0 && (
                 <p className="muted">No access requests are waiting for review.</p>
@@ -1772,7 +1787,7 @@ function App() {
               ))}
             </article>
 
-            <article className="sub-panel">
+            <article className="sub-panel tone-mint">
               <h3>Employee access lifecycle</h3>
               {pagedTeamMembers.length === 0 && (
                 <p className="muted">No employee records available.</p>
@@ -1795,7 +1810,7 @@ function App() {
                       {member.accessStatus}
                     </span>
                     {member.role === 'admin' ? (
-                      <span>Admin lock</span>
+                      <span className="text-info">Admin lock</span>
                     ) : (
                       <button
                         type="button"
@@ -1814,7 +1829,7 @@ function App() {
             </article>
 
             {isAdminUser && (
-              <article className="sub-panel">
+              <article className="sub-panel tone-indigo">
                 <h3>Manager / IT Role Access</h3>
                 <p className="panel-note">
                   Promote trusted users to Management or IT so they can access this board.
@@ -1826,7 +1841,7 @@ function App() {
                       <span>{member.email}</span>
                     </div>
                     <div className="queue-meta role-actions">
-                      <span className={member.role === 'user' ? 'badge warning' : 'badge'}>
+                      <span className={member.role === 'user' ? 'badge pending' : 'badge info'}>
                         {member.role}
                       </span>
                       <div className="action-row">
