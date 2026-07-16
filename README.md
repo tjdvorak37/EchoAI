@@ -60,9 +60,10 @@ npm run dev
 
 1. Apply the migration in `supabase/migrations/20260716_repost_multitenant.sql` to your Supabase project.
 2. Apply `supabase/migrations/20260716_repost_broadcast_rpc.sql` to enable admin broadcast queueing.
-3. Ensure each authenticated user has a `profiles.company` value set. Tenant isolation for repost tables is enforced by this field.
-4. Ensure admin users have `profiles.role = 'admin'` to manage company main posts and company social accounts.
-5. Ensure users have `profiles.access_status = 'active'` if they should receive admin broadcast notifications.
+3. Apply `supabase/migrations/20260716_support_tickets.sql` to enable support ticket submission.
+4. Ensure each authenticated user has a `profiles.company` value set. Tenant isolation for repost tables is enforced by this field.
+5. Ensure admin users have `profiles.role = 'admin'` to manage company main posts and company social accounts.
+6. Ensure users have `profiles.access_status = 'active'` if they should receive admin broadcast notifications.
 
 ## Suggested Supabase Tables
 

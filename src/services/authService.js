@@ -11,6 +11,15 @@ const DEMO_USERS = [
     role: 'admin',
     accessStatus: 'active',
   },
+  {
+    id: 'demo-user-3',
+    fullName: 'Taylor Morgan',
+    email: 'taylor@company.com',
+    company: 'EchoAI Media',
+    password: 'user123',
+    role: 'user',
+    accessStatus: 'active',
+  },
 ]
 
 const DEMO_ACCESS_REQUESTS = []
@@ -455,6 +464,91 @@ export const authService = {
     }
 
     return normalizeMember(data)
+  },
+
+  async updateUserRole({ userId, role }) {
+    if (!userId || !role) {
+      throw new Error('User ID and role are required.')
+    }
+
+    if (!['user', 'manager', 'it', 'admin'].includes(role)) {
+      throw new Error('Role must be user, manager, it, or admin.')
+    }
+
+    if (!isSupabaseConfigured) {
+      const member = DEMO_USERS.find((user) => user.id === userId)
+      if (!member) {
+        throw new Error('User not found.')
+      }
+
+      member.role = role
+      return {
+        id: member.id,
+        fullName: member.fullName,
+        email: member.email,
+        company: member.company,
+        role: member.role,
+        accessStatus: member.accessStatus,
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ role })
+      .eq('id', userId)
+      .select('*')
+      .single()
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return normalizeMember(data)
+  },
+
+  async createSupportTicket({ category, details }) {
+    if (!category || !details) {
+      throw new Error('Support category and details are required.')
+    }
+
+    if (!isSupabaseConfigured) {
+      return {
+        id: `ticket_${Date.now()}`,
+        category,
+        details,
+        status: 'open',
+      }
+    }
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError) {
+      throw new Error(userError.message)
+    }
+
+    if (!user) {
+      throw new Error('No authenticated user available for ticket creation.')
+    }
+
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .insert({
+        user_id: user.id,
+        category,
+        details,
+        status: 'open',
+      })
+      .select('*')
+      .single()
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return data
   },
 
   async requestPasswordReset(email) {

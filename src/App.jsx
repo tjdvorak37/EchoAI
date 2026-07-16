@@ -63,6 +63,14 @@ function App() {
   const [teamMembers, setTeamMembers] = useState(teamMembersSeed)
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminError, setAdminError] = useState('')
+  const [supportModalOpen, setSupportModalOpen] = useState(false)
+  const [supportLoading, setSupportLoading] = useState(false)
+  const [supportError, setSupportError] = useState('')
+  const [supportSuccess, setSupportSuccess] = useState('')
+  const [supportTicket, setSupportTicket] = useState({
+    category: 'Technical issue',
+    details: '',
+  })
   const [composer, setComposer] = useState({
     campaign: '',
     message: '',
@@ -111,6 +119,7 @@ function App() {
     ['active', 'approved', 'posted'].includes(status) ? 'badge' : 'badge warning'
 
   const isAdminUser = session?.role === 'admin'
+  const canViewManagementBoard = ['admin', 'manager', 'it'].includes(session?.role || '')
 
   const loadAdminData = async () => {
     setAdminError('')
@@ -310,6 +319,87 @@ function App() {
         alert.id === alertId ? { ...alert, status: 'resolved' } : alert,
       ),
     )
+  }
+
+  const handleUpdateUserRole = async (member, nextRole) => {
+    setAdminError('')
+    setAdminLoading(true)
+
+    try {
+      const updatedMember = await authService.updateUserRole({
+        userId: member.id,
+        role: nextRole,
+      })
+
+      setTeamMembers((prev) =>
+        prev.map((item) => (item.id === updatedMember.id ? { ...item, ...updatedMember } : item)),
+      )
+
+      if (session?.id === updatedMember.id) {
+        setSession((prev) => ({ ...prev, role: updatedMember.role }))
+        if (!['admin', 'manager', 'it'].includes(updatedMember.role)) {
+          setActiveTab('dashboard')
+        }
+      }
+    } catch (error) {
+      setAdminError(error.message)
+    } finally {
+      setAdminLoading(false)
+    }
+  }
+
+  const openSupportModal = () => {
+    setSupportError('')
+    setSupportSuccess('')
+    setSupportTicket({
+      category: 'Technical issue',
+      details: '',
+    })
+    setSupportModalOpen(true)
+  }
+
+  const closeSupportModal = () => {
+    setSupportModalOpen(false)
+    setSupportError('')
+    setSupportSuccess('')
+  }
+
+  const handleSupportTicketChange = (field, value) => {
+    setSupportTicket((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleSubmitSupportTicket = async (event) => {
+    event.preventDefault()
+    setSupportError('')
+    setSupportSuccess('')
+    setSupportLoading(true)
+
+    try {
+      await authService.createSupportTicket({
+        category: supportTicket.category,
+        details: supportTicket.details,
+      })
+
+      setSupportSuccess('Support ticket sent successfully. Our team will follow up soon.')
+      setAlerts((prev) => [
+        {
+          id: `issue_support_${Date.now()}`,
+          title: `Support ticket: ${supportTicket.category}`,
+          owner: 'Support Desk',
+          priority: 'medium',
+          status: 'open',
+        },
+        ...prev,
+      ])
+      setSupportTicket({
+        category: 'Technical issue',
+        details: '',
+      })
+    } catch (error) {
+      setSupportError(error.message)
+    } finally {
+      setSupportLoading(false)
+    }
   }
 
   const getCompanyPostById = (companyPostId) =>
@@ -745,6 +835,7 @@ function App() {
     await authService.signOut()
     setSession(null)
     setActiveTab('dashboard')
+    setSupportModalOpen(false)
   }
 
   if (!session) {
@@ -916,7 +1007,9 @@ function App() {
           <h1>Campaign command center</h1>
         </div>
         <div className="top-actions">
-          <button type="button" className="ghost-button">Contact support</button>
+          <button type="button" className="ghost-button" onClick={openSupportModal}>
+            Contact support
+          </button>
           <button type="button" className="primary-button" onClick={signOut}>
             Sign out
           </button>
@@ -930,7 +1023,7 @@ function App() {
           ['scheduler', 'Scheduler'],
           ['assistant', 'AI Studio'],
           ['integrations', 'Integrations'],
-          ['admin', 'IT / Management'],
+          ...(canViewManagementBoard ? [['admin', 'IT / Management']] : []),
         ].map(([key, label]) => (
           <button
             key={key}
@@ -1442,7 +1535,7 @@ function App() {
           </section>
         )}
 
-        {activeTab === 'admin' && (
+        {activeTab === 'admin' && canViewManagementBoard && (
           <section className="panel">
             <h2>IT / Management Oversight</h2>
             <p className="panel-note">
@@ -1563,9 +1656,116 @@ function App() {
                 </div>
               ))}
             </article>
+
+            {isAdminUser && (
+              <article className="sub-panel">
+                <h3>Manager / IT Role Access</h3>
+                <p className="panel-note">
+                  Promote trusted users to Management or IT so they can access this board.
+                </p>
+                {teamMembers.map((member) => (
+                  <div key={`role-${member.id}`} className="list-row">
+                    <div>
+                      <p>{member.fullName}</p>
+                      <span>{member.email}</span>
+                    </div>
+                    <div className="queue-meta role-actions">
+                      <span className={member.role === 'user' ? 'badge warning' : 'badge'}>
+                        {member.role}
+                      </span>
+                      <div className="action-row">
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => handleUpdateUserRole(member, 'manager')}
+                          disabled={adminLoading || member.role === 'manager'}
+                        >
+                          Set Manager
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => handleUpdateUserRole(member, 'it')}
+                          disabled={adminLoading || member.role === 'it'}
+                        >
+                          Set IT
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => handleUpdateUserRole(member, 'user')}
+                          disabled={adminLoading || member.role === 'user'}
+                        >
+                          Set User
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </article>
+            )}
           </section>
         )}
       </main>
+
+      {supportModalOpen && (
+        <div className="modal-overlay" role="presentation" onClick={closeSupportModal}>
+          <section
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Support ticket"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2>Support ticket</h2>
+            <p className="panel-note">Tell us what went wrong and our team will follow up.</p>
+
+            <form className="auth-form" onSubmit={handleSubmitSupportTicket}>
+              <label>
+                Issue category
+                <select
+                  value={supportTicket.category}
+                  onChange={(event) => handleSupportTicketChange('category', event.target.value)}
+                >
+                  {[
+                    'Technical issue',
+                    'Billing question',
+                    'Access problem',
+                    'Integration help',
+                    'Feature request',
+                  ].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                What happened?
+                <textarea
+                  rows="4"
+                  value={supportTicket.details}
+                  onChange={(event) => handleSupportTicketChange('details', event.target.value)}
+                  placeholder="Share steps, expected result, and what you saw instead."
+                />
+              </label>
+
+              {supportError && <p className="auth-message auth-error">{supportError}</p>}
+              {supportSuccess && <p className="auth-message">{supportSuccess}</p>}
+
+              <div className="action-row">
+                <button type="button" className="ghost-button" onClick={closeSupportModal}>
+                  Close
+                </button>
+                <button type="submit" className="primary-button" disabled={supportLoading}>
+                  {supportLoading ? 'Sending...' : 'Send ticket'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   )
 }
