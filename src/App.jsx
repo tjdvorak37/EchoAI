@@ -63,6 +63,11 @@ function App() {
   const [teamMembers, setTeamMembers] = useState(teamMembersSeed)
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminError, setAdminError] = useState('')
+  const [employeeSearch, setEmployeeSearch] = useState('')
+  const [employeeSortBy, setEmployeeSortBy] = useState('name')
+  const [employeeSortOrder, setEmployeeSortOrder] = useState('asc')
+  const [employeePage, setEmployeePage] = useState(1)
+  const [employeePageSize, setEmployeePageSize] = useState(8)
   const [supportModalOpen, setSupportModalOpen] = useState(false)
   const [supportLoading, setSupportLoading] = useState(false)
   const [supportError, setSupportError] = useState('')
@@ -101,6 +106,72 @@ function App() {
     () => repostQueue.filter((item) => item.status === 'pending').length,
     [repostQueue],
   )
+
+  const filteredTeamMembers = useMemo(() => {
+    const query = employeeSearch.trim().toLowerCase()
+    if (!query) {
+      return teamMembers
+    }
+
+    return teamMembers.filter((member) => {
+      const searchable = [
+        member.fullName,
+        member.email,
+        member.company,
+        member.role,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+
+      return searchable.includes(query)
+    })
+  }, [employeeSearch, teamMembers])
+
+  const sortedTeamMembers = useMemo(() => {
+    const sorted = [...filteredTeamMembers]
+
+    const toSortable = (member) => {
+      if (employeeSortBy === 'email') {
+        return member.email || ''
+      }
+
+      if (employeeSortBy === 'role') {
+        return member.role || ''
+      }
+
+      if (employeeSortBy === 'status') {
+        return member.accessStatus || ''
+      }
+
+      return member.fullName || ''
+    }
+
+    sorted.sort((a, b) => {
+      const first = toSortable(a).toLowerCase()
+      const second = toSortable(b).toLowerCase()
+
+      if (first < second) {
+        return employeeSortOrder === 'asc' ? -1 : 1
+      }
+
+      if (first > second) {
+        return employeeSortOrder === 'asc' ? 1 : -1
+      }
+
+      return 0
+    })
+
+    return sorted
+  }, [employeeSortBy, employeeSortOrder, filteredTeamMembers])
+
+  const totalEmployeePages = Math.max(1, Math.ceil(sortedTeamMembers.length / employeePageSize))
+  const currentEmployeePage = Math.min(employeePage, totalEmployeePages)
+
+  const pagedTeamMembers = useMemo(() => {
+    const start = (currentEmployeePage - 1) * employeePageSize
+    return sortedTeamMembers.slice(start, start + employeePageSize)
+  }, [currentEmployeePage, employeePageSize, sortedTeamMembers])
 
   const userIdentity = useMemo(() => {
     const metadataName = session?.user_metadata?.full_name
@@ -1542,6 +1613,91 @@ function App() {
               Monitor incidents, review risk, and resolve technical issues before campaigns fail.
             </p>
 
+            <article className="sub-panel">
+              <h3>Employee Search</h3>
+              <label>
+                Search by name, email, company, or role
+                <input
+                  type="text"
+                  value={employeeSearch}
+                  onChange={(event) => {
+                    setEmployeeSearch(event.target.value)
+                    setEmployeePage(1)
+                  }}
+                  placeholder="Search employees..."
+                />
+              </label>
+              <div className="admin-controls">
+                <label>
+                  Sort by
+                  <select
+                    value={employeeSortBy}
+                    onChange={(event) => {
+                      setEmployeeSortBy(event.target.value)
+                      setEmployeePage(1)
+                    }}
+                  >
+                    <option value="name">Name</option>
+                    <option value="email">Email</option>
+                    <option value="role">Role</option>
+                    <option value="status">Access status</option>
+                  </select>
+                </label>
+
+                <label>
+                  Page size
+                  <select
+                    value={employeePageSize}
+                    onChange={(event) => {
+                      setEmployeePageSize(Number(event.target.value))
+                      setEmployeePage(1)
+                    }}
+                  >
+                    {[5, 8, 12, 20].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    setEmployeeSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+                    setEmployeePage(1)
+                  }}
+                >
+                  Order: {employeeSortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                </button>
+              </div>
+              <p className="muted">Matching employees: {filteredTeamMembers.length}</p>
+              <div className="admin-pagination">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setEmployeePage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentEmployeePage === 1}
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {currentEmployeePage} of {totalEmployeePages}
+                </span>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() =>
+                    setEmployeePage((prev) => Math.min(totalEmployeePages, prev + 1))
+                  }
+                  disabled={currentEmployeePage >= totalEmployeePages}
+                >
+                  Next
+                </button>
+              </div>
+            </article>
+
             {adminError && <p className="auth-message auth-error">{adminError}</p>}
 
             <article className="sub-panel">
@@ -1618,11 +1774,11 @@ function App() {
 
             <article className="sub-panel">
               <h3>Employee access lifecycle</h3>
-              {teamMembers.length === 0 && (
+              {pagedTeamMembers.length === 0 && (
                 <p className="muted">No employee records available.</p>
               )}
 
-              {teamMembers.map((member) => (
+              {pagedTeamMembers.map((member) => (
                 <div key={member.id} className="list-row">
                   <div>
                     <p>
@@ -1663,7 +1819,7 @@ function App() {
                 <p className="panel-note">
                   Promote trusted users to Management or IT so they can access this board.
                 </p>
-                {teamMembers.map((member) => (
+                {pagedTeamMembers.map((member) => (
                   <div key={`role-${member.id}`} className="list-row">
                     <div>
                       <p>{member.fullName}</p>

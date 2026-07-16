@@ -301,6 +301,21 @@ main {
   margin: 0;
 }
 
+.admin-controls {
+  margin-top: 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+
+.admin-pagination {
+  margin-top: 0.8rem;
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
 .badge {
   background: #dcfce7;
   color: #166534;
