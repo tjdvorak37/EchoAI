@@ -1,6 +1,16 @@
 export function LandingPage({ onSignIn, onPurchase }) {
   const features = [
     {
+      icon: '🎧',
+      title: 'Social Listening Intelligence',
+      desc: 'Track mentions, competitors, hashtags, and trend shifts across social, news, blogs, reviews, forums, and broader web sources.',
+    },
+    {
+      icon: '🚨',
+      title: 'Crisis + Reputation Alerts',
+      desc: 'Surface negative spikes, high-risk conversations, and priority incidents in real time before they turn into brand damage.',
+    },
+    {
       icon: '📅',
       title: 'Smart Scheduler',
       desc: 'Queue posts to Instagram, TikTok, Facebook & Snapchat. Set exact times, bulk load campaigns, and never miss a drop.',
@@ -35,10 +45,16 @@ export function LandingPage({ onSignIn, onPurchase }) {
       title: 'Integrations',
       desc: 'Connect CRMs, analytics tools, webhooks, and image generation APIs to fully automate your content pipeline.',
     },
+    {
+      icon: '🧠',
+      title: 'Personal AI Agent Sync',
+      desc: 'Bring your own AI endpoint and route message, image, and video workflows through your preferred model stack.',
+    },
   ]
 
   const screenshots = [
     { label: 'Dashboard — real-time campaign overview', bg: '#0f172a', icon: '📊' },
+    { label: 'Social Listening — sentiment, trend, and crisis visibility', bg: '#112534', icon: '🎧' },
     { label: 'Photo Creator — AI-generated visual compositions', bg: '#111827', icon: '🖼️' },
     { label: 'Video Studio — Filmora-style timeline editor', bg: '#1a1a2e', icon: '🎬' },
     { label: 'Scheduler — multi-channel calendar', bg: '#0f2027', icon: '📅' },
@@ -61,15 +77,16 @@ export function LandingPage({ onSignIn, onPurchase }) {
 
       <section className="landing-hero">
         <div className="landing-hero-content">
-          <div className="landing-badge">All-in-one social media platform</div>
+          <div className="landing-badge">All-in-one social media intelligence platform</div>
           <h1 className="landing-headline">
-            Automate your social media.<br />
-            <span className="landing-headline-accent">Ship more. Stress less.</span>
+            Publish faster, monitor smarter.<br />
+            <span className="landing-headline-accent">Create, listen, and respond from one command center.</span>
           </h1>
           <p className="landing-subhead">
-            EchoAI combines AI content generation, video editing, multi-channel scheduling,
-            and team collaboration in one powerful platform. Built for creators and agencies
-            who move fast.
+            EchoAI now combines AI content generation, immersive photo/video editing,
+            multi-channel scheduling, and advanced social listening intelligence. Track
+            sentiment, share of voice, influencer signals, and crisis trends while your team
+            ships content at speed.
           </p>
           <div className="landing-hero-actions">
             <button
@@ -87,7 +104,7 @@ export function LandingPage({ onSignIn, onPurchase }) {
               Sign in to existing account
             </button>
           </div>
-          <p className="landing-fine-print">No contracts. Cancel anytime. 2 GB included.</p>
+          <p className="landing-fine-print">No contracts. Cancel anytime. Includes listening intelligence and bring-your-own AI agent support.</p>
         </div>
 
         <div className="landing-hero-visual">
@@ -161,7 +178,7 @@ export function LandingPage({ onSignIn, onPurchase }) {
       <section className="landing-pricing">
         <h2>Simple, transparent pricing</h2>
         <p className="landing-section-sub">
-          Both plans include every feature and 2 GB of workspace storage.
+          Both plans include every feature, Social Listening intelligence, and 2 GB of workspace storage.
         </p>
         <div className="landing-pricing-grid">
           <div className="pricing-card">
@@ -179,6 +196,9 @@ export function LandingPage({ onSignIn, onPurchase }) {
               <li>✓ Multi-channel scheduling</li>
               <li>✓ Repost Hub</li>
               <li>✓ AI content generation</li>
+              <li>✓ Social Listening + crisis alerts</li>
+              <li>✓ Share-of-voice and sentiment insights</li>
+              <li>✓ Personal AI agent endpoint sync</li>
               <li>✓ Team collaboration</li>
               <li>✓ Email support</li>
             </ul>
@@ -201,6 +221,7 @@ export function LandingPage({ onSignIn, onPurchase }) {
               <li>✓ 33% discount</li>
               <li>✓ Priority support</li>
               <li>✓ Early access to new features</li>
+              <li>✓ Earlier access to new listening connectors</li>
             </ul>
             <button type="button" className="primary-button pricing-btn" onClick={onPurchase}>
               Get annual access

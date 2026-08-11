@@ -5,6 +5,14 @@ const PLANS = {
   annual: { label: 'Annual', price: 120, period: '/ year', storageLimitGb: 2, note: 'Save $60 vs monthly' },
 }
 
+const CORE_FEATURES = [
+  'Social Listening intelligence with sentiment, trend, and crisis visibility',
+  'Brand mentions, keywords, competitors, hashtags, and conversation tracking',
+  'AI-powered recommendations and personal AI agent endpoint sync',
+  'Immersive Photo Creator and timeline-based Video Studio',
+  'Multi-channel scheduler, repost workflows, and team collaboration',
+]
+
 export function PurchasePage({ onBack, onSubmit, venmoUsername, validatePromoCode }) {
   const [step, setStep] = useState('plan')
   const [selectedPlan, setSelectedPlan] = useState('annual')
@@ -111,7 +119,22 @@ export function PurchasePage({ onBack, onSubmit, venmoUsername, validatePromoCod
         {step === 'plan' && (
           <>
             <h2>Choose your plan</h2>
-            <p className="muted">All plans include every feature and 2 GB storage.</p>
+            <p className="muted">All plans include every feature, Social Listening tools, and 2 GB storage.</p>
+
+            <div className="purchase-summary" style={{ marginTop: '1rem' }}>
+              <span>What you unlock</span>
+              <strong>Full EchoAI suite</strong>
+              <span>Includes</span>
+              <strong>Monitoring + creation + scheduling</strong>
+              <span>AI support</span>
+              <strong>Bring-your-own agent endpoint</strong>
+            </div>
+
+            <ul className="pricing-features" style={{ marginTop: '0.75rem' }}>
+              {CORE_FEATURES.map((item) => (
+                <li key={item}>✓ {item}</li>
+              ))}
+            </ul>
 
             <div className="plan-cards">
               {Object.entries(PLANS).map(([key, p]) => (
@@ -147,7 +170,7 @@ export function PurchasePage({ onBack, onSubmit, venmoUsername, validatePromoCod
         {step === 'info' && (
           <>
             <h2>Your information</h2>
-            <p className="muted">This will be used to create and identify your license.</p>
+            <p className="muted">This will be used to create and identify your license for all current EchoAI capabilities.</p>
 
             <label>
               Full name
@@ -175,6 +198,7 @@ export function PurchasePage({ onBack, onSubmit, venmoUsername, validatePromoCod
               <span>Plan</span><strong>{plan.label}</strong>
               <span>Amount</span><strong>${plan.price} {plan.period}</strong>
               <span>Storage</span><strong>{plan.storageLimitGb} GB</strong>
+              <span>Suite access</span><strong>All features enabled</strong>
             </div>
 
             <button
@@ -194,6 +218,7 @@ export function PurchasePage({ onBack, onSubmit, venmoUsername, validatePromoCod
         {step === 'pay' && (
           <>
             <h2>Complete your order</h2>
+            <p className="muted">Your purchase unlocks Social Listening, AI agent sync, Photo Creator, Video Studio, and scheduler workflows.</p>
 
             {/* Promo code section — always shown first */}
             <div className="promo-code-section">
