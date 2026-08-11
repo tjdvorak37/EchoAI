@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import './components/VideoEditor.css'
 import './components/PhotoEditor.css'
@@ -32,12 +32,14 @@ import { authService } from './services/authService'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
 import { isSupabaseConfigured } from './lib/supabase'
-import { VideoEditor } from './components/VideoEditor'
-import { PhotoEditor } from './components/PhotoEditor'
-import { LandingPage } from './components/LandingPage'
-import { PurchasePage } from './components/PurchasePage'
-import { AdminPanel } from './components/AdminPanel'
-import { FinancePanel } from './components/FinancePanel'
+
+const VideoEditor = lazy(() => import('./components/VideoEditor').then((module) => ({ default: module.VideoEditor })))
+const PhotoEditor = lazy(() => import('./components/PhotoEditor').then((module) => ({ default: module.PhotoEditor })))
+const SocialListeningPanel = lazy(() => import('./components/SocialListeningPanel').then((module) => ({ default: module.SocialListeningPanel })))
+const LandingPage = lazy(() => import('./components/LandingPage').then((module) => ({ default: module.LandingPage })))
+const PurchasePage = lazy(() => import('./components/PurchasePage').then((module) => ({ default: module.PurchasePage })))
+const AdminPanel = lazy(() => import('./components/AdminPanel').then((module) => ({ default: module.AdminPanel })))
+const FinancePanel = lazy(() => import('./components/FinancePanel').then((module) => ({ default: module.FinancePanel })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
@@ -171,10 +173,6 @@ function App() {
   const [aiAgentTesting, setAiAgentTesting] = useState(false)
   const [aiAgentFeedback, setAiAgentFeedback] = useState('')
   const [aiAgentFeedbackTone, setAiAgentFeedbackTone] = useState('info')
-
-  useEffect(() => {
-    setAiAgentDraft(aiAgentConfig)
-  }, [aiAgentConfig])
   const [workspaceFolders, setWorkspaceFolders] = useState(workspaceFoldersSeed)
   const [workspaceAssets, setWorkspaceAssets] = useState(workspaceAssetsSeed)
   const [selectedFolderId, setSelectedFolderId] = useState('folder-root')
@@ -198,6 +196,13 @@ function App() {
   const [refunds, setRefunds] = useState(refundsSeed)
   const [financialTasks, setFinancialTasks] = useState(financialTasksSeed)
   const [showPurchase, setShowPurchase] = useState(false)
+
+  const loadingPanel = (
+    <section className="panel">
+      <h2>Loading workspace module...</h2>
+      <p className="panel-note">Preparing tools and data.</p>
+    </section>
+  )
 
   // Loads and applies this user's persisted data after login.
   // Demo users fall back to seed data on first login; all others start clean.
@@ -234,19 +239,21 @@ function App() {
         email: user.email,
       })
 
-      setAiAgentConfig(
-        profileAiAgentConfig
-          ? { ...createDefaultAiAgentConfig(), ...profileAiAgentConfig }
-          : createDefaultAiAgentConfig(),
-      )
+      const nextAiAgentConfig = profileAiAgentConfig
+        ? { ...createDefaultAiAgentConfig(), ...profileAiAgentConfig }
+        : createDefaultAiAgentConfig()
+
+      setAiAgentConfig(nextAiAgentConfig)
+      setAiAgentDraft(nextAiAgentConfig)
       return
     }
 
-    setAiAgentConfig(
-      d.aiAgentConfig
-        ? { ...createDefaultAiAgentConfig(), ...d.aiAgentConfig }
-        : createDefaultAiAgentConfig(),
-    )
+    const nextAiAgentConfig = d.aiAgentConfig
+      ? { ...createDefaultAiAgentConfig(), ...d.aiAgentConfig }
+      : createDefaultAiAgentConfig()
+
+    setAiAgentConfig(nextAiAgentConfig)
+    setAiAgentDraft(nextAiAgentConfig)
   }
 
   const validatePromoCode = (raw) => {
@@ -577,7 +584,9 @@ function App() {
         },
       })
 
-      setAiAgentConfig({ ...createDefaultAiAgentConfig(), ...savedConfig })
+      const nextAiAgentConfig = { ...createDefaultAiAgentConfig(), ...savedConfig }
+      setAiAgentConfig(nextAiAgentConfig)
+      setAiAgentDraft(nextAiAgentConfig)
       setAiAgentFeedbackTone('success')
       setAiAgentFeedback('AI agent settings saved for this account.')
     } catch (error) {
@@ -1386,59 +1395,63 @@ function App() {
   if (!session) {
     if (showPurchase) {
       return (
-        <PurchasePage
-          venmoUsername={venmoUsername}
-          validatePromoCode={validatePromoCode}
-          onBack={() => setShowPurchase(false)}
-          onSubmit={(order) => {
-            const isPromo = Boolean(order.promoCode)
-            const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-            const newLicense = {
-              id: `lic-${Date.now()}`,
-              userId: `pending-${Date.now()}`,
-              userEmail: order.email,
-              userFullName: order.fullName,
-              plan: 'monthly',
-              priceUsd: isPromo ? 0 : order.priceUsd,
-              storageLimitGb: order.storageLimitGb,
-              status: isPromo ? 'active' : 'pending_payment',
-              purchasedAt: new Date().toISOString(),
-              expiresAt: isPromo ? expiresAt : null,
-              venmoTxnId: order.venmoTxnId || '',
-              paymentConfirmed: isPromo,
-              notes: isPromo ? `Promo: ${order.promoCode}` : `Ref: ${order.licenseRef}`,
-            }
-            setLicenses((prev) => [newLicense, ...prev])
-            setPurchaseHistory((prev) => [{
-              id: `pmt-${Date.now()}`,
-              licenseId: newLicense.id,
-              userEmail: order.email,
-              userFullName: order.fullName,
-              plan: newLicense.plan,
-              amountUsd: newLicense.priceUsd,
-              method: isPromo ? `Promo (${order.promoCode})` : 'Venmo',
-              venmoTxnId: order.venmoTxnId || '',
-              status: isPromo ? 'confirmed' : 'pending',
-              paidAt: isPromo ? new Date().toISOString() : null,
-            }, ...prev])
-            if (isPromo) {
-              setPromoCodes((prev) => prev.map((c) =>
-                c.code.toUpperCase() === order.promoCode.toUpperCase()
-                  ? { ...c, usedCount: c.usedCount + 1, usedBy: [...c.usedBy, order.email] }
-                  : c,
-              ))
-            }
-          }}
-        />
+        <Suspense fallback={loadingPanel}>
+          <PurchasePage
+            venmoUsername={venmoUsername}
+            validatePromoCode={validatePromoCode}
+            onBack={() => setShowPurchase(false)}
+            onSubmit={(order) => {
+              const isPromo = Boolean(order.promoCode)
+              const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+              const newLicense = {
+                id: `lic-${Date.now()}`,
+                userId: `pending-${Date.now()}`,
+                userEmail: order.email,
+                userFullName: order.fullName,
+                plan: 'monthly',
+                priceUsd: isPromo ? 0 : order.priceUsd,
+                storageLimitGb: order.storageLimitGb,
+                status: isPromo ? 'active' : 'pending_payment',
+                purchasedAt: new Date().toISOString(),
+                expiresAt: isPromo ? expiresAt : null,
+                venmoTxnId: order.venmoTxnId || '',
+                paymentConfirmed: isPromo,
+                notes: isPromo ? `Promo: ${order.promoCode}` : `Ref: ${order.licenseRef}`,
+              }
+              setLicenses((prev) => [newLicense, ...prev])
+              setPurchaseHistory((prev) => [{
+                id: `pmt-${Date.now()}`,
+                licenseId: newLicense.id,
+                userEmail: order.email,
+                userFullName: order.fullName,
+                plan: newLicense.plan,
+                amountUsd: newLicense.priceUsd,
+                method: isPromo ? `Promo (${order.promoCode})` : 'Venmo',
+                venmoTxnId: order.venmoTxnId || '',
+                status: isPromo ? 'confirmed' : 'pending',
+                paidAt: isPromo ? new Date().toISOString() : null,
+              }, ...prev])
+              if (isPromo) {
+                setPromoCodes((prev) => prev.map((c) =>
+                  c.code.toUpperCase() === order.promoCode.toUpperCase()
+                    ? { ...c, usedCount: c.usedCount + 1, usedBy: [...c.usedBy, order.email] }
+                    : c,
+                ))
+              }
+            }}
+          />
+        </Suspense>
       )
     }
 
     if (authView === 'landing') {
       return (
-        <LandingPage
-          onSignIn={() => setAuthView('signin')}
-          onPurchase={() => setShowPurchase(true)}
-        />
+        <Suspense fallback={loadingPanel}>
+          <LandingPage
+            onSignIn={() => setAuthView('signin')}
+            onPurchase={() => setShowPurchase(true)}
+          />
+        </Suspense>
       )
     }
 
@@ -1631,6 +1644,7 @@ function App() {
       <nav className="main-nav">
         {[
           ['dashboard', 'Dashboard'],
+          ['listening', 'Social Listening'],
           ['repost', 'Repost Hub'],
           ['scheduler', 'Scheduler'],
           ['assistant', 'AI Studio'],
@@ -1650,9 +1664,9 @@ function App() {
         ))}
       </nav>
 
-      <main>
+      <main className={activeTab === 'photo' ? 'app-main photo-workspace-layout' : 'app-main'}>
         <aside
-          className={`asset-drawer ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
+          className={`asset-drawer ${activeTab === 'photo' ? 'photo-workspace-drawer' : ''} ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
           onDragEnter={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); setDrawerDragActive(true) } }}
           onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy' } }}
           onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDrawerDragActive(false) }}
@@ -1882,6 +1896,15 @@ function App() {
               </article>
             </div>
           </section>
+        )}
+
+        {activeTab === 'listening' && (
+          <Suspense fallback={loadingPanel}>
+            <SocialListeningPanel
+              connectedAccounts={connectedAccounts}
+              aiAgentConfig={aiAgentConfig}
+            />
+          </Suspense>
         )}
 
         {activeTab === 'repost' && (
@@ -2289,25 +2312,29 @@ function App() {
         )}
 
         {activeTab === 'studio' && (
-          <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
-            <VideoEditor
-              assets={workspaceAssets}
-              onExport={(project) => {
-                setComposer((prev) => ({
-                  ...prev,
-                  message: `Video project: ${project.totalClips} clips, ${project.duration}s duration`,
-                  imageIdea: `Project with ${project.totalClips} clips`,
-                }))
-                setActiveTab('scheduler')
-              }}
-            />
-          </section>
+          <Suspense fallback={loadingPanel}>
+            <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
+              <VideoEditor
+                assets={workspaceAssets}
+                onExport={(project) => {
+                  setComposer((prev) => ({
+                    ...prev,
+                    message: `Video project: ${project.totalClips} clips, ${project.duration}s duration`,
+                    imageIdea: `Project with ${project.totalClips} clips`,
+                  }))
+                  setActiveTab('scheduler')
+                }}
+              />
+            </section>
+          </Suspense>
         )}
 
         {activeTab === 'photo' && (
-          <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
-            <PhotoEditor assets={workspaceAssets} onExport={handlePhotoExport} agentConfig={aiAgentConfig} />
-          </section>
+          <Suspense fallback={loadingPanel}>
+            <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
+              <PhotoEditor assets={workspaceAssets} onExport={handlePhotoExport} agentConfig={aiAgentConfig} />
+            </section>
+          </Suspense>
         )}
 
         {activeTab === 'integrations' && (
@@ -2318,7 +2345,79 @@ function App() {
               becomes available in the Scheduler and AI Studio.
             </p>
 
-            <article className="sub-panel tone-indigo" style={{ marginBottom: '1rem' }}>
+            <h3 className="section-label">Social media accounts</h3>
+            <div className="integration-grid">
+              {[
+                { key: 'instagram', accountPlaceholder: '@youraccount', desc: 'Publish posts, stories, and reels. Read insights and story metrics.' },
+                { key: 'facebook',  accountPlaceholder: 'Your page name', desc: 'Schedule posts, publish to pages, and track ad-level reach.' },
+                { key: 'tiktok',    accountPlaceholder: '@youraccount', desc: 'Queue short-form videos, read performance data and comment trends.' },
+                { key: 'snapchat',  accountPlaceholder: 'Your Snapchat', desc: 'Upload creative content and track Snap campaign metrics.' },
+                { key: 'x',         accountPlaceholder: '@youraccount', desc: 'Post to X (formerly Twitter), schedule threads, and monitor mentions.' },
+                { key: 'youtube',   accountPlaceholder: 'Your channel', desc: 'Upload videos, schedule premieres, and read subscriber analytics.' },
+                { key: 'linkedin',  accountPlaceholder: 'Your profile / page', desc: 'Publish professional content and read engagement metrics.' },
+              ].map(({ key, accountPlaceholder, desc }) => {
+                const meta = getPlatformMeta(key)
+                const linked = connectedAccounts.find((a) => a.platform.toLowerCase() === key)
+                return (
+                  <div
+                    key={key}
+                    className="integration-platform-card"
+                    style={{ borderColor: meta.border }}
+                  >
+                    <div className="integration-platform-header" style={{ background: meta.bg, borderColor: meta.border }}>
+                      <span className="integration-platform-icon" style={{ color: meta.color }}>{meta.icon}</span>
+                      <div>
+                        <strong style={{ color: meta.color }}>{meta.label}</strong>
+                        {linked && <span className="integration-linked-handle">{linked.accountName}</span>}
+                      </div>
+                      {linked && (
+                        <span className={`integration-status-badge ${linked.status === 'healthy' ? 'good' : 'warn'}`}>
+                          {linked.status === 'healthy' ? '● Live' : '⚠ Needs refresh'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="integration-platform-body">
+                      <p>{desc}</p>
+                      {linked ? (
+                        <div className="integration-actions">
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => setConnectedAccounts((prev) =>
+                              prev.map((a) => a.id === linked.id ? { ...a, status: 'token refresh due' } : a)
+                            )}
+                          >
+                            Re-authenticate
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            style={{ color: '#ef4444' }}
+                            onClick={() => setConnectedAccounts((prev) => prev.filter((a) => a.id !== linked.id))}
+                          >
+                            Disconnect
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="primary-button"
+                          style={{ background: meta.color, borderColor: meta.color }}
+                          onClick={() => setConnectedAccounts((prev) => [
+                            ...prev,
+                            { id: `acc_${Date.now()}`, platform: meta.label, accountName: accountPlaceholder, status: 'healthy' },
+                          ])}
+                        >
+                          Connect {meta.label}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <h3>Personal AI agent</h3>
               <p className="muted">Set your own endpoint once, then reuse it across message, image, and video tools.</p>
               <div className="agent-setup-guide">
@@ -2440,78 +2539,6 @@ function App() {
               </form>
             </article>
 
-            <h3 className="section-label">Social media accounts</h3>
-            <div className="integration-grid">
-              {[
-                { key: 'instagram', accountPlaceholder: '@youraccount', desc: 'Publish posts, stories, and reels. Read insights and story metrics.' },
-                { key: 'facebook',  accountPlaceholder: 'Your page name', desc: 'Schedule posts, publish to pages, and track ad-level reach.' },
-                { key: 'tiktok',    accountPlaceholder: '@youraccount', desc: 'Queue short-form videos, read performance data and comment trends.' },
-                { key: 'snapchat',  accountPlaceholder: 'Your Snapchat', desc: 'Upload creative content and track Snap campaign metrics.' },
-                { key: 'x',         accountPlaceholder: '@youraccount', desc: 'Post to X (formerly Twitter), schedule threads, and monitor mentions.' },
-                { key: 'youtube',   accountPlaceholder: 'Your channel', desc: 'Upload videos, schedule premieres, and read subscriber analytics.' },
-                { key: 'linkedin',  accountPlaceholder: 'Your profile / page', desc: 'Publish professional content and read engagement metrics.' },
-              ].map(({ key, accountPlaceholder, desc }) => {
-                const meta = getPlatformMeta(key)
-                const linked = connectedAccounts.find((a) => a.platform.toLowerCase() === key)
-                return (
-                  <div
-                    key={key}
-                    className="integration-platform-card"
-                    style={{ borderColor: meta.border }}
-                  >
-                    <div className="integration-platform-header" style={{ background: meta.bg, borderColor: meta.border }}>
-                      <span className="integration-platform-icon" style={{ color: meta.color }}>{meta.icon}</span>
-                      <div>
-                        <strong style={{ color: meta.color }}>{meta.label}</strong>
-                        {linked && <span className="integration-linked-handle">{linked.accountName}</span>}
-                      </div>
-                      {linked && (
-                        <span className={`integration-status-badge ${linked.status === 'healthy' ? 'good' : 'warn'}`}>
-                          {linked.status === 'healthy' ? '● Live' : '⚠ Needs refresh'}
-                        </span>
-                      )}
-                    </div>
-                    <div className="integration-platform-body">
-                      <p>{desc}</p>
-                      {linked ? (
-                        <div className="integration-actions">
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => setConnectedAccounts((prev) =>
-                              prev.map((a) => a.id === linked.id ? { ...a, status: 'token refresh due' } : a)
-                            )}
-                          >
-                            Re-authenticate
-                          </button>
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            style={{ color: '#ef4444' }}
-                            onClick={() => setConnectedAccounts((prev) => prev.filter((a) => a.id !== linked.id))}
-                          >
-                            Disconnect
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="primary-button"
-                          style={{ background: meta.color, borderColor: meta.color }}
-                          onClick={() => setConnectedAccounts((prev) => [
-                            ...prev,
-                            { id: `acc_${Date.now()}`, platform: meta.label, accountName: accountPlaceholder, status: 'healthy' },
-                          ])}
-                        >
-                          Connect {meta.label}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
             <h3 className="section-label" style={{ marginTop: '2rem' }}>Third-party tools</h3>
             <div className="cards">
               {[
@@ -2535,57 +2562,61 @@ function App() {
         )}
 
         {activeTab === 'admin' && isAdminUser && (
-          <AdminPanel
-            teamMembers={teamMembers}
-            setTeamMembers={setTeamMembers}
-            accessRequests={accessRequests}
-            setAccessRequests={setAccessRequests}
-            alerts={alerts}
-            setAlerts={setAlerts}
-            licenses={licenses}
-            setLicenses={setLicenses}
-            tickets={tickets}
-            setTickets={setTickets}
-            purchaseHistory={purchaseHistory}
-            setPurchaseHistory={setPurchaseHistory}
-            featureFlags={featureFlags}
-            setFeatureFlags={setFeatureFlags}
-            venmoUsername={venmoUsername}
-            setVenmoUsername={setVenmoUsername}
-            promoCodes={promoCodes}
-            setPromoCodes={setPromoCodes}
-            expenses={expenses}
-            setExpenses={setExpenses}
-            payroll={payroll}
-            setPayroll={setPayroll}
-            taxRecords={taxRecords}
-            setTaxRecords={setTaxRecords}
-            refunds={refunds}
-            setRefunds={setRefunds}
-            financialTasks={financialTasks}
-            setFinancialTasks={setFinancialTasks}
-            quotaEditingUserId={quotaEditingUserId}
-            setQuotaEditingUserId={setQuotaEditingUserId}
-            quotaDraftMb={quotaDraftMb}
-            setQuotaDraftMb={setQuotaDraftMb}
-            handleQuotaUpdate={handleQuotaUpdate}
-            handleToggleUserAccess={handleToggleUserAccess}
-            handleUpdateUserRole={handleUpdateUserRole}
-            adminLoading={adminLoading}
-            adminError={adminError}
-            currentUser={session}
-          />
+          <Suspense fallback={loadingPanel}>
+            <AdminPanel
+              teamMembers={teamMembers}
+              setTeamMembers={setTeamMembers}
+              accessRequests={accessRequests}
+              setAccessRequests={setAccessRequests}
+              alerts={alerts}
+              setAlerts={setAlerts}
+              licenses={licenses}
+              setLicenses={setLicenses}
+              tickets={tickets}
+              setTickets={setTickets}
+              purchaseHistory={purchaseHistory}
+              setPurchaseHistory={setPurchaseHistory}
+              featureFlags={featureFlags}
+              setFeatureFlags={setFeatureFlags}
+              venmoUsername={venmoUsername}
+              setVenmoUsername={setVenmoUsername}
+              promoCodes={promoCodes}
+              setPromoCodes={setPromoCodes}
+              expenses={expenses}
+              setExpenses={setExpenses}
+              payroll={payroll}
+              setPayroll={setPayroll}
+              taxRecords={taxRecords}
+              setTaxRecords={setTaxRecords}
+              refunds={refunds}
+              setRefunds={setRefunds}
+              financialTasks={financialTasks}
+              setFinancialTasks={setFinancialTasks}
+              quotaEditingUserId={quotaEditingUserId}
+              setQuotaEditingUserId={setQuotaEditingUserId}
+              quotaDraftMb={quotaDraftMb}
+              setQuotaDraftMb={setQuotaDraftMb}
+              handleQuotaUpdate={handleQuotaUpdate}
+              handleToggleUserAccess={handleToggleUserAccess}
+              handleUpdateUserRole={handleUpdateUserRole}
+              adminLoading={adminLoading}
+              adminError={adminError}
+              currentUser={session}
+            />
+          </Suspense>
         )}
 
         {activeTab === 'admin' && !isAdminUser && canViewManagementBoard && (
-          <FinancePanel
-            purchaseHistory={purchaseHistory}
-            expenses={expenses} setExpenses={setExpenses}
-            payroll={payroll} setPayroll={setPayroll}
-            taxRecords={taxRecords} setTaxRecords={setTaxRecords}
-            refunds={refunds} setRefunds={setRefunds}
-            financialTasks={financialTasks} setFinancialTasks={setFinancialTasks}
-          />
+          <Suspense fallback={loadingPanel}>
+            <FinancePanel
+              purchaseHistory={purchaseHistory}
+              expenses={expenses} setExpenses={setExpenses}
+              payroll={payroll} setPayroll={setPayroll}
+              taxRecords={taxRecords} setTaxRecords={setTaxRecords}
+              refunds={refunds} setRefunds={setRefunds}
+              financialTasks={financialTasks} setFinancialTasks={setFinancialTasks}
+            />
+          </Suspense>
         )}
       </main>
 

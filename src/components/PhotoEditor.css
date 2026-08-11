@@ -1,5 +1,6 @@
 .photo-creator-shell {
-  min-height: 100%;
+  height: calc(100vh - 11.5rem);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -9,6 +10,7 @@
     radial-gradient(circle at top left, rgba(34, 211, 238, 0.18), transparent 28%),
     radial-gradient(circle at bottom right, rgba(244, 114, 182, 0.12), transparent 30%),
     linear-gradient(180deg, #07111f 0%, #0f172a 52%, #020617 100%);
+  overflow: hidden;
 }
 
 .photo-creator-header {
@@ -32,16 +34,35 @@
 }
 
 .photo-creator-grid {
+  --photo-left-width: 280px;
+  --photo-right-width: 320px;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  grid-template-columns: var(--photo-left-width) minmax(0, 1fr) var(--photo-right-width);
   gap: 1rem;
   min-height: 0;
   flex: 1;
+  height: 100%;
+  align-items: stretch;
+}
+
+.photo-creator-grid.compact {
+  --photo-left-width: 240px;
+  --photo-right-width: 280px;
+  gap: 0.75rem;
+}
+
+.photo-creator-grid.left-collapsed {
+  --photo-left-width: 88px;
+}
+
+.photo-creator-grid.right-collapsed {
+  --photo-right-width: 88px;
 }
 
 .photo-sidebar,
 .photo-stage-panel {
   min-height: 0;
+  height: 100%;
   border-radius: 26px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: rgba(2, 6, 23, 0.66);
@@ -58,11 +79,39 @@
   overflow-y: auto;
 }
 
+.photo-sidebar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.photo-sidebar-toolbar .ghost-button {
+  padding: 0.45rem 0.85rem;
+}
+
+.photo-sidebar.collapsed {
+  overflow: hidden;
+  padding: 0.75rem;
+}
+
+.photo-sidebar-collapsed-card {
+  flex: 1;
+  border: 1px dashed rgba(103, 232, 249, 0.45);
+  border-radius: 20px;
+  background: rgba(8, 15, 30, 0.72);
+  color: #e2e8f0;
+  font-weight: 700;
+  min-height: 220px;
+}
+
 .photo-stage-panel {
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
   padding: 1rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .panel-block {
@@ -91,20 +140,24 @@
 .photo-stage-wrap {
   flex: 1;
   min-height: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0.5rem;
 }
 
 .photo-stage {
   position: relative;
-  width: min(100%, 1000px);
-  max-height: calc(100vh - 16rem);
   border-radius: 32px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
     0 30px 80px rgba(2, 6, 23, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  flex: 0 0 auto;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .photo-paint-layer,
@@ -245,6 +298,36 @@
   text-transform: uppercase;
   letter-spacing: 0.15em;
   color: #67e8f9;
+}
+
+.photo-creator-shell.compact .photo-sidebar,
+.photo-creator-shell.compact .photo-stage-panel {
+  border-radius: 20px;
+}
+
+.photo-creator-shell.compact .photo-sidebar {
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.photo-creator-shell.compact .panel-block {
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border-radius: 18px;
+}
+
+.photo-creator-shell.compact .photo-upload-chip,
+.photo-creator-shell.compact .tool-chip,
+.photo-creator-shell.compact .chip,
+.photo-creator-shell.compact .ghost-button,
+.photo-creator-shell.compact .primary-button {
+  padding: 0.55rem 0.85rem;
+}
+
+.photo-creator-shell.compact .photo-sidebar textarea,
+.photo-creator-shell.compact .photo-sidebar input,
+.photo-creator-shell.compact .photo-sidebar select {
+  padding: 0.65rem 0.8rem;
 }
 
 .full-width {
@@ -441,26 +524,37 @@
 }
 
 @media (max-width: 1280px) {
+  .photo-creator-shell {
+    height: auto;
+    overflow: visible;
+  }
+
   .photo-creator-grid {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .photo-sidebar {
     order: 2;
+    height: auto;
   }
 
   .photo-stage-panel {
     order: 1;
+    height: auto;
   }
 }
 
 @media (max-width: 720px) {
   .photo-creator-shell {
     padding: 0.75rem;
+    height: auto;
   }
 
   .photo-stage {
-    max-height: none;
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: auto;
   }
 
   .photo-creator-actions {

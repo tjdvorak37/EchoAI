@@ -220,8 +220,28 @@ const loadImage = (src) =>
     image.src = src
   })
 
+const normalizeColorInputValue = (value, fallback = '#020617') => {
+  if (!value || typeof value !== 'string') {
+    return fallback
+  }
+
+  if (value.startsWith('#')) {
+    return value.slice(0, 7)
+  }
+
+  const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i)
+  if (!match) {
+    return fallback
+  }
+
+  const [, red, green, blue] = match
+  return `#${[red, green, blue]
+    .map((channel) => Number(channel).toString(16).padStart(2, '0'))
+    .join('')}`
+}
+
 const drawStroke = (ctx, stroke, width, height) => {
-  if (!stroke.points.length) return
+  if (!stroke?.points?.length) return
 
   ctx.save()
   ctx.lineCap = 'round'
@@ -474,18 +494,26 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
   const [layers, setLayers] = useState(defaultLayers)
   const [activeLayerId, setActiveLayerId] = useState('headline')
   const [notice, setNotice] = useState('Ready to create.')
+  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
+  const [compactMode, setCompactMode] = useState(false)
   const stageRef = useRef(null)
+  const stageViewportRef = useRef(null)
   const paintCanvasRef = useRef(null)
   const dragRef = useRef(null)
   const cropDragRef = useRef(null)
   const brushStrokeRef = useRef(null)
   const layerIdRef = useRef(0)
+  const [stageViewportSize, setStageViewportSize] = useState({ width: 900, height: 720 })
 
   const selectedAsset = imageAssets.find((asset) => asset.id === selectedAssetId) ?? imageAssets[0] ?? null
   const selectedImageSrc = generatedImageSrc || uploadedImage || selectedAsset?.previewUrl || ''
   const preset = STYLE_PRESETS[presetId] ?? STYLE_PRESETS.aurora
   const aspect = ASPECT_RATIOS[aspectRatio] ?? ASPECT_RATIOS['4:5']
-  const activeTextLayer = layers.find((layer) => layer.id === activeLayerId && layer.type === 'text') ?? null
+  const resolvedActiveLayerId = layers.some((layer) => layer.id === activeLayerId)
+    ? activeLayerId
+    : (layers[0]?.id ?? '')
+  const activeTextLayer = layers.find((layer) => layer.id === resolvedActiveLayerId && layer.type === 'text') ?? null
   const stageClipPath =
     maskShape === 'circle'
       ? 'circle(44% at 50% 50%)'
@@ -496,6 +524,25 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
           : maskShape === 'rounded'
             ? 'inset(0 round 28px)'
             : 'none'
+
+  const stageDisplaySize = useMemo(() => {
+    const ratio = aspect.canvasWidth / aspect.canvasHeight
+    const availableWidth = Math.max(240, stageViewportSize.width - (compactMode ? 20 : 36))
+    const availableHeight = Math.max(220, stageViewportSize.height - (compactMode ? 20 : 36))
+
+    let width = availableWidth
+    let height = width / ratio
+
+    if (height > availableHeight) {
+      height = availableHeight
+      width = height * ratio
+    }
+
+    return {
+      width: Math.round(width),
+      height: Math.round(height),
+    }
+  }, [aspect, compactMode, stageViewportSize])
 
   const updateLayer = (layerId, patch) => {
     setLayers((prev) => prev.map((layer) => (layer.id === layerId ? { ...layer, ...patch } : layer)))
@@ -528,6 +575,38 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
   }, [])
 
   useEffect(() => {
+    if (!stageViewportRef.current) return undefined
+
+    const updateViewport = () => {
+      const rect = stageViewportRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      setStageViewportSize((prev) => {
+        const next = {
+          width: Math.max(260, Math.round(rect.width)),
+          height: Math.max(260, Math.round(rect.height)),
+        }
+
+        if (prev.width === next.width && prev.height === next.height) {
+          return prev
+        }
+
+        return next
+      })
+    }
+
+    updateViewport()
+    const observer = new ResizeObserver(updateViewport)
+    observer.observe(stageViewportRef.current)
+    window.addEventListener('resize', updateViewport)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', updateViewport)
+    }
+  }, [])
+
+  useEffect(() => {
     const canvas = paintCanvasRef.current
     if (!canvas) return
 
@@ -539,6 +618,38 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     brushStrokes.forEach((stroke) => drawStroke(ctx, stroke, canvas.width, canvas.height))
   }, [brushStrokes, cropRect, stageMetrics])
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if ((event.key !== 'Delete' && event.key !== 'Backspace') || !resolvedActiveLayerId) {
+        return
+      }
+
+      const target = event.target
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable) {
+          return
+        }
+      }
+
+      event.preventDefault()
+      const remainingLayers = layers.filter((layer) => layer.id !== resolvedActiveLayerId)
+      setLayers(remainingLayers)
+      setActiveLayerId((prev) => {
+        if (prev !== resolvedActiveLayerId && remainingLayers.some((layer) => layer.id === prev)) {
+          return prev
+        }
+        return remainingLayers[0]?.id ?? ''
+      })
+      setNotice('Layer removed.')
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [resolvedActiveLayerId, layers])
 
   const getStagePoint = (event) => {
     const rect = stageRef.current?.getBoundingClientRect()
@@ -655,8 +766,9 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
     }
 
     const finishStroke = () => {
-      if (brushStrokeRef.current) {
-        setBrushStrokes((prev) => [...prev, brushStrokeRef.current])
+      const completedStroke = brushStrokeRef.current
+      if (completedStroke) {
+        setBrushStrokes((prev) => [...prev, completedStroke])
       }
       brushStrokeRef.current = null
       window.removeEventListener('pointermove', moveStroke)
@@ -851,8 +963,15 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
   }
 
   const deleteLayer = (layerId) => {
-    setLayers((prev) => prev.filter((layer) => layer.id !== layerId))
-    setActiveLayerId((prev) => (prev === layerId ? 'headline' : prev))
+    const remainingLayers = layers.filter((layer) => layer.id !== layerId)
+    setLayers(remainingLayers)
+    setActiveLayerId((prev) => {
+      if (prev !== layerId && remainingLayers.some((layer) => layer.id === prev)) {
+        return prev
+      }
+      return remainingLayers[0]?.id ?? ''
+    })
+    setNotice('Layer removed.')
   }
 
   const updateTextEffect = (patch) => {
@@ -918,20 +1037,42 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
   }
 
   return (
-    <section className="photo-creator-shell">
+    <section className={`photo-creator-shell ${compactMode ? 'compact' : ''}`}>
       <header className="photo-creator-header">
         <div>
           <p className="small-title">Photo Creator</p>
           <h2>Immersive editor for social images, AI concepts, and campaign art</h2>
         </div>
         <div className="photo-creator-actions">
+          <button type="button" className="ghost-button" onClick={() => setCompactMode((prev) => !prev)}>
+            {compactMode ? 'Comfort tools' : 'Compact tools'}
+          </button>
+          <button type="button" className="ghost-button" onClick={() => setLeftSidebarCollapsed((prev) => !prev)}>
+            {leftSidebarCollapsed ? 'Show left tools' : 'Hide left tools'}
+          </button>
+          <button type="button" className="ghost-button" onClick={() => setRightSidebarCollapsed((prev) => !prev)}>
+            {rightSidebarCollapsed ? 'Show inspector' : 'Hide inspector'}
+          </button>
           <button type="button" className="ghost-button" onClick={resetEditor}>Reset canvas</button>
           <button type="button" className="primary-button" onClick={exportCanvas}>Export PNG</button>
         </div>
       </header>
 
-      <div className="photo-creator-grid">
-        <aside className="photo-sidebar photo-sidebar-left">
+      <div className={`photo-creator-grid ${compactMode ? 'compact' : ''} ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${rightSidebarCollapsed ? 'right-collapsed' : ''}`}>
+        <aside className={`photo-sidebar photo-sidebar-left ${leftSidebarCollapsed ? 'collapsed' : ''}`}>
+          <div className="photo-sidebar-toolbar">
+            <p className="section-label">Source & tools</p>
+            <button type="button" className="ghost-button" onClick={() => setLeftSidebarCollapsed((prev) => !prev)}>
+              {leftSidebarCollapsed ? 'Open' : 'Collapse'}
+            </button>
+          </div>
+
+          {leftSidebarCollapsed ? (
+            <button type="button" className="photo-sidebar-collapsed-card" onClick={() => setLeftSidebarCollapsed(false)}>
+              Show source tools
+            </button>
+          ) : (
+            <>
           <div className="panel-block">
             <p className="section-label">Source</p>
             <div className="source-actions">
@@ -1059,6 +1200,8 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
               <input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} />
             </label>
           </div>
+            </>
+          )}
         </aside>
 
         <div className="photo-stage-panel">
@@ -1070,12 +1213,14 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
             <p className="muted">{notice}</p>
           </div>
 
-          <div className="photo-stage-wrap">
+          <div ref={stageViewportRef} className="photo-stage-wrap">
             <div
               ref={stageRef}
               className="photo-stage"
               onPointerDown={startBrushStroke}
               style={{
+                width: `${stageDisplaySize.width}px`,
+                height: `${stageDisplaySize.height}px`,
                 aspectRatio: aspect.css,
                 background: preset.background,
                 cursor: activeTool === 'brush' ? 'crosshair' : activeTool === 'crop' ? 'move' : 'default',
@@ -1140,7 +1285,7 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                 <button
                   key={layer.id}
                   type="button"
-                  className={layer.id === activeLayerId ? 'photo-layer active' : 'photo-layer'}
+                  className={layer.id === resolvedActiveLayerId ? 'photo-layer active' : 'photo-layer'}
                   style={{
                     left: `${layer.x}%`,
                     top: `${layer.y}%`,
@@ -1191,7 +1336,20 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
           </div>
         </div>
 
-        <aside className="photo-sidebar photo-sidebar-right">
+        <aside className={`photo-sidebar photo-sidebar-right ${rightSidebarCollapsed ? 'collapsed' : ''}`}>
+          <div className="photo-sidebar-toolbar">
+            <p className="section-label">Inspector</p>
+            <button type="button" className="ghost-button" onClick={() => setRightSidebarCollapsed((prev) => !prev)}>
+              {rightSidebarCollapsed ? 'Open' : 'Collapse'}
+            </button>
+          </div>
+
+          {rightSidebarCollapsed ? (
+            <button type="button" className="photo-sidebar-collapsed-card" onClick={() => setRightSidebarCollapsed(false)}>
+              Show inspector
+            </button>
+          ) : (
+            <>
           <div className="panel-block">
             <p className="section-label">Inspector</p>
             <label>
@@ -1204,7 +1362,7 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
             </label>
             <label>
               Active layer
-              <select value={activeLayerId} onChange={(event) => setActiveLayerId(event.target.value)}>
+              <select value={resolvedActiveLayerId} onChange={(event) => setActiveLayerId(event.target.value)}>
                 {layers.map((layer) => (
                   <option key={layer.id} value={layer.id}>{layer.label}</option>
                 ))}
@@ -1223,7 +1381,7 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
               </select>
             </label>
             {layers.map((layer) =>
-              layer.id === activeLayerId ? (
+              layer.id === resolvedActiveLayerId ? (
                 <div key={layer.id} className="layer-inspector">
                   <label>
                     Content
@@ -1296,7 +1454,7 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                         Shadow color
                         <input
                           type="color"
-                          value={layer.shadowColor ?? '#020617'}
+                          value={normalizeColorInputValue(layer.shadowColor, '#020617')}
                           onChange={(event) => updateLayer(layer.id, { shadowColor: event.target.value })}
                         />
                       </label>
@@ -1304,7 +1462,7 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                         Panel color
                         <input
                           type="color"
-                          value={layer.panelColor?.startsWith('rgba') ? '#0f172a' : layer.panelColor ?? '#0f172a'}
+                          value={normalizeColorInputValue(layer.panelColor, '#0f172a')}
                           onChange={(event) => updateLayer(layer.id, { panelColor: `${event.target.value}cc` })}
                         />
                       </label>
@@ -1372,6 +1530,8 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
               <small>Preset: {preset.label}</small>
             </div>
           </div>
+            </>
+          )}
         </aside>
       </div>
     </section>

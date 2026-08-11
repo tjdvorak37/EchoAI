@@ -172,7 +172,7 @@ export async function generatePhotoConcept({ prompt, style, aspectRatio, referen
         payload: { prompt: cleanedPrompt, style, aspectRatio, referenceImageSrc: referenceImageSrc || null },
       })
 
-      const imageSrc = agentResult.payload?.imageSrc || agentResult.payload?.imageUrl || agentResult.payload?.dataUrl
+      const imageSrc = await readResponseImage(agentResult.payload)
       if (imageSrc) {
         return {
           imageSrc,
