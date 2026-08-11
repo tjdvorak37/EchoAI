@@ -10,6 +10,7 @@ const DEMO_USERS = [
     password: 'admin123',
     role: 'admin',
     accessStatus: 'active',
+    storageQuotaMb: 2048,
   },
   {
     id: 'demo-user-3',
@@ -19,6 +20,17 @@ const DEMO_USERS = [
     password: 'user123',
     role: 'user',
     accessStatus: 'active',
+    storageQuotaMb: 2048,
+  },
+  {
+    id: 'demo-accountant-1',
+    fullName: 'Sam Rivers',
+    email: 'accountant@company.com',
+    company: 'EchoAI Media',
+    password: 'acct123',
+    role: 'accountant',
+    accessStatus: 'active',
+    storageQuotaMb: 2048,
   },
 ]
 
@@ -52,6 +64,29 @@ const normalizeRequest = (record) => ({
   reviewedAt: record.reviewed_at,
 })
 
+const normalizeAiAgentConfig = (value) => {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const hasCapabilityField = Object.prototype.hasOwnProperty.call(value, 'capabilities')
+  const capabilityList = hasCapabilityField
+    ? (Array.isArray(value.capabilities) ? value.capabilities.filter(Boolean) : [])
+    : ['message', 'image', 'video']
+
+  return {
+    enabled: Boolean(value.enabled),
+    name: value.name || 'My AI Agent',
+    endpoint: value.endpoint || '',
+    apiKey: value.apiKey || '',
+    model: value.model || '',
+    capabilities: capabilityList,
+    lastSyncedAt: value.lastSyncedAt || '',
+    status: value.status || 'not connected',
+    message: value.message || 'Connect a personal AI agent endpoint to personalize copy and image generation.',
+  }
+}
+
 const normalizeMember = (record) => ({
   id: record.id,
   fullName: record.full_name,
@@ -59,6 +94,8 @@ const normalizeMember = (record) => ({
   company: record.company,
   role: record.role,
   accessStatus: record.access_status,
+  storageQuotaMb: record.storage_quota_mb ?? record.storageQuotaMb ?? 2048,
+  aiAgentConfig: normalizeAiAgentConfig(record.ai_agent_config ?? record.aiAgentConfig),
 })
 
 const getProfileByUser = async ({ userId, email }) => {
@@ -178,6 +215,7 @@ export const authService = {
           email: demoUser?.email ?? email,
           role: demoUser?.role ?? 'user',
           accessStatus: demoUser?.accessStatus ?? 'active',
+          storageQuotaMb: demoUser?.storageQuotaMb ?? 2048,
         },
       }
     }
@@ -230,6 +268,7 @@ export const authService = {
         password,
         role: 'user',
         accessStatus: 'pending',
+        storageQuotaMb: 2048,
       })
 
       DEMO_ACCESS_REQUESTS.push({
@@ -275,6 +314,7 @@ export const authService = {
       company,
       role: 'user',
       access_status: 'pending',
+      ai_agent_config: {},
     })
 
     if (profileError) {
@@ -489,6 +529,7 @@ export const authService = {
         company: member.company,
         role: member.role,
         accessStatus: member.accessStatus,
+        storageQuotaMb: member.storageQuotaMb,
       }
     }
 
@@ -504,6 +545,96 @@ export const authService = {
     }
 
     return normalizeMember(data)
+  },
+
+  async updateUserStorageQuota({ userId, storageQuotaMb }) {
+    if (!userId || storageQuotaMb === undefined || storageQuotaMb === null) {
+      throw new Error('User ID and storage quota are required.')
+    }
+
+    const parsedQuota = Number(storageQuotaMb)
+    if (!Number.isFinite(parsedQuota) || parsedQuota <= 0) {
+      throw new Error('Storage quota must be a positive number.')
+    }
+
+    if (!isSupabaseConfigured) {
+      const member = DEMO_USERS.find((user) => user.id === userId)
+      if (!member) {
+        throw new Error('User not found.')
+      }
+
+      member.storageQuotaMb = parsedQuota
+      return {
+        id: member.id,
+        fullName: member.fullName,
+        email: member.email,
+        company: member.company,
+        role: member.role,
+        accessStatus: member.accessStatus,
+        storageQuotaMb: member.storageQuotaMb,
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ storage_quota_mb: parsedQuota })
+      .eq('id', userId)
+      .select('*')
+      .single()
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return normalizeMember(data)
+  },
+
+  async getUserAiAgentConfig({ userId, email }) {
+    if (!userId && !email) {
+      return null
+    }
+
+    if (!isSupabaseConfigured) {
+      const demoUser = DEMO_USERS.find(
+        (user) => user.id === userId || (email && user.email.toLowerCase() === email.toLowerCase()),
+      )
+
+      return normalizeAiAgentConfig(demoUser?.aiAgentConfig)
+    }
+
+    const profile = await getProfileByUser({ userId, email })
+    return normalizeAiAgentConfig(profile?.ai_agent_config ?? profile?.aiAgentConfig)
+  },
+
+  async updateUserAiAgentConfig({ userId, aiAgentConfig }) {
+    if (!userId) {
+      throw new Error('User ID is required.')
+    }
+
+    const normalizedConfig = normalizeAiAgentConfig(aiAgentConfig) ?? normalizeAiAgentConfig({})
+
+    if (!isSupabaseConfigured) {
+      const member = DEMO_USERS.find((user) => user.id === userId)
+      if (!member) {
+        throw new Error('User not found.')
+      }
+
+      member.aiAgentConfig = normalizedConfig
+      return normalizedConfig
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ ai_agent_config: normalizedConfig })
+      .eq('id', userId)
+      .select('*')
+      .single()
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return normalizeAiAgentConfig(data?.ai_agent_config ?? data?.aiAgentConfig)
   },
 
   async createSupportTicket({ category, details }) {

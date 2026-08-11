@@ -1,0 +1,27 @@
+<svg width="1200" height="1500" viewBox="0 0 1200 1500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="1500" rx="48" fill="#081120"/>
+  <rect width="1200" height="1500" rx="48" fill="url(#bg)" fill-opacity="0.94"/>
+  <circle cx="222" cy="248" r="220" fill="#67E8F9" fill-opacity="0.16"/>
+  <circle cx="962" cy="1224" r="304" fill="#A855F7" fill-opacity="0.22"/>
+  <circle cx="1024" cy="280" r="196" fill="#22C55E" fill-opacity="0.18"/>
+  <rect x="112" y="882" width="976" height="378" rx="42" fill="#0F172A" fill-opacity="0.54" stroke="#67E8F9" stroke-opacity="0.35" stroke-width="3"/>
+  <rect x="112" y="188" width="202" height="34" rx="17" fill="#E0F2FE" fill-opacity="0.18"/>
+  <text x="146" y="211" fill="#67E8F9" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="3">ECHOAI CREATOR</text>
+  <text x="112" y="432" fill="#F8FAFC" font-family="Inter, Arial, sans-serif" font-size="112" font-weight="800">Launch the</text>
+  <text x="112" y="548" fill="#F8FAFC" font-family="Inter, Arial, sans-serif" font-size="112" font-weight="800">next drop</text>
+  <text x="112" y="660" fill="#E2E8F0" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="500">Build polished post art, add smart captions, and export</text>
+  <text x="112" y="710" fill="#E2E8F0" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="500">campaign-ready creative without leaving EchoAI.</text>
+  <text x="166" y="988" fill="#F8FAFC" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="700">Photo creator demo poster</text>
+  <text x="166" y="1054" fill="#CBD5E1" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="500">Use this built-in asset to test crop, masks, typography, and export.</text>
+  <rect x="166" y="1118" width="214" height="62" rx="31" fill="#2563EB"/>
+  <text x="211" y="1159" fill="#FFFFFF" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700">Create now</text>
+  <text x="904" y="998" fill="#FDE68A" font-family="Inter, Arial, sans-serif" font-size="72">✦</text>
+  <text x="972" y="1072" fill="#F9A8D4" font-family="Inter, Arial, sans-serif" font-size="52">✦</text>
+  <defs>
+    <linearGradient id="bg" x1="56" y1="98" x2="1128" y2="1442" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="0.45" stop-color="#0B5ED7"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+</svg>

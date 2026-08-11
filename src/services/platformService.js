@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { canUseAgentMode, runUserAiAgent } from './aiAgentService'
 
 const randomId = () => `post_${Math.random().toString(36).slice(2, 10)}`
 
@@ -42,10 +43,27 @@ export const platformService = {
     }
   },
 
-  async generateMessageIdeas(prompt) {
+  async generateMessageIdeas(prompt, agentConfig) {
     const cleanedPrompt = prompt.trim()
     if (!cleanedPrompt) {
       return []
+    }
+
+    if (canUseAgentMode(agentConfig, 'message')) {
+      try {
+        const agentResult = await runUserAiAgent({
+          agentConfig,
+          mode: 'copy',
+          prompt: cleanedPrompt,
+          payload: { prompt: cleanedPrompt },
+        })
+
+        if (agentResult.suggestions?.length) {
+          return agentResult.suggestions
+        }
+      } catch (error) {
+        console.warn('User AI agent unavailable, falling back to default copy generation.', error)
+      }
     }
 
     if (!isSupabaseConfigured) {

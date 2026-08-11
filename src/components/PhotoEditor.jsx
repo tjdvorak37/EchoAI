@@ -1,0 +1,1379 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import './PhotoEditor.css'
+import { generatePhotoConcept } from '../services/photoAiService'
+
+const ASPECT_RATIOS = {
+  '1:1': { label: 'Square', canvasWidth: 1200, canvasHeight: 1200, css: '1 / 1' },
+  '4:5': { label: 'Feed', canvasWidth: 1200, canvasHeight: 1500, css: '4 / 5' },
+  '16:9': { label: 'Landscape', canvasWidth: 1600, canvasHeight: 900, css: '16 / 9' },
+  '9:16': { label: 'Story', canvasWidth: 1080, canvasHeight: 1920, css: '9 / 16' },
+}
+
+const STYLE_PRESETS = {
+  aurora: {
+    label: 'Aurora',
+    background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.38), rgba(168, 85, 247, 0.28) 52%, rgba(250, 204, 21, 0.16))',
+    base: '#081120',
+    accent: '#67e8f9',
+    secondary: '#f9a8d4',
+    headline: 'Neon glow for social-first campaigns',
+    subcopy: 'Use this preset for launches, music drops, and anything that needs a luminous punch.',
+  },
+  editorial: {
+    label: 'Editorial',
+    background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.42), rgba(71, 85, 105, 0.3) 55%, rgba(148, 163, 184, 0.14))',
+    base: '#0f172a',
+    accent: '#f8fafc',
+    secondary: '#cbd5e1',
+    headline: 'High-contrast story cover',
+    subcopy: 'Best for portraits, product teasers, and clean launch art that feels premium.',
+  },
+  sunset: {
+    label: 'Sunset',
+    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.35), rgba(236, 72, 153, 0.28) 50%, rgba(59, 130, 246, 0.18))',
+    base: '#1f130f',
+    accent: '#fde68a',
+    secondary: '#fecdd3',
+    headline: 'Warm, cinematic, and scroll-stopping',
+    subcopy: 'Use for lifestyle, travel, food, and anything that benefits from a softer tone.',
+  },
+  chrome: {
+    label: 'Chrome',
+    background: 'linear-gradient(135deg, rgba(226, 232, 240, 0.28), rgba(148, 163, 184, 0.18) 45%, rgba(15, 23, 42, 0.18))',
+    base: '#0b1220',
+    accent: '#f8fafc',
+    secondary: '#94a3b8',
+    headline: 'Sharp, cool, and metallic',
+    subcopy: 'A strong fit for tech, architecture, fashion, and polished brand moments.',
+  },
+}
+
+const STICKERS = ['✨', '⚡', '📸', '🔥', '💎', '🌙', '🪩']
+const TEXT_EFFECTS = {
+  none: 'None',
+  shadow: 'Shadow',
+  outline: 'Outline',
+  panel: 'Panel',
+  glow: 'Glow',
+  gradient: 'Gradient',
+}
+
+const MASK_SHAPES = {
+  none: 'None',
+  rounded: 'Rounded',
+  circle: 'Circle',
+  frame: 'Frame',
+  diagonal: 'Diagonal',
+}
+
+const TOOLS = {
+  select: 'Select',
+  brush: 'Brush',
+  crop: 'Crop',
+}
+
+const DEFAULT_PROMPT = 'Create a bold product teaser for an evening launch post.'
+
+const defaultLayers = () => [
+  {
+    id: 'headline',
+    type: 'text',
+    label: 'Headline',
+    value: 'Launch the next drop',
+    x: 16,
+    y: 15,
+    fontSize: 56,
+    weight: 800,
+    color: '#f8fafc',
+    align: 'left',
+    effect: 'shadow',
+    outlineWidth: 2,
+    outlineColor: '#020617',
+    shadowBlur: 24,
+    shadowColor: 'rgba(2, 6, 23, 0.72)',
+    shadowOffsetX: 0,
+    shadowOffsetY: 8,
+    panelColor: 'rgba(2, 6, 23, 0.15)',
+    panelRadius: 22,
+    letterSpacing: 0.5,
+  },
+  {
+    id: 'subcopy',
+    type: 'text',
+    label: 'Subcopy',
+    value: 'Edit, stylize, and export campaign art without leaving EchoAI.',
+    x: 16,
+    y: 28,
+    fontSize: 22,
+    weight: 500,
+    color: '#e2e8f0',
+    align: 'left',
+    effect: 'panel',
+    outlineWidth: 0,
+    outlineColor: '#020617',
+    shadowBlur: 12,
+    shadowColor: 'rgba(2, 6, 23, 0.55)',
+    shadowOffsetX: 0,
+    shadowOffsetY: 6,
+    panelColor: 'rgba(15, 23, 42, 0.42)',
+    panelRadius: 18,
+    letterSpacing: 0.1,
+  },
+  {
+    id: 'sticker',
+    type: 'sticker',
+    label: 'Accent',
+    value: '✨',
+    x: 78,
+    y: 14,
+    fontSize: 52,
+    weight: 700,
+    color: '#67e8f9',
+    align: 'center',
+    effect: 'glow',
+    outlineWidth: 0,
+    outlineColor: '#020617',
+    shadowBlur: 26,
+    shadowColor: 'rgba(103, 232, 249, 0.65)',
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
+    panelColor: 'transparent',
+    panelRadius: 999,
+    letterSpacing: 0,
+  },
+]
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+
+const slugify = (value) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'echoai-photo'
+
+const classifyPrompt = (prompt) => {
+  const value = prompt.toLowerCase()
+
+  if (/(portrait|editorial|fashion|luxury|premium|chrome)/.test(value)) {
+    return {
+      preset: 'chrome',
+      headline: 'Premium portrait with a polished edge',
+      subcopy: 'Use crisp contrast, cool lighting, and minimal copy to keep the focus on the subject.',
+      sticker: '💎',
+    }
+  }
+
+  if (/(sunset|warm|lifestyle|travel|food|golden)/.test(value)) {
+    return {
+      preset: 'sunset',
+      headline: 'Warm story art with a cinematic glow',
+      subcopy: 'Layer soft color, bold typography, and a sunset palette for a relaxed social post.',
+      sticker: '🌙',
+    }
+  }
+
+  if (/(launch|product|drop|hype|music|neon|night)/.test(value)) {
+    return {
+      preset: 'aurora',
+      headline: 'Neon launch concept built to stop the scroll',
+      subcopy: 'Use bright accents, punchy type, and motion-heavy contrast for high-energy campaigns.',
+      sticker: '⚡',
+    }
+  }
+
+  return {
+    preset: 'editorial',
+    headline: 'Clean editorial frame with strong hierarchy',
+    subcopy: 'Works well for hero images, announcements, and reusable social cover templates.',
+    sticker: '✨',
+  }
+}
+
+const wrapText = (ctx, text, maxWidth) => {
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length === 0) return ['']
+
+  const lines = []
+  let current = words[0]
+
+  for (const word of words.slice(1)) {
+    const next = `${current} ${word}`
+    if (ctx.measureText(next).width <= maxWidth) {
+      current = next
+    } else {
+      lines.push(current)
+      current = word
+    }
+  }
+
+  lines.push(current)
+  return lines
+}
+
+const loadImage = (src) =>
+  new Promise((resolve, reject) => {
+    const image = new Image()
+    image.crossOrigin = 'anonymous'
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Unable to load the selected image.'))
+    image.src = src
+  })
+
+const drawStroke = (ctx, stroke, width, height) => {
+  if (!stroke.points.length) return
+
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = stroke.color
+  ctx.lineWidth = stroke.size
+  ctx.globalAlpha = stroke.opacity
+  ctx.beginPath()
+
+  stroke.points.forEach((point, index) => {
+    const mapped = {
+      x: (point.x / 100) * width,
+      y: (point.y / 100) * height,
+    }
+    if (index === 0) {
+      ctx.moveTo(mapped.x, mapped.y)
+    } else {
+      ctx.lineTo(mapped.x, mapped.y)
+    }
+  })
+
+  ctx.stroke()
+  ctx.restore()
+}
+
+const buildMaskPath = (ctx, maskShape, width, height) => {
+  ctx.beginPath()
+
+  if (maskShape === 'circle') {
+    ctx.ellipse(width / 2, height / 2, width * 0.44, height * 0.44, 0, 0, Math.PI * 2)
+    return
+  }
+
+  if (maskShape === 'frame') {
+    ctx.roundRect(width * 0.06, height * 0.06, width * 0.88, height * 0.88, 36)
+    return
+  }
+
+  if (maskShape === 'diagonal') {
+    ctx.moveTo(width * 0.08, height * 0.16)
+    ctx.lineTo(width * 0.92, height * 0.06)
+    ctx.lineTo(width * 0.84, height * 0.84)
+    ctx.lineTo(width * 0.12, height * 0.94)
+    ctx.closePath()
+    return
+  }
+
+  ctx.roundRect(0, 0, width, height, 28)
+}
+
+const drawTextLayer = (ctx, layer, x, y, maxWidth) => {
+  const lines = wrapText(ctx, layer.value, maxWidth)
+  const lineHeight = layer.fontSize * 1.14
+  const textWidth = Math.max(...lines.map((line) => ctx.measureText(line).width), 0)
+  const totalHeight = lines.length * lineHeight
+
+  if (layer.effect === 'panel') {
+    const paddingX = 18
+    const paddingY = 12
+    const panelWidth = Math.min(maxWidth + paddingX * 2, Math.max(textWidth + paddingX * 2, 120))
+    const panelHeight = totalHeight + paddingY * 2
+    ctx.save()
+    ctx.fillStyle = layer.panelColor || 'rgba(15, 23, 42, 0.35)'
+    ctx.beginPath()
+    ctx.roundRect(x - paddingX, y - paddingY, panelWidth, panelHeight, layer.panelRadius || 16)
+    ctx.fill()
+    ctx.restore()
+  }
+
+  ctx.save()
+  ctx.font = `${layer.weight} ${layer.fontSize}px Inter, system-ui, sans-serif`
+  ctx.textAlign = layer.align || 'left'
+  ctx.textBaseline = 'top'
+  ctx.direction = 'ltr'
+  ctx.letterSpacing = `${layer.letterSpacing || 0}px`
+
+  if (layer.effect === 'glow') {
+    ctx.shadowColor = layer.shadowColor || layer.color
+    ctx.shadowBlur = layer.shadowBlur || 18
+  } else if (layer.effect === 'shadow' || layer.effect === 'panel') {
+    ctx.shadowColor = layer.shadowColor || 'rgba(0, 0, 0, 0.55)'
+    ctx.shadowBlur = layer.shadowBlur || 18
+    ctx.shadowOffsetX = layer.shadowOffsetX || 0
+    ctx.shadowOffsetY = layer.shadowOffsetY || 4
+  }
+
+  if (layer.effect === 'gradient') {
+    const gradient = ctx.createLinearGradient(x, y, x + maxWidth, y + layer.fontSize)
+    gradient.addColorStop(0, layer.color)
+    gradient.addColorStop(1, '#f8fafc')
+    ctx.fillStyle = gradient
+  } else {
+    ctx.fillStyle = layer.color
+  }
+
+  if (layer.effect === 'outline' && layer.outlineWidth > 0) {
+    ctx.lineWidth = layer.outlineWidth
+    ctx.strokeStyle = layer.outlineColor || '#000000'
+    lines.forEach((line, index) => {
+      ctx.strokeText(line, x, y + index * lineHeight)
+    })
+  }
+
+  lines.forEach((line, index) => {
+    ctx.fillText(line, x, y + index * lineHeight)
+  })
+
+  ctx.restore()
+}
+
+const renderComposition = async ({
+  canvas,
+  imageSrc,
+  maskShape,
+  filters,
+  preset,
+  layers,
+  brushStrokes,
+  stageMetrics,
+}) => {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    throw new Error('Canvas export is unavailable in this browser.')
+  }
+
+  const width = canvas.width
+  const height = canvas.height
+
+  ctx.clearRect(0, 0, width, height)
+  ctx.fillStyle = preset.base
+  ctx.fillRect(0, 0, width, height)
+
+  const gradient = ctx.createLinearGradient(0, 0, width, height)
+  gradient.addColorStop(0, preset.base)
+  gradient.addColorStop(0.55, preset.accent)
+  gradient.addColorStop(1, preset.secondary)
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, width, height)
+
+  if (imageSrc) {
+    try {
+      const image = await loadImage(imageSrc)
+      const stageImageWidth = stageMetrics.width
+      const stageImageHeight = stageMetrics.height
+      const imageRatio = image.width / image.height
+      const stageRatio = stageImageWidth / stageImageHeight
+      let drawWidth = stageImageWidth
+      let drawHeight = stageImageHeight
+      let offsetX = 0
+      let offsetY = 0
+
+      if (imageRatio > stageRatio) {
+        drawHeight = stageImageHeight
+        drawWidth = imageRatio * drawHeight
+        offsetX = (stageImageWidth - drawWidth) / 2
+      } else {
+        drawWidth = stageImageWidth
+        drawHeight = drawWidth / imageRatio
+        offsetY = (stageImageHeight - drawHeight) / 2
+      }
+
+      ctx.save()
+      if (maskShape !== 'none') {
+        buildMaskPath(ctx, maskShape, width, height)
+        ctx.clip()
+      }
+
+      ctx.filter = `brightness(${filters.brightness}%) contrast(${filters.contrast}%) saturate(${filters.saturation}%) hue-rotate(${filters.hue}deg) blur(${filters.blur}px)`
+      ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
+      ctx.restore()
+    } catch {
+      ctx.fillStyle = 'rgba(255,255,255,0.08)'
+      ctx.fillRect(width * 0.12, height * 0.12, width * 0.76, height * 0.72)
+    }
+  }
+
+  if (brushStrokes.length) {
+    ctx.save()
+    brushStrokes.forEach((stroke) => drawStroke(ctx, stroke, width, height))
+    ctx.restore()
+  }
+
+  const vignette = ctx.createRadialGradient(width / 2, height / 2, width * 0.18, width / 2, height / 2, width * 0.72)
+  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)')
+  vignette.addColorStop(1, 'rgba(2, 6, 23, 0.55)')
+  ctx.fillStyle = vignette
+  ctx.fillRect(0, 0, width, height)
+
+  if (filters.grain > 0) {
+    const dotCount = Math.round((width * height * filters.grain) / 110000)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.18)'
+    for (let index = 0; index < dotCount; index += 1) {
+      ctx.fillRect(Math.random() * width, Math.random() * height, 1, 1)
+    }
+  }
+
+  layers.forEach((layer) => {
+    const x = (layer.x / 100) * width
+    const y = (layer.y / 100) * height
+    if (layer.type === 'sticker') {
+      ctx.save()
+      ctx.font = `${layer.fontSize}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.shadowColor = layer.shadowColor || 'rgba(0, 0, 0, 0.45)'
+      ctx.shadowBlur = layer.shadowBlur || 24
+      ctx.fillText(layer.value, x, y)
+      ctx.restore()
+      return
+    }
+
+    drawTextLayer(ctx, layer, x, y, width * 0.48)
+  })
+
+  return canvas.toDataURL('image/png')
+}
+
+export function PhotoEditor({ assets, onExport, agentConfig }) {
+  const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
+  const [selectedAssetId, setSelectedAssetId] = useState(imageAssets[0]?.id ?? '')
+  const [uploadedImage, setUploadedImage] = useState('')
+  const [generatedImageSrc, setGeneratedImageSrc] = useState('')
+  const [generatedImageMeta, setGeneratedImageMeta] = useState(null)
+  const [aiImagePrompt, setAiImagePrompt] = useState(DEFAULT_PROMPT)
+  const [aiImageStyle, setAiImageStyle] = useState('aurora')
+  const [aiImageLoading, setAiImageLoading] = useState(false)
+  const [aiImageError, setAiImageError] = useState('')
+  const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
+  const [presetId, setPresetId] = useState('aurora')
+  const [aspectRatio, setAspectRatio] = useState('4:5')
+  const [headline, setHeadline] = useState('Launch the next drop')
+  const [subcopy, setSubcopy] = useState('Edit, stylize, and export campaign art without leaving EchoAI.')
+  const [activeTool, setActiveTool] = useState('select')
+  const [maskShape, setMaskShape] = useState('none')
+  const [brushColor, setBrushColor] = useState('#ffffff')
+  const [brushSize, setBrushSize] = useState(24)
+  const [brushOpacity, setBrushOpacity] = useState(0.8)
+  const [brushStrokes, setBrushStrokes] = useState([])
+  const [cropRect, setCropRect] = useState({ x: 0, y: 0, w: 100, h: 100 })
+  const [stageMetrics, setStageMetrics] = useState({ width: 1000, height: 1250 })
+  const [filters, setFilters] = useState({
+    brightness: 108,
+    contrast: 116,
+    saturation: 118,
+    blur: 0,
+    hue: 0,
+    vignette: 38,
+    grain: 18,
+  })
+  const [layers, setLayers] = useState(defaultLayers)
+  const [activeLayerId, setActiveLayerId] = useState('headline')
+  const [notice, setNotice] = useState('Ready to create.')
+  const stageRef = useRef(null)
+  const paintCanvasRef = useRef(null)
+  const dragRef = useRef(null)
+  const cropDragRef = useRef(null)
+  const brushStrokeRef = useRef(null)
+  const layerIdRef = useRef(0)
+
+  const selectedAsset = imageAssets.find((asset) => asset.id === selectedAssetId) ?? imageAssets[0] ?? null
+  const selectedImageSrc = generatedImageSrc || uploadedImage || selectedAsset?.previewUrl || ''
+  const preset = STYLE_PRESETS[presetId] ?? STYLE_PRESETS.aurora
+  const aspect = ASPECT_RATIOS[aspectRatio] ?? ASPECT_RATIOS['4:5']
+  const activeTextLayer = layers.find((layer) => layer.id === activeLayerId && layer.type === 'text') ?? null
+  const stageClipPath =
+    maskShape === 'circle'
+      ? 'circle(44% at 50% 50%)'
+      : maskShape === 'frame'
+        ? 'inset(6% round 30px)'
+        : maskShape === 'diagonal'
+          ? 'polygon(8% 16%, 92% 6%, 84% 84%, 12% 94%)'
+          : maskShape === 'rounded'
+            ? 'inset(0 round 28px)'
+            : 'none'
+
+  const updateLayer = (layerId, patch) => {
+    setLayers((prev) => prev.map((layer) => (layer.id === layerId ? { ...layer, ...patch } : layer)))
+  }
+
+  useEffect(() => {
+    if (!stageRef.current) return undefined
+
+    const updateMetrics = () => {
+      const rect = stageRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setStageMetrics((prev) => {
+        const next = { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) }
+        if (prev.width === next.width && prev.height === next.height) {
+          return prev
+        }
+        return next
+      })
+    }
+
+    updateMetrics()
+    const observer = new ResizeObserver(updateMetrics)
+    observer.observe(stageRef.current)
+    window.addEventListener('resize', updateMetrics)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', updateMetrics)
+    }
+  }, [])
+
+  useEffect(() => {
+    const canvas = paintCanvasRef.current
+    if (!canvas) return
+
+    canvas.width = stageMetrics.width
+    canvas.height = stageMetrics.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    brushStrokes.forEach((stroke) => drawStroke(ctx, stroke, canvas.width, canvas.height))
+  }, [brushStrokes, cropRect, stageMetrics])
+
+  const getStagePoint = (event) => {
+    const rect = stageRef.current?.getBoundingClientRect()
+    if (!rect) return { x: 0, y: 0 }
+
+    return {
+      x: clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100),
+      y: clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100),
+    }
+  }
+
+  const beginDrag = (layer, event) => {
+    if (activeTool !== 'select') return
+    if (!stageRef.current) return
+    event.preventDefault()
+    const stageRect = stageRef.current.getBoundingClientRect()
+    const currentX = (layer.x / 100) * stageRect.width
+    const currentY = (layer.y / 100) * stageRect.height
+
+    dragRef.current = {
+      layerId: layer.id,
+      offsetX: event.clientX - stageRect.left - currentX,
+      offsetY: event.clientY - stageRect.top - currentY,
+    }
+
+    const handleMove = (moveEvent) => {
+      if (!dragRef.current || !stageRef.current) return
+      const rect = stageRef.current.getBoundingClientRect()
+      const nextX = ((moveEvent.clientX - rect.left - dragRef.current.offsetX) / rect.width) * 100
+      const nextY = ((moveEvent.clientY - rect.top - dragRef.current.offsetY) / rect.height) * 100
+      setLayers((prev) =>
+        prev.map((item) =>
+          item.id === dragRef.current.layerId
+            ? { ...item, x: clamp(nextX, 4, 92), y: clamp(nextY, 6, 88) }
+            : item,
+        ),
+      )
+    }
+
+    const handleUp = () => {
+      dragRef.current = null
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+  }
+
+  const startBrushStroke = (event) => {
+    if (activeTool !== 'brush' || !paintCanvasRef.current || !stageRef.current) return
+    event.preventDefault()
+    event.stopPropagation()
+    const point = getStagePoint(event)
+    const stroke = {
+      id: `stroke-${Date.now()}`,
+      color: brushColor,
+      size: brushSize,
+      opacity: brushOpacity,
+      points: [point],
+    }
+
+    brushStrokeRef.current = stroke
+
+    const canvas = paintCanvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.save()
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.strokeStyle = brushColor
+    ctx.lineWidth = brushSize
+    ctx.globalAlpha = brushOpacity
+    ctx.beginPath()
+    const mapped = {
+      x: (point.x / 100) * canvas.width,
+      y: (point.y / 100) * canvas.height,
+    }
+    ctx.moveTo(mapped.x, mapped.y)
+    ctx.restore()
+
+    const moveStroke = (moveEvent) => {
+      if (!brushStrokeRef.current || !paintCanvasRef.current) return
+      const nextPoint = getStagePoint(moveEvent)
+      const currentStroke = brushStrokeRef.current
+      const lastPoint = currentStroke.points[currentStroke.points.length - 1]
+      currentStroke.points.push(nextPoint)
+
+      const moveCanvas = paintCanvasRef.current
+      const moveCtx = moveCanvas.getContext('2d')
+      if (!moveCtx) return
+      moveCtx.save()
+      moveCtx.lineCap = 'round'
+      moveCtx.lineJoin = 'round'
+      moveCtx.strokeStyle = currentStroke.color
+      moveCtx.lineWidth = currentStroke.size
+      moveCtx.globalAlpha = currentStroke.opacity
+      moveCtx.beginPath()
+      const from = {
+        x: (lastPoint.x / 100) * moveCanvas.width,
+        y: (lastPoint.y / 100) * moveCanvas.height,
+      }
+      const to = {
+        x: (nextPoint.x / 100) * moveCanvas.width,
+        y: (nextPoint.y / 100) * moveCanvas.height,
+      }
+      moveCtx.moveTo(from.x, from.y)
+      moveCtx.lineTo(to.x, to.y)
+      moveCtx.stroke()
+      moveCtx.restore()
+    }
+
+    const finishStroke = () => {
+      if (brushStrokeRef.current) {
+        setBrushStrokes((prev) => [...prev, brushStrokeRef.current])
+      }
+      brushStrokeRef.current = null
+      window.removeEventListener('pointermove', moveStroke)
+      window.removeEventListener('pointerup', finishStroke)
+      window.removeEventListener('pointercancel', finishStroke)
+    }
+
+    window.addEventListener('pointermove', moveStroke)
+    window.addEventListener('pointerup', finishStroke)
+    window.addEventListener('pointercancel', finishStroke)
+  }
+
+  const updateCropRect = (nextRect) => {
+    setCropRect((prev) => {
+      const merged = { ...prev, ...nextRect }
+      const width = clamp(merged.w, 20, 100)
+      const height = clamp(merged.h, 20, 100)
+      const x = clamp(merged.x, 0, 100 - width)
+      const y = clamp(merged.y, 0, 100 - height)
+      return { x, y, w: width, h: height }
+    })
+  }
+
+  const startCropDrag = (event, mode = 'move') => {
+    if (activeTool !== 'crop') return
+    event.preventDefault()
+    event.stopPropagation()
+    cropDragRef.current = {
+      mode,
+      startPoint: getStagePoint(event),
+      startRect: cropRect,
+    }
+
+    const moveCrop = (moveEvent) => {
+      if (!cropDragRef.current) return
+      const currentPoint = getStagePoint(moveEvent)
+      const deltaX = currentPoint.x - cropDragRef.current.startPoint.x
+      const deltaY = currentPoint.y - cropDragRef.current.startPoint.y
+      const { startRect: rect, mode: dragMode } = cropDragRef.current
+
+      if (dragMode === 'move') {
+        updateCropRect({ x: rect.x + deltaX, y: rect.y + deltaY })
+        return
+      }
+
+      const resizeMap = {
+        nw: { x: rect.x + deltaX, y: rect.y + deltaY, w: rect.w - deltaX, h: rect.h - deltaY },
+        ne: { y: rect.y + deltaY, w: rect.w + deltaX, h: rect.h - deltaY },
+        sw: { x: rect.x + deltaX, w: rect.w - deltaX, h: rect.h + deltaY },
+        se: { w: rect.w + deltaX, h: rect.h + deltaY },
+      }
+
+      updateCropRect(resizeMap[dragMode] ?? rect)
+    }
+
+    const endCropDrag = () => {
+      cropDragRef.current = null
+      window.removeEventListener('pointermove', moveCrop)
+      window.removeEventListener('pointerup', endCropDrag)
+      window.removeEventListener('pointercancel', endCropDrag)
+    }
+
+    window.addEventListener('pointermove', moveCrop)
+    window.addEventListener('pointerup', endCropDrag)
+    window.addEventListener('pointercancel', endCropDrag)
+  }
+
+  const handleGenerateImage = async () => {
+    if (!aiImagePrompt.trim()) {
+      setAiImageError('Describe the image you want to generate.')
+      return
+    }
+
+    setAiImageLoading(true)
+    setAiImageError('')
+
+    try {
+      const result = await generatePhotoConcept({
+        prompt: aiImagePrompt,
+        style: aiImageStyle,
+        aspectRatio,
+        referenceImageSrc: selectedImageSrc,
+        agentConfig,
+      })
+
+      setGeneratedImageSrc(result.imageSrc)
+      setGeneratedImageMeta(result)
+      setSelectedAssetId('')
+      setUploadedImage('')
+      setNotice(`Generated ${result.source === 'api' ? 'AI' : 'local'} concept image.`)
+      if (result.headline) setHeadline(result.headline)
+      if (result.caption) setSubcopy(result.caption)
+      if (result.palette && STYLE_PRESETS[result.palette]) setPresetId(result.palette)
+      setLayers((prev) =>
+        prev.map((layer) => {
+          if (layer.id === 'headline') return { ...layer, value: result.headline || layer.value }
+          if (layer.id === 'subcopy') return { ...layer, value: result.caption || layer.value }
+          return layer
+        }),
+      )
+    } catch (error) {
+      setAiImageError(error.message)
+    } finally {
+      setAiImageLoading(false)
+    }
+  }
+
+  const clearBaseImage = () => {
+    setGeneratedImageSrc('')
+    setGeneratedImageMeta(null)
+    setUploadedImage('')
+    setSelectedAssetId(imageAssets[0]?.id ?? '')
+    setNotice('Reverted to the workspace image library.')
+  }
+
+  const handleUpload = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      setUploadedImage(String(reader.result || ''))
+      setNotice(`Loaded ${file.name} into the canvas.`)
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }
+
+  const applyPrompt = () => {
+    const concept = classifyPrompt(prompt)
+    setPresetId(concept.preset)
+    setHeadline(concept.headline)
+    setSubcopy(concept.subcopy)
+    setLayers((prev) =>
+      prev.map((layer) => {
+        if (layer.id === 'headline') return { ...layer, value: concept.headline }
+        if (layer.id === 'subcopy') return { ...layer, value: concept.subcopy }
+        if (layer.id === 'sticker') return { ...layer, value: concept.sticker }
+        return layer
+      }),
+    )
+    setActiveLayerId('headline')
+    setNotice(`AI concept generated from: ${prompt}`)
+  }
+
+  const resetEditor = () => {
+    setPrompt(DEFAULT_PROMPT)
+    setPresetId('aurora')
+    setAspectRatio('4:5')
+    setHeadline('Launch the next drop')
+    setSubcopy('Edit, stylize, and export campaign art without leaving EchoAI.')
+    setFilters({ brightness: 108, contrast: 116, saturation: 118, blur: 0, hue: 0, vignette: 38, grain: 18 })
+    setLayers(defaultLayers())
+    setActiveLayerId('headline')
+    setNotice('Canvas reset to the default concept.')
+  }
+
+  const addTextLayer = () => {
+    const newLayer = {
+      id: `layer-${(layerIdRef.current += 1)}`,
+      type: 'text',
+      label: 'Text layer',
+      value: 'Add your message',
+      x: 20,
+      y: 68,
+      fontSize: 28,
+      weight: 600,
+      color: '#f8fafc',
+      align: 'left',
+    }
+    setLayers((prev) => [...prev, newLayer])
+    setActiveLayerId(newLayer.id)
+    setNotice('Added a new text layer.')
+  }
+
+  const addStickerLayer = (sticker) => {
+    const newLayer = {
+      id: `sticker-${(layerIdRef.current += 1)}`,
+      type: 'sticker',
+      label: 'Sticker',
+      value: sticker,
+      x: 82,
+      y: 72,
+      fontSize: 56,
+      weight: 700,
+      color: preset.accent,
+      align: 'center',
+    }
+    setLayers((prev) => [...prev, newLayer])
+    setActiveLayerId(newLayer.id)
+    setNotice('Sticker added to the layout.')
+  }
+
+  const deleteLayer = (layerId) => {
+    setLayers((prev) => prev.filter((layer) => layer.id !== layerId))
+    setActiveLayerId((prev) => (prev === layerId ? 'headline' : prev))
+  }
+
+  const updateTextEffect = (patch) => {
+    if (!activeTextLayer) return
+    updateLayer(activeTextLayer.id, patch)
+  }
+
+  const exportCanvas = async () => {
+    const stageCanvas = document.createElement('canvas')
+    stageCanvas.width = stageMetrics.width
+    stageCanvas.height = stageMetrics.height
+    const stageDataUrl = await renderComposition({
+      canvas: stageCanvas,
+      imageSrc: selectedImageSrc,
+      maskShape,
+      filters,
+      preset,
+      layers,
+      brushStrokes,
+      stageMetrics,
+    })
+
+    const exportCanvasEl = document.createElement('canvas')
+    exportCanvasEl.width = aspect.canvasWidth
+    exportCanvasEl.height = aspect.canvasHeight
+    const exportCtx = exportCanvasEl.getContext('2d')
+
+    if (!exportCtx) {
+      setNotice('Canvas export is unavailable in this browser.')
+      return
+    }
+
+    exportCtx.fillStyle = preset.base
+    exportCtx.fillRect(0, 0, exportCanvasEl.width, exportCanvasEl.height)
+
+    const stageImage = await loadImage(stageDataUrl)
+    const sourceX = (cropRect.x / 100) * stageMetrics.width
+    const sourceY = (cropRect.y / 100) * stageMetrics.height
+    const sourceWidth = (cropRect.w / 100) * stageMetrics.width
+    const sourceHeight = (cropRect.h / 100) * stageMetrics.height
+    exportCtx.drawImage(stageImage, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, exportCanvasEl.width, exportCanvasEl.height)
+
+    const exportName = `${slugify(headline || prompt)}-${aspectRatio.replace(':', 'x')}.png`
+    const dataUrl = exportCanvasEl.toDataURL('image/png')
+
+    onExport?.({
+      exportName,
+      dataUrl,
+      prompt,
+      caption: subcopy,
+      headline,
+      palette: preset.label,
+      aspectRatio,
+      sizeBytes: Math.max(300000, Math.round(dataUrl.length * 0.72)),
+      summary: `Photo design exported from the ${preset.label} preset.`,
+    })
+
+    const link = document.createElement('a')
+    link.href = dataUrl
+    link.download = exportName
+    link.click()
+    setNotice(`Exported ${exportName} and sent it to your workspace.`)
+  }
+
+  return (
+    <section className="photo-creator-shell">
+      <header className="photo-creator-header">
+        <div>
+          <p className="small-title">Photo Creator</p>
+          <h2>Immersive editor for social images, AI concepts, and campaign art</h2>
+        </div>
+        <div className="photo-creator-actions">
+          <button type="button" className="ghost-button" onClick={resetEditor}>Reset canvas</button>
+          <button type="button" className="primary-button" onClick={exportCanvas}>Export PNG</button>
+        </div>
+      </header>
+
+      <div className="photo-creator-grid">
+        <aside className="photo-sidebar photo-sidebar-left">
+          <div className="panel-block">
+            <p className="section-label">Source</p>
+            <div className="source-actions">
+              <label className="photo-upload-chip">
+                Upload from device
+                <input type="file" accept="image/*" onChange={handleUpload} />
+              </label>
+              <button type="button" className="ghost-button full-width" onClick={clearBaseImage}>
+                Use library image
+              </button>
+            </div>
+            <div className="source-list">
+              {imageAssets.length === 0 && <p className="muted">Your workspace has no image assets yet.</p>}
+              {imageAssets.map((asset) => (
+                <button
+                  key={asset.id}
+                  type="button"
+                  className={selectedAssetId === asset.id ? 'source-card active' : 'source-card'}
+                  onClick={() => {
+                    setSelectedAssetId(asset.id)
+                    setUploadedImage('')
+                    setNotice(`Using ${asset.name} as the base image.`)
+                  }}
+                >
+                  <span className="source-thumb">{asset.previewUrl ? <img src={asset.previewUrl} alt={asset.name} /> : '🖼️'}</span>
+                  <span>
+                    <strong>{asset.name}</strong>
+                    <small>{asset.summary}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel-block">
+            <p className="section-label">AI image generator</p>
+            <label>
+              Prompt
+              <textarea
+                rows="4"
+                value={aiImagePrompt}
+                onChange={(event) => setAiImagePrompt(event.target.value)}
+                placeholder="Describe the scene, subject, and vibe..."
+              />
+            </label>
+            <label>
+              Style
+              <select value={aiImageStyle} onChange={(event) => setAiImageStyle(event.target.value)}>
+                {Object.entries(STYLE_PRESETS).map(([key, value]) => (
+                  <option key={key} value={key}>{value.label}</option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="primary-button full-width" onClick={handleGenerateImage} disabled={aiImageLoading}>
+              {aiImageLoading ? 'Generating...' : 'Generate image'}
+            </button>
+            {generatedImageMeta && (
+              <p className="muted">{generatedImageMeta.source === 'api' ? 'Connected AI model' : 'Local concept fallback'} • {generatedImageMeta.palette}</p>
+            )}
+            {aiImageError && <p className="auth-message auth-error">{aiImageError}</p>}
+            <label>
+              Social prompt
+              <textarea
+                rows="3"
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="Used for the concept cards and export notes..."
+              />
+            </label>
+            <button type="button" className="ghost-button full-width" onClick={applyPrompt}>
+              Sync prompt to text layers
+            </button>
+          </div>
+
+          <div className="panel-block">
+            <p className="section-label">Quick styles</p>
+            <div className="preset-grid">
+              {Object.entries(STYLE_PRESETS).map(([key, value]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={presetId === key ? 'preset-card active' : 'preset-card'}
+                  onClick={() => setPresetId(key)}
+                  style={{ background: value.background }}
+                >
+                  <strong>{value.label}</strong>
+                  <span>{value.headline}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel-block">
+            <p className="section-label">Tools</p>
+            <div className="tool-grid">
+              {Object.entries(TOOLS).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={activeTool === key ? 'tool-chip active' : 'tool-chip'}
+                  onClick={() => setActiveTool(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <label>
+              Mask shape
+              <select value={maskShape} onChange={(event) => setMaskShape(event.target.value)}>
+                {Object.entries(MASK_SHAPES).map(([key, value]) => (
+                  <option key={key} value={key}>{value}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Brush color
+              <input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} />
+            </label>
+            <label className="slider-row">
+              <span>Brush size</span>
+              <input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} />
+            </label>
+            <label className="slider-row">
+              <span>Brush opacity</span>
+              <input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} />
+            </label>
+          </div>
+        </aside>
+
+        <div className="photo-stage-panel">
+          <div className="stage-chrome">
+            <div>
+              <p className="section-label">Canvas</p>
+              <h3>{aspect.label} layout</h3>
+            </div>
+            <p className="muted">{notice}</p>
+          </div>
+
+          <div className="photo-stage-wrap">
+            <div
+              ref={stageRef}
+              className="photo-stage"
+              onPointerDown={startBrushStroke}
+              style={{
+                aspectRatio: aspect.css,
+                background: preset.background,
+                cursor: activeTool === 'brush' ? 'crosshair' : activeTool === 'crop' ? 'move' : 'default',
+                clipPath: stageClipPath,
+              }}
+            >
+              {selectedImageSrc ? (
+                <img
+                  className="photo-stage-image"
+                  src={selectedImageSrc}
+                  alt="Selected composition"
+                  style={{
+                    filter: `brightness(${filters.brightness}%) contrast(${filters.contrast}%) saturate(${filters.saturation}%) hue-rotate(${filters.hue}deg) blur(${filters.blur}px)`,
+                  }}
+                />
+              ) : (
+                <div className="photo-stage-empty">
+                  <span>Drop in a photo or generate a concept to start</span>
+                </div>
+              )}
+
+              <div className="photo-stage-vignette" style={{ opacity: clamp(filters.vignette / 100, 0.18, 0.7) }} />
+              <div className="photo-stage-noise" style={{ opacity: clamp(filters.grain / 80, 0.05, 0.22) }} />
+              <canvas ref={paintCanvasRef} className="photo-paint-layer" aria-hidden="true" />
+
+              {activeTool === 'crop' && (
+                <div className="crop-overlay">
+                  <button
+                    type="button"
+                    className="crop-handle crop-handle-nw"
+                    onPointerDown={(event) => startCropDrag(event, 'nw')}
+                  />
+                  <button
+                    type="button"
+                    className="crop-handle crop-handle-ne"
+                    onPointerDown={(event) => startCropDrag(event, 'ne')}
+                  />
+                  <button
+                    type="button"
+                    className="crop-handle crop-handle-sw"
+                    onPointerDown={(event) => startCropDrag(event, 'sw')}
+                  />
+                  <button
+                    type="button"
+                    className="crop-handle crop-handle-se"
+                    onPointerDown={(event) => startCropDrag(event, 'se')}
+                  />
+                  <div
+                    className="crop-frame"
+                    onPointerDown={(event) => startCropDrag(event, 'move')}
+                    style={{
+                      left: `${cropRect.x}%`,
+                      top: `${cropRect.y}%`,
+                      width: `${cropRect.w}%`,
+                      height: `${cropRect.h}%`,
+                    }}
+                  />
+                </div>
+              )}
+
+              {layers.map((layer) => (
+                <button
+                  key={layer.id}
+                  type="button"
+                  className={layer.id === activeLayerId ? 'photo-layer active' : 'photo-layer'}
+                  style={{
+                    left: `${layer.x}%`,
+                    top: `${layer.y}%`,
+                    transform:
+                      layer.type === 'sticker'
+                        ? 'translate(-50%, -50%)'
+                        : layer.align === 'center'
+                          ? 'translate(-50%, -50%)'
+                          : layer.align === 'right'
+                            ? 'translate(-100%, -50%)'
+                            : 'translate(0, -50%)',
+                  }}
+                  onPointerDown={(event) => beginDrag(layer, event)}
+                  onClick={() => setActiveLayerId(layer.id)}
+                >
+                  {layer.type === 'sticker' ? (
+                    <span style={{ fontSize: `${layer.fontSize}px` }}>{layer.value}</span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: `${layer.fontSize}px`,
+                        fontWeight: layer.weight,
+                        color: layer.color,
+                        textAlign: layer.align,
+                        filter: layer.effect === 'glow' ? 'drop-shadow(0 0 12px rgba(255,255,255,0.7))' : 'none',
+                        maxWidth: '18ch',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {layer.value}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="stage-footer">
+            <p>Drag text and sticker layers directly on the canvas.</p>
+            <div className="chip-row">
+              {STICKERS.map((sticker) => (
+                <button key={sticker} type="button" className="chip" onClick={() => addStickerLayer(sticker)}>
+                  {sticker}
+                </button>
+              ))}
+              <button type="button" className="chip" onClick={addTextLayer}>+ Text layer</button>
+            </div>
+          </div>
+        </div>
+
+        <aside className="photo-sidebar photo-sidebar-right">
+          <div className="panel-block">
+            <p className="section-label">Inspector</p>
+            <label>
+              Aspect ratio
+              <select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value)}>
+                {Object.entries(ASPECT_RATIOS).map(([key, value]) => (
+                  <option key={key} value={key}>{value.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Active layer
+              <select value={activeLayerId} onChange={(event) => setActiveLayerId(event.target.value)}>
+                {layers.map((layer) => (
+                  <option key={layer.id} value={layer.id}>{layer.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Layer effect
+              <select
+                value={activeTextLayer?.effect ?? 'none'}
+                onChange={(event) => updateTextEffect({ effect: event.target.value })}
+                disabled={!activeTextLayer}
+              >
+                {Object.entries(TEXT_EFFECTS).map(([key, value]) => (
+                  <option key={key} value={key}>{value}</option>
+                ))}
+              </select>
+            </label>
+            {layers.map((layer) =>
+              layer.id === activeLayerId ? (
+                <div key={layer.id} className="layer-inspector">
+                  <label>
+                    Content
+                    <input
+                      value={layer.value}
+                      onChange={(event) => updateLayer(layer.id, { value: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Size
+                    <input
+                      type="range"
+                      min="16"
+                      max="96"
+                      value={layer.fontSize}
+                      onChange={(event) => updateLayer(layer.id, { fontSize: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label>
+                    X position
+                    <input
+                      type="range"
+                      min="4"
+                      max="92"
+                      value={layer.x}
+                      onChange={(event) => updateLayer(layer.id, { x: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label>
+                    Y position
+                    <input
+                      type="range"
+                      min="6"
+                      max="88"
+                      value={layer.y}
+                      onChange={(event) => updateLayer(layer.id, { y: Number(event.target.value) })}
+                    />
+                  </label>
+                  {layer.type === 'text' && (
+                    <>
+                      <label>
+                        Outline width
+                        <input
+                          type="range"
+                          min="0"
+                          max="12"
+                          value={layer.outlineWidth ?? 0}
+                          onChange={(event) => updateLayer(layer.id, { outlineWidth: Number(event.target.value) })}
+                        />
+                      </label>
+                      <label>
+                        Outline color
+                        <input
+                          type="color"
+                          value={layer.outlineColor ?? '#020617'}
+                          onChange={(event) => updateLayer(layer.id, { outlineColor: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Shadow blur
+                        <input
+                          type="range"
+                          min="0"
+                          max="40"
+                          value={layer.shadowBlur ?? 0}
+                          onChange={(event) => updateLayer(layer.id, { shadowBlur: Number(event.target.value) })}
+                        />
+                      </label>
+                      <label>
+                        Shadow color
+                        <input
+                          type="color"
+                          value={layer.shadowColor ?? '#020617'}
+                          onChange={(event) => updateLayer(layer.id, { shadowColor: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Panel color
+                        <input
+                          type="color"
+                          value={layer.panelColor?.startsWith('rgba') ? '#0f172a' : layer.panelColor ?? '#0f172a'}
+                          onChange={(event) => updateLayer(layer.id, { panelColor: `${event.target.value}cc` })}
+                        />
+                      </label>
+                      <label>
+                        Letter spacing
+                        <input
+                          type="range"
+                          min="-2"
+                          max="8"
+                          step="0.5"
+                          value={layer.letterSpacing ?? 0}
+                          onChange={(event) => updateLayer(layer.id, { letterSpacing: Number(event.target.value) })}
+                        />
+                      </label>
+                    </>
+                  )}
+                  {layer.type === 'text' && (
+                    <label>
+                      Color
+                      <input
+                        type="color"
+                        value={layer.color}
+                        onChange={(event) => updateLayer(layer.id, { color: event.target.value })}
+                      />
+                    </label>
+                  )}
+                  <button type="button" className="ghost-button full-width" onClick={() => deleteLayer(layer.id)}>
+                    Remove layer
+                  </button>
+                </div>
+              ) : null,
+            )}
+          </div>
+
+          <div className="panel-block">
+            <p className="section-label">Adjustments</p>
+            {[
+              ['brightness', 'Brightness'],
+              ['contrast', 'Contrast'],
+              ['saturation', 'Saturation'],
+              ['hue', 'Hue'],
+              ['blur', 'Blur'],
+              ['vignette', 'Vignette'],
+              ['grain', 'Grain'],
+            ].map(([key, label]) => (
+              <label key={key} className="slider-row">
+                <span>{label}</span>
+                <input
+                  type="range"
+                  min={key === 'blur' ? 0 : key === 'hue' ? -45 : 0}
+                  max={key === 'blur' ? 6 : key === 'hue' ? 45 : 200}
+                  step={key === 'blur' ? 0.1 : 1}
+                  value={filters[key]}
+                  onChange={(event) => setFilters((prev) => ({ ...prev, [key]: Number(event.target.value) }))}
+                />
+              </label>
+            ))}
+          </div>
+
+          <div className="panel-block">
+            <p className="section-label">Concept notes</p>
+            <div className="concept-card">
+              <strong>{headline}</strong>
+              <p>{subcopy}</p>
+              <small>Preset: {preset.label}</small>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  )
+}

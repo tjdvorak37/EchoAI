@@ -10,6 +10,7 @@ EchoAI is a JavaScript + Supabase social media scheduling platform built for tea
 - Company post syndication hub with notifications, approval board, copy/repost flow, and user-branded repost captions.
 - Post scheduler with channel selection, message composition, image brief, and timed deployment queue.
 - AI message studio for copy ideas, image prompts, and campaign suggestions.
+- Immersive photo creator with AI image generation, brush tools, crop masking, and text effects.
 - IT/Management oversight panel for incident tracking and operational visibility.
 - Employee access lifecycle controls (approve, deny, deactivate, reactivate).
 - Auto-approval toggle for non-technical users to repost company main-page posts automatically.
@@ -40,6 +41,9 @@ cp .env.example .env
 ```env
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_IMAGE_GEN_ENDPOINT=https://your-image-service.example.com/generate
+VITE_IMAGE_GEN_API_KEY=your-image-service-key
+VITE_IMAGE_GEN_MODEL=image-1
 ```
 
 4. Start development server:
@@ -53,6 +57,7 @@ npm run dev
 - Authentication methods are in `src/services/authService.js`.
 - Repost workflow service methods are in `src/services/repostService.js`.
 - Post scheduling and AI hooks are in `src/services/platformService.js`.
+- Photo Creator image generation is in `src/services/photoAiService.js` and falls back to a local canvas concept if no endpoint is configured.
 - Supabase client bootstrap is in `src/lib/supabase.js`.
 - Without env configuration, the app runs in demo mode for UI prototyping.
 
@@ -79,4 +84,5 @@ npm run dev
 - Add OAuth account linking for Meta, Snapchat, TikTok, and X.
 - Add background job processing for scheduled publish events.
 - Build a Supabase Edge Function named `generate-social-copy` for live AI text/image suggestions.
+- Add a dedicated image-generation endpoint for the Photo Creator if you want real model-backed output.
 - Add role-based access (user, manager, IT-admin) and audit logs.

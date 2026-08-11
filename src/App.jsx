@@ -1,5 +1,7 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import './components/VideoEditor.css'
+import './components/PhotoEditor.css'
 import {
   accessRequestsSeed,
   adminAlerts,
@@ -7,20 +9,102 @@ import {
   companyMainPostsSeed,
   companySocialAccountsSeed,
   connectedAccountsSeed,
+  expensesSeed,
+  financialTasksSeed,
+  licensesSeed,
+  payrollSeed,
   postTypeChips,
+  promoCodesSeed,
+  purchaseHistorySeed,
+  refundsSeed,
   repostQueueSeed,
   scheduledPostsSeed,
+  siteFeatureFlagsSeed,
   starterStats,
+  supportTicketsSeed,
+  taxRecordsSeed,
   teamMembersSeed,
   userRepostsSeed,
+  workspaceAssetsSeed,
+  workspaceFoldersSeed,
 } from './data/demoData'
 import { authService } from './services/authService'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
 import { isSupabaseConfigured } from './lib/supabase'
+import { VideoEditor } from './components/VideoEditor'
+import { PhotoEditor } from './components/PhotoEditor'
+import { LandingPage } from './components/LandingPage'
+import { PurchasePage } from './components/PurchasePage'
+import { AdminPanel } from './components/AdminPanel'
+import { FinancePanel } from './components/FinancePanel'
+
+// Per-user localStorage isolation — each user's data lives under their own key
+const getUserKey = (userId) => `echoai-u-${userId}-v1`
+const readUserData = (userId) => {
+  try { return JSON.parse(localStorage.getItem(getUserKey(userId))) } catch { return null }
+}
+
+const PLATFORM_META = {
+  instagram: { label: 'Instagram', icon: 'IG', color: '#E1306C', bg: 'rgba(225,48,108,0.12)', border: 'rgba(225,48,108,0.35)' },
+  facebook:  { label: 'Facebook',  icon: 'FB', color: '#1877F2', bg: 'rgba(24,119,242,0.12)', border: 'rgba(24,119,242,0.35)' },
+  tiktok:    { label: 'TikTok',    icon: 'TT', color: '#FE2C55', bg: 'rgba(254,44,85,0.12)',  border: 'rgba(254,44,85,0.35)' },
+  snapchat:  { label: 'Snapchat',  icon: '👻', color: '#F7C600', bg: 'rgba(247,198,0,0.12)',  border: 'rgba(247,198,0,0.35)' },
+  x:         { label: 'X',         icon: '𝕏',  color: '#e2e8f0', bg: 'rgba(226,232,240,0.1)', border: 'rgba(226,232,240,0.3)' },
+  youtube:   { label: 'YouTube',   icon: '▶',  color: '#FF0000', bg: 'rgba(255,0,0,0.12)',    border: 'rgba(255,0,0,0.35)' },
+  linkedin:  { label: 'LinkedIn',  icon: 'in', color: '#0A66C2', bg: 'rgba(10,102,194,0.12)', border: 'rgba(10,102,194,0.35)' },
+}
+
+const getPlatformMeta = (platformName) =>
+  PLATFORM_META[platformName?.toLowerCase()] ??
+  { label: platformName, icon: '🔗', color: '#64748b', bg: 'rgba(100,116,139,0.1)', border: 'rgba(100,116,139,0.25)' }
+
+const createDefaultAiAgentConfig = () => ({
+  enabled: false,
+  name: 'My AI Agent',
+  endpoint: '',
+  apiKey: '',
+  model: '',
+  capabilities: ['message', 'image', 'video'],
+  lastSyncedAt: '',
+  status: 'not connected',
+  message: 'Connect a personal AI agent endpoint to personalize copy and image generation.',
+})
+
+const hydrateWorkspaceAssets = (assets) =>
+  (assets ?? []).map((asset) => {
+    if (asset?.type !== 'image' || asset?.previewUrl) {
+      return asset
+    }
+
+    const seededAsset = workspaceAssetsSeed.find((item) => item.id === asset.id)
+    if (!seededAsset?.previewUrl) {
+      return asset
+    }
+
+    return { ...asset, previewUrl: seededAsset.previewUrl }
+  })
+
+const AI_AGENT_CAPABILITIES = [
+  {
+    key: 'message',
+    title: 'Message assistance',
+    description: 'Captions, replies, post copy, and campaign wording.',
+  },
+  {
+    key: 'image',
+    title: 'Image assistance',
+    description: 'Photo prompts, creative directions, and generated concepts.',
+  },
+  {
+    key: 'video',
+    title: 'Video assistance',
+    description: 'Scripts, scene ideas, hooks, and edit suggestions.',
+  },
+]
 
 function App() {
-  const [authView, setAuthView] = useState('signin')
+  const [authView, setAuthView] = useState('landing')
   const [authState, setAuthState] = useState({
     email: '',
     password: '',
@@ -36,7 +120,7 @@ function App() {
   const [session, setSession] = useState(null)
 
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [connectedAccounts] = useState(connectedAccountsSeed)
+  const [connectedAccounts, setConnectedAccounts] = useState(connectedAccountsSeed)
   const [scheduledPosts, setScheduledPosts] = useState(scheduledPostsSeed)
   const [companyMainPosts, setCompanyMainPosts] = useState(companyMainPostsSeed)
   const [companySocialAccounts, setCompanySocialAccounts] = useState(companySocialAccountsSeed)
@@ -63,11 +147,6 @@ function App() {
   const [teamMembers, setTeamMembers] = useState(teamMembersSeed)
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminError, setAdminError] = useState('')
-  const [employeeSearch, setEmployeeSearch] = useState('')
-  const [employeeSortBy, setEmployeeSortBy] = useState('name')
-  const [employeeSortOrder, setEmployeeSortOrder] = useState('asc')
-  const [employeePage, setEmployeePage] = useState(1)
-  const [employeePageSize, setEmployeePageSize] = useState(8)
   const [supportModalOpen, setSupportModalOpen] = useState(false)
   const [supportLoading, setSupportLoading] = useState(false)
   const [supportError, setSupportError] = useState('')
@@ -86,6 +165,133 @@ function App() {
   const [aiInput, setAiInput] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState([])
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiAgentConfig, setAiAgentConfig] = useState(() => createDefaultAiAgentConfig())
+  const [aiAgentDraft, setAiAgentDraft] = useState(() => createDefaultAiAgentConfig())
+  const [aiAgentSaving, setAiAgentSaving] = useState(false)
+  const [aiAgentTesting, setAiAgentTesting] = useState(false)
+  const [aiAgentFeedback, setAiAgentFeedback] = useState('')
+  const [aiAgentFeedbackTone, setAiAgentFeedbackTone] = useState('info')
+
+  useEffect(() => {
+    setAiAgentDraft(aiAgentConfig)
+  }, [aiAgentConfig])
+  const [workspaceFolders, setWorkspaceFolders] = useState(workspaceFoldersSeed)
+  const [workspaceAssets, setWorkspaceAssets] = useState(workspaceAssetsSeed)
+  const [selectedFolderId, setSelectedFolderId] = useState('folder-root')
+  const [assetSearch, setAssetSearch] = useState('')
+  const [newFolderName, setNewFolderName] = useState('')
+  const [editingItem, setEditingItem] = useState(null)
+  const [editingName, setEditingName] = useState('')
+  const [isAssetPanelOpen, setIsAssetPanelOpen] = useState(true)
+  const [drawerDragActive, setDrawerDragActive] = useState(false)
+  const [quotaEditingUserId, setQuotaEditingUserId] = useState('')
+  const [quotaDraftMb, setQuotaDraftMb] = useState('2048')
+  const [licenses, setLicenses] = useState(licensesSeed)
+  const [tickets, setTickets] = useState(supportTicketsSeed)
+  const [purchaseHistory, setPurchaseHistory] = useState(purchaseHistorySeed)
+  const [featureFlags, setFeatureFlags] = useState(siteFeatureFlagsSeed)
+  const [venmoUsername, setVenmoUsername] = useState('EchoAIPayments')
+  const [promoCodes, setPromoCodes] = useState(promoCodesSeed)
+  const [expenses, setExpenses] = useState(expensesSeed)
+  const [payroll, setPayroll] = useState(payrollSeed)
+  const [taxRecords, setTaxRecords] = useState(taxRecordsSeed)
+  const [refunds, setRefunds] = useState(refundsSeed)
+  const [financialTasks, setFinancialTasks] = useState(financialTasksSeed)
+  const [showPurchase, setShowPurchase] = useState(false)
+
+  // Loads and applies this user's persisted data after login.
+  // Demo users fall back to seed data on first login; all others start clean.
+  const applyUserData = async (user) => {
+    const stored = readUserData(user.id)
+    const isDemo = user.id?.startsWith('demo-')
+    const defaults = isDemo
+      ? {
+          scheduledPosts: scheduledPostsSeed,
+          connectedAccounts: connectedAccountsSeed,
+          companyMainPosts: companyMainPostsSeed,
+          companySocialAccounts: companySocialAccountsSeed,
+          repostQueue: repostQueueSeed,
+          userReposts: userRepostsSeed,
+          workspaceFolders: workspaceFoldersSeed,
+          workspaceAssets: workspaceAssetsSeed,
+        }
+      : {}
+    const d = stored ?? defaults
+    setScheduledPosts(d.scheduledPosts ?? [])
+    setConnectedAccounts(d.connectedAccounts ?? [])
+    setCompanyMainPosts(d.companyMainPosts ?? [])
+    setCompanySocialAccounts(d.companySocialAccounts ?? [])
+    setRepostQueue(d.repostQueue ?? [])
+    setUserReposts(d.userReposts ?? [])
+    setWorkspaceFolders(
+      d.workspaceFolders ?? [{ id: 'folder-root', name: 'My workspace', parentId: null, createdAt: new Date().toISOString() }],
+    )
+    setWorkspaceAssets(hydrateWorkspaceAssets(d.workspaceAssets ?? []))
+
+    if (isSupabaseConfigured) {
+      const profileAiAgentConfig = await authService.getUserAiAgentConfig({
+        userId: user.id,
+        email: user.email,
+      })
+
+      setAiAgentConfig(
+        profileAiAgentConfig
+          ? { ...createDefaultAiAgentConfig(), ...profileAiAgentConfig }
+          : createDefaultAiAgentConfig(),
+      )
+      return
+    }
+
+    setAiAgentConfig(
+      d.aiAgentConfig
+        ? { ...createDefaultAiAgentConfig(), ...d.aiAgentConfig }
+        : createDefaultAiAgentConfig(),
+    )
+  }
+
+  const validatePromoCode = (raw) => {
+    const code = raw.trim().toUpperCase()
+    const found = promoCodes.find((c) => c.code.toUpperCase() === code)
+    if (!found) return { valid: false, message: 'Code not found.' }
+    if (!found.active) return { valid: false, message: 'This code is no longer active.' }
+    if (found.expiresAt && new Date(found.expiresAt) < new Date()) return { valid: false, message: 'This code has expired.' }
+    if (found.maxUses !== null && found.usedCount >= found.maxUses) return { valid: false, message: 'This code has reached its usage limit.' }
+    return { valid: true, message: `Code applied: ${found.description}`, codeObj: found }
+  }
+
+  // Save all per-user data to their own namespaced localStorage key whenever any slice changes.
+  // In production this is backed by Supabase with row-level security scoped to auth.uid().
+  useEffect(() => {
+    if (!session?.id) return
+    try {
+      // Keep image previews for the editor; strip larger non-image previews from storage.
+      const assetsForStorage = workspaceAssets.map((asset) => {
+        const rest = { ...asset }
+        if (asset.type !== 'image') {
+          delete rest.previewUrl
+        }
+        return rest
+      })
+      localStorage.setItem(
+        getUserKey(session.id),
+        JSON.stringify({
+          scheduledPosts,
+          connectedAccounts,
+          companyMainPosts,
+          companySocialAccounts,
+          repostQueue,
+          userReposts,
+          workspaceFolders,
+          workspaceAssets: assetsForStorage,
+          ...(isSupabaseConfigured ? {} : { aiAgentConfig }),
+        }),
+      )
+    } catch (err) {
+      console.error('Unable to save user data', err)
+    }
+  }, [session, scheduledPosts, connectedAccounts, companyMainPosts, companySocialAccounts, repostQueue, userReposts, workspaceFolders, workspaceAssets, aiAgentConfig])
+
+  const storageQuotaMb = Number(session?.storageQuotaMb ?? session?.storage_quota_mb ?? 2048) || 2048
 
   const upcomingPostCount = useMemo(
     () => scheduledPosts.filter((post) => post.status === 'scheduled').length,
@@ -107,71 +313,10 @@ function App() {
     [repostQueue],
   )
 
-  const filteredTeamMembers = useMemo(() => {
-    const query = employeeSearch.trim().toLowerCase()
-    if (!query) {
-      return teamMembers
-    }
-
-    return teamMembers.filter((member) => {
-      const searchable = [
-        member.fullName,
-        member.email,
-        member.company,
-        member.role,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-
-      return searchable.includes(query)
-    })
-  }, [employeeSearch, teamMembers])
-
-  const sortedTeamMembers = useMemo(() => {
-    const sorted = [...filteredTeamMembers]
-
-    const toSortable = (member) => {
-      if (employeeSortBy === 'email') {
-        return member.email || ''
-      }
-
-      if (employeeSortBy === 'role') {
-        return member.role || ''
-      }
-
-      if (employeeSortBy === 'status') {
-        return member.accessStatus || ''
-      }
-
-      return member.fullName || ''
-    }
-
-    sorted.sort((a, b) => {
-      const first = toSortable(a).toLowerCase()
-      const second = toSortable(b).toLowerCase()
-
-      if (first < second) {
-        return employeeSortOrder === 'asc' ? -1 : 1
-      }
-
-      if (first > second) {
-        return employeeSortOrder === 'asc' ? 1 : -1
-      }
-
-      return 0
-    })
-
-    return sorted
-  }, [employeeSortBy, employeeSortOrder, filteredTeamMembers])
-
-  const totalEmployeePages = Math.max(1, Math.ceil(sortedTeamMembers.length / employeePageSize))
-  const currentEmployeePage = Math.min(employeePage, totalEmployeePages)
-
-  const pagedTeamMembers = useMemo(() => {
-    const start = (currentEmployeePage - 1) * employeePageSize
-    return sortedTeamMembers.slice(start, start + employeePageSize)
-  }, [currentEmployeePage, employeePageSize, sortedTeamMembers])
+  const storageUsedMb = useMemo(
+    () => workspaceAssets.reduce((sum, asset) => sum + asset.size / 1024 / 1024, 0),
+    [workspaceAssets],
+  )
 
   const userIdentity = useMemo(() => {
     const metadataName = session?.user_metadata?.full_name
@@ -205,7 +350,7 @@ function App() {
   }
 
   const isAdminUser = session?.role === 'admin'
-  const canViewManagementBoard = ['admin', 'manager', 'it'].includes(session?.role || '')
+  const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant'].includes(session?.role || '')
 
   const loadAdminData = async () => {
     setAdminError('')
@@ -276,7 +421,8 @@ function App() {
         return
       }
 
-      setSession(result.user)
+        setSession(result.user)
+        await applyUserData(result.user)
     } catch (error) {
       setAuthError(error.message)
     } finally {
@@ -336,6 +482,7 @@ function App() {
         code: authState.otpCode,
       })
       setSession(result.user)
+      await applyUserData(result.user)
       await loadRepostWorkspace()
       if (result.user?.role === 'admin') {
         await loadAdminData()
@@ -394,19 +541,350 @@ function App() {
     }
 
     setAiLoading(true)
-    const suggestions = await platformService.generateMessageIdeas(aiInput)
-    setAiSuggestions(suggestions)
-    setAiLoading(false)
+    try {
+      const suggestions = await platformService.generateMessageIdeas(aiInput, aiAgentConfig)
+      setAiSuggestions(suggestions)
+    } finally {
+      setAiLoading(false)
+    }
   }
 
-  const handleResolveAlert = (alertId) => {
-    setAlerts((prev) =>
-      prev.map((alert) =>
-        alert.id === alertId ? { ...alert, status: 'resolved' } : alert,
-      ),
-    )
+  const handleSaveAiAgent = async (event) => {
+    event.preventDefault()
+    setAiAgentSaving(true)
+    setAiAgentFeedback('')
+
+    try {
+      const capabilities = Array.isArray(aiAgentDraft.capabilities)
+        ? aiAgentDraft.capabilities
+        : createDefaultAiAgentConfig().capabilities
+
+      const savedConfig = await authService.updateUserAiAgentConfig({
+        userId: session.id,
+        aiAgentConfig: {
+          ...createDefaultAiAgentConfig(),
+          ...aiAgentDraft,
+          capabilities,
+          enabled: Boolean(aiAgentDraft.endpoint.trim()) && aiAgentDraft.enabled,
+          endpoint: aiAgentDraft.endpoint.trim(),
+          apiKey: aiAgentDraft.apiKey.trim(),
+          model: aiAgentDraft.model.trim(),
+          status: aiAgentDraft.endpoint.trim() ? 'connected' : 'not connected',
+          message: aiAgentDraft.endpoint.trim()
+            ? 'Your personal AI agent is ready for copy and image generation.'
+            : 'Connect a personal AI agent endpoint to personalize copy and image generation.',
+          lastSyncedAt: aiAgentDraft.endpoint.trim() ? new Date().toISOString() : '',
+        },
+      })
+
+      setAiAgentConfig({ ...createDefaultAiAgentConfig(), ...savedConfig })
+      setAiAgentFeedbackTone('success')
+      setAiAgentFeedback('AI agent settings saved for this account.')
+    } catch (error) {
+      setAiAgentFeedbackTone('error')
+      setAiAgentFeedback(error.message)
+    } finally {
+      setAiAgentSaving(false)
+    }
   }
 
+  const handleAiAgentDraftChange = (field, value) => {
+    setAiAgentDraft((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleAiAgentCapabilityToggle = (capabilityKey) => {
+    setAiAgentDraft((prev) => {
+      const current = Array.isArray(prev.capabilities) ? prev.capabilities : []
+      const next = current.includes(capabilityKey)
+        ? current.filter((item) => item !== capabilityKey)
+        : [...current, capabilityKey]
+
+      return { ...prev, capabilities: next }
+    })
+  }
+
+  const handleTestAiAgent = async () => {
+    const endpoint = aiAgentDraft.endpoint.trim() || aiAgentConfig.endpoint.trim()
+    if (!endpoint) {
+      setAiAgentFeedbackTone('error')
+      setAiAgentFeedback('Add an AI agent endpoint before testing the connection.')
+      return
+    }
+
+    setAiAgentTesting(true)
+    setAiAgentFeedback('')
+
+    try {
+      const capabilities = Array.isArray(aiAgentDraft.capabilities)
+        ? aiAgentDraft.capabilities
+        : aiAgentConfig.capabilities
+
+      const testConfig = {
+        ...createDefaultAiAgentConfig(),
+        ...aiAgentDraft,
+        capabilities,
+        endpoint,
+        enabled: true,
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(testConfig.apiKey ? { Authorization: `Bearer ${testConfig.apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          mode: 'test',
+          model: testConfig.model || 'default',
+          agentName: testConfig.name || 'My AI Agent',
+          prompt: 'EchoAI connection test',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`AI agent test failed (${response.status})`)
+      }
+
+      setAiAgentFeedbackTone('success')
+      setAiAgentFeedback('AI agent connection verified successfully.')
+    } catch (error) {
+      setAiAgentFeedbackTone('error')
+      setAiAgentFeedback(error.message)
+    } finally {
+      setAiAgentTesting(false)
+    }
+  }
+
+  const handlePhotoExport = (project) => {
+    const exportedAsset = {
+      id: `asset_${Date.now()}`,
+      name: project.exportName || 'photo-creator-export.png',
+      type: 'image',
+      mime: 'image/png',
+      size: project.sizeBytes || Math.max(300000, Math.round((project.dataUrl?.length || 0) * 0.72)),
+      folderId: selectedFolderId,
+      createdAt: new Date().toISOString(),
+      previewUrl: project.dataUrl,
+      summary: project.summary || 'Exported from the photo creator',
+    }
+
+    setWorkspaceAssets((prev) => [exportedAsset, ...prev])
+    setComposer((prev) => ({
+      ...prev,
+      message: project.caption || prev.message,
+      imageIdea: project.prompt || project.headline || prev.imageIdea,
+      campaign: prev.campaign || 'Photo campaign',
+    }))
+    setActiveTab('scheduler')
+  }
+
+  const handleCreateFolder = (event) => {
+    event.preventDefault()
+    if (!newFolderName.trim()) {
+      return
+    }
+
+    const folder = {
+      id: `folder_${Date.now()}`,
+      name: newFolderName.trim(),
+      parentId: selectedFolderId,
+      createdAt: new Date().toISOString(),
+    }
+
+    setWorkspaceFolders((prev) => [...prev, folder])
+    setNewFolderName('')
+    setSelectedFolderId(folder.id)
+  }
+
+  const handleUploadAsset = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    const fileSizeMb = file.size / 1024 / 1024
+    if (storageUsedMb + fileSizeMb > storageQuotaMb) {
+      setAdminError('This upload exceeds your available storage quota.')
+      event.target.value = ''
+      return
+    }
+
+    const assetType = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : 'document'
+
+    const previewUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => reject(new Error('Unable to read file'))
+      reader.readAsDataURL(file)
+    })
+
+    const asset = {
+      id: `asset_${Date.now()}`,
+      name: file.name,
+      type: assetType,
+      mime: file.type || 'application/octet-stream',
+      size: file.size,
+      folderId: selectedFolderId,
+      createdAt: new Date().toISOString(),
+      previewUrl,
+      summary: 'Uploaded from your device',
+    }
+
+    setWorkspaceAssets((prev) => [asset, ...prev])
+    event.target.value = ''
+  }
+
+  // Prevent the browser from navigating to dropped files anywhere on the page.
+  useEffect(() => {
+    // Prevent browser navigating to the file; don't set dropEffect so element handlers control the cursor
+    const blockBrowser = (e) => {
+      if (e.dataTransfer?.types?.includes('Files')) e.preventDefault()
+    }
+    document.addEventListener('dragover', blockBrowser)
+    document.addEventListener('drop', blockBrowser)
+    return () => {
+      document.removeEventListener('dragover', blockBrowser)
+      document.removeEventListener('drop', blockBrowser)
+    }
+  }, [])
+
+  const handleAssetFileDrop = async (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setDrawerDragActive(false)
+    const file = event.dataTransfer?.files?.[0]
+    if (!file) return
+    const fileSizeMb = file.size / 1024 / 1024
+    if (storageUsedMb + fileSizeMb > storageQuotaMb) {
+      setAdminError('This upload exceeds your available storage quota.')
+      return
+    }
+    const assetType = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : 'document'
+    const previewUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => reject(new Error('Unable to read file'))
+      reader.readAsDataURL(file)
+    })
+    setWorkspaceAssets((prev) => [{
+      id: `asset_${Date.now()}`,
+      name: file.name,
+      type: assetType,
+      mime: file.type || 'application/octet-stream',
+      size: file.size,
+      folderId: selectedFolderId,
+      createdAt: new Date().toISOString(),
+      previewUrl,
+      summary: 'Dropped into workspace',
+    }, ...prev])
+  }
+
+  const filteredAssets = useMemo(() => {
+    const query = assetSearch.trim().toLowerCase()
+    return workspaceAssets.filter((asset) => {
+      if (!query) {
+        return asset.folderId === selectedFolderId
+      }
+
+      return (
+        asset.folderId === selectedFolderId &&
+        `${asset.name} ${asset.summary}`.toLowerCase().includes(query)
+      )
+    })
+  }, [assetSearch, selectedFolderId, workspaceAssets])
+
+  const currentFolder = workspaceFolders.find((folder) => folder.id === selectedFolderId)
+  const folderBreadcrumbs = useMemo(() => {
+    const crumbs = []
+    let folder = currentFolder
+
+    while (folder) {
+      crumbs.unshift(folder)
+      folder = workspaceFolders.find((item) => item.id === folder.parentId)
+    }
+
+    return crumbs
+  }, [currentFolder, workspaceFolders])
+
+  const startRenameItem = (type, id, name) => {
+    setEditingItem({ type, id })
+    setEditingName(name)
+  }
+
+  const saveRenameItem = () => {
+    if (!editingItem) {
+      return
+    }
+
+    const trimmed = editingName.trim()
+    if (!trimmed) {
+      setEditingItem(null)
+      setEditingName('')
+      return
+    }
+
+    if (editingItem.type === 'folder') {
+      setWorkspaceFolders((prev) => prev.map((folder) => (folder.id === editingItem.id ? { ...folder, name: trimmed } : folder)))
+    } else {
+      setWorkspaceAssets((prev) => prev.map((asset) => (asset.id === editingItem.id ? { ...asset, name: trimmed } : asset)))
+    }
+
+    setEditingItem(null)
+    setEditingName('')
+  }
+
+  const deleteFolder = (folderId) => {
+    const foldersToRemove = [folderId]
+    const collectChildren = (id) => {
+      const children = workspaceFolders.filter((folder) => folder.parentId === id)
+      children.forEach((child) => {
+        foldersToRemove.push(child.id)
+        collectChildren(child.id)
+      })
+    }
+
+    collectChildren(folderId)
+
+    setWorkspaceFolders((prev) => prev.filter((folder) => !foldersToRemove.includes(folder.id)))
+    setWorkspaceAssets((prev) => prev.filter((asset) => !foldersToRemove.includes(asset.folderId)))
+
+    if (selectedFolderId === folderId || foldersToRemove.includes(selectedFolderId)) {
+      setSelectedFolderId('folder-root')
+    }
+  }
+
+  const deleteAsset = (assetId) => {
+    setWorkspaceAssets((prev) => prev.filter((asset) => asset.id !== assetId))
+  }
+
+  const handleAssetDragStart = () => {}
+
+  const handleQuotaUpdate = async (member) => {
+    const nextQuota = Number(quotaDraftMb)
+    if (!Number.isFinite(nextQuota) || nextQuota <= 0) {
+      setAdminError('Storage quota must be a positive number.')
+      return
+    }
+
+    try {
+      const updatedMember = await authService.updateUserStorageQuota({
+        userId: member.id,
+        storageQuotaMb: nextQuota,
+      })
+
+      setTeamMembers((prev) =>
+        prev.map((item) => (item.id === updatedMember.id ? { ...item, ...updatedMember } : item)),
+      )
+      if (session?.id === updatedMember.id) {
+        setSession((prev) => ({ ...prev, storageQuotaMb: updatedMember.storageQuotaMb }))
+      }
+      setQuotaEditingUserId('')
+      setQuotaDraftMb('2048')
+      setAdminError('')
+    } catch (error) {
+      setAdminError(error.message)
+    }
+  }
   const handleUpdateUserRole = async (member, nextRole) => {
     setAdminError('')
     setAdminLoading(true)
@@ -859,38 +1337,6 @@ function App() {
     }
   }
 
-  const handleReviewAccessRequest = async (requestId, decision) => {
-    setAdminError('')
-    setAdminLoading(true)
-
-    try {
-      const result = await authService.reviewAccessRequest({ requestId, decision })
-
-      setAccessRequests((prev) =>
-        prev.map((request) =>
-          request.id === requestId ? { ...request, ...result.request } : request,
-        ),
-      )
-
-      if (result.member) {
-        setTeamMembers((prev) => {
-          const exists = prev.some((member) => member.id === result.member.id)
-          if (exists) {
-            return prev.map((member) =>
-              member.id === result.member.id ? { ...member, ...result.member } : member,
-            )
-          }
-
-          return [result.member, ...prev]
-        })
-      }
-    } catch (error) {
-      setAdminError(error.message)
-    } finally {
-      setAdminLoading(false)
-    }
-  }
-
   const handleToggleUserAccess = async (member) => {
     setAdminError('')
     setAdminLoading(true)
@@ -922,13 +1368,86 @@ function App() {
     setSession(null)
     setActiveTab('dashboard')
     setSupportModalOpen(false)
+    // Wipe all per-user state so the next user starts with a clean slate
+    setScheduledPosts([])
+    setConnectedAccounts([])
+    setCompanyMainPosts([])
+    setCompanySocialAccounts([])
+    setRepostQueue([])
+    setUserReposts([])
+    setWorkspaceFolders([])
+    setWorkspaceAssets([])
+    setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: ['instagram'] })
+    setAiSuggestions([])
+    setAiAgentConfig(createDefaultAiAgentConfig())
+    setAiAgentDraft(createDefaultAiAgentConfig())
   }
 
   if (!session) {
+    if (showPurchase) {
+      return (
+        <PurchasePage
+          venmoUsername={venmoUsername}
+          validatePromoCode={validatePromoCode}
+          onBack={() => setShowPurchase(false)}
+          onSubmit={(order) => {
+            const isPromo = Boolean(order.promoCode)
+            const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+            const newLicense = {
+              id: `lic-${Date.now()}`,
+              userId: `pending-${Date.now()}`,
+              userEmail: order.email,
+              userFullName: order.fullName,
+              plan: 'monthly',
+              priceUsd: isPromo ? 0 : order.priceUsd,
+              storageLimitGb: order.storageLimitGb,
+              status: isPromo ? 'active' : 'pending_payment',
+              purchasedAt: new Date().toISOString(),
+              expiresAt: isPromo ? expiresAt : null,
+              venmoTxnId: order.venmoTxnId || '',
+              paymentConfirmed: isPromo,
+              notes: isPromo ? `Promo: ${order.promoCode}` : `Ref: ${order.licenseRef}`,
+            }
+            setLicenses((prev) => [newLicense, ...prev])
+            setPurchaseHistory((prev) => [{
+              id: `pmt-${Date.now()}`,
+              licenseId: newLicense.id,
+              userEmail: order.email,
+              userFullName: order.fullName,
+              plan: newLicense.plan,
+              amountUsd: newLicense.priceUsd,
+              method: isPromo ? `Promo (${order.promoCode})` : 'Venmo',
+              venmoTxnId: order.venmoTxnId || '',
+              status: isPromo ? 'confirmed' : 'pending',
+              paidAt: isPromo ? new Date().toISOString() : null,
+            }, ...prev])
+            if (isPromo) {
+              setPromoCodes((prev) => prev.map((c) =>
+                c.code.toUpperCase() === order.promoCode.toUpperCase()
+                  ? { ...c, usedCount: c.usedCount + 1, usedBy: [...c.usedBy, order.email] }
+                  : c,
+              ))
+            }
+          }}
+        />
+      )
+    }
+
+    if (authView === 'landing') {
+      return (
+        <LandingPage
+          onSignIn={() => setAuthView('signin')}
+          onPurchase={() => setShowPurchase(true)}
+        />
+      )
+    }
+
     return (
       <div className="auth-page">
         <header className="auth-header">
-          <p className="brand">EchoAI</p>
+          <button type="button" className="text-button" onClick={() => setAuthView('landing')}>
+            ← EchoAI
+          </button>
           <button
             type="button"
             className="ghost-button"
@@ -1002,6 +1521,13 @@ function App() {
                     onClick={() => setAuthView('forgot')}
                   >
                     Forgot password?
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setShowPurchase(true)}
+                  >
+                    Don&apos;t have access? Purchase a license →
                   </button>
                 </form>
               )}
@@ -1108,6 +1634,8 @@ function App() {
           ['repost', 'Repost Hub'],
           ['scheduler', 'Scheduler'],
           ['assistant', 'AI Studio'],
+          ['photo', 'Photo Creator'],
+          ['studio', 'Video Studio'],
           ['integrations', 'Integrations'],
           ...(canViewManagementBoard ? [['admin', 'IT / Management']] : []),
         ].map(([key, label]) => (
@@ -1123,6 +1651,158 @@ function App() {
       </nav>
 
       <main>
+        <aside
+          className={`asset-drawer ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
+          onDragEnter={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); setDrawerDragActive(true) } }}
+          onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy' } }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDrawerDragActive(false) }}
+          onDrop={handleAssetFileDrop}
+        >
+          {drawerDragActive && (
+            <div className="drawer-drop-overlay">
+              <span>📂 Drop to upload</span>
+            </div>
+          )}
+          <div className="asset-drawer-header">
+            <div>
+              <p className="small-title">Workspace</p>
+              <h3>Media library</h3>
+            </div>
+            <button type="button" className="ghost-button" onClick={() => setIsAssetPanelOpen((prev) => !prev)}>
+              {isAssetPanelOpen ? 'Hide' : 'Show'}
+            </button>
+          </div>
+
+          {isAssetPanelOpen && (
+            <>
+              <form className="composer" onSubmit={handleCreateFolder}>
+                <label>
+                  New folder
+                  <input
+                    value={newFolderName}
+                    onChange={(event) => setNewFolderName(event.target.value)}
+                    placeholder="Campaign assets"
+                  />
+                </label>
+                <button type="submit" className="primary-button">Create folder</button>
+              </form>
+
+              <label className="asset-upload-label asset-upload-chip">
+                <span>Upload media</span>
+                <input type="file" onChange={handleUploadAsset} />
+              </label>
+
+              <div className="folder-breadcrumbs">
+                {folderBreadcrumbs.map((folder) => (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    className="chip"
+                    onClick={() => setSelectedFolderId(folder.id)}
+                  >
+                    {folder.name}
+                  </button>
+                ))}
+              </div>
+
+              <label>
+                Search assets
+                <input
+                  value={assetSearch}
+                  onChange={(event) => setAssetSearch(event.target.value)}
+                  placeholder="Find video, image, PDF"
+                />
+              </label>
+
+              <div className="asset-usage-banner">
+                <strong>Quota</strong>
+                <span>{storageUsedMb.toFixed(1)} MB / {storageQuotaMb} MB used</span>
+              </div>
+
+              <div className="asset-list">
+                {workspaceFolders
+                  .filter((folder) => folder.parentId === selectedFolderId)
+                  .map((folder) => (
+                    <div key={folder.id} className="asset-card">
+                      {editingItem?.type === 'folder' && editingItem?.id === folder.id ? (
+                        <div className="asset-edit-row">
+                          <input
+                            value={editingName}
+                            onChange={(event) => setEditingName(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                saveRenameItem()
+                              }
+                            }}
+                          />
+                          <div className="asset-actions">
+                            <button type="button" className="asset-action-button" onClick={saveRenameItem}>Save</button>
+                            <button type="button" className="asset-action-button" onClick={() => setEditingItem(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <button type="button" className="asset-card-main" onClick={() => setSelectedFolderId(folder.id)}>
+                            <strong>📁 {folder.name}</strong>
+                            <span>Subfolder</span>
+                          </button>
+                          <div className="asset-actions">
+                            <button type="button" className="asset-action-button" onClick={() => startRenameItem('folder', folder.id, folder.name)}>Rename</button>
+                            <button type="button" className="asset-action-button" onClick={() => deleteFolder(folder.id)}>Delete</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+
+                {filteredAssets.map((asset) => (
+                  <div
+                    key={asset.id}
+                    className="asset-card"
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData('assetId', asset.id)
+                      handleAssetDragStart(asset.id)
+                    }}
+                  >
+                    {editingItem?.type === 'asset' && editingItem?.id === asset.id ? (
+                      <div className="asset-edit-row">
+                        <input
+                          value={editingName}
+                          onChange={(event) => setEditingName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              saveRenameItem()
+                            }
+                          }}
+                        />
+                        <div className="asset-actions">
+                          <button type="button" className="asset-action-button" onClick={saveRenameItem}>Save</button>
+                          <button type="button" className="asset-action-button" onClick={() => setEditingItem(null)}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="asset-card-main">
+                          <strong>{asset.type === 'video' ? '🎬' : asset.type === 'image' ? '🖼️' : '📄'} {asset.name}</strong>
+                          <span>{asset.summary}</span>
+                          <small>{asset.type} • {(asset.size / 1024 / 1024).toFixed(1)} MB</small>
+                        </div>
+                        <div className="asset-actions">
+                          <button type="button" className="asset-action-button" onClick={() => startRenameItem('asset', asset.id, asset.name)}>Rename</button>
+                          <button type="button" className="asset-action-button" onClick={() => deleteAsset(asset.id)}>Delete</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </aside>
+
         {activeTab === 'dashboard' && (
           <section className="panel panel-dashboard">
             <h2>Overview</h2>
@@ -1146,21 +1826,50 @@ function App() {
             <div className="split">
               <article className="sub-panel tone-ocean">
                 <h3>Connected channels</h3>
-                {connectedAccounts.map((account) => (
-                  <div key={account.id} className="list-row">
-                    <div>
-                      <p>{account.platform}</p>
-                      <span>{account.accountName}</span>
-                    </div>
-                    <span className={getStatusBadgeClass(account.status)}>
-                      {account.status}
-                    </span>
-                  </div>
-                ))}
+                <div className="platform-cards">
+                  {connectedAccounts.map((account) => {
+                    const meta = getPlatformMeta(account.platform)
+                    return (
+                      <div
+                        key={account.id}
+                        className="platform-card"
+                        style={{ borderColor: meta.border, background: meta.bg }}
+                      >
+                        <span className="platform-icon" style={{ color: meta.color }}>{meta.icon}</span>
+                        <div className="platform-card-info">
+                          <strong style={{ color: meta.color }}>{meta.label}</strong>
+                          <span>{account.accountName}</span>
+                        </div>
+                        <span className={getStatusBadgeClass(account.status)} style={{ flexShrink: 0 }}>
+                          {account.status}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
               </article>
 
               <article className="sub-panel tone-sun">
-                <h3>Upcoming queue</h3>
+                <h3>Quick actions</h3>
+                <div className="action-row">
+                  <button type="button" className="primary-button" onClick={() => setActiveTab('photo')}>
+                    Open photo creator
+                  </button>
+                  <button type="button" className="primary-button" onClick={() => setActiveTab('studio')}>
+                    Open video studio
+                  </button>
+                  <button type="button" className="ghost-button" onClick={() => setActiveTab('scheduler')}>
+                    Open scheduler
+                  </button>
+                </div>
+                {canViewManagementBoard && (
+                  <div className="action-row" style={{ marginTop: '0.6rem' }}>
+                    <button type="button" className="ghost-button" onClick={() => setActiveTab('admin')}>
+                      Open IT panel
+                    </button>
+                  </div>
+                )}
+                <h3 style={{ marginTop: '1rem' }}>Upcoming queue</h3>
                 {scheduledPosts.slice(0, 4).map((post) => (
                   <div key={post.id} className="list-row">
                     <div>
@@ -1482,20 +2191,22 @@ function App() {
               <div>
                 <p className="small-title">Publish channels</p>
                 <div className="chip-row">
-                  {connectedAccounts.map((account) => (
-                    <button
-                      key={account.id}
-                      type="button"
-                      className={
-                        composer.channels.includes(account.platform.toLowerCase())
-                          ? 'chip active'
-                          : 'chip'
-                      }
-                      onClick={() => toggleChannel(account.platform.toLowerCase())}
-                    >
-                      {account.platform}
-                    </button>
-                  ))}
+                  {connectedAccounts.map((account) => {
+                    const meta = getPlatformMeta(account.platform)
+                    const key = account.platform.toLowerCase()
+                    const active = composer.channels.includes(key)
+                    return (
+                      <button
+                        key={account.id}
+                        type="button"
+                        className={active ? 'chip active' : 'chip'}
+                        style={active ? { borderColor: meta.color, color: meta.color, background: meta.bg } : {}}
+                        onClick={() => toggleChannel(key)}
+                      >
+                        <span>{meta.icon}</span> {meta.label}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -1577,42 +2288,244 @@ function App() {
           </section>
         )}
 
+        {activeTab === 'studio' && (
+          <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
+            <VideoEditor
+              assets={workspaceAssets}
+              onExport={(project) => {
+                setComposer((prev) => ({
+                  ...prev,
+                  message: `Video project: ${project.totalClips} clips, ${project.duration}s duration`,
+                  imageIdea: `Project with ${project.totalClips} clips`,
+                }))
+                setActiveTab('scheduler')
+              }}
+            />
+          </section>
+        )}
+
+        {activeTab === 'photo' && (
+          <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
+            <PhotoEditor assets={workspaceAssets} onExport={handlePhotoExport} agentConfig={aiAgentConfig} />
+          </section>
+        )}
+
         {activeTab === 'integrations' && (
           <section className="panel panel-integrations">
-            <h2>Integrations and 3rd Party Tools</h2>
+            <h2>Integrations &amp; Connected Accounts</h2>
             <p className="panel-note">
-              Extend workflows with sync connectors, webhook triggers, and analytics tools.
+              Link your social media accounts and third-party tools. Each channel you connect
+              becomes available in the Scheduler and AI Studio.
             </p>
 
+            <article className="sub-panel tone-indigo" style={{ marginBottom: '1rem' }}>
+              <h3>Personal AI agent</h3>
+              <p className="muted">Set your own endpoint once, then reuse it across message, image, and video tools.</p>
+              <div className="agent-setup-guide">
+                <div className="agent-guide-card hero">
+                  <p className="section-label">Quick setup</p>
+                  <h4>Connect your bot in 4 steps</h4>
+                  <ol className="agent-steps">
+                    <li>Give the bot a name users recognize.</li>
+                    <li>Paste the endpoint that receives AI requests.</li>
+                    <li>Choose what it should help with: message, image, or video.</li>
+                    <li>Test the connection, then save the profile.</li>
+                  </ol>
+                </div>
+
+                <div className="agent-guide-card">
+                  <p className="section-label">What to enter</p>
+                  <ul className="agent-checklist">
+                    <li><strong>Agent name:</strong> a friendly label like “Creative Bot”.</li>
+                    <li><strong>Endpoint URL:</strong> the HTTPS address that accepts POST requests.</li>
+                    <li><strong>API key:</strong> only if your bot requires authorization.</li>
+                    <li><strong>Model or route:</strong> optional name if your endpoint supports it.</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="list-row">
+                <div>
+                  <p>{aiAgentConfig.name}</p>
+                  <span>{aiAgentConfig.message}</span>
+                </div>
+                <span className={getStatusBadgeClass(aiAgentConfig.status)}>{aiAgentConfig.status}</span>
+              </div>
+              <form className="auth-form" onSubmit={handleSaveAiAgent}>
+                <label>
+                  Agent name
+                  <input
+                    type="text"
+                    value={aiAgentDraft.name}
+                    onChange={(event) => handleAiAgentDraftChange('name', event.target.value)}
+                    placeholder="My AI Agent"
+                  />
+                </label>
+                <label>
+                  Endpoint URL
+                  <input
+                    type="url"
+                    value={aiAgentDraft.endpoint}
+                    onChange={(event) => handleAiAgentDraftChange('endpoint', event.target.value)}
+                    placeholder="https://your-agent.example.com/run"
+                  />
+                </label>
+                <label>
+                  API key
+                  <input
+                    type="password"
+                    value={aiAgentDraft.apiKey}
+                    onChange={(event) => handleAiAgentDraftChange('apiKey', event.target.value)}
+                    placeholder="Optional bearer token"
+                  />
+                </label>
+                <label>
+                  Model or route
+                  <input
+                    type="text"
+                    value={aiAgentDraft.model}
+                    onChange={(event) => handleAiAgentDraftChange('model', event.target.value)}
+                    placeholder="default or your model name"
+                  />
+                </label>
+                <div className="agent-capability-grid">
+                  {AI_AGENT_CAPABILITIES.map((capability) => {
+                    const checked = (aiAgentDraft.capabilities || []).includes(capability.key)
+                    return (
+                      <label key={capability.key} className={`agent-capability-card ${checked ? 'active' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => handleAiAgentCapabilityToggle(capability.key)}
+                        />
+                        <span>
+                          <strong>{capability.title}</strong>
+                          <small>{capability.description}</small>
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <label className="toggle-row" style={{ alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={aiAgentDraft.enabled}
+                    onChange={(event) => handleAiAgentDraftChange('enabled', event.target.checked)}
+                  />
+                  Enable this agent for AI tools
+                </label>
+                <div className="action-row">
+                  <button type="button" className="ghost-button" onClick={handleTestAiAgent} disabled={aiAgentTesting}>
+                    {aiAgentTesting ? 'Testing...' : 'Test connection'}
+                  </button>
+                  <button type="submit" className="primary-button" disabled={aiAgentSaving}>
+                    {aiAgentSaving ? 'Saving...' : 'Save agent settings'}
+                  </button>
+                </div>
+                {aiAgentFeedback && (
+                  <p className={aiAgentFeedbackTone === 'error' ? 'auth-message auth-error' : 'auth-message'}>
+                    {aiAgentFeedback}
+                  </p>
+                )}
+
+                <div className="agent-payload-preview">
+                  <p className="section-label">Request preview</p>
+                  <pre>{JSON.stringify({
+                    mode: 'message | image | video',
+                    agentName: aiAgentDraft.name || 'My AI Agent',
+                    model: aiAgentDraft.model || 'default',
+                    capabilities: aiAgentDraft.capabilities || [],
+                    prompt: 'What do you want the bot to help with?',
+                  }, null, 2)}</pre>
+                </div>
+              </form>
+            </article>
+
+            <h3 className="section-label">Social media accounts</h3>
+            <div className="integration-grid">
+              {[
+                { key: 'instagram', accountPlaceholder: '@youraccount', desc: 'Publish posts, stories, and reels. Read insights and story metrics.' },
+                { key: 'facebook',  accountPlaceholder: 'Your page name', desc: 'Schedule posts, publish to pages, and track ad-level reach.' },
+                { key: 'tiktok',    accountPlaceholder: '@youraccount', desc: 'Queue short-form videos, read performance data and comment trends.' },
+                { key: 'snapchat',  accountPlaceholder: 'Your Snapchat', desc: 'Upload creative content and track Snap campaign metrics.' },
+                { key: 'x',         accountPlaceholder: '@youraccount', desc: 'Post to X (formerly Twitter), schedule threads, and monitor mentions.' },
+                { key: 'youtube',   accountPlaceholder: 'Your channel', desc: 'Upload videos, schedule premieres, and read subscriber analytics.' },
+                { key: 'linkedin',  accountPlaceholder: 'Your profile / page', desc: 'Publish professional content and read engagement metrics.' },
+              ].map(({ key, accountPlaceholder, desc }) => {
+                const meta = getPlatformMeta(key)
+                const linked = connectedAccounts.find((a) => a.platform.toLowerCase() === key)
+                return (
+                  <div
+                    key={key}
+                    className="integration-platform-card"
+                    style={{ borderColor: meta.border }}
+                  >
+                    <div className="integration-platform-header" style={{ background: meta.bg, borderColor: meta.border }}>
+                      <span className="integration-platform-icon" style={{ color: meta.color }}>{meta.icon}</span>
+                      <div>
+                        <strong style={{ color: meta.color }}>{meta.label}</strong>
+                        {linked && <span className="integration-linked-handle">{linked.accountName}</span>}
+                      </div>
+                      {linked && (
+                        <span className={`integration-status-badge ${linked.status === 'healthy' ? 'good' : 'warn'}`}>
+                          {linked.status === 'healthy' ? '● Live' : '⚠ Needs refresh'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="integration-platform-body">
+                      <p>{desc}</p>
+                      {linked ? (
+                        <div className="integration-actions">
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => setConnectedAccounts((prev) =>
+                              prev.map((a) => a.id === linked.id ? { ...a, status: 'token refresh due' } : a)
+                            )}
+                          >
+                            Re-authenticate
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            style={{ color: '#ef4444' }}
+                            onClick={() => setConnectedAccounts((prev) => prev.filter((a) => a.id !== linked.id))}
+                          >
+                            Disconnect
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="primary-button"
+                          style={{ background: meta.color, borderColor: meta.color }}
+                          onClick={() => setConnectedAccounts((prev) => [
+                            ...prev,
+                            { id: `acc_${Date.now()}`, platform: meta.label, accountName: accountPlaceholder, status: 'healthy' },
+                          ])}
+                        >
+                          Connect {meta.label}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <h3 className="section-label" style={{ marginTop: '2rem' }}>Third-party tools</h3>
             <div className="cards">
               {[
-                {
-                  name: 'Meta Graph API',
-                  desc: 'Publish Facebook and Instagram posts, stories, and reels.',
-                },
-                {
-                  name: 'Snap Kit',
-                  desc: 'Support Snapchat creative upload and campaign tracking.',
-                },
-                {
-                  name: 'TikTok Business',
-                  desc: 'Queue short-form promotions and read ad-level metrics.',
-                },
-                {
-                  name: 'Slack + Teams',
-                  desc: 'Send internal deployment alerts to your operations channel.',
-                },
-                {
-                  name: 'Zapier / Make',
-                  desc: 'Trigger workflows from CRM updates, forms, and ecommerce events.',
-                },
-                {
-                  name: 'AI Image Tools',
-                  desc: 'Connect image generation APIs for campaign graphics at scale.',
-                },
+                { name: 'Slack + Teams', icon: '💬', color: '#4A154B', desc: 'Send deployment alerts and campaign summaries to your ops channel.' },
+                { name: 'Zapier / Make', icon: '⚡', color: '#FF4A00', desc: 'Trigger workflows from CRM updates, forms, and ecommerce events.' },
+                { name: 'AI Image Tools', icon: '🎨', color: '#7C3AED', desc: 'Connect image generation APIs for campaign graphics at scale.' },
+                { name: 'Google Analytics', icon: '📊', color: '#E37400', desc: 'Pull traffic and conversion data alongside your social metrics.' },
+                { name: 'Shopify', icon: '🛍️', color: '#96BF48', desc: 'Sync product launches and inventory events to social posts automatically.' },
               ].map((item) => (
-                <article key={item.name} className="integration-card">
-                  <h3>{item.name}</h3>
+                <article key={item.name} className="integration-card" style={{ borderTopColor: item.color }}>
+                  <div className="integration-card-header">
+                    <span className="integration-card-icon" style={{ color: item.color }}>{item.icon}</span>
+                    <h3>{item.name}</h3>
+                  </div>
                   <p>{item.desc}</p>
                   <button type="button" className="ghost-button">Connect</button>
                 </article>
@@ -1621,261 +2534,58 @@ function App() {
           </section>
         )}
 
-        {activeTab === 'admin' && canViewManagementBoard && (
-          <section className="panel panel-admin">
-            <h2>IT / Management Oversight</h2>
-            <p className="panel-note">
-              Monitor incidents, review risk, and resolve technical issues before campaigns fail.
-            </p>
+        {activeTab === 'admin' && isAdminUser && (
+          <AdminPanel
+            teamMembers={teamMembers}
+            setTeamMembers={setTeamMembers}
+            accessRequests={accessRequests}
+            setAccessRequests={setAccessRequests}
+            alerts={alerts}
+            setAlerts={setAlerts}
+            licenses={licenses}
+            setLicenses={setLicenses}
+            tickets={tickets}
+            setTickets={setTickets}
+            purchaseHistory={purchaseHistory}
+            setPurchaseHistory={setPurchaseHistory}
+            featureFlags={featureFlags}
+            setFeatureFlags={setFeatureFlags}
+            venmoUsername={venmoUsername}
+            setVenmoUsername={setVenmoUsername}
+            promoCodes={promoCodes}
+            setPromoCodes={setPromoCodes}
+            expenses={expenses}
+            setExpenses={setExpenses}
+            payroll={payroll}
+            setPayroll={setPayroll}
+            taxRecords={taxRecords}
+            setTaxRecords={setTaxRecords}
+            refunds={refunds}
+            setRefunds={setRefunds}
+            financialTasks={financialTasks}
+            setFinancialTasks={setFinancialTasks}
+            quotaEditingUserId={quotaEditingUserId}
+            setQuotaEditingUserId={setQuotaEditingUserId}
+            quotaDraftMb={quotaDraftMb}
+            setQuotaDraftMb={setQuotaDraftMb}
+            handleQuotaUpdate={handleQuotaUpdate}
+            handleToggleUserAccess={handleToggleUserAccess}
+            handleUpdateUserRole={handleUpdateUserRole}
+            adminLoading={adminLoading}
+            adminError={adminError}
+            currentUser={session}
+          />
+        )}
 
-            <article className="sub-panel tone-ocean">
-              <h3>Employee Search</h3>
-              <label>
-                Search by name, email, company, or role
-                <input
-                  type="text"
-                  value={employeeSearch}
-                  onChange={(event) => {
-                    setEmployeeSearch(event.target.value)
-                    setEmployeePage(1)
-                  }}
-                  placeholder="Search employees..."
-                />
-              </label>
-              <div className="admin-controls">
-                <label>
-                  Sort by
-                  <select
-                    value={employeeSortBy}
-                    onChange={(event) => {
-                      setEmployeeSortBy(event.target.value)
-                      setEmployeePage(1)
-                    }}
-                  >
-                    <option value="name">Name</option>
-                    <option value="email">Email</option>
-                    <option value="role">Role</option>
-                    <option value="status">Access status</option>
-                  </select>
-                </label>
-
-                <label>
-                  Page size
-                  <select
-                    value={employeePageSize}
-                    onChange={(event) => {
-                      setEmployeePageSize(Number(event.target.value))
-                      setEmployeePage(1)
-                    }}
-                  >
-                    {[5, 8, 12, 20].map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => {
-                    setEmployeeSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
-                    setEmployeePage(1)
-                  }}
-                >
-                  Order: {employeeSortOrder === 'asc' ? 'Ascending' : 'Descending'}
-                </button>
-              </div>
-              <p className="muted text-info">Matching employees: {filteredTeamMembers.length}</p>
-              <div className="admin-pagination">
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => setEmployeePage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentEmployeePage === 1}
-                >
-                  Previous
-                </button>
-                <span>
-                  Page {currentEmployeePage} of {totalEmployeePages}
-                </span>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() =>
-                    setEmployeePage((prev) => Math.min(totalEmployeePages, prev + 1))
-                  }
-                  disabled={currentEmployeePage >= totalEmployeePages}
-                >
-                  Next
-                </button>
-              </div>
-            </article>
-
-            {adminError && <p className="auth-message auth-error">{adminError}</p>}
-
-            <article className="sub-panel tone-rose">
-              <h3>Issue desk</h3>
-              {alerts.map((alert) => (
-                <div key={alert.id} className="list-row">
-                  <div>
-                    <p>{alert.title}</p>
-                    <span>{alert.owner}</span>
-                  </div>
-                  <div className="queue-meta">
-                    <span className={getStatusBadgeClass(alert.priority)}>
-                      {alert.priority}
-                    </span>
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() => handleResolveAlert(alert.id)}
-                      disabled={alert.status === 'resolved'}
-                    >
-                      {alert.status === 'resolved' ? 'Resolved' : 'Resolve'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </article>
-
-            <article className="sub-panel tone-amber">
-              <h3>Account access requests</h3>
-              {accessRequests.length === 0 && (
-                <p className="muted">No access requests are waiting for review.</p>
-              )}
-
-              {accessRequests.map((request) => (
-                <div key={request.id} className="list-row">
-                  <div>
-                    <p>{request.fullName}</p>
-                    <span>
-                      {request.email} • {request.company || 'No company provided'}
-                    </span>
-                  </div>
-                  <div className="queue-meta">
-                    <span
-                      className={getStatusBadgeClass(request.status)}
-                    >
-                      {request.status}
-                    </span>
-                    {request.status === 'pending' ? (
-                      <div className="action-row">
-                        <button
-                          type="button"
-                          className="primary-button"
-                          onClick={() => handleReviewAccessRequest(request.id, 'approved')}
-                          disabled={adminLoading}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => handleReviewAccessRequest(request.id, 'denied')}
-                          disabled={adminLoading}
-                        >
-                          Deny
-                        </button>
-                      </div>
-                    ) : (
-                      <span>{request.reviewedAt ? 'Reviewed' : 'Closed'}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </article>
-
-            <article className="sub-panel tone-mint">
-              <h3>Employee access lifecycle</h3>
-              {pagedTeamMembers.length === 0 && (
-                <p className="muted">No employee records available.</p>
-              )}
-
-              {pagedTeamMembers.map((member) => (
-                <div key={member.id} className="list-row">
-                  <div>
-                    <p>
-                      {member.fullName} • {member.role}
-                    </p>
-                    <span>
-                      {member.email} • {member.company || 'No company provided'}
-                    </span>
-                  </div>
-                  <div className="queue-meta">
-                    <span
-                      className={getStatusBadgeClass(member.accessStatus)}
-                    >
-                      {member.accessStatus}
-                    </span>
-                    {member.role === 'admin' ? (
-                      <span className="text-info">Admin lock</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => handleToggleUserAccess(member)}
-                        disabled={adminLoading}
-                      >
-                        {member.accessStatus === 'deactivated'
-                          ? 'Reactivate account'
-                          : 'Deactivate account'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </article>
-
-            {isAdminUser && (
-              <article className="sub-panel tone-indigo">
-                <h3>Manager / IT Role Access</h3>
-                <p className="panel-note">
-                  Promote trusted users to Management or IT so they can access this board.
-                </p>
-                {pagedTeamMembers.map((member) => (
-                  <div key={`role-${member.id}`} className="list-row">
-                    <div>
-                      <p>{member.fullName}</p>
-                      <span>{member.email}</span>
-                    </div>
-                    <div className="queue-meta role-actions">
-                      <span className={member.role === 'user' ? 'badge pending' : 'badge info'}>
-                        {member.role}
-                      </span>
-                      <div className="action-row">
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => handleUpdateUserRole(member, 'manager')}
-                          disabled={adminLoading || member.role === 'manager'}
-                        >
-                          Set Manager
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => handleUpdateUserRole(member, 'it')}
-                          disabled={adminLoading || member.role === 'it'}
-                        >
-                          Set IT
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => handleUpdateUserRole(member, 'user')}
-                          disabled={adminLoading || member.role === 'user'}
-                        >
-                          Set User
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </article>
-            )}
-          </section>
+        {activeTab === 'admin' && !isAdminUser && canViewManagementBoard && (
+          <FinancePanel
+            purchaseHistory={purchaseHistory}
+            expenses={expenses} setExpenses={setExpenses}
+            payroll={payroll} setPayroll={setPayroll}
+            taxRecords={taxRecords} setTaxRecords={setTaxRecords}
+            refunds={refunds} setRefunds={setRefunds}
+            financialTasks={financialTasks} setFinancialTasks={setFinancialTasks}
+          />
         )}
       </main>
 
