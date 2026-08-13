@@ -37,9 +37,9 @@ const DEMO_USERS = [
 const DEMO_ACCESS_REQUESTS = []
 
 const BLOCKED_STATUS_MESSAGES = {
-  pending: 'Your account is pending approval by Management or IT.',
+  pending: 'Your account is not active yet. Complete your subscription to unlock access.',
   denied: 'Your account request was denied. Contact Management or IT for help.',
-  deactivated: 'Your account has been deactivated. Contact Management or IT for help.',
+  deactivated: 'Your access is inactive. This usually means a subscription lapsed or a payment failed — renew to restore it instantly.',
 }
 
 const assertAccountCanAccess = (accessStatus) => {
@@ -321,6 +321,19 @@ export const authService = {
       throw new Error(profileError.message)
     }
 
+    // The claim_subscription_for_new_profile trigger attaches any subscription
+    // already paid for under this email and flips access to active. Only accounts
+    // without billing coverage fall back to the manual approval queue.
+    const { data: createdProfile } = await supabase
+      .from('profiles')
+      .select('access_status')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (createdProfile?.access_status === 'active') {
+      return { ok: true, activated: true }
+    }
+
     const { error: requestError } = await supabase.from('access_requests').insert({
       user_id: userId,
       full_name: fullName,
@@ -333,7 +346,7 @@ export const authService = {
       throw new Error(requestError.message)
     }
 
-    return { ok: true }
+    return { ok: true, activated: false }
   },
 
   async getAccessRequests() {

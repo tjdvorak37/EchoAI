@@ -69,8 +69,50 @@ const MASK_SHAPES = {
 const TOOLS = {
   select: 'Select',
   brush: 'Brush',
+  eraser: 'Eraser',
   crop: 'Crop',
 }
+
+const SHAPES = {
+  rectangle: 'Rectangle',
+  ellipse: 'Ellipse',
+  line: 'Line',
+  triangle: 'Triangle',
+}
+
+const EXPORT_FORMATS = {
+  png: { label: 'PNG', mime: 'image/png', extension: 'png', lossy: false },
+  jpeg: { label: 'JPEG', mime: 'image/jpeg', extension: 'jpg', lossy: true },
+  webp: { label: 'WebP', mime: 'image/webp', extension: 'webp', lossy: true },
+}
+
+const DEFAULT_FILTERS = {
+  brightness: 108,
+  contrast: 116,
+  saturation: 118,
+  exposure: 100,
+  blur: 0,
+  hue: 0,
+  sepia: 0,
+  grayscale: 0,
+  invert: 0,
+  vignette: 38,
+  grain: 18,
+}
+
+// Preview and export must agree, so both read this one string.
+const buildFilterString = (filters) =>
+  [
+    `brightness(${filters.brightness}%)`,
+    `brightness(${filters.exposure ?? 100}%)`,
+    `contrast(${filters.contrast}%)`,
+    `saturate(${filters.saturation}%)`,
+    `hue-rotate(${filters.hue}deg)`,
+    `sepia(${filters.sepia ?? 0}%)`,
+    `grayscale(${filters.grayscale ?? 0}%)`,
+    `invert(${filters.invert ?? 0}%)`,
+    `blur(${filters.blur}px)`,
+  ].join(' ')
 
 const DEFAULT_PROMPT = 'Create a bold product teaser for an evening launch post.'
 
@@ -246,6 +288,8 @@ const drawStroke = (ctx, stroke, width, height) => {
   ctx.save()
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
+  // The eraser clears previously painted pixels rather than painting over them.
+  ctx.globalCompositeOperation = stroke.erase ? 'destination-out' : 'source-over'
   ctx.strokeStyle = stroke.color
   ctx.lineWidth = stroke.size
   ctx.globalAlpha = stroke.opacity
@@ -264,6 +308,60 @@ const drawStroke = (ctx, stroke, width, height) => {
   })
 
   ctx.stroke()
+  ctx.restore()
+}
+
+// Strokes composite on their own surface first, so an eraser stroke only removes
+// paint instead of cutting a hole through the photo underneath.
+const renderStrokeLayer = (strokes, width, height) => {
+  const layerCanvas = document.createElement('canvas')
+  layerCanvas.width = width
+  layerCanvas.height = height
+  const layerCtx = layerCanvas.getContext('2d')
+  if (!layerCtx) return null
+
+  strokes.forEach((stroke) => drawStroke(layerCtx, stroke, width, height))
+  return layerCanvas
+}
+
+const drawShapeLayer = (ctx, layer, width, height) => {
+  const w = (layer.width / 100) * width
+  const h = (layer.height / 100) * height
+  const x = (layer.x / 100) * width
+  const y = (layer.y / 100) * height
+
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(((layer.rotation || 0) * Math.PI) / 180)
+  ctx.globalAlpha = (layer.opacity ?? 100) / 100
+  ctx.fillStyle = layer.color
+  ctx.strokeStyle = layer.strokeColor || layer.color
+  ctx.lineWidth = layer.strokeWidth || 0
+  ctx.lineCap = 'round'
+
+  ctx.beginPath()
+  if (layer.shape === 'ellipse') {
+    ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2)
+  } else if (layer.shape === 'line') {
+    ctx.moveTo(-w / 2, 0)
+    ctx.lineTo(w / 2, 0)
+  } else if (layer.shape === 'triangle') {
+    ctx.moveTo(0, -h / 2)
+    ctx.lineTo(w / 2, h / 2)
+    ctx.lineTo(-w / 2, h / 2)
+    ctx.closePath()
+  } else {
+    ctx.roundRect(-w / 2, -h / 2, w, h, layer.radius || 0)
+  }
+
+  if (layer.shape === 'line') {
+    ctx.lineWidth = Math.max(2, h)
+    ctx.stroke()
+  } else {
+    if (layer.filled !== false) ctx.fill()
+    if (layer.strokeWidth > 0) ctx.stroke()
+  }
+
   ctx.restore()
 }
 
@@ -409,7 +507,7 @@ const renderComposition = async ({
         ctx.clip()
       }
 
-      ctx.filter = `brightness(${filters.brightness}%) contrast(${filters.contrast}%) saturate(${filters.saturation}%) hue-rotate(${filters.hue}deg) blur(${filters.blur}px)`
+      ctx.filter = buildFilterString(filters)
       ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
       ctx.restore()
     } catch {
@@ -419,9 +517,10 @@ const renderComposition = async ({
   }
 
   if (brushStrokes.length) {
-    ctx.save()
-    brushStrokes.forEach((stroke) => drawStroke(ctx, stroke, width, height))
-    ctx.restore()
+    const strokeLayer = renderStrokeLayer(brushStrokes, width, height)
+    if (strokeLayer) {
+      ctx.drawImage(strokeLayer, 0, 0)
+    }
   }
 
   const vignette = ctx.createRadialGradient(width / 2, height / 2, width * 0.18, width / 2, height / 2, width * 0.72)
@@ -439,21 +538,40 @@ const renderComposition = async ({
   }
 
   layers.forEach((layer) => {
+    if (layer.hidden) return
+
     const x = (layer.x / 100) * width
     const y = (layer.y / 100) * height
+
+    if (layer.type === 'shape') {
+      drawShapeLayer(ctx, layer, width, height)
+      return
+    }
+
     if (layer.type === 'sticker') {
       ctx.save()
+      ctx.globalAlpha = (layer.opacity ?? 100) / 100
+      ctx.translate(x, y)
+      ctx.rotate(((layer.rotation || 0) * Math.PI) / 180)
       ctx.font = `${layer.fontSize}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.shadowColor = layer.shadowColor || 'rgba(0, 0, 0, 0.45)'
       ctx.shadowBlur = layer.shadowBlur || 24
-      ctx.fillText(layer.value, x, y)
+      ctx.fillText(layer.value, 0, 0)
       ctx.restore()
       return
     }
 
+    ctx.save()
+    ctx.globalAlpha = (layer.opacity ?? 100) / 100
+    if (layer.rotation) {
+      ctx.translate(x, y)
+      ctx.rotate((layer.rotation * Math.PI) / 180)
+      ctx.translate(-x, -y)
+    }
     drawTextLayer(ctx, layer, x, y, width * 0.48)
+    ctx.restore()
   })
 
   return canvas.toDataURL('image/png')
@@ -482,15 +600,10 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
   const [brushStrokes, setBrushStrokes] = useState([])
   const [cropRect, setCropRect] = useState({ x: 0, y: 0, w: 100, h: 100 })
   const [stageMetrics, setStageMetrics] = useState({ width: 1000, height: 1250 })
-  const [filters, setFilters] = useState({
-    brightness: 108,
-    contrast: 116,
-    saturation: 118,
-    blur: 0,
-    hue: 0,
-    vignette: 38,
-    grain: 18,
-  })
+  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [exportFormat, setExportFormat] = useState('png')
+  const [exportQuality, setExportQuality] = useState(92)
+  const [historyCounts, setHistoryCounts] = useState({ past: 0, future: 0 })
   const [layers, setLayers] = useState(defaultLayers)
   const [activeLayerId, setActiveLayerId] = useState('headline')
   const [notice, setNotice] = useState('Ready to create.')
@@ -546,6 +659,180 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
 
   const updateLayer = (layerId, patch) => {
     setLayers((prev) => prev.map((layer) => (layer.id === layerId ? { ...layer, ...patch } : layer)))
+  }
+
+  // --- History -------------------------------------------------------------
+  // Snapshots everything a user can undo. Sliders call commitHistory on
+  // pointerdown so one drag produces one undo step, not one per pixel.
+  const historyRef = useRef({ past: [], future: [] })
+
+  const buildSnapshot = () => ({
+    layers,
+    filters,
+    brushStrokes,
+    maskShape,
+    cropRect,
+    presetId,
+    aspectRatio,
+  })
+
+  const applySnapshot = (snapshot) => {
+    setLayers(snapshot.layers)
+    setFilters(snapshot.filters)
+    setBrushStrokes(snapshot.brushStrokes)
+    setMaskShape(snapshot.maskShape)
+    setCropRect(snapshot.cropRect)
+    setPresetId(snapshot.presetId)
+    setAspectRatio(snapshot.aspectRatio)
+  }
+
+  const syncHistoryCounts = () => {
+    setHistoryCounts({
+      past: historyRef.current.past.length,
+      future: historyRef.current.future.length,
+    })
+  }
+
+  const commitHistory = () => {
+    historyRef.current.past.push(buildSnapshot())
+    if (historyRef.current.past.length > 60) {
+      historyRef.current.past.shift()
+    }
+    historyRef.current.future = []
+    syncHistoryCounts()
+  }
+
+  const undo = () => {
+    const previous = historyRef.current.past.pop()
+    if (!previous) return
+    historyRef.current.future.push(buildSnapshot())
+    applySnapshot(previous)
+    syncHistoryCounts()
+    setNotice('Undid the last change.')
+  }
+
+  const redo = () => {
+    const next = historyRef.current.future.pop()
+    if (!next) return
+    historyRef.current.past.push(buildSnapshot())
+    applySnapshot(next)
+    syncHistoryCounts()
+    setNotice('Redid the last change.')
+  }
+
+  // --- Layer operations ----------------------------------------------------
+  const nextLayerId = (kind) => {
+    layerIdRef.current += 1
+    return `${kind}-${layerIdRef.current}`
+  }
+
+  const addLayer = (layer) => {
+    commitHistory()
+    setLayers((prev) => [...prev, layer])
+    setActiveLayerId(layer.id)
+  }
+
+  const addTextLayer = () => {
+    addLayer({
+      id: nextLayerId('text'),
+      type: 'text',
+      label: 'Text',
+      value: 'New text layer',
+      x: 20,
+      y: 50,
+      fontSize: 34,
+      weight: 700,
+      color: '#f8fafc',
+      align: 'left',
+      effect: 'shadow',
+      outlineWidth: 0,
+      outlineColor: '#020617',
+      shadowBlur: 18,
+      shadowColor: 'rgba(2, 6, 23, 0.6)',
+      shadowOffsetX: 0,
+      shadowOffsetY: 6,
+      panelColor: 'rgba(15, 23, 42, 0.42)',
+      panelRadius: 18,
+      letterSpacing: 0,
+      opacity: 100,
+      rotation: 0,
+    })
+    setNotice('Added a text layer.')
+  }
+
+  const addShapeLayer = (shape) => {
+    addLayer({
+      id: nextLayerId('shape'),
+      type: 'shape',
+      label: SHAPES[shape] ?? 'Shape',
+      shape,
+      value: SHAPES[shape] ?? 'Shape',
+      x: 50,
+      y: 50,
+      width: 30,
+      height: shape === 'line' ? 1 : 20,
+      color: preset.accent,
+      strokeColor: preset.secondary,
+      strokeWidth: 0,
+      radius: shape === 'rectangle' ? 18 : 0,
+      filled: true,
+      opacity: 90,
+      rotation: 0,
+    })
+    setNotice(`Added a ${SHAPES[shape] ?? 'shape'} layer.`)
+  }
+
+  const duplicateLayer = (layerId) => {
+    const source = layers.find((layer) => layer.id === layerId)
+    if (!source) return
+    const copy = {
+      ...source,
+      id: nextLayerId(source.type),
+      label: `${source.label} copy`,
+      x: clamp(source.x + 4, 0, 100),
+      y: clamp(source.y + 4, 0, 100),
+    }
+    commitHistory()
+    setLayers((prev) => [...prev, copy])
+    setActiveLayerId(copy.id)
+    setNotice('Duplicated the layer.')
+  }
+
+  const deleteLayer = (layerId) => {
+    if (layers.length <= 1) {
+      setNotice('Keep at least one layer on the canvas.')
+      return
+    }
+    commitHistory()
+    setLayers((prev) => prev.filter((layer) => layer.id !== layerId))
+    setNotice('Deleted the layer.')
+  }
+
+  const moveLayerOrder = (layerId, direction) => {
+    const index = layers.findIndex((layer) => layer.id === layerId)
+    const target = index + direction
+    if (index < 0 || target < 0 || target >= layers.length) return
+
+    commitHistory()
+    setLayers((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(index, 1)
+      next.splice(target, 0, moved)
+      return next
+    })
+  }
+
+  const toggleLayerVisibility = (layerId) => {
+    commitHistory()
+    setLayers((prev) =>
+      prev.map((layer) => (layer.id === layerId ? { ...layer, hidden: !layer.hidden } : layer)),
+    )
+  }
+
+  const resetFilters = () => {
+    commitHistory()
+    setFilters(DEFAULT_FILTERS)
+    setNotice('Adjustments reset.')
   }
 
   useEffect(() => {
@@ -621,10 +908,6 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if ((event.key !== 'Delete' && event.key !== 'Backspace') || !resolvedActiveLayerId) {
-        return
-      }
-
       const target = event.target
       if (target instanceof HTMLElement) {
         const tag = target.tagName.toLowerCase()
@@ -633,23 +916,32 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
         }
       }
 
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) redo()
+        else undo()
+        return
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd' && resolvedActiveLayerId) {
+        event.preventDefault()
+        duplicateLayer(resolvedActiveLayerId)
+        return
+      }
+
+      if ((event.key !== 'Delete' && event.key !== 'Backspace') || !resolvedActiveLayerId) {
+        return
+      }
+
       event.preventDefault()
-      const remainingLayers = layers.filter((layer) => layer.id !== resolvedActiveLayerId)
-      setLayers(remainingLayers)
-      setActiveLayerId((prev) => {
-        if (prev !== resolvedActiveLayerId && remainingLayers.some((layer) => layer.id === prev)) {
-          return prev
-        }
-        return remainingLayers[0]?.id ?? ''
-      })
-      setNotice('Layer removed.')
+      deleteLayer(resolvedActiveLayerId)
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [resolvedActiveLayerId, layers])
+  })
 
   const getStagePoint = (event) => {
     const rect = stageRef.current?.getBoundingClientRect()
@@ -702,12 +994,15 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
   }
 
   const startBrushStroke = (event) => {
-    if (activeTool !== 'brush' || !paintCanvasRef.current || !stageRef.current) return
+    const painting = activeTool === 'brush' || activeTool === 'eraser'
+    if (!painting || !paintCanvasRef.current || !stageRef.current) return
     event.preventDefault()
     event.stopPropagation()
+    const erase = activeTool === 'eraser'
     const point = getStagePoint(event)
     const stroke = {
       id: `stroke-${Date.now()}`,
+      erase,
       color: brushColor,
       size: brushSize,
       opacity: brushOpacity,
@@ -745,6 +1040,7 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
       const moveCtx = moveCanvas.getContext('2d')
       if (!moveCtx) return
       moveCtx.save()
+      moveCtx.globalCompositeOperation = currentStroke.erase ? 'destination-out' : 'source-over'
       moveCtx.lineCap = 'round'
       moveCtx.lineJoin = 'round'
       moveCtx.strokeStyle = currentStroke.color
@@ -768,6 +1064,7 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
     const finishStroke = () => {
       const completedStroke = brushStrokeRef.current
       if (completedStroke) {
+        commitHistory()
         setBrushStrokes((prev) => [...prev, completedStroke])
       }
       brushStrokeRef.current = null
@@ -920,33 +1217,15 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
     setAspectRatio('4:5')
     setHeadline('Launch the next drop')
     setSubcopy('Edit, stylize, and export campaign art without leaving EchoAI.')
-    setFilters({ brightness: 108, contrast: 116, saturation: 118, blur: 0, hue: 0, vignette: 38, grain: 18 })
+    setFilters(DEFAULT_FILTERS)
     setLayers(defaultLayers())
     setActiveLayerId('headline')
     setNotice('Canvas reset to the default concept.')
   }
 
-  const addTextLayer = () => {
-    const newLayer = {
-      id: `layer-${(layerIdRef.current += 1)}`,
-      type: 'text',
-      label: 'Text layer',
-      value: 'Add your message',
-      x: 20,
-      y: 68,
-      fontSize: 28,
-      weight: 600,
-      color: '#f8fafc',
-      align: 'left',
-    }
-    setLayers((prev) => [...prev, newLayer])
-    setActiveLayerId(newLayer.id)
-    setNotice('Added a new text layer.')
-  }
-
   const addStickerLayer = (sticker) => {
-    const newLayer = {
-      id: `sticker-${(layerIdRef.current += 1)}`,
+    addLayer({
+      id: nextLayerId('sticker'),
       type: 'sticker',
       label: 'Sticker',
       value: sticker,
@@ -956,22 +1235,10 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
       weight: 700,
       color: preset.accent,
       align: 'center',
-    }
-    setLayers((prev) => [...prev, newLayer])
-    setActiveLayerId(newLayer.id)
-    setNotice('Sticker added to the layout.')
-  }
-
-  const deleteLayer = (layerId) => {
-    const remainingLayers = layers.filter((layer) => layer.id !== layerId)
-    setLayers(remainingLayers)
-    setActiveLayerId((prev) => {
-      if (prev !== layerId && remainingLayers.some((layer) => layer.id === prev)) {
-        return prev
-      }
-      return remainingLayers[0]?.id ?? ''
+      opacity: 100,
+      rotation: 0,
     })
-    setNotice('Layer removed.')
+    setNotice('Sticker added to the layout.')
   }
 
   const updateTextEffect = (patch) => {
@@ -1014,8 +1281,20 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
     const sourceHeight = (cropRect.h / 100) * stageMetrics.height
     exportCtx.drawImage(stageImage, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, exportCanvasEl.width, exportCanvasEl.height)
 
-    const exportName = `${slugify(headline || prompt)}-${aspectRatio.replace(':', 'x')}.png`
-    const dataUrl = exportCanvasEl.toDataURL('image/png')
+    const format = EXPORT_FORMATS[exportFormat] ?? EXPORT_FORMATS.png
+
+    // JPEG has no alpha, so anything transparent would render black without this.
+    if (format.mime === 'image/jpeg') {
+      exportCtx.globalCompositeOperation = 'destination-over'
+      exportCtx.fillStyle = preset.base
+      exportCtx.fillRect(0, 0, exportCanvasEl.width, exportCanvasEl.height)
+      exportCtx.globalCompositeOperation = 'source-over'
+    }
+
+    const exportName = `${slugify(headline || prompt)}-${aspectRatio.replace(':', 'x')}.${format.extension}`
+    const dataUrl = format.lossy
+      ? exportCanvasEl.toDataURL(format.mime, clamp(exportQuality, 10, 100) / 100)
+      : exportCanvasEl.toDataURL(format.mime)
 
     onExport?.({
       exportName,
@@ -1054,7 +1333,27 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
             {rightSidebarCollapsed ? 'Show inspector' : 'Hide inspector'}
           </button>
           <button type="button" className="ghost-button" onClick={resetEditor}>Reset canvas</button>
-          <button type="button" className="primary-button" onClick={exportCanvas}>Export PNG</button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={undo}
+            disabled={historyCounts.past === 0}
+            title="Undo (Ctrl+Z)"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={redo}
+            disabled={historyCounts.future === 0}
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            Redo
+          </button>
+          <button type="button" className="primary-button" onClick={exportCanvas}>
+            Export {EXPORT_FORMATS[exportFormat]?.label ?? 'PNG'}
+          </button>
         </div>
       </header>
 
@@ -1223,7 +1522,12 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                 height: `${stageDisplaySize.height}px`,
                 aspectRatio: aspect.css,
                 background: preset.background,
-                cursor: activeTool === 'brush' ? 'crosshair' : activeTool === 'crop' ? 'move' : 'default',
+                cursor:
+                  activeTool === 'brush' || activeTool === 'eraser'
+                    ? 'crosshair'
+                    : activeTool === 'crop'
+                      ? 'move'
+                      : 'default',
                 clipPath: stageClipPath,
               }}
             >
@@ -1233,7 +1537,7 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                   src={selectedImageSrc}
                   alt="Selected composition"
                   style={{
-                    filter: `brightness(${filters.brightness}%) contrast(${filters.contrast}%) saturate(${filters.saturation}%) hue-rotate(${filters.hue}deg) blur(${filters.blur}px)`,
+                    filter: buildFilterString(filters),
                   }}
                 />
               ) : (
@@ -1281,7 +1585,7 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                 </div>
               )}
 
-              {layers.map((layer) => (
+              {layers.filter((layer) => !layer.hidden).map((layer) => (
                 <button
                   key={layer.id}
                   type="button"
@@ -1289,19 +1593,35 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                   style={{
                     left: `${layer.x}%`,
                     top: `${layer.y}%`,
-                    transform:
-                      layer.type === 'sticker'
+                    opacity: (layer.opacity ?? 100) / 100,
+                    transform: `${
+                      layer.type === 'sticker' || layer.type === 'shape'
                         ? 'translate(-50%, -50%)'
                         : layer.align === 'center'
                           ? 'translate(-50%, -50%)'
                           : layer.align === 'right'
                             ? 'translate(-100%, -50%)'
-                            : 'translate(0, -50%)',
+                            : 'translate(0, -50%)'
+                    } rotate(${layer.rotation || 0}deg)`,
                   }}
                   onPointerDown={(event) => beginDrag(layer, event)}
                   onClick={() => setActiveLayerId(layer.id)}
                 >
-                  {layer.type === 'sticker' ? (
+                  {layer.type === 'shape' ? (
+                    <span
+                      style={{
+                        display: 'block',
+                        width: `${(layer.width / 100) * stageDisplaySize.width}px`,
+                        height: `${(layer.height / 100) * stageDisplaySize.height}px`,
+                        background: layer.filled === false ? 'transparent' : layer.color,
+                        border: layer.strokeWidth > 0 ? `${layer.strokeWidth}px solid ${layer.strokeColor}` : 'none',
+                        borderRadius:
+                          layer.shape === 'ellipse' ? '50%' : `${layer.radius || 0}px`,
+                        clipPath:
+                          layer.shape === 'triangle' ? 'polygon(50% 0%, 100% 100%, 0% 100%)' : 'none',
+                      }}
+                    />
+                  ) : layer.type === 'sticker' ? (
                     <span style={{ fontSize: `${layer.fontSize}px` }}>{layer.value}</span>
                   ) : (
                     <span
@@ -1324,14 +1644,19 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
           </div>
 
           <div className="stage-footer">
-            <p>Drag text and sticker layers directly on the canvas.</p>
+            <p>Drag text, shape, and sticker layers directly on the canvas.</p>
             <div className="chip-row">
               {STICKERS.map((sticker) => (
                 <button key={sticker} type="button" className="chip" onClick={() => addStickerLayer(sticker)}>
                   {sticker}
                 </button>
               ))}
-              <button type="button" className="chip" onClick={addTextLayer}>+ Text layer</button>
+              <button type="button" className="chip" onClick={addTextLayer}>+ Text</button>
+              {Object.entries(SHAPES).map(([key, label]) => (
+                <button key={key} type="button" className="chip" onClick={() => addShapeLayer(key)}>
+                  + {label}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -1400,6 +1725,89 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                       onChange={(event) => updateLayer(layer.id, { fontSize: Number(event.target.value) })}
                     />
                   </label>
+                  <label className="slider-row">
+                    <span>Opacity {layer.opacity ?? 100}%</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={layer.opacity ?? 100}
+                      onPointerDown={commitHistory}
+                      onChange={(event) => updateLayer(layer.id, { opacity: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label className="slider-row">
+                    <span>Rotation {layer.rotation ?? 0}°</span>
+                    <input
+                      type="range"
+                      min="-180"
+                      max="180"
+                      value={layer.rotation ?? 0}
+                      onPointerDown={commitHistory}
+                      onChange={(event) => updateLayer(layer.id, { rotation: Number(event.target.value) })}
+                    />
+                  </label>
+                  {layer.type === 'shape' && (
+                    <>
+                      <label className="slider-row">
+                        <span>Width</span>
+                        <input
+                          type="range"
+                          min="2"
+                          max="100"
+                          value={layer.width}
+                          onPointerDown={commitHistory}
+                          onChange={(event) => updateLayer(layer.id, { width: Number(event.target.value) })}
+                        />
+                      </label>
+                      <label className="slider-row">
+                        <span>Height</span>
+                        <input
+                          type="range"
+                          min="1"
+                          max="100"
+                          value={layer.height}
+                          onPointerDown={commitHistory}
+                          onChange={(event) => updateLayer(layer.id, { height: Number(event.target.value) })}
+                        />
+                      </label>
+                      <label>
+                        Fill color
+                        <input
+                          type="color"
+                          value={normalizeColorInputValue(layer.color, '#67e8f9')}
+                          onChange={(event) => updateLayer(layer.id, { color: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Border width
+                        <input
+                          type="range"
+                          min="0"
+                          max="24"
+                          value={layer.strokeWidth ?? 0}
+                          onPointerDown={commitHistory}
+                          onChange={(event) => updateLayer(layer.id, { strokeWidth: Number(event.target.value) })}
+                        />
+                      </label>
+                      <label>
+                        Border color
+                        <input
+                          type="color"
+                          value={normalizeColorInputValue(layer.strokeColor, '#f9a8d4')}
+                          onChange={(event) => updateLayer(layer.id, { strokeColor: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Filled
+                        <input
+                          type="checkbox"
+                          checked={layer.filled !== false}
+                          onChange={(event) => updateLayer(layer.id, { filled: event.target.checked })}
+                        />
+                      </label>
+                    </>
+                  )}
                   <label>
                     X position
                     <input
@@ -1498,12 +1906,19 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
           </div>
 
           <div className="panel-block">
-            <p className="section-label">Adjustments</p>
+            <div className="photo-sidebar-toolbar">
+              <p className="section-label">Adjustments</p>
+              <button type="button" className="ghost-button" onClick={resetFilters}>Reset</button>
+            </div>
             {[
               ['brightness', 'Brightness'],
+              ['exposure', 'Exposure'],
               ['contrast', 'Contrast'],
               ['saturation', 'Saturation'],
               ['hue', 'Hue'],
+              ['sepia', 'Sepia'],
+              ['grayscale', 'Black & white'],
+              ['invert', 'Invert'],
               ['blur', 'Blur'],
               ['vignette', 'Vignette'],
               ['grain', 'Grain'],
@@ -1513,12 +1928,87 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                 <input
                   type="range"
                   min={key === 'blur' ? 0 : key === 'hue' ? -45 : 0}
-                  max={key === 'blur' ? 6 : key === 'hue' ? 45 : 200}
+                  max={
+                    key === 'blur'
+                      ? 6
+                      : key === 'hue'
+                        ? 45
+                        : ['sepia', 'grayscale', 'invert'].includes(key)
+                          ? 100
+                          : 200
+                  }
                   step={key === 'blur' ? 0.1 : 1}
                   value={filters[key]}
+                  // One undo step per drag, rather than one per pixel moved.
+                  onPointerDown={commitHistory}
                   onChange={(event) => setFilters((prev) => ({ ...prev, [key]: Number(event.target.value) }))}
                 />
               </label>
+            ))}
+          </div>
+
+          <div className="panel-block">
+            <p className="section-label">Export</p>
+            <label>
+              Format
+              <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value)}>
+                {Object.entries(EXPORT_FORMATS).map(([key, value]) => (
+                  <option key={key} value={key}>{value.label}</option>
+                ))}
+              </select>
+            </label>
+            {EXPORT_FORMATS[exportFormat]?.lossy && (
+              <label className="slider-row">
+                <span>Quality {exportQuality}%</span>
+                <input
+                  type="range"
+                  min="10"
+                  max="100"
+                  value={exportQuality}
+                  onChange={(event) => setExportQuality(Number(event.target.value))}
+                />
+              </label>
+            )}
+          </div>
+
+          <div className="panel-block">
+            <p className="section-label">Layers</p>
+            <p className="panel-note">Top of this list draws first; the bottom entry sits in front.</p>
+            {[...layers].reverse().map((layer) => (
+              <div
+                key={`manage-${layer.id}`}
+                className={`it-row ${layer.id === resolvedActiveLayerId ? 'active' : ''}`}
+                style={{ gap: '0.35rem', alignItems: 'center' }}
+              >
+                <button
+                  type="button"
+                  className="text-button"
+                  style={{ flex: 1, textAlign: 'left', opacity: layer.hidden ? 0.45 : 1 }}
+                  onClick={() => setActiveLayerId(layer.id)}
+                >
+                  {layer.type === 'sticker' ? layer.value : layer.label}
+                </button>
+                <button
+                  type="button"
+                  className="chip"
+                  title={layer.hidden ? 'Show layer' : 'Hide layer'}
+                  onClick={() => toggleLayerVisibility(layer.id)}
+                >
+                  {layer.hidden ? 'Show' : 'Hide'}
+                </button>
+                <button type="button" className="chip" title="Bring forward" onClick={() => moveLayerOrder(layer.id, 1)}>
+                  ↑
+                </button>
+                <button type="button" className="chip" title="Send backward" onClick={() => moveLayerOrder(layer.id, -1)}>
+                  ↓
+                </button>
+                <button type="button" className="chip" title="Duplicate" onClick={() => duplicateLayer(layer.id)}>
+                  Copy
+                </button>
+                <button type="button" className="chip" title="Delete" onClick={() => deleteLayer(layer.id)}>
+                  ✕
+                </button>
+              </div>
             ))}
           </div>
 

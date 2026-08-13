@@ -13,21 +13,21 @@ const CORE_FEATURES = [
   'Multi-channel scheduler, repost workflows, and team collaboration',
 ]
 
-export function PurchasePage({ onBack, onSubmit, venmoUsername, validatePromoCode }) {
+export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode }) {
   const [step, setStep] = useState('plan')
   const [selectedPlan, setSelectedPlan] = useState('annual')
-  const [form, setForm] = useState({ fullName: '', email: '', venmoTxnId: '' })
+  const [form, setForm] = useState({ fullName: '', email: '' })
   const [errors, setErrors] = useState({})
   const [submitted, setSubmitted] = useState(false)
   const [promoInput, setPromoInput] = useState('')
   const [appliedPromo, setAppliedPromo] = useState(null)
   const [promoError, setPromoError] = useState('')
+  const [processing, setProcessing] = useState(false)
+  const [payError, setPayError] = useState('')
 
-  const venmoHandle = venmoUsername || 'EchoAIPayments'
   const plan = PLANS[selectedPlan]
   // Stable reference ID generated once on mount
   const [licenseRef] = useState(() => `ECHOAI-${Date.now().toString(36).toUpperCase()}`)
-  const venmoLink = `https://venmo.com/${venmoHandle}?txn=pay&amount=${plan.price}&note=${licenseRef}`
 
   const validate = () => {
     const errs = {}
@@ -43,19 +43,31 @@ export function PurchasePage({ onBack, onSubmit, venmoUsername, validatePromoCod
     setStep('pay')
   }
 
-  const handleConfirmPayment = () => {
-    onSubmit({
-      licenseRef,
-      plan: selectedPlan,
-      priceUsd: plan.price,
-      storageLimitGb: plan.storageLimitGb,
-      fullName: form.fullName,
-      email: form.email,
-      venmoTxnId: form.venmoTxnId || '',
-      promoCode: appliedPromo ? appliedPromo.code : null,
-    })
-    setSubmitted(true)
-    setStep('done')
+  const handleConfirmPayment = async () => {
+    setPayError('')
+    setProcessing(true)
+
+    try {
+      const result = await onSubmit({
+        licenseRef,
+        plan: selectedPlan,
+        priceUsd: plan.price,
+        storageLimitGb: plan.storageLimitGb,
+        fullName: form.fullName,
+        email: form.email,
+        promoCode: appliedPromo ? appliedPromo.code : null,
+      })
+
+      // Paid checkout hands off to the payment provider; the page is unloading.
+      if (result?.redirected) return
+
+      setSubmitted(true)
+      setStep('done')
+    } catch (error) {
+      setPayError(error.message || 'We could not complete that. Please try again.')
+    } finally {
+      setProcessing(false)
+    }
   }
 
   const handleApplyPromo = () => {
@@ -79,14 +91,18 @@ export function PurchasePage({ onBack, onSubmit, venmoUsername, validatePromoCod
           {appliedPromo ? (
             <>
               <h2>Your free month is activated!</h2>
-              <p>30 days of full access has been applied to <strong>{form.email}</strong>. Sign in to get started.</p>
+              <p>
+                30 days of full access has been applied to <strong>{form.email}</strong>. Sign in
+                with that email to get started — no approval step required.
+              </p>
             </>
           ) : (
             <>
-              <h2>Purchase request submitted!</h2>
+              <h2>Payment received — you&apos;re active</h2>
               <p>
-                Your request <strong>{licenseRef}</strong> has been received. Once we confirm
-                your Venmo payment your account will be activated — usually within a few hours.
+                Your subscription <strong>{licenseRef}</strong> is live and{' '}
+                <strong>{form.email}</strong> now has full access. Renewals, failed payments, and
+                cancellations are all handled automatically.
               </p>
             </>
           )}
@@ -120,6 +136,15 @@ export function PurchasePage({ onBack, onSubmit, venmoUsername, validatePromoCod
           <>
             <h2>Choose your plan</h2>
             <p className="muted">All plans include every feature, Social Listening tools, and 2 GB storage.</p>
+
+            {referralCode && (
+              <div className="promo-applied" style={{ marginTop: '0.75rem' }}>
+                <span>
+                  🎉 You were referred — <strong>20% off your first month</strong> or{' '}
+                  <strong>10% off your first year</strong> is applied at checkout.
+                </span>
+              </div>
+            )}
 
             <div className="purchase-summary" style={{ marginTop: '1rem' }}>
               <span>What you unlock</span>
@@ -256,64 +281,48 @@ export function PurchasePage({ onBack, onSubmit, venmoUsername, validatePromoCod
                   type="button"
                   className="primary-button"
                   style={{ width: '100%' }}
+                  disabled={processing}
                   onClick={handleConfirmPayment}
                 >
-                  Activate my free month →
+                  {processing ? 'Activating…' : 'Activate my free month →'}
                 </button>
               </>
             ) : (
               <>
-                <div className="venmo-instructions">
-                  <div className="venmo-logo-row">
-                    <span className="venmo-logo-badge">Venmo</span>
-                    <span className="muted">Secure peer-to-peer payment</span>
-                  </div>
-                  <div className="venmo-details">
-                    <div className="venmo-row">
-                      <span>Pay to</span>
-                      <strong>@{venmoHandle}</strong>
-                    </div>
-                    <div className="venmo-row">
-                      <span>Amount</span>
-                      <strong>${plan.price}.00</strong>
-                    </div>
-                    <div className="venmo-row">
-                      <span>Note / Reference</span>
-                      <strong>{licenseRef}</strong>
-                    </div>
-                  </div>
-                  <p className="venmo-note">
-                    ⚠ You <strong>must</strong> include <code>{licenseRef}</code> in the Venmo note
-                    so we can match your payment to your account.
-                  </p>
-                  <a href={venmoLink} target="_blank" rel="noopener noreferrer" className="primary-button venmo-pay-btn">
-                    Open Venmo to pay →
-                  </a>
+                <div className="purchase-summary">
+                  <span>Plan</span><strong>{plan.label}</strong>
+                  <span>Billed</span><strong>${plan.price} {plan.period}</strong>
+                  {referralCode && (
+                    <>
+                      <span>Referral</span>
+                      <strong>
+                        {selectedPlan === 'annual' ? '10% off your first year' : '20% off your first month'}
+                      </strong>
+                    </>
+                  )}
+                  <span>Renews</span><strong>Automatically until you cancel</strong>
+                  <span>Activation</span><strong>Instant on successful payment</strong>
                 </div>
 
-                <div className="venmo-confirm-section">
-                  <p>Already sent the payment? Enter your Venmo transaction ID or username so we can confirm faster (optional):</p>
-                  <label>
-                    Venmo transaction ID or @username (optional)
-                    <input
-                      type="text"
-                      value={form.venmoTxnId}
-                      onChange={(e) => setForm((p) => ({ ...p, venmoTxnId: e.target.value }))}
-                      placeholder="@yourvenmo or transaction ID"
-                    />
-                  </label>
-                </div>
+                <p className="muted">
+                  You&apos;ll be taken to our secure payment provider. Your account switches on the
+                  moment the payment clears, and it switches off automatically if a renewal fails.
+                  Card details never touch EchoAI.
+                </p>
 
                 <button
                   type="button"
                   className="primary-button"
                   style={{ width: '100%', marginTop: '1rem' }}
+                  disabled={processing}
                   onClick={handleConfirmPayment}
                 >
-                  I&apos;ve completed my payment
+                  {processing ? 'Opening secure checkout…' : `Pay $${plan.price} securely →`}
                 </button>
               </>
             )}
+
+            {payError && <span className="field-error">{payError}</span>}
           </>
         )}
       </div>

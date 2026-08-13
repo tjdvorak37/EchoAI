@@ -70,6 +70,74 @@ npm run dev
 5. Ensure admin users have `profiles.role = 'admin'` to manage company main posts and company social accounts.
 6. Ensure users have `profiles.access_status = 'active'` if they should receive admin broadcast notifications.
 
+## Automated Billing & Access Lifecycle
+
+Access is derived from billing state by the database. Nobody approves, activates, or
+deactivates an account by hand, so the system scales without operator involvement.
+
+**How it works**
+
+1. A buyer checks out through Stripe Checkout (`create-checkout-session` edge function).
+   Prices live server-side, so the browser cannot alter the amount.
+2. Stripe calls the `stripe-webhook` edge function. It verifies the signature, de-duplicates
+   by event id in `billing_events`, and writes the result through `apply_stripe_subscription()`.
+3. A trigger on `subscriptions` sets `profiles.access_status` to `active` while the
+   subscription is entitled and `deactivated` the moment it is not.
+4. Failed charges become `past_due` with a grace window (`BILLING_GRACE_DAYS`) while Stripe
+   retries. When the window closes, access is gone.
+5. `expire_overdue_subscriptions()` runs every 15 minutes via `pg_cron` as a safety net for
+   any webhook that never arrived.
+6. Signed-in sessions re-check `my_entitlement()` every 5 minutes and on window focus, so a
+   lapse ends an active session rather than waiting for the next login.
+7. Promo codes are validated and consumed atomically by `redeem_promo_code()`; the client
+   never sees the code table.
+8. Customers self-serve renewals, card updates, and cancellation through the `billing-portal`
+   edge function, reachable from the Integrations tab.
+
+Every paid or failed invoice is written to `billing_payments`, which is what the admin and
+finance screens report on. Those screens read live billing data, so their license actions are
+hidden outside demo mode.
+
+Paying users skip the manual approval queue entirely: if a subscription already covers their
+email, `claim_subscription_for_new_profile()` attaches it at signup and activates them.
+
+**Setup**
+
+1. Apply `supabase/migrations/20260812_core_identity.sql`, then
+   `supabase/migrations/20260813_billing_automation.sql`. The first creates
+   `profiles` and `access_requests` if they are missing and enables RLS on both —
+   **apply it to staging first if your project currently runs them with RLS off.**
+2. Create monthly and annual recurring prices in Stripe.
+3. Set the function secrets listed in `supabase/functions/.env.example`:
+   `supabase secrets set --env-file supabase/functions/.env`
+4. Deploy the functions:
+   `supabase functions deploy stripe-webhook create-checkout-session billing-portal`
+5. Add a Stripe webhook endpoint pointing at the deployed `stripe-webhook` URL, subscribed to
+   `checkout.session.completed`, `customer.subscription.*`, `invoice.payment_succeeded`, and
+   `invoice.payment_failed`. Copy its signing secret into `STRIPE_WEBHOOK_SECRET`.
+6. If `pg_cron` is unavailable on your plan, call `public.expire_overdue_subscriptions()` from
+   an external scheduler instead.
+
+Without Supabase configured the app runs in demo mode, which simulates the same instant
+activation locally.
+
+## Referral Program
+
+Any subscriber can open Integrations and generate a share link (`/?ref=CODE`).
+
+- The referred customer gets **20% off their first month** or **10% off their first year**,
+  applied as a `duration=once` Stripe coupon so it never carries into renewals.
+- The referrer earns **one free month** per conversion, delivered as a Stripe customer balance
+  credit against their next invoice. No money leaves the platform and there is nothing to pay out.
+- Rewards are granted by the webhook the moment checkout completes, not on a schedule.
+
+Abuse guards, all enforced server-side in `resolve_referral_code()`: no self-referral, no
+discount for someone who already has an active subscription, and a unique index on the referred
+email so one person can only ever generate one reward.
+
+Apply `supabase/migrations/20260814_referrals.sql` and set `STRIPE_COUPON_REFERRAL_MONTHLY`
+and `STRIPE_COUPON_REFERRAL_ANNUAL` to `duration=once` coupons you create in Stripe.
+
 ## Suggested Supabase Tables
 
 - `profiles` (user metadata)

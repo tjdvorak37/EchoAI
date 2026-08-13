@@ -29,6 +29,7 @@ import {
   workspaceFoldersSeed,
 } from './data/demoData'
 import { authService } from './services/authService'
+import { billingService } from './services/billingService'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
 import { isSupabaseConfigured } from './lib/supabase'
@@ -188,7 +189,6 @@ function App() {
   const [tickets, setTickets] = useState(supportTicketsSeed)
   const [purchaseHistory, setPurchaseHistory] = useState(purchaseHistorySeed)
   const [featureFlags, setFeatureFlags] = useState(siteFeatureFlagsSeed)
-  const [venmoUsername, setVenmoUsername] = useState('EchoAIPayments')
   const [promoCodes, setPromoCodes] = useState(promoCodesSeed)
   const [expenses, setExpenses] = useState(expensesSeed)
   const [payroll, setPayroll] = useState(payrollSeed)
@@ -196,6 +196,15 @@ function App() {
   const [refunds, setRefunds] = useState(refundsSeed)
   const [financialTasks, setFinancialTasks] = useState(financialTasksSeed)
   const [showPurchase, setShowPurchase] = useState(false)
+  const [myEntitlement, setMyEntitlement] = useState(null)
+  const [billingPortalLoading, setBillingPortalLoading] = useState(false)
+  const [billingPortalError, setBillingPortalError] = useState('')
+  const [referralSummary, setReferralSummary] = useState(null)
+  const [referralCopied, setReferralCopied] = useState(false)
+  // Captured once on load so it survives the user navigating around before buying.
+  const [incomingReferralCode] = useState(
+    () => new URLSearchParams(window.location.search).get('ref') || '',
+  )
 
   const loadingPanel = (
     <section className="panel">
@@ -258,6 +267,18 @@ function App() {
 
   const validatePromoCode = (raw) => {
     const code = raw.trim().toUpperCase()
+
+    // With Supabase configured the code is validated and consumed atomically by
+    // the redeem_promo_code RPC, so the client never gets to see the code list.
+    if (isSupabaseConfigured) {
+      if (!code) return { valid: false, message: 'Enter a code.' }
+      return {
+        valid: true,
+        message: 'Code will be verified when you activate.',
+        codeObj: { code, description: 'Verified at activation' },
+      }
+    }
+
     const found = promoCodes.find((c) => c.code.toUpperCase() === code)
     if (!found) return { valid: false, message: 'Code not found.' }
     if (!found.active) return { valid: false, message: 'This code is no longer active.' }
@@ -364,9 +385,11 @@ function App() {
     setAdminLoading(true)
 
     try {
-      const [requests, members] = await Promise.all([
+      const [requests, members, subscriptions, payments] = await Promise.all([
         authService.getAccessRequests(),
         authService.getManagedUsers(),
+        billingService.listSubscriptions(),
+        billingService.listPayments(),
       ])
 
       if (requests.length) {
@@ -375,6 +398,21 @@ function App() {
 
       if (members.length) {
         setTeamMembers(members)
+      }
+
+      if (isSupabaseConfigured) {
+        // Subscriptions only carry an email; pair them with profile names.
+        const nameByEmail = new Map(
+          members.map((m) => [String(m.email || '').toLowerCase(), m.fullName]),
+        )
+        const withNames = (rows) =>
+          rows.map((row) => ({
+            ...row,
+            userFullName: nameByEmail.get(String(row.userEmail || '').toLowerCase()) || row.userEmail,
+          }))
+
+        setLicenses(withNames(subscriptions))
+        setPurchaseHistory(withNames(payments))
       }
     } catch (error) {
       setAdminError(error.message)
@@ -1372,6 +1410,78 @@ function App() {
     }
   }
 
+  const handleOpenBillingPortal = async () => {
+    setBillingPortalError('')
+    setBillingPortalLoading(true)
+
+    try {
+      await billingService.openBillingPortal()
+    } catch (error) {
+      setBillingPortalError(error.message)
+      setBillingPortalLoading(false)
+    }
+  }
+
+  const handleLoadReferral = async () => {
+    setBillingPortalError('')
+
+    try {
+      setReferralSummary(await billingService.getReferralSummary())
+    } catch (error) {
+      setBillingPortalError(error.message)
+    }
+  }
+
+  const handleCopyReferralLink = async () => {
+    const link = billingService.referralLink(referralSummary?.code)
+    if (!link) return
+
+    try {
+      await navigator.clipboard.writeText(link)
+      setReferralCopied(true)
+      setTimeout(() => setReferralCopied(false), 2000)
+    } catch {
+      setBillingPortalError('Copy failed — select the link and copy it manually.')
+    }
+  }
+
+  // Continuously enforce billing entitlement. If a renewal fails or a plan
+  // lapses while someone is signed in, their session ends without intervention.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !session?.id) return undefined
+
+    let cancelled = false
+
+    const enforceEntitlement = async () => {
+      let entitlement
+      try {
+        entitlement = await billingService.getMyEntitlement()
+      } catch {
+        // A transient network failure must never lock a paying customer out.
+        return
+      }
+
+      if (cancelled) return
+      setMyEntitlement(entitlement)
+
+      if (entitlement?.entitled !== false) return
+
+      await authService.signOut()
+      if (cancelled) return
+      setSession(null)
+      setAuthError('Your subscription is no longer active. Renew to restore access.')
+    }
+    enforceEntitlement()
+    const timer = setInterval(enforceEntitlement, 5 * 60 * 1000)
+    window.addEventListener('focus', enforceEntitlement)
+
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+      window.removeEventListener('focus', enforceEntitlement)
+    }
+  }, [session?.id])
+
   const signOut = async () => {
     await authService.signOut()
     setSession(null)
@@ -1397,25 +1507,47 @@ function App() {
       return (
         <Suspense fallback={loadingPanel}>
           <PurchasePage
-            venmoUsername={venmoUsername}
             validatePromoCode={validatePromoCode}
+            referralCode={incomingReferralCode}
             onBack={() => setShowPurchase(false)}
-            onSubmit={(order) => {
+            onSubmit={async (order) => {
               const isPromo = Boolean(order.promoCode)
-              const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+
+              // Live mode: activation and revocation are driven entirely by the
+              // payment provider webhook and the database, never by an operator.
+              if (isSupabaseConfigured) {
+                if (isPromo) {
+                  await billingService.redeemPromoCode({
+                    code: order.promoCode,
+                    email: order.email,
+                  })
+                  return { redirected: false }
+                }
+
+                await billingService.startCheckout({
+                  plan: order.plan,
+                  email: order.email,
+                  fullName: order.fullName,
+                  referralCode: incomingReferralCode,
+                })
+                return { redirected: true }
+              }
+
+              // Demo mode mirrors the live behaviour: paid or redeemed means active immediately.
+              const periodDays = !isPromo && order.plan === 'annual' ? 365 : 30
+              const expiresAt = new Date(Date.now() + periodDays * 24 * 60 * 60 * 1000).toISOString()
               const newLicense = {
                 id: `lic-${Date.now()}`,
                 userId: `pending-${Date.now()}`,
                 userEmail: order.email,
                 userFullName: order.fullName,
-                plan: 'monthly',
+                plan: isPromo ? 'monthly' : order.plan,
                 priceUsd: isPromo ? 0 : order.priceUsd,
                 storageLimitGb: order.storageLimitGb,
-                status: isPromo ? 'active' : 'pending_payment',
+                status: 'active',
                 purchasedAt: new Date().toISOString(),
-                expiresAt: isPromo ? expiresAt : null,
-                venmoTxnId: order.venmoTxnId || '',
-                paymentConfirmed: isPromo,
+                expiresAt,
+                paymentConfirmed: true,
                 notes: isPromo ? `Promo: ${order.promoCode}` : `Ref: ${order.licenseRef}`,
               }
               setLicenses((prev) => [newLicense, ...prev])
@@ -1426,10 +1558,9 @@ function App() {
                 userFullName: order.fullName,
                 plan: newLicense.plan,
                 amountUsd: newLicense.priceUsd,
-                method: isPromo ? `Promo (${order.promoCode})` : 'Venmo',
-                venmoTxnId: order.venmoTxnId || '',
-                status: isPromo ? 'confirmed' : 'pending',
-                paidAt: isPromo ? new Date().toISOString() : null,
+                method: isPromo ? `Promo (${order.promoCode})` : 'Card',
+                status: 'confirmed',
+                paidAt: new Date().toISOString(),
               }, ...prev])
               if (isPromo) {
                 setPromoCodes((prev) => prev.map((c) =>
@@ -1438,6 +1569,8 @@ function App() {
                     : c,
                 ))
               }
+
+              return { redirected: false }
             }}
           />
         </Suspense>
@@ -2317,10 +2450,24 @@ function App() {
               <VideoEditor
                 assets={workspaceAssets}
                 onExport={(project) => {
+                  const exportedAsset = {
+                    id: `asset_${Date.now()}`,
+                    name: project.exportName || 'video-studio-export.webm',
+                    type: 'video',
+                    mime: 'video/webm',
+                    size: project.sizeBytes || 0,
+                    folderId: selectedFolderId,
+                    createdAt: new Date().toISOString(),
+                    previewUrl: project.previewUrl,
+                    summary: project.summary || 'Exported from the video studio',
+                  }
+
+                  setWorkspaceAssets((prev) => [exportedAsset, ...prev])
                   setComposer((prev) => ({
                     ...prev,
-                    message: `Video project: ${project.totalClips} clips, ${project.duration}s duration`,
-                    imageIdea: `Project with ${project.totalClips} clips`,
+                    message: `Video: ${project.totalClips} clips, ${project.durationSeconds}s`,
+                    imageIdea: project.exportName || prev.imageIdea,
+                    campaign: prev.campaign || 'Video campaign',
                   }))
                   setActiveTab('scheduler')
                 }}
@@ -2344,6 +2491,64 @@ function App() {
               Link your social media accounts and third-party tools. Each channel you connect
               becomes available in the Scheduler and AI Studio.
             </p>
+
+            <h3 className="section-label">Subscription &amp; billing</h3>
+            <div className="list-row">
+              <div>
+                <p>Your EchoAI subscription</p>
+                <span className="muted">
+                  {myEntitlement
+                    ? myEntitlement.status === 'none'
+                      ? 'No subscription on file.'
+                      : `Status: ${myEntitlement.status}${
+                          myEntitlement.currentPeriodEnd
+                            ? ` • renews ${new Date(myEntitlement.currentPeriodEnd).toLocaleDateString()}`
+                            : ''
+                        }`
+                    : 'Update your card, change plan, or cancel at any time.'}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={billingPortalLoading || !isSupabaseConfigured}
+                onClick={handleOpenBillingPortal}
+              >
+                {billingPortalLoading ? 'Opening…' : 'Manage billing'}
+              </button>
+            </div>
+            {billingPortalError && <span className="field-error">{billingPortalError}</span>}
+
+            <h3 className="section-label">Refer &amp; earn</h3>
+            <div className="list-row">
+              <div>
+                <p>Share your link — earn a free month</p>
+                <span className="muted">
+                  They get 20% off their first month or 10% off their first year. You get one free
+                  month once their subscription goes through, applied automatically.
+                </span>
+              </div>
+              <button type="button" className="ghost-button" onClick={handleLoadReferral}>
+                {referralSummary ? 'Refresh' : 'Get my link'}
+              </button>
+            </div>
+
+            {referralSummary?.code && (
+              <div className="list-row">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ overflowWrap: 'anywhere' }}>
+                    {billingService.referralLink(referralSummary.code)}
+                  </p>
+                  <span className="muted">
+                    {referralSummary.converted} referred • {referralSummary.rewardsGranted} free
+                    month(s) earned
+                  </span>
+                </div>
+                <button type="button" className="ghost-button" onClick={handleCopyReferralLink}>
+                  {referralCopied ? 'Copied' : 'Copy link'}
+                </button>
+              </div>
+            )}
 
             <h3 className="section-label">Social media accounts</h3>
             <div className="integration-grid">
@@ -2578,8 +2783,7 @@ function App() {
               setPurchaseHistory={setPurchaseHistory}
               featureFlags={featureFlags}
               setFeatureFlags={setFeatureFlags}
-              venmoUsername={venmoUsername}
-              setVenmoUsername={setVenmoUsername}
+              billingLive={isSupabaseConfigured}
               promoCodes={promoCodes}
               setPromoCodes={setPromoCodes}
               expenses={expenses}

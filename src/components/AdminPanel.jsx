@@ -51,7 +51,7 @@ export function AdminPanel({
   tickets, setTickets,
   purchaseHistory, setPurchaseHistory,
   featureFlags, setFeatureFlags,
-  venmoUsername, setVenmoUsername,
+  billingLive,
   promoCodes, setPromoCodes,
   expenses, setExpenses,
   payroll, setPayroll,
@@ -68,8 +68,6 @@ export function AdminPanel({
   const [ticketOpen, setTicketOpen] = useState(null)
   const [replyDraft, setReplyDraft] = useState('')
   const [licenseNote, setLicenseNote] = useState({})
-  const [venmoEdit, setVenmoEdit] = useState(false)
-  const [venmodraft, setVenmoDraft] = useState(venmoUsername || '')
   const [userSearch, setUserSearch] = useState('')
 
   const activeLicenses = licenses.filter((l) => l.status === 'active').length
@@ -243,32 +241,16 @@ export function AdminPanel({
               )}
             </Section>
 
-            <Section title="Venmo payment account">
-              {venmoEdit ? (
-                <div className="it-venmo-edit">
-                  <label>
-                    Venmo @username
-                    <input
-                      type="text"
-                      value={venmodraft}
-                      onChange={(e) => setVenmoDraft(e.target.value)}
-                      placeholder="YourVenmoUsername"
-                    />
-                  </label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button type="button" className="primary-button" onClick={() => { setVenmoUsername(venmodraft); setVenmoEdit(false) }}>Save</button>
-                    <button type="button" className="ghost-button" onClick={() => setVenmoEdit(false)}>Cancel</button>
-                  </div>
+            <Section title="Payments">
+              <div className="it-row">
+                <div>
+                  <p>Card payments via Stripe</p>
+                  <span>
+                    Subscriptions activate and revoke automatically. Prices and keys are configured
+                    server-side in the edge function secrets, not here.
+                  </span>
                 </div>
-              ) : (
-                <div className="it-row">
-                  <div>
-                    <p>@{venmoUsername || 'Not configured'}</p>
-                    <span>Payments from new users go here</span>
-                  </div>
-                  <button type="button" className="ghost-button" onClick={() => { setVenmoDraft(venmoUsername || ''); setVenmoEdit(true) }}>Edit</button>
-                </div>
-              )}
+              </div>
             </Section>
           </div>
         )}
@@ -276,6 +258,11 @@ export function AdminPanel({
         {itTab === 'licenses' && (
           <div>
             <Section title="All licenses">
+              <p className="panel-note">
+                Activation and revocation are automatic — a successful payment or promo redemption
+                turns access on, and a failed or overdue payment turns it off. This list is read
+                directly from the billing system; no license here needs your approval.
+              </p>
               <div className="it-table">
                 <div className="it-table-header">
                   <span>User</span>
@@ -297,22 +284,23 @@ export function AdminPanel({
                     <span>{l.expiresAt ? new Date(l.expiresAt).toLocaleDateString() : '—'}</span>
                     <StatusBadge value={l.status} />
                     <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                      {l.status === 'pending_payment' && (
+                      {billingLive && <span className="muted">Managed automatically</span>}
+                      {!billingLive && l.status === 'pending_payment' && (
                         <button type="button" className="primary-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => confirmLicense(l.id)}>
-                          Confirm payment
+                          Force activate
                         </button>
                       )}
-                      {(l.status === 'active') && (
+                      {!billingLive && (l.status === 'active') && (
                         <button type="button" className="ghost-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => suspendLicense(l.id)}>
                           Suspend
                         </button>
                       )}
-                      {(l.status === 'suspended' || l.status === 'expired') && (
+                      {!billingLive && (l.status === 'suspended' || l.status === 'expired') && (
                         <button type="button" className="ghost-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => restoreLicense(l.id)}>
                           Restore
                         </button>
                       )}
-                      {l.status === 'active' && (
+                      {!billingLive && l.status === 'active' && (
                         <button type="button" className="ghost-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem', color: '#ef4444' }} onClick={() => revokeLicense(l.id)}>
                           Revoke
                         </button>
@@ -323,6 +311,7 @@ export function AdminPanel({
               </div>
             </Section>
 
+            {!billingLive && (
             <Section title="License notes">
               {licenses.map((l) => (
                 <div key={`note-${l.id}`} className="it-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
@@ -342,6 +331,7 @@ export function AdminPanel({
                 </div>
               ))}
             </Section>
+            )}
           </div>
         )}
 

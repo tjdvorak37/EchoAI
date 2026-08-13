@@ -1,0 +1,12 @@
+project_id = "echoai"
+
+[functions.stripe-webhook]
+# Stripe signs requests itself; it cannot present a Supabase JWT.
+verify_jwt = false
+
+[functions.create-checkout-session]
+# Buyers check out before they have an account.
+verify_jwt = false
+
+[functions.billing-portal]
+verify_jwt = true
