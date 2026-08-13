@@ -20,3 +20,8 @@ verify_jwt = true
 
 [functions.listening-fetch]
 verify_jwt = true
+
+[functions.cloud-drive]
+# Handles the OAuth redirect back from Google and Microsoft, which arrives
+# without a Supabase JWT. Requests are authorised inside the function.
+verify_jwt = false

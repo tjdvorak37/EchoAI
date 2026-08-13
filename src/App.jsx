@@ -31,6 +31,7 @@ import {
 import { authService } from './services/authService'
 import { billingService } from './services/billingService'
 import { brandService, createEmptyBrandKit, loadBrandFonts, MAX_LOGO_BYTES } from './services/brandService'
+import { CLOUD_PROVIDERS, cloudDriveService, toLinkedAsset } from './services/cloudDriveService'
 import { getPlan, getStorageMb } from './data/plans'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
@@ -137,6 +138,13 @@ function App() {
   const [brandBusy, setBrandBusy] = useState(false)
   const [brandNotice, setBrandNotice] = useState('')
   const [brandError, setBrandError] = useState('')
+  const [cloudConnections, setCloudConnections] = useState([])
+  const [cloudProvider, setCloudProvider] = useState('')
+  const [cloudItems, setCloudItems] = useState([])
+  const [cloudPath, setCloudPath] = useState([])
+  const [cloudSearch, setCloudSearch] = useState('')
+  const [cloudBusy, setCloudBusy] = useState(false)
+  const [cloudError, setCloudError] = useState('')
   const [pendingEmail, setPendingEmail] = useState('')
   const [session, setSession] = useState(null)
 
@@ -368,8 +376,12 @@ function App() {
     [repostQueue],
   )
 
+  // Linked cloud files live in the customer's own drive, so they cost no quota.
   const storageUsedMb = useMemo(
-    () => workspaceAssets.reduce((sum, asset) => sum + asset.size / 1024 / 1024, 0),
+    () =>
+      workspaceAssets
+        .filter((asset) => !asset.linked)
+        .reduce((sum, asset) => sum + asset.size / 1024 / 1024, 0),
     [workspaceAssets],
   )
 
@@ -554,6 +566,71 @@ function App() {
     }
   }
 
+  const loadCloudConnections = async () => {
+    if (!isSupabaseConfigured) return
+
+    try {
+      setCloudConnections(await cloudDriveService.listConnections())
+    } catch (error) {
+      setCloudError(error.message)
+    }
+  }
+
+  const browseCloud = async ({ provider, folderId = '', search = '', label = '' }) => {
+    setCloudError('')
+    setCloudBusy(true)
+    setCloudProvider(provider)
+
+    try {
+      const items = await cloudDriveService.listFiles({ provider, folderId, search })
+      setCloudItems(items)
+
+      if (search) {
+        setCloudPath([{ id: '', label: `Search: ${search}` }])
+      } else if (!folderId) {
+        setCloudPath([])
+      } else {
+        setCloudPath((prev) => [...prev, { id: folderId, label }])
+      }
+    } catch (error) {
+      setCloudError(
+        error.message === 'reauth_required'
+          ? 'That connection expired. Reconnect the provider to continue.'
+          : error.message === 'not_connected'
+            ? 'Connect this provider first.'
+            : error.message,
+      )
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  // Adds a pointer to the file. Nothing is copied, so the quota is untouched.
+  const linkCloudFile = (item) => {
+    const asset = toLinkedAsset({ item, provider: cloudProvider, folderId: selectedFolderId })
+
+    if (workspaceAssets.some((existing) => existing.id === asset.id)) {
+      setCloudError(`${item.name} is already in this workspace.`)
+      return
+    }
+
+    setWorkspaceAssets((prev) => [asset, ...prev])
+    setCloudError('')
+  }
+
+  const handleDisconnectCloud = async (provider) => {
+    try {
+      await cloudDriveService.disconnect(provider)
+      setCloudConnections((prev) => prev.filter((entry) => entry.provider !== provider))
+      if (cloudProvider === provider) {
+        setCloudItems([])
+        setCloudProvider('')
+      }
+    } catch (error) {
+      setCloudError(error.message)
+    }
+  }
+
   const loadBrandKit = async () => {
     setBrandError('')
 
@@ -735,6 +812,7 @@ function App() {
       await applyUserData(result.user)
       await loadRepostWorkspace()
       await loadBrandKit()
+      await loadCloudConnections()
       if (result.user?.role === 'admin') {
         await loadAdminData()
       }
@@ -2231,6 +2309,120 @@ function App() {
                 <span>{storageUsedMb.toFixed(1)} MB / {storageQuotaMb} MB used</span>
               </div>
 
+              <div className="cloud-drive-panel">
+                <strong>Cloud drives</strong>
+                <p className="muted">
+                  Browse and link files without using your quota — they stay in your own drive.
+                </p>
+
+                <div className="chip-row">
+                  {Object.values(CLOUD_PROVIDERS).map((provider) => {
+                    const connection = cloudConnections.find((entry) => entry.provider === provider.key)
+                    return connection ? (
+                      <button
+                        key={provider.key}
+                        type="button"
+                        className={cloudProvider === provider.key ? 'chip active' : 'chip'}
+                        title={connection.accountEmail}
+                        onClick={() => browseCloud({ provider: provider.key })}
+                      >
+                        {provider.icon} {provider.label}
+                      </button>
+                    ) : (
+                      <button
+                        key={provider.key}
+                        type="button"
+                        className="chip"
+                        disabled={!isSupabaseConfigured}
+                        onClick={() => cloudDriveService.connect(provider.key).catch((error) => setCloudError(error.message))}
+                      >
+                        + Connect {provider.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {cloudProvider && (
+                  <>
+                    <div className="chip-row">
+                      <button
+                        type="button"
+                        className="chip"
+                        onClick={() => browseCloud({ provider: cloudProvider })}
+                      >
+                        ← Top level
+                      </button>
+                      {cloudPath.map((crumb) => (
+                        <span key={`${crumb.id}-${crumb.label}`} className="chip">{crumb.label}</span>
+                      ))}
+                      <button
+                        type="button"
+                        className="chip"
+                        onClick={() => handleDisconnectCloud(cloudProvider)}
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+
+                    <label>
+                      Search this drive
+                      <input
+                        value={cloudSearch}
+                        onChange={(event) => setCloudSearch(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            browseCloud({ provider: cloudProvider, search: cloudSearch })
+                          }
+                        }}
+                        placeholder="Press Enter to search"
+                      />
+                    </label>
+
+                    {cloudBusy && <p className="muted">Loading…</p>}
+
+                    <div className="asset-list">
+                      {cloudItems.map((item) => (
+                        <div key={item.id} className="asset-card">
+                          <div className="asset-card-main">
+                            <span>{item.isFolder ? '📁' : '📄'} {item.name}</span>
+                            {!item.isFolder && (
+                              <small className="muted">
+                                {(item.size / 1024 / 1024).toFixed(1)} MB • no quota used
+                              </small>
+                            )}
+                          </div>
+                          {item.isFolder ? (
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() =>
+                                browseCloud({
+                                  provider: cloudProvider,
+                                  folderId: item.id,
+                                  label: item.name,
+                                })
+                              }
+                            >
+                              Open
+                            </button>
+                          ) : (
+                            <button type="button" className="ghost-button" onClick={() => linkCloudFile(item)}>
+                              Link
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {!cloudBusy && cloudItems.length === 0 && (
+                        <p className="muted">Nothing here.</p>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {cloudError && <span className="field-error">{cloudError}</span>}
+              </div>
+
               <div className="asset-list">
                 {workspaceFolders
                   .filter((folder) => folder.parentId === selectedFolderId)
@@ -2300,7 +2492,17 @@ function App() {
                         <div className="asset-card-main">
                           <strong>{asset.type === 'video' ? '🎬' : asset.type === 'image' ? '🖼️' : '📄'} {asset.name}</strong>
                           <span>{asset.summary}</span>
-                          <small>{asset.type} • {(asset.size / 1024 / 1024).toFixed(1)} MB</small>
+                          <small>
+                            {asset.type} • {(asset.size / 1024 / 1024).toFixed(1)} MB
+                            {asset.linked && (
+                              <>
+                                {' '}
+                                <span className="asset-linked-badge">
+                                  Linked · {CLOUD_PROVIDERS[asset.provider]?.label ?? 'cloud'} · no quota
+                                </span>
+                              </>
+                            )}
+                          </small>
                         </div>
                         <div className="asset-actions">
                           <button type="button" className="asset-action-button" onClick={() => startRenameItem('asset', asset.id, asset.name)}>Rename</button>

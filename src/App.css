@@ -2429,3 +2429,32 @@ main {
 }
 .rec-stop-btn:hover { background: rgba(239,68,68,0.25); }
 .rec-error { font-size: 0.8rem; color: #ef4444; }
+
+.cloud-drive-panel {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: 1px solid #dbeafe;
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.cloud-drive-panel .asset-list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.asset-card-main {
+  display: grid;
+  gap: 0.15rem;
+  overflow-wrap: anywhere;
+}
+
+.asset-linked-badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
