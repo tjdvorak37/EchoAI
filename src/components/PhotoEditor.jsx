@@ -391,6 +391,10 @@ const buildMaskPath = (ctx, maskShape, width, height) => {
 }
 
 const drawTextLayer = (ctx, layer, x, y, maxWidth) => {
+  const fontStack = layer.fontFamily
+    ? `"${layer.fontFamily}", Inter, system-ui, sans-serif`
+    : 'Inter, system-ui, sans-serif'
+  ctx.font = `${layer.weight} ${layer.fontSize}px ${fontStack}`
   const lines = wrapText(ctx, layer.value, maxWidth)
   const lineHeight = layer.fontSize * 1.14
   const textWidth = Math.max(...lines.map((line) => ctx.measureText(line).width), 0)
@@ -410,7 +414,7 @@ const drawTextLayer = (ctx, layer, x, y, maxWidth) => {
   }
 
   ctx.save()
-  ctx.font = `${layer.weight} ${layer.fontSize}px Inter, system-ui, sans-serif`
+  ctx.font = `${layer.weight} ${layer.fontSize}px ${fontStack}`
   ctx.textAlign = layer.align || 'left'
   ctx.textBaseline = 'top'
   ctx.direction = 'ltr'
@@ -537,11 +541,41 @@ const renderComposition = async ({
     }
   }
 
+  // Logo layers need decoding before the synchronous draw pass below.
+  const logoImages = new Map()
+  await Promise.all(
+    layers
+      .filter((layer) => layer.type === 'image' && layer.src && !layer.hidden)
+      .map(async (layer) => {
+        try {
+          logoImages.set(layer.id, await loadImage(layer.src))
+        } catch {
+          // A logo that will not decode is skipped rather than failing the export.
+        }
+      }),
+  )
+
   layers.forEach((layer) => {
     if (layer.hidden) return
 
     const x = (layer.x / 100) * width
     const y = (layer.y / 100) * height
+
+    if (layer.type === 'image') {
+      const image = logoImages.get(layer.id)
+      if (!image) return
+
+      const drawWidth = (layer.width / 100) * width
+      const drawHeight = drawWidth * (image.height / image.width)
+
+      ctx.save()
+      ctx.globalAlpha = (layer.opacity ?? 100) / 100
+      ctx.translate(x, y)
+      ctx.rotate(((layer.rotation || 0) * Math.PI) / 180)
+      ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
+      ctx.restore()
+      return
+    }
 
     if (layer.type === 'shape') {
       drawShapeLayer(ctx, layer, width, height)
@@ -577,7 +611,7 @@ const renderComposition = async ({
   return canvas.toDataURL('image/png')
 }
 
-export function PhotoEditor({ assets, onExport, agentConfig }) {
+export function PhotoEditor({ assets, onExport, agentConfig, brandKit }) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
   const [selectedAssetId, setSelectedAssetId] = useState(imageAssets[0]?.id ?? '')
   const [uploadedImage, setUploadedImage] = useState('')
@@ -1223,6 +1257,36 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
     setNotice('Canvas reset to the default concept.')
   }
 
+  const addLogoLayer = (logo) => {
+    addLayer({
+      id: nextLayerId('logo'),
+      type: 'image',
+      label: logo.label || 'Logo',
+      src: logo.dataUrl,
+      value: logo.label || 'Logo',
+      x: 82,
+      y: 88,
+      width: 18,
+      opacity: 100,
+      rotation: 0,
+    })
+    setNotice(`Added the ${logo.label} logo.`)
+  }
+
+  const applyBrandColor = (value) => {
+    if (!resolvedActiveLayerId) return
+    commitHistory()
+    updateLayer(resolvedActiveLayerId, { color: value })
+    setNotice('Applied a brand colour to the selected layer.')
+  }
+
+  const applyBrandFont = (family) => {
+    if (!resolvedActiveLayerId) return
+    commitHistory()
+    updateLayer(resolvedActiveLayerId, { fontFamily: family })
+    setNotice(family ? `Set the layer font to ${family}.` : 'Reset the layer font.')
+  }
+
   const addStickerLayer = (sticker) => {
     addLayer({
       id: nextLayerId('sticker'),
@@ -1247,6 +1311,12 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
   }
 
   const exportCanvas = async () => {
+    // Canvas silently falls back to a default face if a brand font is still
+    // loading, so wait for the font set to settle first.
+    if (document.fonts?.ready) {
+      await document.fonts.ready
+    }
+
     const stageCanvas = document.createElement('canvas')
     stageCanvas.width = stageMetrics.width
     stageCanvas.height = stageMetrics.height
@@ -1595,7 +1665,7 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                     top: `${layer.y}%`,
                     opacity: (layer.opacity ?? 100) / 100,
                     transform: `${
-                      layer.type === 'sticker' || layer.type === 'shape'
+                      layer.type === 'sticker' || layer.type === 'shape' || layer.type === 'image'
                         ? 'translate(-50%, -50%)'
                         : layer.align === 'center'
                           ? 'translate(-50%, -50%)'
@@ -1607,7 +1677,17 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                   onPointerDown={(event) => beginDrag(layer, event)}
                   onClick={() => setActiveLayerId(layer.id)}
                 >
-                  {layer.type === 'shape' ? (
+                  {layer.type === 'image' ? (
+                    <img
+                      src={layer.src}
+                      alt={layer.label}
+                      style={{
+                        display: 'block',
+                        width: `${(layer.width / 100) * stageDisplaySize.width}px`,
+                        height: 'auto',
+                      }}
+                    />
+                  ) : layer.type === 'shape' ? (
                     <span
                       style={{
                         display: 'block',
@@ -1628,6 +1708,9 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                       style={{
                         fontSize: `${layer.fontSize}px`,
                         fontWeight: layer.weight,
+                        fontFamily: layer.fontFamily
+                          ? `"${layer.fontFamily}", Inter, system-ui, sans-serif`
+                          : undefined,
                         color: layer.color,
                         textAlign: layer.align,
                         filter: layer.effect === 'glow' ? 'drop-shadow(0 0 12px rgba(255,255,255,0.7))' : 'none',
@@ -1652,6 +1735,11 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                 </button>
               ))}
               <button type="button" className="chip" onClick={addTextLayer}>+ Text</button>
+              {(brandKit?.logos ?? []).map((logo) => (
+                <button key={logo.id} type="button" className="chip" onClick={() => addLogoLayer(logo)}>
+                  <img src={logo.dataUrl} alt={logo.label} style={{ height: 18, width: 'auto' }} />
+                </button>
+              ))}
               {Object.entries(SHAPES).map(([key, label]) => (
                 <button key={key} type="button" className="chip" onClick={() => addShapeLayer(key)}>
                   + {label}
@@ -2010,6 +2098,81 @@ export function PhotoEditor({ assets, onExport, agentConfig }) {
                 </button>
               </div>
             ))}
+          </div>
+
+          <div className="panel-block">
+            <p className="section-label">Brand kit</p>
+            {(brandKit?.colors?.length || brandKit?.fonts?.length || brandKit?.logos?.length) ? (
+              <>
+                {brandKit.colors?.length > 0 && (
+                  <>
+                    <p className="muted">Colours — click to apply to the selected layer</p>
+                    <div className="chip-row">
+                      {brandKit.colors.map((color) => (
+                        <button
+                          key={color.id}
+                          type="button"
+                          className="chip"
+                          title={`${color.label} ${color.value}`}
+                          onClick={() => applyBrandColor(color.value)}
+                          style={{
+                            background: color.value,
+                            color: '#fff',
+                            textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+                          }}
+                        >
+                          {color.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {brandKit.fonts?.length > 0 && (
+                  <label>
+                    Brand font
+                    <select
+                      value={activeTextLayer?.fontFamily ?? ''}
+                      disabled={!activeTextLayer}
+                      onChange={(event) => applyBrandFont(event.target.value)}
+                    >
+                      <option value="">Default (Inter)</option>
+                      {brandKit.fonts
+                        .filter((font) => font.family)
+                        .map((font) => (
+                          <option key={font.id} value={font.family}>
+                            {font.label || font.family}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
+
+                {brandKit.logos?.length > 0 && (
+                  <>
+                    <p className="muted">Logos</p>
+                    <div className="chip-row">
+                      {brandKit.logos.map((logo) => (
+                        <button
+                          key={logo.id}
+                          type="button"
+                          className="chip"
+                          onClick={() => addLogoLayer(logo)}
+                          title={`Add ${logo.label}`}
+                        >
+                          <img src={logo.dataUrl} alt={logo.label} style={{ height: 22, width: 'auto' }} />
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <p className="muted">
+                No brand kit yet. Add your colours, licensed fonts, and logos under Integrations →
+                Brand kit and they&apos;ll show up here.
+              </p>
+            )}
           </div>
 
           <div className="panel-block">

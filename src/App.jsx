@@ -30,6 +30,7 @@ import {
 } from './data/demoData'
 import { authService } from './services/authService'
 import { billingService } from './services/billingService'
+import { brandService, createEmptyBrandKit, loadBrandFonts, MAX_LOGO_BYTES } from './services/brandService'
 import { getPlan, getStorageMb } from './data/plans'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
@@ -131,6 +132,11 @@ function App() {
   const [mfaBusy, setMfaBusy] = useState(false)
   const [recoveryMode, setRecoveryMode] = useState(false)
   const [recoveryCodeInput, setRecoveryCodeInput] = useState('')
+  const [brandKit, setBrandKit] = useState(createEmptyBrandKit)
+  const [brandDraft, setBrandDraft] = useState(createEmptyBrandKit)
+  const [brandBusy, setBrandBusy] = useState(false)
+  const [brandNotice, setBrandNotice] = useState('')
+  const [brandError, setBrandError] = useState('')
   const [pendingEmail, setPendingEmail] = useState('')
   const [session, setSession] = useState(null)
 
@@ -548,6 +554,113 @@ function App() {
     }
   }
 
+  const loadBrandKit = async () => {
+    setBrandError('')
+
+    try {
+      const kit = await brandService.getBrandKit()
+      setBrandKit(kit)
+      setBrandDraft(kit)
+      await loadBrandFonts(kit.fonts)
+    } catch (error) {
+      setBrandError(error.message)
+    }
+  }
+
+  const handleSaveBrandKit = async () => {
+    setBrandError('')
+    setBrandNotice('')
+    setBrandBusy(true)
+
+    try {
+      const saved = await brandService.saveBrandKit(brandDraft)
+      setBrandKit(saved)
+      setBrandDraft(saved)
+      await loadBrandFonts(saved.fonts)
+      setBrandNotice('Brand kit saved. It now applies across the editors.')
+    } catch (error) {
+      setBrandError(error.message)
+    } finally {
+      setBrandBusy(false)
+    }
+  }
+
+  const addBrandColor = () => {
+    setBrandDraft((prev) => ({
+      ...prev,
+      colors: [
+        ...prev.colors,
+        { id: `color-${prev.colors.length + 1}-${prev.colors.length}`, label: 'New colour', value: '#3b82f6' },
+      ],
+    }))
+  }
+
+  const updateBrandColor = (id, patch) => {
+    setBrandDraft((prev) => ({
+      ...prev,
+      colors: prev.colors.map((color) => (color.id === id ? { ...color, ...patch } : color)),
+    }))
+  }
+
+  const removeBrandItem = (collection, id) => {
+    setBrandDraft((prev) => ({
+      ...prev,
+      [collection]: prev[collection].filter((item) => item.id !== id),
+    }))
+  }
+
+  const addBrandFont = () => {
+    setBrandDraft((prev) => ({
+      ...prev,
+      fonts: [
+        ...prev.fonts,
+        {
+          id: `font-${prev.fonts.length + 1}-${prev.fonts.length}`,
+          label: 'Heading font',
+          family: '',
+          sourceUrl: '',
+          fallback: 'system-ui, sans-serif',
+        },
+      ],
+    }))
+  }
+
+  const updateBrandFont = (id, patch) => {
+    setBrandDraft((prev) => ({
+      ...prev,
+      fonts: prev.fonts.map((font) => (font.id === id ? { ...font, ...patch } : font)),
+    }))
+  }
+
+  const handleBrandLogoUpload = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (file.size > MAX_LOGO_BYTES) {
+      setBrandError(`Logos must be under ${Math.round(MAX_LOGO_BYTES / 1024)} KB. Try an SVG or compressed PNG.`)
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      setBrandError('')
+      setBrandDraft((prev) => ({
+        ...prev,
+        logos: [
+          ...prev.logos,
+          {
+            id: `logo-${prev.logos.length + 1}-${prev.logos.length}`,
+            label: file.name.replace(/\.[^.]+$/, ''),
+            dataUrl: String(reader.result),
+            usage: 'primary',
+          },
+        ],
+      }))
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }
+
   const handleStartMfaEnrollment = async () => {
     setMfaError('')
     setMfaBusy(true)
@@ -621,6 +734,7 @@ function App() {
       setSession(result.user)
       await applyUserData(result.user)
       await loadRepostWorkspace()
+      await loadBrandKit()
       if (result.user?.role === 'admin') {
         await loadAdminData()
       }
@@ -2730,7 +2844,12 @@ function App() {
         {activeTab === 'photo' && (
           <Suspense fallback={loadingPanel}>
             <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
-              <PhotoEditor assets={workspaceAssets} onExport={handlePhotoExport} agentConfig={aiAgentConfig} />
+              <PhotoEditor
+                assets={workspaceAssets}
+                onExport={handlePhotoExport}
+                agentConfig={aiAgentConfig}
+                brandKit={brandKit}
+              />
             </section>
           </Suspense>
         )}
@@ -2742,6 +2861,134 @@ function App() {
               Link your social media accounts and third-party tools. Each channel you connect
               becomes available in the Scheduler and AI Studio.
             </p>
+
+            <h3 className="section-label">Brand kit</h3>
+            <p className="panel-note">
+              Your company&apos;s colours, licensed fonts, and logos. Everything here is available in
+              the Photo Creator and Video Studio so every post stays on brand.
+            </p>
+
+            <div className="list-row">
+              <div>
+                <p>
+                  {brandKit.colors.length} colours • {brandKit.fonts.length} fonts •{' '}
+                  {brandKit.logos.length} logos
+                </p>
+                <span className="muted">
+                  {brandKit.updatedAt
+                    ? `Last updated ${new Date(brandKit.updatedAt).toLocaleDateString()}`
+                    : 'Not set up yet.'}
+                </span>
+              </div>
+              <button type="button" className="ghost-button" onClick={loadBrandKit}>
+                Reload
+              </button>
+            </div>
+
+            <h4 className="section-label">Colours</h4>
+            {brandDraft.colors.map((color) => (
+              <div key={color.id} className="list-row" style={{ gap: '0.5rem' }}>
+                <input
+                  type="color"
+                  value={color.value}
+                  onChange={(event) => updateBrandColor(color.id, { value: event.target.value })}
+                />
+                <input
+                  type="text"
+                  value={color.label}
+                  placeholder="Primary"
+                  onChange={(event) => updateBrandColor(color.id, { label: event.target.value })}
+                  style={{ flex: 1 }}
+                />
+                <input
+                  type="text"
+                  value={color.value}
+                  onChange={(event) => updateBrandColor(color.id, { value: event.target.value })}
+                  style={{ width: '7rem', fontFamily: 'monospace' }}
+                />
+                <button type="button" className="chip" onClick={() => removeBrandItem('colors', color.id)}>
+                  ✕
+                </button>
+              </div>
+            ))}
+            <button type="button" className="ghost-button" onClick={addBrandColor}>
+              + Add colour
+            </button>
+
+            <h4 className="section-label">Licensed fonts</h4>
+            <p className="muted">
+              Host your licensed font file (woff2 recommended) and paste its URL. EchoAI loads it at
+              runtime — the file is never redistributed, so your licence terms are respected.
+            </p>
+            {brandDraft.fonts.map((font) => (
+              <div key={font.id} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.4rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    value={font.label}
+                    placeholder="Heading font"
+                    onChange={(event) => updateBrandFont(font.id, { label: event.target.value })}
+                    style={{ flex: 1 }}
+                  />
+                  <button type="button" className="chip" onClick={() => removeBrandItem('fonts', font.id)}>
+                    ✕
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={font.family}
+                  placeholder="Font family name, e.g. Acme Grotesk"
+                  onChange={(event) => updateBrandFont(font.id, { family: event.target.value })}
+                />
+                <input
+                  type="url"
+                  value={font.sourceUrl}
+                  placeholder="https://cdn.yourbrand.com/AcmeGrotesk.woff2"
+                  onChange={(event) => updateBrandFont(font.id, { sourceUrl: event.target.value })}
+                />
+                {font.family && (
+                  <span style={{ fontFamily: `${font.family}, ${font.fallback}`, fontSize: '1.25rem' }}>
+                    The quick brown fox — 0123456789
+                  </span>
+                )}
+              </div>
+            ))}
+            <button type="button" className="ghost-button" onClick={addBrandFont}>
+              + Add font
+            </button>
+
+            <h4 className="section-label">Logos</h4>
+            <div className="chip-row">
+              {brandDraft.logos.map((logo) => (
+                <div key={logo.id} className="chip" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <img src={logo.dataUrl} alt={logo.label} style={{ height: 28, width: 'auto' }} />
+                  <span>{logo.label}</span>
+                  <button type="button" className="text-button" onClick={() => removeBrandItem('logos', logo.id)}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+            <label>
+              Upload a logo (PNG, SVG, or JPG — under {Math.round(MAX_LOGO_BYTES / 1024)} KB)
+              <input type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp" onChange={handleBrandLogoUpload} />
+            </label>
+
+            <label>
+              Brand guidelines / voice notes
+              <textarea
+                rows={3}
+                value={brandDraft.guidelines}
+                placeholder="Tone of voice, do's and don'ts, logo clear space rules..."
+                onChange={(event) => setBrandDraft((prev) => ({ ...prev, guidelines: event.target.value }))}
+              />
+            </label>
+
+            {brandError && <span className="field-error">{brandError}</span>}
+            {brandNotice && <p className="muted">{brandNotice}</p>}
+            <button type="button" className="primary-button" onClick={handleSaveBrandKit} disabled={brandBusy}>
+              {brandBusy ? 'Saving...' : 'Save brand kit'}
+            </button>
 
             <h3 className="section-label">Security</h3>
             <div className="list-row">
