@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, staging]
+  push:
+    branches: [staging]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run build
+
+      # Provider keys must never reach the browser bundle. Only the Supabase URL
+      # and anon key are legitimately public.
+      - name: Check for secrets in the client bundle
+        run: |
+          if grep -rlE "VITE_[A-Z_]*(API_KEY|SECRET|ENDPOINT)" src/; then
+            echo "::error::A VITE_ provider key or endpoint is referenced in src/. These compile into the public bundle — proxy it through an edge function instead."
+            exit 1
+          fi
+          if grep -rlE "sk_live_|sk_test_|service_role" src/; then
+            echo "::error::A server-side secret appears in src/."
+            exit 1
+          fi
+          echo "No provider secrets found in client code."
