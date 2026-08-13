@@ -81,10 +81,12 @@ export function FinancePanel({
   const netProfit = confirmedRevenue - totalExpenses - totalRefunds - totalPayroll
   const openTaxDue = taxRecords.filter((t) => t.status === 'pending').reduce((s, t) => s + Number(t.estimatedUsd), 0)
 
-  // MRR: active monthly × $15 + active annual × $10
+  // MRR: monthly payments at face value, annual payments spread over 12 months.
   const activeLicenses = purchaseHistory.filter((p) => p.status === 'confirmed')
-  const mrr = activeLicenses.filter((p) => p.plan === 'monthly').reduce((s, p) => s + p.amountUsd, 0)
-    + activeLicenses.filter((p) => p.plan === 'annual').reduce((s, p) => s + p.amountUsd / 12, 0)
+  const mrr = activeLicenses.reduce(
+    (sum, p) => sum + (p.billingInterval === 'annual' ? p.amountUsd / 12 : p.amountUsd),
+    0,
+  )
 
   const addExpense = () => {
     if (!expForm.vendor || !expForm.amountUsd) return

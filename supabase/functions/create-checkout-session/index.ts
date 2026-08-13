@@ -11,14 +11,15 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
 
 const APP_URL = Deno.env.get('APP_URL') ?? 'http://localhost:5173'
 
-const PRICE_BY_PLAN: Record<string, string | undefined> = {
-  monthly: Deno.env.get('STRIPE_PRICE_MONTHLY'),
-  annual: Deno.env.get('STRIPE_PRICE_ANNUAL'),
-}
+const PLAN_KEYS = ['standard', 'storage_plus', 'storage_pro', 'storage_max', 'creator']
+
+// One Stripe price per tier per interval, e.g. STRIPE_PRICE_STORAGE_PRO_ANNUAL.
+const priceFor = (plan: string, interval: string) =>
+  Deno.env.get(`STRIPE_PRICE_${plan.toUpperCase()}_${interval.toUpperCase()}`)
 
 // 20% off the first month, or 10% off the first year. Both are duration=once
 // coupons in Stripe, so the discount never carries into later renewals.
-const REFERRAL_COUPON_BY_PLAN: Record<string, string | undefined> = {
+const REFERRAL_COUPON_BY_INTERVAL: Record<string, string | undefined> = {
   monthly: Deno.env.get('STRIPE_COUPON_REFERRAL_MONTHLY'),
   annual: Deno.env.get('STRIPE_COUPON_REFERRAL_ANNUAL'),
 }
@@ -52,11 +53,17 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const { plan, email: bodyEmail, fullName, referralCode } = await request.json()
+    const { plan, billingInterval, email: bodyEmail, fullName, referralCode } = await request.json()
 
-    const priceId = PRICE_BY_PLAN[plan]
-    if (!priceId) {
+    const interval = billingInterval === 'annual' ? 'annual' : 'monthly'
+
+    if (!PLAN_KEYS.includes(plan)) {
       return json({ error: 'Unknown plan.' }, 400)
+    }
+
+    const priceId = priceFor(plan, interval)
+    if (!priceId) {
+      return json({ error: 'That plan is not available for purchase yet.' }, 400)
     }
 
     const user = await userFromAuthHeader(request.headers.get('Authorization'))
@@ -68,7 +75,7 @@ Deno.serve(async (request) => {
 
     // Referral eligibility is decided server-side; the browser only supplies the code.
     let appliedReferralCode = ''
-    const coupon = REFERRAL_COUPON_BY_PLAN[plan]
+    const coupon = REFERRAL_COUPON_BY_INTERVAL[interval]
 
     if (typeof referralCode === 'string' && referralCode.trim() && coupon) {
       const { data: resolved } = await adminClient().rpc('resolve_referral_code', {
@@ -93,6 +100,8 @@ Deno.serve(async (request) => {
       subscription_data: {
         metadata: {
           email,
+          plan,
+          billing_interval: interval,
           full_name: typeof fullName === 'string' ? fullName : '',
           ...(appliedReferralCode ? { referral_code: appliedReferralCode } : {}),
           ...(user?.id ? { supabase_user_id: user.id } : {}),

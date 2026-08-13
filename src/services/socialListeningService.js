@@ -1,4 +1,5 @@
 import { canUseAgentMode, runUserAiAgent } from './aiAgentService'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const SOCIAL_PLATFORMS = ['instagram', 'facebook', 'x', 'tiktok', 'youtube', 'linkedin', 'reddit']
 const SOURCE_TYPES = ['social', 'news', 'forums', 'blogs', 'reviews', 'web']
@@ -69,37 +70,15 @@ const BUILTIN_SOURCE_NAMES = {
   web: 'Wikipedia web mentions',
 }
 
+// Endpoints and keys now live in the listening-fetch edge function. The client
+// only knows which source types exist, never how to reach them.
 export const createDefaultListeningConnectors = () => ({
-  social: {
-    enabled: Boolean(import.meta.env.VITE_LISTENING_SOCIAL_ENDPOINT),
-    endpoint: import.meta.env.VITE_LISTENING_SOCIAL_ENDPOINT || '',
-    apiKey: import.meta.env.VITE_LISTENING_SOCIAL_API_KEY || '',
-  },
-  news: {
-    enabled: Boolean(import.meta.env.VITE_LISTENING_NEWS_ENDPOINT),
-    endpoint: import.meta.env.VITE_LISTENING_NEWS_ENDPOINT || '',
-    apiKey: import.meta.env.VITE_LISTENING_NEWS_API_KEY || '',
-  },
-  forums: {
-    enabled: Boolean(import.meta.env.VITE_LISTENING_FORUMS_ENDPOINT),
-    endpoint: import.meta.env.VITE_LISTENING_FORUMS_ENDPOINT || '',
-    apiKey: import.meta.env.VITE_LISTENING_FORUMS_API_KEY || '',
-  },
-  blogs: {
-    enabled: Boolean(import.meta.env.VITE_LISTENING_BLOGS_ENDPOINT),
-    endpoint: import.meta.env.VITE_LISTENING_BLOGS_ENDPOINT || '',
-    apiKey: import.meta.env.VITE_LISTENING_BLOGS_API_KEY || '',
-  },
-  reviews: {
-    enabled: Boolean(import.meta.env.VITE_LISTENING_REVIEWS_ENDPOINT),
-    endpoint: import.meta.env.VITE_LISTENING_REVIEWS_ENDPOINT || '',
-    apiKey: import.meta.env.VITE_LISTENING_REVIEWS_API_KEY || '',
-  },
-  web: {
-    enabled: Boolean(import.meta.env.VITE_LISTENING_WEB_ENDPOINT),
-    endpoint: import.meta.env.VITE_LISTENING_WEB_ENDPOINT || '',
-    apiKey: import.meta.env.VITE_LISTENING_WEB_API_KEY || '',
-  },
+  social: { enabled: isSupabaseConfigured, managed: true },
+  news: { enabled: isSupabaseConfigured, managed: true },
+  forums: { enabled: isSupabaseConfigured, managed: true },
+  blogs: { enabled: isSupabaseConfigured, managed: true },
+  reviews: { enabled: isSupabaseConfigured, managed: true },
+  web: { enabled: isSupabaseConfigured, managed: true },
 })
 
 const hashNumber = (value) => {
@@ -257,10 +236,7 @@ const dedupeMentions = (mentions) => {
 }
 
 export const getEnabledConnectorCount = (connectors) =>
-  SOURCE_TYPES.filter((sourceType) => {
-    const connector = connectors?.[sourceType]
-    return Boolean(connector?.enabled && connector?.endpoint)
-  }).length
+  SOURCE_TYPES.filter((sourceType) => Boolean(connectors?.[sourceType]?.enabled)).length
 
 export const fetchLiveMentions = async ({
   connectors,
@@ -273,10 +249,9 @@ export const fetchLiveMentions = async ({
   windowKey,
   maxPerSource = 80,
 }) => {
-  const activeSourceTypes = enabledSourceTypes.filter((sourceType) => {
-    const connector = connectors?.[sourceType]
-    return Boolean(connector?.enabled && connector?.endpoint)
-  })
+  const activeSourceTypes = enabledSourceTypes.filter((sourceType) =>
+    Boolean(connectors?.[sourceType]?.enabled),
+  )
 
   if (!activeSourceTypes.length) {
     return { mentions: [], usedLive: false, errors: [] }
@@ -296,24 +271,21 @@ export const fetchLiveMentions = async ({
 
   const results = await Promise.all(
     activeSourceTypes.map(async (sourceType) => {
-      const connector = connectors[sourceType]
       try {
-        const response = await fetch(connector.endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(connector.apiKey ? { Authorization: `Bearer ${connector.apiKey}`, 'x-api-key': connector.apiKey } : {}),
-          },
-          body: JSON.stringify({ ...payload, sourceType }),
+        const { data, error } = await supabase.functions.invoke('listening-fetch', {
+          body: { ...payload, sourceTypes: [sourceType] },
         })
 
-        if (!response.ok) {
-          throw new Error(`${sourceType} connector failed (${response.status})`)
+        if (error) {
+          throw new Error(error.message)
         }
 
-        const contentType = response.headers.get('content-type') || ''
-        const parsed = contentType.includes('application/json') ? await response.json() : await response.text()
-        const rawItems = normalizeLiveResponseArray(parsed)
+        const entry = data?.results?.[0]
+        if (entry?.error) {
+          throw new Error(entry.error)
+        }
+
+        const rawItems = normalizeLiveResponseArray(entry?.items)
 
         const normalizedMentions = rawItems
           .map((item) => normalizeLiveMention({ mention: item, sourceType }))

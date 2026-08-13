@@ -1,9 +1,12 @@
 import { useState } from 'react'
-
-const PLANS = {
-  monthly: { label: 'Monthly', price: 15, period: '/ month', storageLimitGb: 2 },
-  annual: { label: 'Annual', price: 120, period: '/ year', storageLimitGb: 2, note: 'Save $60 vs monthly' },
-}
+import {
+  BILLING_INTERVALS,
+  PLANS,
+  PLAN_ORDER,
+  getAnnualSavings,
+  getPlan,
+  getPlanPrice,
+} from '../data/plans'
 
 const CORE_FEATURES = [
   'Social Listening intelligence with sentiment, trend, and crisis visibility',
@@ -13,9 +16,10 @@ const CORE_FEATURES = [
   'Multi-channel scheduler, repost workflows, and team collaboration',
 ]
 
-export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode }) {
+export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode, billingLive }) {
   const [step, setStep] = useState('plan')
-  const [selectedPlan, setSelectedPlan] = useState('annual')
+  const [selectedPlan, setSelectedPlan] = useState('storage_pro')
+  const [billingInterval, setBillingInterval] = useState('monthly')
   const [form, setForm] = useState({ fullName: '', email: '' })
   const [errors, setErrors] = useState({})
   const [submitted, setSubmitted] = useState(false)
@@ -25,7 +29,9 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
   const [processing, setProcessing] = useState(false)
   const [payError, setPayError] = useState('')
 
-  const plan = PLANS[selectedPlan]
+  const plan = getPlan(selectedPlan)
+  const price = getPlanPrice(selectedPlan, billingInterval)
+  const intervalMeta = BILLING_INTERVALS[billingInterval]
   // Stable reference ID generated once on mount
   const [licenseRef] = useState(() => `ECHOAI-${Date.now().toString(36).toUpperCase()}`)
 
@@ -51,8 +57,9 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
       const result = await onSubmit({
         licenseRef,
         plan: selectedPlan,
-        priceUsd: plan.price,
-        storageLimitGb: plan.storageLimitGb,
+        billingInterval,
+        priceUsd: price,
+        storageLimitGb: plan.storageGb,
         fullName: form.fullName,
         email: form.email,
         promoCode: appliedPromo ? appliedPromo.code : null,
@@ -92,22 +99,34 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
             <>
               <h2>Your free month is activated!</h2>
               <p>
-                30 days of full access has been applied to <strong>{form.email}</strong>. Sign in
-                with that email to get started — no approval step required.
+                30 days of full access has been applied to <strong>{form.email}</strong>. Create your
+                login with that same email and you&apos;re in — no approval step required.
+              </p>
+            </>
+          ) : billingLive ? (
+            <>
+              <h2>Payment received — you&apos;re active</h2>
+              <p>
+                Your subscription <strong>{licenseRef}</strong> is live. Create your login with{' '}
+                <strong>{form.email}</strong> to get started — your plan is already attached to that
+                address. Renewals, failed payments, and cancellations are handled automatically.
               </p>
             </>
           ) : (
             <>
-              <h2>Payment received — you&apos;re active</h2>
+              <h2>Demo checkout complete</h2>
               <p>
-                Your subscription <strong>{licenseRef}</strong> is live and{' '}
-                <strong>{form.email}</strong> now has full access. Renewals, failed payments, and
-                cancellations are all handled automatically.
+                <strong>No payment was taken and no account was created.</strong> This build is
+                running in demo mode, so checkout is simulated locally.
+              </p>
+              <p>
+                To take real payments, connect Supabase and Stripe. Until then, sign in with one of
+                the demo accounts.
               </p>
             </>
           )}
-          <button type="button" className="primary-button" onClick={onBack} style={{ marginTop: '1.5rem' }}>
-            Back to sign in
+          <button type="button" className="primary-button" onClick={() => onBack(billingLive ? 'signup' : 'signin')} style={{ marginTop: '1.5rem' }}>
+            {billingLive ? 'Create my login' : 'Back to sign in'}
           </button>
         </div>
       </div>
@@ -135,7 +154,10 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
         {step === 'plan' && (
           <>
             <h2>Choose your plan</h2>
-            <p className="muted">All plans include every feature, Social Listening tools, and 2 GB storage.</p>
+            <p className="muted">
+              Every plan includes the complete EchoAI suite. The only difference is how much
+              storage you get.
+            </p>
 
             {referralCode && (
               <div className="promo-applied" style={{ marginTop: '0.75rem' }}>
@@ -146,13 +168,18 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
               </div>
             )}
 
-            <div className="purchase-summary" style={{ marginTop: '1rem' }}>
-              <span>What you unlock</span>
-              <strong>Full EchoAI suite</strong>
-              <span>Includes</span>
-              <strong>Monitoring + creation + scheduling</strong>
-              <span>AI support</span>
-              <strong>Bring-your-own agent endpoint</strong>
+            <div className="billing-toggle" style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+              {Object.entries(BILLING_INTERVALS).map(([key, meta]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={billingInterval === key ? 'chip active' : 'chip'}
+                  onClick={() => setBillingInterval(key)}
+                >
+                  {meta.label}
+                  {key === 'annual' ? ' — save 15%' : ''}
+                </button>
+              ))}
             </div>
 
             <ul className="pricing-features" style={{ marginTop: '0.75rem' }}>
@@ -162,23 +189,32 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
             </ul>
 
             <div className="plan-cards">
-              {Object.entries(PLANS).map(([key, p]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`plan-card ${selectedPlan === key ? 'selected' : ''}`}
-                  onClick={() => setSelectedPlan(key)}
-                >
-                  {key === 'annual' && <span className="plan-card-badge">Best value</span>}
-                  <h3>{p.label}</h3>
-                  <div className="plan-price">
-                    <span className="plan-price-num">${p.price}</span>
-                    <span className="plan-price-period">{p.period}</span>
-                  </div>
-                  {p.note && <p className="plan-card-note">{p.note}</p>}
-                  <p className="plan-card-storage">{p.storageLimitGb} GB included</p>
-                </button>
-              ))}
+              {PLAN_ORDER.map((key) => {
+                const option = PLANS[key]
+                const optionPrice = getPlanPrice(key, billingInterval)
+                const savings = getAnnualSavings(key)
+
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`plan-card ${selectedPlan === key ? 'selected' : ''}`}
+                    onClick={() => setSelectedPlan(key)}
+                  >
+                    {option.popular && <span className="plan-card-badge">Most popular</span>}
+                    <h3>{option.label}</h3>
+                    <div className="plan-price">
+                      <span className="plan-price-num">${optionPrice}</span>
+                      <span className="plan-price-period">{intervalMeta.suffix}</span>
+                    </div>
+                    <p className="plan-card-storage">{option.storageGb} GB storage</p>
+                    <p className="plan-card-note">{option.tagline}</p>
+                    {billingInterval === 'annual' && (
+                      <p className="plan-card-note">Save ${savings} a year</p>
+                    )}
+                  </button>
+                )
+              })}
             </div>
 
             <button
@@ -187,7 +223,7 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
               style={{ width: '100%', marginTop: '1.5rem' }}
               onClick={() => setStep('info')}
             >
-              Continue with {plan.label} — ${plan.price}
+              Continue with {plan.label} — ${price} {intervalMeta.suffix}
             </button>
           </>
         )}
@@ -221,8 +257,8 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
 
             <div className="purchase-summary">
               <span>Plan</span><strong>{plan.label}</strong>
-              <span>Amount</span><strong>${plan.price} {plan.period}</strong>
-              <span>Storage</span><strong>{plan.storageLimitGb} GB</strong>
+              <span>Amount</span><strong>${price} {intervalMeta.suffix}</strong>
+              <span>Storage</span><strong>{plan.storageGb} GB</strong>
               <span>Suite access</span><strong>All features enabled</strong>
             </div>
 
@@ -291,12 +327,13 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
               <>
                 <div className="purchase-summary">
                   <span>Plan</span><strong>{plan.label}</strong>
-                  <span>Billed</span><strong>${plan.price} {plan.period}</strong>
+                  <span>Billed</span><strong>${price} {intervalMeta.suffix}</strong>
+                  <span>Storage</span><strong>{plan.storageGb} GB</strong>
                   {referralCode && (
                     <>
                       <span>Referral</span>
                       <strong>
-                        {selectedPlan === 'annual' ? '10% off your first year' : '20% off your first month'}
+                        {billingInterval === 'annual' ? '10% off your first year' : '20% off your first month'}
                       </strong>
                     </>
                   )}
@@ -305,9 +342,11 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
                 </div>
 
                 <p className="muted">
-                  You&apos;ll be taken to our secure payment provider. Your account switches on the
-                  moment the payment clears, and it switches off automatically if a renewal fails.
-                  Card details never touch EchoAI.
+                  {billingLive
+                    ? `You'll be taken to our secure payment provider. Your account switches on the
+                       moment the payment clears, and it switches off automatically if a renewal
+                       fails. Card details never touch EchoAI.`
+                    : 'Demo mode: no payment provider is connected, so this button only simulates a purchase locally. Nothing is charged and no account is created.'}
                 </p>
 
                 <button
@@ -317,7 +356,11 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
                   disabled={processing}
                   onClick={handleConfirmPayment}
                 >
-                  {processing ? 'Opening secure checkout…' : `Pay $${plan.price} securely →`}
+                  {processing
+                    ? 'Opening secure checkout…'
+                    : billingLive
+                      ? `Pay $${price} securely →`
+                      : `Simulate $${price} purchase (demo)`}
                 </button>
               </>
             )}

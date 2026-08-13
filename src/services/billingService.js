@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { getPlan, getPlanPrice } from '../data/plans'
 
-const PLAN_PRICE_USD = { monthly: 15, annual: 120 }
 const ENTITLED_STATUSES = ['active', 'trialing', 'past_due']
 
 const invokeFunction = async (name, body) => {
@@ -19,9 +19,10 @@ export const billingService = {
   // True when billing runs against Stripe + Supabase rather than local demo state.
   isLive: isSupabaseConfigured,
 
-  async startCheckout({ plan, email, fullName, referralCode }) {
+  async startCheckout({ plan, billingInterval, email, fullName, referralCode }) {
     const data = await invokeFunction('create-checkout-session', {
       plan,
+      billingInterval,
       email,
       fullName,
       referralCode,
@@ -109,7 +110,9 @@ export const billingService = {
       userEmail: row.email,
       userFullName: row.email,
       plan: row.plan,
-      priceUsd: PLAN_PRICE_USD[row.plan] ?? 0,
+      planLabel: getPlan(row.plan).label,
+      billingInterval: row.billing_interval ?? 'monthly',
+      priceUsd: getPlanPrice(row.plan, row.billing_interval ?? 'monthly'),
       storageLimitGb: row.storage_limit_gb,
       status: row.status,
       provider: row.provider,

@@ -1,0 +1,49 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+
+# A single-page app must serve index.html for unknown paths, or deep links
+# (/?ref=CODE, /?checkout=success) return 404.
+customHeaders:
+  - pattern: '**'
+    headers:
+      - key: Strict-Transport-Security
+        value: 'max-age=63072000; includeSubDomains; preload'
+      - key: X-Content-Type-Options
+        value: 'nosniff'
+      - key: X-Frame-Options
+        value: 'DENY'
+      - key: Referrer-Policy
+        value: 'strict-origin-when-cross-origin'
+      - key: Permissions-Policy
+        value: 'geolocation=(), microphone=(self), camera=(self), display-capture=(self), payment=()'
+      # connect-src must list your Supabase project and any AI endpoints you call.
+      # 'unsafe-inline' on style-src is required by the inline styles in the editors.
+      - key: Content-Security-Policy
+        value: >-
+          default-src 'self';
+          script-src 'self';
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data: blob: https:;
+          media-src 'self' blob:;
+          font-src 'self' data:;
+          connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com;
+          frame-src https://js.stripe.com https://hooks.stripe.com;
+          object-src 'none';
+          base-uri 'self';
+          form-action 'self';
+          frame-ancestors 'none';
+          upgrade-insecure-requests

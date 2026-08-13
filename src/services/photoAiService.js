@@ -1,4 +1,5 @@
 import { canUseAgentMode, runUserAiAgent } from './aiAgentService'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const getAspectSize = (aspectRatio) => {
   if (aspectRatio === '1:1') return { width: 1400, height: 1400 }
@@ -188,35 +189,25 @@ export async function generatePhotoConcept({ prompt, style, aspectRatio, referen
     }
   }
 
-  const endpoint = import.meta.env.VITE_IMAGE_GEN_ENDPOINT || import.meta.env.VITE_IMAGE_GEN_URL
-  const apiKey = import.meta.env.VITE_IMAGE_GEN_API_KEY
-  const model = import.meta.env.VITE_IMAGE_GEN_MODEL || 'image-1'
-
-  if (!endpoint) {
+  // The provider key lives in the ai-image edge function, never in this bundle.
+  if (!isSupabaseConfigured) {
     return renderLocalConcept({ prompt: cleanedPrompt, style, aspectRatio, referenceImageSrc })
   }
 
   try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify({
+    const { data: payload, error } = await supabase.functions.invoke('ai-image', {
+      body: {
         prompt: cleanedPrompt,
         style,
         aspectRatio,
-        model,
         referenceImageSrc: referenceImageSrc || null,
-      }),
+      },
     })
 
-    if (!response.ok) {
-      throw new Error(`Image generation failed (${response.status})`)
+    if (error) {
+      throw new Error(error.message)
     }
 
-    const payload = await response.json()
     const imageSrc = await readResponseImage(payload)
 
     if (!imageSrc) {

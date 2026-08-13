@@ -467,24 +467,10 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
                         />
                       </label>
                     </div>
-                    <label>
-                      Endpoint URL
-                      <input
-                        type="url"
-                        value={connector?.endpoint || ''}
-                        onChange={(event) => handleConnectorChange(sourceType, 'endpoint', event.target.value)}
-                        placeholder="https://your-listening-adapter.example.com/search"
-                      />
-                    </label>
-                    <label>
-                      API key
-                      <input
-                        type="password"
-                        value={connector?.apiKey || ''}
-                        onChange={(event) => handleConnectorChange(sourceType, 'apiKey', event.target.value)}
-                        placeholder="Optional key"
-                      />
-                    </label>
+                    <p className="muted">
+                      Managed server-side. Endpoints and API keys are configured as edge function
+                      secrets so they are never exposed in the browser.
+                    </p>
                   </div>
                 )
               })}

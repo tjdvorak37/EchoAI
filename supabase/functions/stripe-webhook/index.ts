@@ -20,9 +20,16 @@ const supabase = createClient(
 // How long a customer keeps access after a failed charge while Stripe retries.
 const GRACE_DAYS = Number(Deno.env.get('BILLING_GRACE_DAYS') ?? '3')
 
-const PRICE_TO_PLAN: Record<string, string> = {
-  [Deno.env.get('STRIPE_PRICE_MONTHLY') ?? '__monthly']: 'monthly',
-  [Deno.env.get('STRIPE_PRICE_ANNUAL') ?? '__annual']: 'annual',
+const PLAN_KEYS = ['standard', 'storage_plus', 'storage_pro', 'storage_max', 'creator']
+
+// Reverse lookup from Stripe price id back to our tier + interval, built from the
+// same STRIPE_PRICE_<TIER>_<INTERVAL> variables the checkout function reads.
+const PRICE_LOOKUP: Record<string, { plan: string; interval: string }> = {}
+for (const plan of PLAN_KEYS) {
+  for (const interval of ['monthly', 'annual']) {
+    const priceId = Deno.env.get(`STRIPE_PRICE_${plan.toUpperCase()}_${interval.toUpperCase()}`)
+    if (priceId) PRICE_LOOKUP[priceId] = { plan, interval }
+  }
 }
 
 // Stripe status -> our status. Anything that is not currently paid resolves to a
@@ -43,8 +50,21 @@ const toIso = (seconds: number | null | undefined) =>
 
 const planFromSubscription = (subscription: Stripe.Subscription) => {
   const priceId = subscription.items.data[0]?.price?.id ?? ''
-  if (PRICE_TO_PLAN[priceId]) return PRICE_TO_PLAN[priceId]
-  return subscription.items.data[0]?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly'
+  const mapped = PRICE_LOOKUP[priceId]
+  if (mapped) return mapped
+
+  // Checkout stamps these on the subscription, so they survive a price rename.
+  const metaPlan = subscription.metadata?.plan
+  const metaInterval = subscription.metadata?.billing_interval
+  const interval =
+    metaInterval === 'annual' || subscription.items.data[0]?.price?.recurring?.interval === 'year'
+      ? 'annual'
+      : 'monthly'
+
+  return {
+    plan: metaPlan && PLAN_KEYS.includes(metaPlan) ? metaPlan : 'standard',
+    interval,
+  }
 }
 
 const resolveEmail = async (subscription: Stripe.Subscription) => {
@@ -73,6 +93,8 @@ const applySubscription = async (subscription: Stripe.Subscription) => {
     ? new Date(Date.now() + GRACE_DAYS * 86_400_000).toISOString()
     : null
 
+  const { plan, interval } = planFromSubscription(subscription)
+
   const { error } = await supabase.rpc('apply_stripe_subscription', {
     p_stripe_subscription_id: subscription.id,
     p_stripe_customer_id: typeof subscription.customer === 'string'
@@ -80,7 +102,8 @@ const applySubscription = async (subscription: Stripe.Subscription) => {
       : subscription.customer?.id ?? null,
     p_email: email,
     p_user_id: subscription.metadata?.supabase_user_id || null,
-    p_plan: planFromSubscription(subscription),
+    p_plan: plan,
+    p_billing_interval: interval,
     p_status: status,
     p_current_period_end: toIso(subscription.current_period_end),
     p_cancel_at_period_end: subscription.cancel_at_period_end ?? false,
@@ -103,7 +126,7 @@ const grantReferralReward = async (subscription: Stripe.Subscription, email: str
     p_code: referralCode,
     p_referred_email: email,
     p_stripe_subscription_id: subscription.id,
-    p_plan: planFromSubscription(subscription),
+    p_plan: planFromSubscription(subscription).plan,
   })
 
   if (error) throw new Error(error.message)
@@ -216,7 +239,7 @@ Deno.serve(async (request) => {
             p_stripe_invoice_id: invoice.id,
             p_stripe_subscription_id: subscriptionId,
             p_email: email,
-            p_plan: planFromSubscription(subscription),
+            p_plan: planFromSubscription(subscription).plan,
             p_amount_usd: (invoice.amount_paid ?? 0) / 100,
             p_status: event.type === 'invoice.payment_succeeded' ? 'confirmed' : 'failed',
             p_paid_at: toIso(invoice.status_transitions?.paid_at) ?? new Date().toISOString(),

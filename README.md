@@ -70,6 +70,56 @@ npm run dev
 5. Ensure admin users have `profiles.role = 'admin'` to manage company main posts and company social accounts.
 6. Ensure users have `profiles.access_status = 'active'` if they should receive admin broadcast notifications.
 
+## Security
+
+**Two-factor authentication.** TOTP via `supabase.auth.mfa` — Google Authenticator, Authy,
+1Password, or any TOTP app. Enrolment shows a QR code and issues ten single-use recovery codes
+(stored bcrypt-hashed, never readable by the client).
+
+Enforcement is at the database, not the UI. `app.mfa_satisfied()` compares the session's `aal`
+claim against the user's enrolled factors, and RESTRICTIVE policies on `profiles`,
+`subscriptions`, `user_ai_agent_config`, `billing_payments`, and `support_tickets` reject an
+AAL1 session once a factor exists. `app.current_role()` returns `user` unless the session is
+AAL2, so staff privileges require the second factor.
+
+Lost devices are self-service: `mfa-recover` verifies password **and** an unused recovery code
+server-side, then deletes the factor. A recovery code alone never mints a session.
+
+**Secrets.** User-supplied AI agent API keys live in `user_ai_agent_config` with owner-only RLS.
+They previously sat in `profiles.ai_agent_config`, which staff and company teammates can read.
+
+**Deployment headers.** `amplify.yml` sets HSTS, CSP, `X-Frame-Options: DENY`, `nosniff`, and a
+restrictive `Permissions-Policy`. Update `connect-src` if you add API endpoints. A static SPA
+cannot set these itself — they must come from the host.
+
+> **Client-side keys.** Anything named `VITE_*` is compiled into the JavaScript bundle and is
+> readable by any visitor, so it can never hold a secret. The image generation and social
+> listening providers are therefore proxied through the `ai-image` and `listening-fetch` edge
+> functions, which require a signed-in user and read their keys from server-side secrets. Only
+> `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` remain in the client, which is correct — the
+> anon key is public by design and is constrained by RLS.
+>
+> Proxying also removed an SSRF path: the browser used to supply the connector URL, and now it
+> can only name a source type.
+
+## Plans
+
+| Plan | Storage | Monthly | Annual (15% off) |
+|---|---|---|---|
+| Standard | 2 GB | $15 | $153 |
+| Storage + | 10 GB | $18 | $184 |
+| Storage Pro | 25 GB | $22 | $224 |
+| Storage Max | 50 GB | $27 | $275 |
+| Creator | 100 GB | $35 | $357 |
+
+Tiers are defined once in [src/data/plans.js](src/data/plans.js) for the UI and in the
+`plan_catalog` table for the server. Storage is enforced on upload: the subscribed tier sets
+`profiles.storage_quota_mb`, and uploads past the limit are rejected.
+
+A successful payment activates the account and applies the tier's storage immediately. A
+downgrade lowers the quota on the next webhook, which can leave an account over its limit —
+existing files are kept, but new uploads are blocked until usage is back under the cap.
+
 ## Automated Billing & Access Lifecycle
 
 Access is derived from billing state by the database. Nobody approves, activates, or

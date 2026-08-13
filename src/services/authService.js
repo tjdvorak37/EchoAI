@@ -178,24 +178,47 @@ export const authService = {
       throw accessError
     }
 
-    const otpSend = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false },
+    // Real second factor. The password alone leaves the session at aal1, and
+    // RLS rejects aal1 for anyone who has enrolled a factor, so this cannot be
+    // skipped by talking to the API directly.
+    const { data: factorData, error: factorError } = await supabase.auth.mfa.listFactors()
+    if (factorError) {
+      throw new Error(factorError.message)
+    }
+
+    const totpFactor = (factorData?.totp ?? []).find((factor) => factor.status === 'verified')
+
+    if (!totpFactor) {
+      return {
+        mfaRequired: false,
+        enrollmentRequired: true,
+        user: {
+          ...data.user,
+          role: 'user',
+          accessStatus: 'active',
+        },
+      }
+    }
+
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+      factorId: totpFactor.id,
     })
 
-    if (otpSend.error) {
-      throw new Error(otpSend.error.message)
+    if (challengeError) {
+      throw new Error(challengeError.message)
     }
 
     return {
       mfaRequired: true,
+      factorId: totpFactor.id,
+      challengeId: challenge.id,
       user: null,
     }
   },
 
-  async verifyMfaCode({ email, code }) {
-    if (!email || !code) {
-      throw new Error('Email and verification code are required.')
+  async verifyMfaCode({ email, code, factorId, challengeId }) {
+    if (!code) {
+      throw new Error('A verification code is required.')
     }
 
     if (!isSupabaseConfigured) {
@@ -220,10 +243,14 @@ export const authService = {
       }
     }
 
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token: code,
-      type: 'email',
+    if (!factorId || !challengeId) {
+      throw new Error('Your sign-in attempt expired. Please start again.')
+    }
+
+    const { data, error } = await supabase.auth.mfa.verify({
+      factorId,
+      challengeId,
+      code: code.replace(/\s/g, ''),
     })
 
     if (error) {
@@ -615,8 +642,18 @@ export const authService = {
       return normalizeAiAgentConfig(demoUser?.aiAgentConfig)
     }
 
-    const profile = await getProfileByUser({ userId, email })
-    return normalizeAiAgentConfig(profile?.ai_agent_config ?? profile?.aiAgentConfig)
+    // Secrets live in an owner-only table; profiles is readable by staff and teammates.
+    const { data, error } = await supabase
+      .from('user_ai_agent_config')
+      .select('config')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return normalizeAiAgentConfig(data?.config)
   },
 
   async updateUserAiAgentConfig({ userId, aiAgentConfig }) {
@@ -637,17 +674,117 @@ export const authService = {
     }
 
     const { data, error } = await supabase
-      .from('profiles')
-      .update({ ai_agent_config: normalizedConfig })
-      .eq('id', userId)
-      .select('*')
+      .from('user_ai_agent_config')
+      .upsert({ user_id: userId, config: normalizedConfig, updated_at: new Date().toISOString() })
+      .select('config')
       .single()
 
     if (error) {
       throw new Error(error.message)
     }
 
-    return normalizeAiAgentConfig(data?.ai_agent_config ?? data?.aiAgentConfig)
+    return normalizeAiAgentConfig(data?.config)
+  },
+
+  // --- Multi-factor authentication ----------------------------------------
+
+  async listMfaFactors() {
+    if (!isSupabaseConfigured) {
+      return { totp: [], hasVerifiedFactor: false }
+    }
+
+    const { data, error } = await supabase.auth.mfa.listFactors()
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const totp = data?.totp ?? []
+    return { totp, hasVerifiedFactor: totp.some((factor) => factor.status === 'verified') }
+  },
+
+  // Returns the QR code Supabase generates, so no QR library is needed.
+  async startMfaEnrollment() {
+    if (!isSupabaseConfigured) {
+      throw new Error('Connect Supabase to enable authenticator apps.')
+    }
+
+    // A half-finished enrolment blocks a new one, so clear those first.
+    const { totp } = await authService.listMfaFactors()
+    await Promise.all(
+      totp
+        .filter((factor) => factor.status !== 'verified')
+        .map((factor) => supabase.auth.mfa.unenroll({ factorId: factor.id })),
+    )
+
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: 'totp',
+      friendlyName: `EchoAI ${new Date().toISOString().slice(0, 10)}`,
+    })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return {
+      factorId: data.id,
+      qrCode: data.totp?.qr_code,
+      secret: data.totp?.secret,
+      uri: data.totp?.uri,
+    }
+  },
+
+  async confirmMfaEnrollment({ factorId, code }) {
+    if (!factorId || !code) {
+      throw new Error('Enter the 6-digit code from your authenticator app.')
+    }
+
+    const { error } = await supabase.auth.mfa.challengeAndVerify({
+      factorId,
+      code: code.replace(/\s/g, ''),
+    })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    // Only issued once, at enrolment.
+    const { data, error: codesError } = await supabase.rpc('generate_mfa_recovery_codes')
+    if (codesError) {
+      throw new Error(codesError.message)
+    }
+
+    return { recoveryCodes: data ?? [] }
+  },
+
+  async disableMfa({ factorId }) {
+    const { error } = await supabase.auth.mfa.unenroll({ factorId })
+    if (error) {
+      throw new Error(error.message)
+    }
+    return true
+  },
+
+  async regenerateRecoveryCodes() {
+    const { data, error } = await supabase.rpc('generate_mfa_recovery_codes')
+    if (error) {
+      throw new Error(error.message)
+    }
+    return data ?? []
+  },
+
+  // Used when the authenticator is lost. Handled server-side so a recovery code
+  // can never mint a session on its own.
+  async recoverWithBackupCode({ email, password, recoveryCode }) {
+    const { data, error } = await supabase.functions.invoke('mfa-recover', {
+      body: { email, password, recoveryCode },
+    })
+
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message)
+    }
+
+    return data
   },
 
   async createSupportTicket({ category, details }) {

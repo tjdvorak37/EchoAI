@@ -30,6 +30,7 @@ import {
 } from './data/demoData'
 import { authService } from './services/authService'
 import { billingService } from './services/billingService'
+import { getPlan, getStorageMb } from './data/plans'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
 import { isSupabaseConfigured } from './lib/supabase'
@@ -107,7 +108,9 @@ const AI_AGENT_CAPABILITIES = [
 ]
 
 function App() {
-  const [authView, setAuthView] = useState('landing')
+  const [authView, setAuthView] = useState(() =>
+    new URLSearchParams(window.location.search).get('checkout') === 'success' ? 'signup' : 'landing',
+  )
   const [authState, setAuthState] = useState({
     email: '',
     password: '',
@@ -119,6 +122,15 @@ function App() {
   const [authNotice, setAuthNotice] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [mfaPending, setMfaPending] = useState(false)
+  const [mfaChallenge, setMfaChallenge] = useState({ factorId: '', challengeId: '' })
+  const [mfaEnrollOpen, setMfaEnrollOpen] = useState(false)
+  const [mfaEnrollment, setMfaEnrollment] = useState(null)
+  const [mfaEnrollCode, setMfaEnrollCode] = useState('')
+  const [mfaRecoveryCodes, setMfaRecoveryCodes] = useState([])
+  const [mfaError, setMfaError] = useState('')
+  const [mfaBusy, setMfaBusy] = useState(false)
+  const [recoveryMode, setRecoveryMode] = useState(false)
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState('')
   const [pendingEmail, setPendingEmail] = useState('')
   const [session, setSession] = useState(null)
 
@@ -196,6 +208,10 @@ function App() {
   const [refunds, setRefunds] = useState(refundsSeed)
   const [financialTasks, setFinancialTasks] = useState(financialTasksSeed)
   const [showPurchase, setShowPurchase] = useState(false)
+  // Stripe sends the buyer back here after checkout; they still need a login.
+  const [checkoutReturn] = useState(
+    () => new URLSearchParams(window.location.search).get('checkout') || '',
+  )
   const [myEntitlement, setMyEntitlement] = useState(null)
   const [billingPortalLoading, setBillingPortalLoading] = useState(false)
   const [billingPortalError, setBillingPortalError] = useState('')
@@ -319,7 +335,12 @@ function App() {
     }
   }, [session, scheduledPosts, connectedAccounts, companyMainPosts, companySocialAccounts, repostQueue, userReposts, workspaceFolders, workspaceAssets, aiAgentConfig])
 
-  const storageQuotaMb = Number(session?.storageQuotaMb ?? session?.storage_quota_mb ?? 2048) || 2048
+  // The subscribed tier is authoritative; the profile column is the fallback for
+  // demo mode and for admins who have no subscription.
+  const storageQuotaMb = myEntitlement?.storageGb
+    ? myEntitlement.storageGb * 1024
+    : Number(session?.storageQuotaMb ?? session?.storage_quota_mb ?? getStorageMb('standard')) ||
+      getStorageMb('standard')
 
   const upcomingPostCount = useMemo(
     () => scheduledPosts.filter((post) => post.status === 'scheduled').length,
@@ -462,7 +483,17 @@ function App() {
 
       if (result.mfaRequired) {
         setPendingEmail(authState.email)
+        setMfaChallenge({ factorId: result.factorId, challengeId: result.challengeId })
         setMfaPending(true)
+        return
+      }
+
+      // Signed in at aal1 with no second factor: enrolment is the next step.
+      if (result.enrollmentRequired) {
+        setPendingEmail(authState.email)
+        setSession(result.user)
+        await applyUserData(result.user)
+        setMfaEnrollOpen(true)
         return
       }
 
@@ -482,14 +513,16 @@ function App() {
     setAuthLoading(true)
 
     try {
-      await authService.signUp({
+      const result = await authService.signUp({
         email: authState.email,
         password: authState.password,
         fullName: authState.fullName,
         company: authState.company,
       })
       setAuthNotice(
-        'Account request submitted. Management or IT must approve before your first login.',
+        result?.activated
+          ? 'Account created and your subscription is attached. Check your inbox to verify your email, then sign in.'
+          : 'Account request submitted. Check your inbox to verify your email. Access unlocks once your subscription is active or a manager approves you.',
       )
       setAuthView('signin')
     } catch (error) {
@@ -515,6 +548,63 @@ function App() {
     }
   }
 
+  const handleStartMfaEnrollment = async () => {
+    setMfaError('')
+    setMfaBusy(true)
+
+    try {
+      setMfaEnrollment(await authService.startMfaEnrollment())
+      setMfaEnrollOpen(true)
+    } catch (error) {
+      setMfaError(error.message)
+    } finally {
+      setMfaBusy(false)
+    }
+  }
+
+  const handleConfirmMfaEnrollment = async (event) => {
+    event.preventDefault()
+    setMfaError('')
+    setMfaBusy(true)
+
+    try {
+      const result = await authService.confirmMfaEnrollment({
+        factorId: mfaEnrollment.factorId,
+        code: mfaEnrollCode,
+      })
+      setMfaRecoveryCodes(result.recoveryCodes)
+      setMfaEnrollment(null)
+      setMfaEnrollCode('')
+    } catch (error) {
+      setMfaError(error.message)
+    } finally {
+      setMfaBusy(false)
+    }
+  }
+
+  const handleRecoverWithBackupCode = async (event) => {
+    event.preventDefault()
+    setAuthError('')
+    setAuthNotice('')
+    setAuthLoading(true)
+
+    try {
+      const result = await authService.recoverWithBackupCode({
+        email: pendingEmail || authState.email,
+        password: authState.password,
+        recoveryCode: recoveryCodeInput,
+      })
+      setAuthNotice(result?.message ?? 'Authenticator removed. Sign in again to set up a new one.')
+      setRecoveryMode(false)
+      setMfaPending(false)
+      setRecoveryCodeInput('')
+    } catch (error) {
+      setAuthError(error.message)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   const handleVerifyMfa = async (event) => {
     event.preventDefault()
     setAuthError('')
@@ -525,6 +615,8 @@ function App() {
       const result = await authService.verifyMfaCode({
         email: pendingEmail,
         code: authState.otpCode,
+        factorId: mfaChallenge.factorId,
+        challengeId: mfaChallenge.challengeId,
       })
       setSession(result.user)
       await applyUserData(result.user)
@@ -533,6 +625,7 @@ function App() {
         await loadAdminData()
       }
       setMfaPending(false)
+      setMfaChallenge({ factorId: '', challengeId: '' })
     } catch (error) {
       setAuthError(error.message)
     } finally {
@@ -1509,7 +1602,13 @@ function App() {
           <PurchasePage
             validatePromoCode={validatePromoCode}
             referralCode={incomingReferralCode}
-            onBack={() => setShowPurchase(false)}
+            billingLive={isSupabaseConfigured}
+            onBack={(nextView) => {
+              setShowPurchase(false)
+              if (nextView === 'signup' || nextView === 'signin') {
+                setAuthView(nextView)
+              }
+            }}
             onSubmit={async (order) => {
               const isPromo = Boolean(order.promoCode)
 
@@ -1526,6 +1625,7 @@ function App() {
 
                 await billingService.startCheckout({
                   plan: order.plan,
+                  billingInterval: order.billingInterval,
                   email: order.email,
                   fullName: order.fullName,
                   referralCode: incomingReferralCode,
@@ -1534,16 +1634,18 @@ function App() {
               }
 
               // Demo mode mirrors the live behaviour: paid or redeemed means active immediately.
-              const periodDays = !isPromo && order.plan === 'annual' ? 365 : 30
+              const periodDays = !isPromo && order.billingInterval === 'annual' ? 365 : 30
               const expiresAt = new Date(Date.now() + periodDays * 24 * 60 * 60 * 1000).toISOString()
               const newLicense = {
                 id: `lic-${Date.now()}`,
                 userId: `pending-${Date.now()}`,
                 userEmail: order.email,
                 userFullName: order.fullName,
-                plan: isPromo ? 'monthly' : order.plan,
+                plan: isPromo ? 'standard' : order.plan,
+                planLabel: getPlan(isPromo ? 'standard' : order.plan).label,
+                billingInterval: isPromo ? 'monthly' : order.billingInterval,
                 priceUsd: isPromo ? 0 : order.priceUsd,
-                storageLimitGb: order.storageLimitGb,
+                storageLimitGb: isPromo ? 2 : order.storageLimitGb,
                 status: 'active',
                 purchasedAt: new Date().toISOString(),
                 expiresAt,
@@ -1577,7 +1679,7 @@ function App() {
       )
     }
 
-    if (authView === 'landing') {
+    if (authView === 'landing' && checkoutReturn !== 'success') {
       return (
         <Suspense fallback={loadingPanel}>
           <LandingPage
@@ -1604,6 +1706,20 @@ function App() {
         </header>
 
         <section className="auth-panel">
+          {checkoutReturn === 'success' && (
+            <div className="promo-applied" style={{ marginBottom: '1rem' }}>
+              <span>
+                ✓ Payment received. Create your login below using the <strong>same email</strong> you
+                paid with — your plan is already attached to that address.
+              </span>
+            </div>
+          )}
+          {checkoutReturn === 'cancelled' && (
+            <div className="promo-applied" style={{ marginBottom: '1rem' }}>
+              <span>Checkout was cancelled. Nothing was charged.</span>
+            </div>
+          )}
+
           <h1>AI social media agents that plan and publish for you</h1>
           <p>
             Connect your channels, queue posts by day and time, and automate reminders,
@@ -1619,22 +1735,63 @@ function App() {
           </div>
 
           {mfaPending ? (
-            <form className="auth-form" onSubmit={handleVerifyMfa}>
-              <h2>Two-factor verification</h2>
-              <p>Enter the one-time code sent to {pendingEmail}.</p>
-              <label>
-                One-time code
-                <input
-                  type="text"
-                  value={authState.otpCode}
-                  onChange={(event) => handleAuthChange('otpCode', event.target.value)}
-                  placeholder="123456"
-                />
-              </label>
-              <button type="submit" disabled={authLoading}>
-                {authLoading ? 'Verifying...' : 'Verify and continue'}
-              </button>
-            </form>
+            recoveryMode ? (
+              <form className="auth-form" onSubmit={handleRecoverWithBackupCode}>
+                <h2>Use a recovery code</h2>
+                <p>
+                  Lost your authenticator? Enter your password and one unused recovery code. We&apos;ll
+                  remove the old device so you can set up a new one.
+                </p>
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    value={authState.password}
+                    onChange={(event) => handleAuthChange('password', event.target.value)}
+                    autoComplete="current-password"
+                  />
+                </label>
+                <label>
+                  Recovery code
+                  <input
+                    type="text"
+                    value={recoveryCodeInput}
+                    onChange={(event) => setRecoveryCodeInput(event.target.value.toUpperCase())}
+                    placeholder="A1B2C3D4E5"
+                    autoComplete="one-time-code"
+                  />
+                </label>
+                <button type="submit" disabled={authLoading}>
+                  {authLoading ? 'Checking...' : 'Reset my authenticator'}
+                </button>
+                <button type="button" className="text-button" onClick={() => setRecoveryMode(false)}>
+                  ← Back to code entry
+                </button>
+              </form>
+            ) : (
+              <form className="auth-form" onSubmit={handleVerifyMfa}>
+                <h2>Two-factor verification</h2>
+                <p>Open your authenticator app and enter the current 6-digit code for {pendingEmail}.</p>
+                <label>
+                  Authentication code
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={authState.otpCode}
+                    onChange={(event) => handleAuthChange('otpCode', event.target.value)}
+                    placeholder="123456"
+                  />
+                </label>
+                <button type="submit" disabled={authLoading}>
+                  {authLoading ? 'Verifying...' : 'Verify and continue'}
+                </button>
+                <button type="button" className="text-button" onClick={() => setRecoveryMode(true)}>
+                  Lost your device? Use a recovery code
+                </button>
+              </form>
+            )
           ) : (
             <>
               {authView === 'signin' && (
@@ -1759,6 +1916,100 @@ function App() {
 
   return (
     <div className="app-shell">
+      {mfaEnrollOpen && (
+        <div className="modal-overlay">
+          <div className="modal-panel" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+            {mfaRecoveryCodes.length > 0 ? (
+              <>
+                <h2>Save your recovery codes</h2>
+                <p className="panel-note">
+                  These are shown once. Store them somewhere safe — each one gets you back in if you
+                  lose your phone.
+                </p>
+                <div className="chip-row" style={{ margin: '1rem 0' }}>
+                  {mfaRecoveryCodes.map((code) => (
+                    <span key={code} className="chip" style={{ fontFamily: 'monospace' }}>{code}</span>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => navigator.clipboard?.writeText(mfaRecoveryCodes.join('\n'))}
+                >
+                  Copy all
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    setMfaRecoveryCodes([])
+                    setMfaEnrollOpen(false)
+                  }}
+                >
+                  I&apos;ve saved them
+                </button>
+              </>
+            ) : mfaEnrollment ? (
+              <form onSubmit={handleConfirmMfaEnrollment}>
+                <h2>Set up your authenticator</h2>
+                <p className="panel-note">
+                  Scan this with Google Authenticator, 1Password, Authy, or any TOTP app, then enter
+                  the 6-digit code it shows.
+                </p>
+                {mfaEnrollment.qrCode && (
+                  <img
+                    src={mfaEnrollment.qrCode}
+                    alt="Authenticator QR code"
+                    style={{ width: 200, height: 200, background: '#fff', borderRadius: 12, margin: '1rem 0' }}
+                  />
+                )}
+                <p className="muted" style={{ overflowWrap: 'anywhere' }}>
+                  Can&apos;t scan? Enter this key manually: <strong>{mfaEnrollment.secret}</strong>
+                </p>
+                <label>
+                  6-digit code
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={mfaEnrollCode}
+                    onChange={(event) => setMfaEnrollCode(event.target.value)}
+                    placeholder="123456"
+                  />
+                </label>
+                {mfaError && <span className="field-error">{mfaError}</span>}
+                <button type="submit" className="primary-button" disabled={mfaBusy}>
+                  {mfaBusy ? 'Verifying...' : 'Turn on two-factor'}
+                </button>
+                <button type="button" className="text-button" onClick={() => setMfaEnrollOpen(false)}>
+                  Later
+                </button>
+              </form>
+            ) : (
+              <>
+                <h2>Protect your account</h2>
+                <p className="panel-note">
+                  Two-factor authentication adds a 6-digit code from your phone on top of your
+                  password. Works with Google Authenticator and any other TOTP app.
+                </p>
+                {mfaError && <span className="field-error">{mfaError}</span>}
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={mfaBusy}
+                  onClick={handleStartMfaEnrollment}
+                >
+                  {mfaBusy ? 'Preparing...' : 'Set up two-factor'}
+                </button>
+                <button type="button" className="text-button" onClick={() => setMfaEnrollOpen(false)}>
+                  Not now
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <header className="top-bar">
         <div>
           <p className="brand">EchoAI</p>
@@ -2492,20 +2743,50 @@ function App() {
               becomes available in the Scheduler and AI Studio.
             </p>
 
+            <h3 className="section-label">Security</h3>
+            <div className="list-row">
+              <div>
+                <p>Two-factor authentication</p>
+                <span className="muted">
+                  Require a 6-digit code from Google Authenticator, Authy, 1Password, or any TOTP
+                  app in addition to your password.
+                </span>
+              </div>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={!isSupabaseConfigured}
+                onClick={() => {
+                  setMfaRecoveryCodes([])
+                  setMfaEnrollment(null)
+                  setMfaError('')
+                  setMfaEnrollOpen(true)
+                }}
+              >
+                Manage 2FA
+              </button>
+            </div>
+
             <h3 className="section-label">Subscription &amp; billing</h3>
             <div className="list-row">
               <div>
-                <p>Your EchoAI subscription</p>
+                <p>
+                  {myEntitlement?.plan
+                    ? `${getPlan(myEntitlement.plan).label} — ${myEntitlement.storageGb} GB storage`
+                    : 'Your EchoAI subscription'}
+                </p>
                 <span className="muted">
                   {myEntitlement
                     ? myEntitlement.status === 'none'
                       ? 'No subscription on file.'
                       : `Status: ${myEntitlement.status}${
+                          myEntitlement.billingInterval ? ` • billed ${myEntitlement.billingInterval}` : ''
+                        }${
                           myEntitlement.currentPeriodEnd
                             ? ` • renews ${new Date(myEntitlement.currentPeriodEnd).toLocaleDateString()}`
                             : ''
                         }`
-                    : 'Update your card, change plan, or cancel at any time.'}
+                    : 'Change plan, update your card, or cancel at any time.'}
                 </span>
               </div>
               <button

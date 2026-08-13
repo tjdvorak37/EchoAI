@@ -210,7 +210,7 @@ export function AdminPanel({
                 <div key={l.id} className="it-row">
                   <div>
                     <p>{l.userFullName}</p>
-                    <span>{l.userEmail} • {l.plan} • ${l.priceUsd}</span>
+                    <span>{l.userEmail} • {l.planLabel ?? l.plan} • ${l.priceUsd}</span>
                   </div>
                   <StatusBadge value={l.status} />
                 </div>
@@ -279,7 +279,10 @@ export function AdminPanel({
                       <br />
                       <small>{l.userEmail}</small>
                     </div>
-                    <span>{l.plan} — ${l.priceUsd}</span>
+                    <span>
+                      {l.planLabel ?? l.plan} • {l.storageLimitGb} GB • ${l.priceUsd}
+                      {l.billingInterval === 'annual' ? '/yr' : '/mo'}
+                    </span>
                     <span>{l.purchasedAt ? new Date(l.purchasedAt).toLocaleDateString() : '—'}</span>
                     <span>{l.expiresAt ? new Date(l.expiresAt).toLocaleDateString() : '—'}</span>
                     <StatusBadge value={l.status} />
@@ -523,7 +526,7 @@ export function AdminPanel({
                       <br />
                       <small>{p.userEmail}</small>
                     </div>
-                    <span>{p.plan}</span>
+                    <span>{p.planLabel ?? p.plan}</span>
                     <span>${p.amountUsd}</span>
                     <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
                       {p.venmoTxnId || '—'}
@@ -540,7 +543,7 @@ export function AdminPanel({
                 {[
                   { label: 'Confirmed revenue', value: `$${totalRevenue}`, color: '#22c55e' },
                   { label: 'Pending payments', value: purchaseHistory.filter((p) => p.status === 'pending').length, color: '#f59e0b' },
-                  { label: 'Annual subscriptions', value: licenses.filter((l) => l.plan === 'annual').length, color: '#a855f7' },
+                  { label: 'Annual subscriptions', value: licenses.filter((l) => l.billingInterval === 'annual').length, color: '#a855f7' },
                 ].map((s) => (
                   <div key={s.label} className="it-stat-card" style={{ borderColor: s.color }}>
                     <span className="it-stat-val" style={{ color: s.color }}>{s.value}</span>

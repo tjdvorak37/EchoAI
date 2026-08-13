@@ -10,3 +10,13 @@ verify_jwt = false
 
 [functions.billing-portal]
 verify_jwt = true
+
+[functions.mfa-recover]
+# The caller has lost their second factor and cannot present an AAL2 JWT.
+verify_jwt = false
+
+[functions.ai-image]
+verify_jwt = true
+
+[functions.listening-fetch]
+verify_jwt = true
