@@ -2,9 +2,20 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #1a1a1a;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(236, 72, 153, 0.14), transparent 28%),
+    radial-gradient(circle at 90% 12%, rgba(99, 102, 241, 0.12), transparent 30%),
+    #0d0e12;
   color: #e0e0e0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.video-editor button {
+  border-radius: 7px;
+}
+
+.video-editor .muted {
+  color: #8991a3;
 }
 
 .video-brief-bar {
@@ -28,7 +39,7 @@
 }
 
 .editor-toolbar {
-  background: #242424;
+  background: rgba(20, 21, 27, 0.98);
   border-bottom: 1px solid #333;
   padding: 0.8rem;
   display: flex;
@@ -276,7 +287,6 @@
   font-size: 0.72rem;
 }
 
-.video-generation-settings input,
 .video-generation-settings select,
 .video-generation-panel textarea,
 .video-generation-panel select {
@@ -372,13 +382,16 @@
   flex-direction: column;
   gap: 0;
   overflow: hidden;
-  background: #1a1a1a;
+  background: #0a0b0e;
 }
 
 .preview-area {
-  flex: 0 0 200px;
-  background: #0a0a0a;
-  border-bottom: 1px solid #333;
+  flex: 0 0 300px;
+  min-height: 260px;
+  background:
+    radial-gradient(circle at center, rgba(236, 72, 153, 0.08), transparent 50%),
+    #07080a;
+  border-bottom: 1px solid #2b2e38;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -386,12 +399,13 @@
 
 .preview-placeholder {
   text-align: center;
-  color: #666;
+  color: #737b8d;
 }
 
 .preview-placeholder p {
   margin: 0;
   font-weight: 600;
+  color: #d8dce7;
 }
 
 .preview-placeholder small {
@@ -421,14 +435,14 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #1a1a1a;
+  background: #0d0e12;
   position: relative;
 }
 
 .timeline-header {
   flex: 0 0 40px;
-  background: #242424;
-  border-bottom: 1px solid #333;
+  background: #17181e;
+  border-bottom: 1px solid #2b2e38;
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -444,12 +458,12 @@
   position: absolute;
   width: 40px;
   height: 100%;
-  border-right: 1px solid #333;
+  border-right: 1px solid #2b2e38;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.8rem;
-  color: #888;
+  color: #7c8494;
   font-weight: 600;
 }
 
@@ -464,14 +478,14 @@
 
 .track {
   display: flex;
-  border-bottom: 1px solid #333;
-  background: #1a1a1a;
+  border-bottom: 1px solid #2b2e38;
+  background: #101116;
 }
 
 .track-header {
   flex: 0 0 150px;
-  background: #242424;
-  border-right: 1px solid #333;
+  background: #191a21;
+  border-right: 1px solid #2b2e38;
   padding: 0.6rem;
   display: flex;
   align-items: center;
@@ -507,8 +521,8 @@
 .track-clips {
   flex: 1;
   position: relative;
-  background: #1a1a1a;
-  border-left: 1px solid #333;
+  background: #101116;
+  border-left: 1px solid #2b2e38;
   min-height: 60px;
 }
 
@@ -516,8 +530,8 @@
   position: absolute;
   top: 6px;
   height: 48px;
-  background: linear-gradient(180deg, #1d4ed8, #1e40af);
-  border: 1px solid #1d4ed8;
+  background: linear-gradient(135deg, #9d174d, #db2777);
+  border: 1px solid #ec4899;
   border-radius: 0.3rem;
   padding: 0.4rem;
   cursor: move;
@@ -529,12 +543,12 @@
 }
 
 .clip:hover {
-  box-shadow: 0 0 8px rgba(29, 78, 216, 0.5);
+  box-shadow: 0 0 12px rgba(236, 72, 153, 0.45);
 }
 
 .clip.selected {
-  background: linear-gradient(180deg, #3b82f6, #2563eb);
-  box-shadow: 0 0 12px rgba(29, 78, 216, 0.8);
+  background: linear-gradient(135deg, #ec4899, #a21caf);
+  box-shadow: 0 0 0 2px #f9a8d4, 0 0 16px rgba(236, 72, 153, 0.7);
 }
 
 .clip-content {
@@ -606,7 +620,7 @@
   top: 0;
   bottom: 0;
   width: 2px;
-  background: #ef4444;
+  background: #ffd166;
   pointer-events: none;
   z-index: 10;
   box-shadow: -2px 0 4px rgba(239, 68, 68, 0.5);
@@ -649,8 +663,8 @@
 
 .editor-footer {
   flex: 0 0 50px;
-  background: #242424;
-  border-top: 1px solid #333;
+  background: #17181e;
+  border-top: 1px solid #2b2e38;
   padding: 0.8rem;
   display: flex;
   justify-content: space-between;
