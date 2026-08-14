@@ -68,6 +68,7 @@ const MASK_SHAPES = {
 
 const TOOLS = {
   select: 'Select',
+  heal: 'Heal',
   brush: 'Brush',
   eraser: 'Eraser',
   crop: 'Crop',
@@ -184,6 +185,13 @@ const defaultLayers = () => [
     letterSpacing: 0,
   },
 ]
+
+const projectLayers = (project) => defaultLayers().map((layer) => {
+  if (!project) return layer
+  if (layer.id === 'headline') return { ...layer, value: project.headline || layer.value }
+  if (layer.id === 'subcopy') return { ...layer, value: project.caption || layer.value }
+  return layer
+})
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
@@ -322,6 +330,57 @@ const renderStrokeLayer = (strokes, width, height) => {
 
   strokes.forEach((stroke) => drawStroke(layerCtx, stroke, width, height))
   return layerCanvas
+}
+
+const healImage = async ({ imageSrc, points, brushSize, stageMetrics }) => {
+  const image = await loadImage(imageSrc)
+  const canvas = document.createElement('canvas')
+  canvas.width = image.naturalWidth || image.width
+  canvas.height = image.naturalHeight || image.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Image healing is unavailable in this browser.')
+
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+  const softened = document.createElement('canvas')
+  softened.width = canvas.width
+  softened.height = canvas.height
+  const softenedCtx = softened.getContext('2d')
+  if (!softenedCtx) throw new Error('Image healing is unavailable in this browser.')
+
+  const imageRatio = canvas.width / canvas.height
+  const stageRatio = stageMetrics.width / stageMetrics.height
+  let drawWidth = stageMetrics.width
+  let drawHeight = stageMetrics.height
+  let offsetX = 0
+  let offsetY = 0
+  if (imageRatio > stageRatio) {
+    drawWidth = imageRatio * drawHeight
+    offsetX = (stageMetrics.width - drawWidth) / 2
+  } else {
+    drawHeight = drawWidth / imageRatio
+    offsetY = (stageMetrics.height - drawHeight) / 2
+  }
+
+  const sourceScale = canvas.width / drawWidth
+  const radius = Math.max(4, brushSize * sourceScale * 0.5)
+  softenedCtx.filter = `blur(${Math.max(3, radius * 0.42)}px)`
+  softenedCtx.drawImage(canvas, 0, 0)
+
+  ctx.save()
+  ctx.beginPath()
+  points.forEach((point) => {
+    const stageX = (point.x / 100) * stageMetrics.width
+    const stageY = (point.y / 100) * stageMetrics.height
+    const imageX = ((stageX - offsetX) / drawWidth) * canvas.width
+    const imageY = ((stageY - offsetY) / drawHeight) * canvas.height
+    ctx.moveTo(imageX + radius, imageY)
+    ctx.arc(imageX, imageY, radius, 0, Math.PI * 2)
+  })
+  ctx.clip()
+  ctx.drawImage(softened, 0, 0)
+  ctx.restore()
+
+  return canvas.toDataURL('image/png')
 }
 
 const drawShapeLayer = (ctx, layer, width, height) => {
@@ -611,21 +670,21 @@ const renderComposition = async ({
   return canvas.toDataURL('image/png')
 }
 
-export function PhotoEditor({ assets, onExport, agentConfig, brandKit }) {
+export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialProject }) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
   const [selectedAssetId, setSelectedAssetId] = useState(imageAssets[0]?.id ?? '')
   const [uploadedImage, setUploadedImage] = useState('')
-  const [generatedImageSrc, setGeneratedImageSrc] = useState('')
-  const [generatedImageMeta, setGeneratedImageMeta] = useState(null)
-  const [aiImagePrompt, setAiImagePrompt] = useState(DEFAULT_PROMPT)
+  const [generatedImageSrc, setGeneratedImageSrc] = useState(initialProject?.imageSrc || '')
+  const [generatedImageMeta, setGeneratedImageMeta] = useState(initialProject ? { source: initialProject.imageSource || initialProject.source, palette: 'editorial' } : null)
+  const [aiImagePrompt, setAiImagePrompt] = useState(initialProject?.visualPrompt || DEFAULT_PROMPT)
   const [aiImageStyle, setAiImageStyle] = useState('aurora')
   const [aiImageLoading, setAiImageLoading] = useState(false)
   const [aiImageError, setAiImageError] = useState('')
-  const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
+  const [prompt, setPrompt] = useState(initialProject?.visualPrompt || DEFAULT_PROMPT)
   const [presetId, setPresetId] = useState('aurora')
-  const [aspectRatio, setAspectRatio] = useState('4:5')
-  const [headline, setHeadline] = useState('Launch the next drop')
-  const [subcopy, setSubcopy] = useState('Edit, stylize, and export campaign art without leaving EchoAI.')
+  const [aspectRatio, setAspectRatio] = useState(initialProject?.outputType === 'image' ? '1:1' : '4:5')
+  const [headline, setHeadline] = useState(initialProject?.headline || 'Launch the next drop')
+  const [subcopy, setSubcopy] = useState(initialProject?.caption || 'Edit, stylize, and export campaign art without leaving EchoAI.')
   const [activeTool, setActiveTool] = useState('select')
   const [maskShape, setMaskShape] = useState('none')
   const [brushColor, setBrushColor] = useState('#ffffff')
@@ -638,9 +697,9 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit }) {
   const [exportFormat, setExportFormat] = useState('png')
   const [exportQuality, setExportQuality] = useState(92)
   const [historyCounts, setHistoryCounts] = useState({ past: 0, future: 0 })
-  const [layers, setLayers] = useState(defaultLayers)
+  const [layers, setLayers] = useState(() => projectLayers(initialProject))
   const [activeLayerId, setActiveLayerId] = useState('headline')
-  const [notice, setNotice] = useState('Ready to create.')
+  const [notice, setNotice] = useState(initialProject ? 'Generated project loaded. Every layer remains editable.' : 'Ready to create.')
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const [compactMode, setCompactMode] = useState(false)
@@ -708,6 +767,9 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit }) {
     cropRect,
     presetId,
     aspectRatio,
+    generatedImageSrc,
+    uploadedImage,
+    selectedAssetId,
   })
 
   const applySnapshot = (snapshot) => {
@@ -718,6 +780,9 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit }) {
     setCropRect(snapshot.cropRect)
     setPresetId(snapshot.presetId)
     setAspectRatio(snapshot.aspectRatio)
+    setGeneratedImageSrc(snapshot.generatedImageSrc)
+    setUploadedImage(snapshot.uploadedImage)
+    setSelectedAssetId(snapshot.selectedAssetId)
   }
 
   const syncHistoryCounts = () => {
@@ -1028,15 +1093,17 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit }) {
   }
 
   const startBrushStroke = (event) => {
-    const painting = activeTool === 'brush' || activeTool === 'eraser'
+    const painting = activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal'
     if (!painting || !paintCanvasRef.current || !stageRef.current) return
     event.preventDefault()
     event.stopPropagation()
     const erase = activeTool === 'eraser'
+    const healing = activeTool === 'heal'
     const point = getStagePoint(event)
     const stroke = {
       id: `stroke-${Date.now()}`,
       erase,
+      healing,
       color: brushColor,
       size: brushSize,
       opacity: brushOpacity,
@@ -1070,6 +1137,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit }) {
       const lastPoint = currentStroke.points[currentStroke.points.length - 1]
       currentStroke.points.push(nextPoint)
 
+      if (currentStroke.healing) return
       const moveCanvas = paintCanvasRef.current
       const moveCtx = moveCanvas.getContext('2d')
       if (!moveCtx) return
@@ -1095,11 +1163,31 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit }) {
       moveCtx.restore()
     }
 
-    const finishStroke = () => {
+    const finishStroke = async () => {
       const completedStroke = brushStrokeRef.current
       if (completedStroke) {
         commitHistory()
-        setBrushStrokes((prev) => [...prev, completedStroke])
+        if (completedStroke.healing) {
+          if (!selectedImageSrc) {
+            setNotice('Load an image before using Heal.')
+          } else {
+            try {
+              setGeneratedImageSrc(await healImage({
+                imageSrc: selectedImageSrc,
+                points: completedStroke.points,
+                brushSize,
+                stageMetrics,
+              }))
+              setUploadedImage('')
+              setSelectedAssetId('')
+              setNotice('Healed the selected area in the image pixels.')
+            } catch (error) {
+              setNotice(error.message)
+            }
+          }
+        } else {
+          setBrushStrokes((prev) => [...prev, completedStroke])
+        }
       }
       brushStrokeRef.current = null
       window.removeEventListener('pointermove', moveStroke)
@@ -1548,6 +1636,9 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit }) {
                 </button>
               ))}
             </div>
+            <p className="muted">
+              Heal smooths blemishes and small distractions in the image itself. Eraser only removes paint strokes.
+            </p>
             <label>
               Mask shape
               <select value={maskShape} onChange={(event) => setMaskShape(event.target.value)}>
@@ -1593,7 +1684,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit }) {
                 aspectRatio: aspect.css,
                 background: preset.background,
                 cursor:
-                  activeTool === 'brush' || activeTool === 'eraser'
+                  activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal'
                     ? 'crosshair'
                     : activeTool === 'crop'
                       ? 'move'

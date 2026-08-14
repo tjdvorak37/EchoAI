@@ -36,6 +36,8 @@ import { getPlan, getStorageMb } from './data/plans'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
 import { isSupabaseConfigured } from './lib/supabase'
+import echoMascot from './assets/echo-mascot.svg'
+import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
 
 const VideoEditor = lazy(() => import('./components/VideoEditor').then((module) => ({ default: module.VideoEditor })))
 const PhotoEditor = lazy(() => import('./components/PhotoEditor').then((module) => ({ default: module.PhotoEditor })))
@@ -44,6 +46,9 @@ const LandingPage = lazy(() => import('./components/LandingPage').then((module) 
 const PurchasePage = lazy(() => import('./components/PurchasePage').then((module) => ({ default: module.PurchasePage })))
 const AdminPanel = lazy(() => import('./components/AdminPanel').then((module) => ({ default: module.AdminPanel })))
 const FinancePanel = lazy(() => import('./components/FinancePanel').then((module) => ({ default: module.FinancePanel })))
+const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((module) => ({ default: module.CreativeBrief })))
+const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
+const InhouseAiStudio = lazy(() => import('./components/InhouseAiStudio').then((module) => ({ default: module.InhouseAiStudio })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
@@ -71,10 +76,14 @@ const createDefaultAiAgentConfig = () => ({
   endpoint: '',
   apiKey: '',
   model: '',
-  capabilities: ['message', 'image', 'video'],
+  capabilities: DEFAULT_AGENT_CAPABILITIES,
+  personas: [],
+  routing: { strategy: 'best_quality', allowFallback: true },
+  negativePrompt: '',
+  defaultStyle: '',
   lastSyncedAt: '',
   status: 'not connected',
-  message: 'Connect a personal AI agent endpoint to personalize copy and image generation.',
+  message: 'Connect an in-house AI endpoint for writing, documents, images, characters, video, audio, and media analysis.',
 })
 
 const hydrateWorkspaceAssets = (assets) =>
@@ -91,23 +100,7 @@ const hydrateWorkspaceAssets = (assets) =>
     return { ...asset, previewUrl: seededAsset.previewUrl }
   })
 
-const AI_AGENT_CAPABILITIES = [
-  {
-    key: 'message',
-    title: 'Message assistance',
-    description: 'Captions, replies, post copy, and campaign wording.',
-  },
-  {
-    key: 'image',
-    title: 'Image assistance',
-    description: 'Photo prompts, creative directions, and generated concepts.',
-  },
-  {
-    key: 'video',
-    title: 'Video assistance',
-    description: 'Scripts, scene ideas, hooks, and edit suggestions.',
-  },
-]
+const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 
 function App() {
   const [authView, setAuthView] = useState(() =>
@@ -194,6 +187,7 @@ function App() {
   const [aiInput, setAiInput] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState([])
   const [aiLoading, setAiLoading] = useState(false)
+  const [creativeProject, setCreativeProject] = useState(null)
   const [aiAgentConfig, setAiAgentConfig] = useState(() => createDefaultAiAgentConfig())
   const [aiAgentDraft, setAiAgentDraft] = useState(() => createDefaultAiAgentConfig())
   const [aiAgentSaving, setAiAgentSaving] = useState(false)
@@ -207,7 +201,7 @@ function App() {
   const [newFolderName, setNewFolderName] = useState('')
   const [editingItem, setEditingItem] = useState(null)
   const [editingName, setEditingName] = useState('')
-  const [isAssetPanelOpen, setIsAssetPanelOpen] = useState(true)
+  const [isAssetPanelOpen, setIsAssetPanelOpen] = useState(() => window.innerWidth > 768)
   const [drawerDragActive, setDrawerDragActive] = useState(false)
   const [quotaEditingUserId, setQuotaEditingUserId] = useState('')
   const [quotaDraftMb, setQuotaDraftMb] = useState('2048')
@@ -222,6 +216,7 @@ function App() {
   const [refunds, setRefunds] = useState(refundsSeed)
   const [financialTasks, setFinancialTasks] = useState(financialTasksSeed)
   const [showPurchase, setShowPurchase] = useState(false)
+  const [purchasePlan, setPurchasePlan] = useState('storage_pro')
   // Stripe sends the buyer back here after checkout; they still need a login.
   const [checkoutReturn] = useState(
     () => new URLSearchParams(window.location.search).get('checkout') || '',
@@ -879,6 +874,21 @@ function App() {
     }
   }
 
+  const handleEditCreativeProject = (project) => {
+    setCreativeProject(project)
+    setActiveTab(project.outputType === 'video' ? 'studio' : 'photo')
+  }
+
+  const handleUseCreativeDraft = (project) => {
+    setComposer((prev) => ({
+      ...prev,
+      campaign: project.title || prev.campaign,
+      message: project.caption || prev.message,
+      imageIdea: project.visualPrompt || prev.imageIdea,
+    }))
+    setActiveTab('scheduler')
+  }
+
   const handleSaveAiAgent = async (event) => {
     event.preventDefault()
     setAiAgentSaving(true)
@@ -901,8 +911,8 @@ function App() {
           model: aiAgentDraft.model.trim(),
           status: aiAgentDraft.endpoint.trim() ? 'connected' : 'not connected',
           message: aiAgentDraft.endpoint.trim()
-            ? 'Your personal AI agent is ready for copy and image generation.'
-            : 'Connect a personal AI agent endpoint to personalize copy and image generation.',
+            ? 'Your in-house AI is ready for its enabled creative capabilities.'
+            : 'Connect an in-house AI endpoint to activate creative generation.',
           lastSyncedAt: aiAgentDraft.endpoint.trim() ? new Date().toISOString() : '',
         },
       })
@@ -918,6 +928,27 @@ function App() {
     } finally {
       setAiAgentSaving(false)
     }
+  }
+
+  const saveInhouseAiConfig = async (nextConfig) => {
+    const savedConfig = await authService.updateUserAiAgentConfig({
+      userId: session.id,
+      aiAgentConfig: nextConfig,
+    })
+    const normalized = { ...createDefaultAiAgentConfig(), ...savedConfig }
+    setAiAgentConfig(normalized)
+    setAiAgentDraft(normalized)
+    return normalized
+  }
+
+  const handleInhouseAiAsset = (asset) => {
+    setWorkspaceAssets((prev) => [{
+      id: `asset_${Date.now()}`,
+      size: 0,
+      folderId: selectedFolderId,
+      createdAt: new Date().toISOString(),
+      ...asset,
+    }, ...prev])
   }
 
   const handleAiAgentDraftChange = (field, value) => {
@@ -966,9 +997,13 @@ function App() {
           ...(testConfig.apiKey ? { Authorization: `Bearer ${testConfig.apiKey}` } : {}),
         },
         body: JSON.stringify({
+          contractVersion: '2.0',
           mode: 'test',
+          capability: 'test',
           model: testConfig.model || 'default',
           agentName: testConfig.name || 'My AI Agent',
+          capabilities: testConfig.capabilities,
+          routing: testConfig.routing,
           prompt: 'EchoAI connection test',
         }),
       })
@@ -1792,6 +1827,7 @@ function App() {
       return (
         <Suspense fallback={loadingPanel}>
           <PurchasePage
+            initialPlan={purchasePlan}
             validatePromoCode={validatePromoCode}
             referralCode={incomingReferralCode}
             billingLive={isSupabaseConfigured}
@@ -1876,7 +1912,10 @@ function App() {
         <Suspense fallback={loadingPanel}>
           <LandingPage
             onSignIn={() => setAuthView('signin')}
-            onPurchase={() => setShowPurchase(true)}
+            onPurchase={(planKey) => {
+              if (planKey) setPurchasePlan(planKey)
+              setShowPurchase(true)
+            }}
           />
         </Suspense>
       )
@@ -2203,9 +2242,12 @@ function App() {
       )}
 
       <header className="top-bar">
-        <div>
+        <div className="app-brand-heading">
+          <img src={echoMascot} alt="EchoAI mascot" />
+          <div>
           <p className="brand">EchoAI</p>
           <h1>Campaign command center</h1>
+          </div>
         </div>
         <div className="top-actions">
           <button type="button" className="ghost-button" onClick={openSupportModal}>
@@ -2224,9 +2266,11 @@ function App() {
           ['repost', 'Repost Hub'],
           ['scheduler', 'Scheduler'],
           ['assistant', 'AI Studio'],
+          ['inhouse-ai', 'In-house AI'],
           ['photo', 'Photo Creator'],
           ['studio', 'Video Studio'],
           ['integrations', 'Integrations'],
+          ['help', 'How To'],
           ...(canViewManagementBoard ? [['admin', 'IT / Management']] : []),
         ].map(([key, label]) => (
           <button
@@ -2240,7 +2284,8 @@ function App() {
         ))}
       </nav>
 
-      <main className={activeTab === 'photo' ? 'app-main photo-workspace-layout' : 'app-main'}>
+      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''}`}>
+        {activeTab !== 'help' && (
         <aside
           className={`asset-drawer ${activeTab === 'photo' ? 'photo-workspace-drawer' : ''} ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
           onDragEnter={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); setDrawerDragActive(true) } }}
@@ -2516,6 +2561,7 @@ function App() {
             </>
           )}
         </aside>
+        )}
 
         {activeTab === 'dashboard' && (
           <section className="panel panel-dashboard">
@@ -2960,12 +3006,20 @@ function App() {
 
         {activeTab === 'assistant' && (
           <section className="panel panel-assistant">
-            <h2>AI Message Studio</h2>
+            <h2>AI Content Studio</h2>
             <p className="panel-note">
-              Generate marketing copy, image concepts, and app suggestions from a single prompt.
+              Turn mixed source files into editable campaign visuals, video plans, and publish-ready copy.
             </p>
 
-            <div className="split">
+            <Suspense fallback={loadingPanel}>
+              <CreativeBrief
+                agentConfig={aiAgentConfig}
+                onEditProject={handleEditCreativeProject}
+                onUseDraft={handleUseCreativeDraft}
+              />
+            </Suspense>
+
+            <div className="split assistant-quick-copy">
               <article className="sub-panel tone-indigo">
                 <h3>Prompt builder</h3>
                 <textarea
@@ -3011,11 +3065,23 @@ function App() {
           </section>
         )}
 
+        {activeTab === 'inhouse-ai' && (
+          <Suspense fallback={loadingPanel}>
+            <InhouseAiStudio
+              agentConfig={aiAgentConfig}
+              assets={workspaceAssets}
+              onSaveConfig={saveInhouseAiConfig}
+              onAddAsset={handleInhouseAiAsset}
+            />
+          </Suspense>
+        )}
+
         {activeTab === 'studio' && (
           <Suspense fallback={loadingPanel}>
             <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
               <VideoEditor
                 assets={workspaceAssets}
+                brief={creativeProject?.outputType === 'video' ? creativeProject : null}
                 onExport={(project) => {
                   const exportedAsset = {
                     id: `asset_${Date.now()}`,
@@ -3047,12 +3113,20 @@ function App() {
           <Suspense fallback={loadingPanel}>
             <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
               <PhotoEditor
+                key={creativeProject?.imageSrc || 'photo-editor'}
                 assets={workspaceAssets}
                 onExport={handlePhotoExport}
                 agentConfig={aiAgentConfig}
                 brandKit={brandKit}
+                initialProject={creativeProject?.outputType !== 'video' ? creativeProject : null}
               />
             </section>
+          </Suspense>
+        )}
+
+        {activeTab === 'help' && (
+          <Suspense fallback={loadingPanel}>
+            <HelpCenter onContactSupport={openSupportModal} />
           </Suspense>
         )}
 
@@ -3353,16 +3427,16 @@ function App() {
             </div>
 
             <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
-              <h3>Personal AI agent</h3>
-              <p className="muted">Set your own endpoint once, then reuse it across message, image, and video tools.</p>
+              <h3>In-house AI engine</h3>
+              <p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p>
               <div className="agent-setup-guide">
                 <div className="agent-guide-card hero">
                   <p className="section-label">Quick setup</p>
-                  <h4>Connect your bot in 4 steps</h4>
+                  <h4>Connect your AI in 4 steps</h4>
                   <ol className="agent-steps">
                     <li>Give the bot a name users recognize.</li>
                     <li>Paste the endpoint that receives AI requests.</li>
-                    <li>Choose what it should help with: message, image, or video.</li>
+                    <li>Enable only the capabilities your endpoint actually supports.</li>
                     <li>Test the connection, then save the profile.</li>
                   </ol>
                 </div>
@@ -3421,6 +3495,46 @@ function App() {
                     placeholder="default or your model name"
                   />
                 </label>
+                <div className="split" style={{ marginTop: 0 }}>
+                  <label>
+                    Routing strategy
+                    <select
+                      value={aiAgentDraft.routing?.strategy || 'best_quality'}
+                      onChange={(event) => handleAiAgentDraftChange('routing', { ...aiAgentDraft.routing, strategy: event.target.value })}
+                    >
+                      <option value="best_quality">Best quality</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="lowest_cost">Lowest cost</option>
+                      <option value="fastest">Fastest</option>
+                      <option value="private_only">Private models only</option>
+                    </select>
+                  </label>
+                  <label>
+                    Default visual style
+                    <input
+                      value={aiAgentDraft.defaultStyle || ''}
+                      onChange={(event) => handleAiAgentDraftChange('defaultStyle', event.target.value)}
+                      placeholder="Editorial, photoreal, illustrated..."
+                    />
+                  </label>
+                </div>
+                <label>
+                  Global negative prompt
+                  <textarea
+                    rows="3"
+                    value={aiAgentDraft.negativePrompt || ''}
+                    onChange={(event) => handleAiAgentDraftChange('negativePrompt', event.target.value)}
+                    placeholder="Traits, artifacts, subjects, or styles the agent should avoid."
+                  />
+                </label>
+                <label className="toggle-row" style={{ alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={aiAgentDraft.routing?.allowFallback !== false}
+                    onChange={(event) => handleAiAgentDraftChange('routing', { ...aiAgentDraft.routing, allowFallback: event.target.checked })}
+                  />
+                  Allow an approved fallback provider when the preferred model is unavailable
+                </label>
                 <div className="agent-capability-grid">
                   {AI_AGENT_CAPABILITIES.map((capability) => {
                     const checked = (aiAgentDraft.capabilities || []).includes(capability.key)
@@ -3464,10 +3578,16 @@ function App() {
                 <div className="agent-payload-preview">
                   <p className="section-label">Request preview</p>
                   <pre>{JSON.stringify({
-                    mode: 'message | image | video',
+                    contractVersion: '2.0',
+                    mode: 'image | image_edit | character | video | audio | vision | document | message',
+                    capability: 'selected capability',
                     agentName: aiAgentDraft.name || 'My AI Agent',
                     model: aiAgentDraft.model || 'default',
                     capabilities: aiAgentDraft.capabilities || [],
+                    routing: aiAgentDraft.routing,
+                    persona: '{ reusable character profile or null }',
+                    references: '[ workspace assets ]',
+                    output: '{ aspectRatio, durationSeconds, quality, style }',
                     prompt: 'What do you want the bot to help with?',
                   }, null, 2)}</pre>
                 </div>
