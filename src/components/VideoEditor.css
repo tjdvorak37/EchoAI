@@ -184,6 +184,166 @@
   white-space: nowrap;
 }
 
+.video-generation-panel {
+  gap: 0.7rem;
+}
+
+.video-generation-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.video-generation-modes button,
+.video-generation-references button {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem;
+  border: 1px solid #333;
+  border-radius: 0.45rem;
+  color: #a0a0a0;
+  background: #242424;
+  text-align: left;
+}
+
+.video-generation-modes button.active,
+.video-generation-references button.active {
+  border-color: #ec4899;
+  color: #fff;
+  background: rgba(157, 23, 77, 0.38);
+}
+
+.video-generation-modes button strong {
+  font-size: 0.75rem;
+}
+
+.video-generation-modes button small,
+.video-generation-label small {
+  color: #7d8796;
+  font-size: 0.68rem;
+  font-weight: 400;
+}
+
+.video-generation-label {
+  margin: 0;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.video-generation-references {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.video-generation-references button {
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+}
+
+.video-generation-references img,
+.video-generation-references button > span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  object-fit: cover;
+  border-radius: 0.25rem;
+  color: #93c5fd;
+  background: #111827;
+  font-size: 0.55rem;
+  font-weight: 800;
+}
+
+.video-generation-references strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.7rem;
+}
+
+.video-generation-settings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.video-generation-settings label {
+  min-width: 0;
+  color: #a0a0a0;
+  font-size: 0.72rem;
+}
+
+.video-generation-settings input,
+.video-generation-settings select,
+.video-generation-panel textarea,
+.video-generation-panel select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #333;
+  border-radius: 0.35rem;
+  color: #e0e0e0;
+  background: #242424;
+  padding: 0.5rem;
+}
+
+.video-generate-button {
+  min-height: 44px;
+  color: #fff;
+  border-color: #ec4899;
+  background: linear-gradient(90deg, #be185d, #9333ea);
+}
+
+.video-generation-results {
+  display: grid;
+  gap: 0.75rem;
+  max-height: 360px;
+  padding: 0.75rem;
+  overflow-y: auto;
+  border-bottom: 1px solid #333;
+  background: #111;
+}
+
+.video-generation-result {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid #3b3b3b;
+  border-radius: 0.5rem;
+  background: #1d1d1d;
+}
+
+.video-generation-result > div:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.video-generation-result > div:first-child span {
+  color: #a0a0a0;
+  font-size: 0.8rem;
+}
+
+.video-generation-media {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.video-generation-media video,
+.video-generation-media img {
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  background: #000;
+}
+
+.video-generation-media > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 .tool-item {
   display: flex;
   gap: 0.4rem;

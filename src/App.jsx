@@ -2265,8 +2265,7 @@ function App() {
           ['listening', 'Social Listening'],
           ['repost', 'Repost Hub'],
           ['scheduler', 'Scheduler'],
-          ['assistant', 'AI Studio'],
-          ['inhouse-ai', 'In-house AI'],
+          ['assistant', 'Create'],
           ['photo', 'Photo Creator'],
           ['studio', 'Video Studio'],
           ['integrations', 'Integrations'],
@@ -3006,10 +3005,20 @@ function App() {
 
         {activeTab === 'assistant' && (
           <section className="panel panel-assistant">
-            <h2>AI Content Studio</h2>
-            <p className="panel-note">
-              Turn mixed source files into editable campaign visuals, video plans, and publish-ready copy.
-            </p>
+            <div className="create-hub-heading">
+              <div>
+                <p className="small-title">Create</p>
+                <h2>Turn an idea into a finished campaign</h2>
+                <p className="panel-note">
+                  Start with a brief, files, or a prompt. Generate, edit, and send the result to Scheduler.
+                </p>
+              </div>
+              <div className="create-hub-actions">
+                <button type="button" className="ghost-button" onClick={() => setActiveTab('photo')}>Edit an image</button>
+                <button type="button" className="ghost-button" onClick={() => setActiveTab('studio')}>Create a video</button>
+                <button type="button" className="primary-button" onClick={() => setActiveTab('scheduler')}>Open Scheduler</button>
+              </div>
+            </div>
 
             <Suspense fallback={loadingPanel}>
               <CreativeBrief
@@ -3062,18 +3071,24 @@ function App() {
                 ))}
               </article>
             </div>
+            <div className="create-hub-advanced">
+              <div className="create-hub-advanced-heading">
+                <div>
+                  <p className="section-label">Advanced creation</p>
+                  <h3>Use your in-house AI engine</h3>
+                </div>
+                <span>For characters, image editing, video, audio, vision, and specialist models</span>
+              </div>
+              <Suspense fallback={loadingPanel}>
+                <InhouseAiStudio
+                  agentConfig={aiAgentConfig}
+                  assets={workspaceAssets}
+                  onSaveConfig={saveInhouseAiConfig}
+                  onAddAsset={handleInhouseAiAsset}
+                />
+              </Suspense>
+            </div>
           </section>
-        )}
-
-        {activeTab === 'inhouse-ai' && (
-          <Suspense fallback={loadingPanel}>
-            <InhouseAiStudio
-              agentConfig={aiAgentConfig}
-              assets={workspaceAssets}
-              onSaveConfig={saveInhouseAiConfig}
-              onAddAsset={handleInhouseAiAsset}
-            />
-          </Suspense>
         )}
 
         {activeTab === 'studio' && (
@@ -3082,6 +3097,8 @@ function App() {
               <VideoEditor
                 assets={workspaceAssets}
                 brief={creativeProject?.outputType === 'video' ? creativeProject : null}
+                agentConfig={aiAgentConfig}
+                onAddAsset={handleInhouseAiAsset}
                 onExport={(project) => {
                   const exportedAsset = {
                     id: `asset_${Date.now()}`,

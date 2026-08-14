@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { canUseAgentMode, runCreativeAgentJob } from '../services/aiAgentService'
 
 const FILTER_PRESETS = {
   none: { label: 'None', css: '' },
@@ -32,6 +33,13 @@ const TEXT_PRESETS = {
   lower_third: { label: 'Lower third', fontSize: 28, weight: 700, y: 82, color: '#ffffff' },
   credit: { label: 'Credit', fontSize: 22, weight: 500, y: 90, color: '#e2e8f0' },
 }
+
+const GENERATE_MODES = [
+  { key: 'frame', label: 'Frame to Video', icon: '\uD83D\uDDBC\uFE0F', hint: 'Animate a start frame, optionally guided by a reference image.' },
+  { key: 'text', label: 'Text to Video', icon: '\u2728', hint: 'Generate a scene directly from a written description.' },
+  { key: 'character', label: 'Character to Video', icon: '\uD83E\uDDD1', hint: 'Keep a saved persona consistent across the generated scene.' },
+  { key: 'extend', label: 'Extend Clip', icon: '\u23E9', hint: 'Continue an existing clip using its last frame as the start.' },
+]
 
 // Both the live preview and the exported frames read this, so what you see is
 // what gets rendered.
@@ -75,7 +83,7 @@ const transitionStateAt = (clip, localTime) => {
 
 const clipEnd = (clip) => clip.startTime + clip.duration
 
-export function VideoEditor({ assets, onExport, brief }) {
+export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }) {
   const [tracks, setTracks] = useState([
     { id: 'video-1', type: 'video', name: 'Video Track 1', clips: [] },
     { id: 'text-1', type: 'text', name: 'Text Track 1', clips: [] },
@@ -102,6 +110,24 @@ export function VideoEditor({ assets, onExport, brief }) {
   const timerRef = useRef(null)
   const historyRef = useRef({ past: [], future: [] })
   const rafRef = useRef(0)
+
+  // AI video generation panel — a dedicated screen toggled from the toolbar,
+  // separate from timeline editing state.
+  const [generateMode, setGenerateMode] = useState('frame')
+  const [generateStartFrameId, setGenerateStartFrameId] = useState('')
+  const [generatePersonaId, setGeneratePersonaId] = useState('')
+  const [generatePrompt, setGeneratePrompt] = useState('')
+  const [generateReferenceIds, setGenerateReferenceIds] = useState([])
+  const [generateAspectRatio, setGenerateAspectRatio] = useState('16:9')
+  const [generateDuration, setGenerateDuration] = useState(6)
+  const [generateQuality, setGenerateQuality] = useState('high')
+  const [generateBusy, setGenerateBusy] = useState(false)
+  const [generateError, setGenerateError] = useState('')
+  const [generateResults, setGenerateResults] = useState([])
+  const generateResultCounter = useRef(0)
+
+  const generateAssets = (assets ?? []).filter((asset) => asset.type === 'image' || asset.type === 'video')
+  const generatePersonas = agentConfig?.personas ?? []
 
   const syncHistoryCounts = () => {
     setHistoryCounts({
@@ -212,6 +238,80 @@ export function VideoEditor({ assets, onExport, brief }) {
       clips: [],
     }
     setTracks((prev) => [...prev, newTrack])
+  }
+
+  const toggleGenerateReference = (assetId) => {
+    setGenerateReferenceIds((current) => current.includes(assetId)
+      ? current.filter((id) => id !== assetId)
+      : [...current, assetId].slice(0, 2))
+  }
+
+  const generateVideo = async () => {
+    if (!agentConfig?.enabled || !agentConfig?.endpoint || !canUseAgentMode(agentConfig, 'video')) {
+      setGenerateError('Enable the video capability for your in-house AI in Integrations first.')
+      return
+    }
+    if (!generatePrompt.trim()) {
+      setGenerateError('Describe the scene, movement, camera, and mood you want to create.')
+      return
+    }
+
+    setGenerateBusy(true)
+    setGenerateError('')
+    try {
+      const references = generateAssets.filter((asset) => generateReferenceIds.includes(asset.id))
+      const persona = generatePersonas.find((item) => item.id === generatePersonaId) || null
+      const output = await runCreativeAgentJob({
+        agentConfig,
+        capability: 'video',
+        prompt: generatePrompt,
+        persona,
+        references,
+        settings: {
+          aspectRatio: generateAspectRatio,
+          durationSeconds: generateDuration,
+          quality: generateQuality,
+          mode: generateMode,
+          startFrameId: generateStartFrameId || null,
+          returnEditableMetadata: true,
+        },
+      })
+      setGenerateResults((current) => [{ ...output, id: `generation-${(generateResultCounter.current += 1)}` }, ...current])
+    } catch (error) {
+      setGenerateError(error.message)
+    } finally {
+      setGenerateBusy(false)
+    }
+  }
+
+  const saveGeneratedVideo = (result, media, index) => {
+    const asset = {
+      id: `asset_${Date.now()}`,
+      name: `${result.title || 'ai-video'}-${index + 1}.webm`,
+      type: media.kind === 'video' ? 'video' : 'image',
+      mime: media.mime || (media.kind === 'video' ? 'video/webm' : 'image/png'),
+      size: 0,
+      folderId: 'folder-root',
+      createdAt: new Date().toISOString(),
+      previewUrl: media.src,
+      summary: 'Generated by the in-house AI video studio',
+    }
+    onAddAsset?.(asset)
+    setStatusMessage(`Saved ${asset.name} to the workspace.`)
+  }
+
+  const addGeneratedVideoToTimeline = (result, media) => {
+    const asset = {
+      id: `generated-${Date.now()}`,
+      name: `${result.title || 'AI generated scene'}.webm`,
+      type: 'video',
+      mime: media.mime || 'video/webm',
+      previewUrl: media.src,
+    }
+    const targetTrack = tracks.find((track) => track.type === 'video')
+    if (!targetTrack) return
+    handleDropAssetToTrack(targetTrack.id, asset)
+    setStatusMessage('Added the generated scene to the video timeline.')
   }
 
   const handleRemoveTrack = (trackId) => {
@@ -847,7 +947,7 @@ export function VideoEditor({ assets, onExport, brief }) {
         </div>
 
         <div className="toolbar-groups">
-          {['media', 'transitions', 'effects', 'filters', 'text', 'audio'].map((tool) => (
+          {['generate', 'media', 'transitions', 'effects', 'filters', 'text', 'audio'].map((tool) => (
             <button
               key={tool}
               type="button"
@@ -862,6 +962,54 @@ export function VideoEditor({ assets, onExport, brief }) {
 
       <div className="editor-layout">
         <aside className="editor-panel">
+          {activeToolbar === 'generate' && (
+            <div className="tool-panel video-generation-panel">
+              <h3>Generate video</h3>
+              <p className="muted">Create a short scene with your in-house AI, then save it or add it to the timeline.</p>
+              <div className="video-generation-modes">
+                {GENERATE_MODES.map((item) => (
+                  <button key={item.key} type="button" className={generateMode === item.key ? 'active' : ''} onClick={() => setGenerateMode(item.key)}>
+                    <span>{item.icon}</span><strong>{item.label}</strong><small>{item.hint}</small>
+                  </button>
+                ))}
+              </div>
+              {generateMode === 'frame' && (
+                <label>Start frame
+                  <select value={generateStartFrameId} onChange={(event) => setGenerateStartFrameId(event.target.value)}>
+                    <option value="">Choose an image or video</option>
+                    {generateAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+                  </select>
+                </label>
+              )}
+              {generateMode === 'character' && (
+                <label>Character persona
+                  <select value={generatePersonaId} onChange={(event) => setGeneratePersonaId(event.target.value)}>
+                    <option value="">Choose a saved persona</option>
+                    {generatePersonas.map((persona) => <option key={persona.id} value={persona.id}>{persona.name}</option>)}
+                  </select>
+                </label>
+              )}
+              <label>Describe your video
+                <textarea rows="5" value={generatePrompt} onChange={(event) => setGeneratePrompt(event.target.value)} placeholder="A slow camera push toward a glowing product on a rainy city street..." />
+              </label>
+              <p className="video-generation-label">Visual references <small>Optional · select up to 2</small></p>
+              <div className="video-generation-references">
+                {generateAssets.map((asset) => (
+                  <button key={asset.id} type="button" className={generateReferenceIds.includes(asset.id) ? 'active' : ''} onClick={() => toggleGenerateReference(asset.id)}>
+                    {asset.previewUrl && asset.type === 'image' ? <img src={asset.previewUrl} alt="" /> : <span>{asset.type === 'video' ? 'VID' : 'IMG'}</span>}
+                    <strong>{asset.name}</strong>
+                  </button>
+                ))}
+              </div>
+              <div className="video-generation-settings">
+                <label>Ratio<select value={generateAspectRatio} onChange={(event) => setGenerateAspectRatio(event.target.value)}><option>16:9</option><option>9:16</option><option>1:1</option><option>4:5</option></select></label>
+                <label>Seconds<input type="number" min="2" max="30" value={generateDuration} onChange={(event) => setGenerateDuration(Number(event.target.value))} /></label>
+                <label>Quality<select value={generateQuality} onChange={(event) => setGenerateQuality(event.target.value)}><option value="draft">Draft</option><option value="standard">Standard</option><option value="high">High</option></select></label>
+              </div>
+              {generateError && <p className="rec-error">{generateError}</p>}
+              <button type="button" className="tool-button video-generate-button" disabled={generateBusy} onClick={generateVideo}>{generateBusy ? 'Generating...' : 'Generate scene'}</button>
+            </div>
+          )}
           {activeToolbar === 'media' && (
             <div className="tool-panel">
               <h3>Media</h3>
@@ -1039,6 +1187,22 @@ export function VideoEditor({ assets, onExport, brief }) {
         </aside>
 
         <div className="editor-center">
+          {generateResults.length > 0 && (
+            <div className="video-generation-results">
+              {generateResults.map((result) => (
+                <article key={result.id} className="video-generation-result">
+                  <div><strong>{result.title || 'Generated scene'}</strong><span>{result.text || 'Ready to add to your workspace or timeline.'}</span></div>
+                  {result.media.map((media, index) => (
+                    <div className="video-generation-media" key={`${media.kind}-${index}`}>
+                      {media.kind === 'video' && <video src={media.src} controls playsInline />}
+                      {media.kind === 'image' && <img src={media.src} alt={result.title || 'Generated scene'} />}
+                      <div><button type="button" className="toolbar-btn" onClick={() => saveGeneratedVideo(result, media, index)}>Save to workspace</button>{media.kind === 'video' && <button type="button" className="toolbar-btn active" onClick={() => addGeneratedVideoToTimeline(result, media)}>Add to timeline</button>}</div>
+                    </div>
+                  ))}
+                </article>
+              ))}
+            </div>
+          )}
           <div className="preview-area">
             {previewSrc && previewType === 'video' ? (
               <video
