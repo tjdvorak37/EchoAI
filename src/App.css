@@ -231,6 +231,53 @@ main {
   background: linear-gradient(180deg, #f8f7ff, #ffffff);
 }
 
+.create-hub-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.create-hub-heading h2 {
+  margin-top: 0.25rem;
+}
+
+.create-hub-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.create-hub-actions button {
+  min-height: 44px;
+}
+
+.create-hub-advanced {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #dbe3ee;
+}
+
+.create-hub-advanced-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.create-hub-advanced-heading h3 {
+  margin: 0.25rem 0 0;
+}
+
+.create-hub-advanced-heading > span {
+  max-width: 480px;
+  color: #64748b;
+  font-size: 0.88rem;
+  text-align: right;
+}
+
 .creative-brief-layout {
   margin-top: 1rem;
   display: grid;
@@ -1276,6 +1323,23 @@ main {
 
   .top-actions {
     width: 100%;
+  }
+
+  .create-hub-heading,
+  .create-hub-advanced-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .create-hub-actions {
+    justify-content: stretch;
+  }
+
+  .create-hub-actions button,
+  .create-hub-advanced-heading > span {
+    width: 100%;
+    max-width: none;
+    text-align: left;
   }
 
   .listening-sentiment-row {

@@ -1,20 +1,45 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-labelledby="title description">
   <title id="title">EchoAI mascot</title>
-  <description id="description">A cheerful coral character with a blue echo-wave ear and yellow creative spark.</description>
-  <path fill="#ffd23f" d="m109 19 8-15 6 16 16 5-14 9 1 17-13-11-16 6 6-16-10-13z"/>
+  <description id="description">A cheerful plush coral character with colorful echo waves, a creative spark, and a warm dimensional smile.</description>
+  <defs>
+    <linearGradient id="bodyGradient" x1="25" y1="25" x2="150" y2="165" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff9a83"/>
+      <stop offset=".42" stop-color="#ff6b82"/>
+      <stop offset="1" stop-color="#d94691"/>
+    </linearGradient>
+    <linearGradient id="earGradient" x1="140" y1="70" x2="175" y2="125" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6e8cff"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <radialGradient id="shineGradient" cx="0" cy="0" r="1" gradientTransform="translate(75 55) rotate(56) scale(54 74)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity=".68"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="plush" x="-12%" y="-12%" width="124%" height="124%">
+      <feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="2" seed="8" result="fuzz"/>
+      <feDisplacementMap in="SourceGraphic" in2="fuzz" scale="1.4"/>
+      <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#17223b" flood-opacity=".2"/>
+    </filter>
+  </defs>
+  <g filter="url(#plush)">
+  <path fill="#ffe066" d="m109 19 8-15 6 16 16 5-14 9 1 17-13-11-16 6 6-16-10-13z"/>
   <path fill="#2364d8" d="M45 57c-20 9-32 29-32 52 0 10 2 19 6 27l16-8a46 46 0 0 1 17-58z"/>
-  <path fill="#83b6ff" d="M34 68A57 57 0 0 0 25 120l13-4a44 44 0 0 1 7-39z"/>
-  <path fill="#ff6b5e" d="M48 41c17-17 50-21 76-7 27 15 43 48 36 79-7 32-35 55-68 56-34 1-64-20-73-51-8-28 4-58 29-77z"/>
-  <path fill="#ff8a76" d="M54 49c19-14 46-14 67-2 9 5 17 12 23 20-18-10-43-12-62-5-18 7-33 21-42 37-1-20 4-38 14-50z" opacity=".72"/>
+  <path fill="#40d9d0" d="M34 68A57 57 0 0 0 25 120l13-4a44 44 0 0 1 7-39z"/>
+  <path fill="url(#bodyGradient)" d="M48 41c17-17 50-21 76-7 27 15 43 48 36 79-7 32-35 55-68 56-34 1-64-20-73-51-8-28 4-58 29-77z"/>
+  <path fill="url(#shineGradient)" d="M54 49c19-14 46-14 67-2 9 5 17 12 23 20-18-10-43-12-62-5-18 7-33 21-42 37-1-20 4-38 14-50z"/>
   <ellipse cx="66" cy="103" fill="#fff" rx="14" ry="18"/>
   <ellipse cx="116" cy="103" fill="#fff" rx="14" ry="18"/>
-  <circle cx="69" cy="106" r="7" fill="#17223b"/>
-  <circle cx="113" cy="106" r="7" fill="#17223b"/>
-  <circle cx="72" cy="102" r="2.5" fill="#fff"/>
-  <circle cx="116" cy="102" r="2.5" fill="#fff"/>
+  <g>
+    <circle cx="69" cy="106" r="7" fill="#17223b"/>
+    <circle cx="113" cy="106" r="7" fill="#17223b"/>
+    <circle cx="72" cy="102" r="2.5" fill="#fff"/>
+    <circle cx="116" cy="102" r="2.5" fill="#fff"/>
+    <animateTransform attributeName="transform" type="scale" values="1;1;1;1 0.1;1 1;1" keyTimes="0;.72;.78;.8;.83;1" dur="6s" repeatCount="indefinite"/>
+  </g>
   <path fill="none" stroke="#17223b" stroke-linecap="round" stroke-width="7" d="M72 133c11 10 27 10 38 0"/>
-  <circle cx="46" cy="124" r="8" fill="#ffb2a6" opacity=".85"/>
-  <circle cx="136" cy="124" r="8" fill="#ffb2a6" opacity=".85"/>
-  <path fill="#2364d8" d="M149 70c15 2 25 15 24 30-1 13-10 24-23 27l-4-13c8-2 13-8 13-16 0-7-5-13-13-15z"/>
-  <path fill="#83b6ff" d="M151 84c7 2 11 8 10 15 0 6-4 11-10 13l-3-9c3-1 5-3 5-6s-2-5-5-5z"/>
+  <circle cx="46" cy="124" r="8" fill="#ffcabd" opacity=".9"/>
+  <circle cx="136" cy="124" r="8" fill="#ffcabd" opacity=".9"/>
+  <path fill="url(#earGradient)" d="M149 70c15 2 25 15 24 30-1 13-10 24-23 27l-4-13c8-2 13-8 13-16 0-7-5-13-13-15z"/>
+  <path fill="#40d9d0" d="M151 84c7 2 11 8 10 15 0 6-4 11-10 13l-3-9c3-1 5-3 5-6s-2-5-5-5z"/>
+  </g>
 </svg>
