@@ -113,7 +113,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
   // AI video generation panel — a dedicated screen toggled from the toolbar,
   // separate from timeline editing state.
-  const [generateMode, setGenerateMode] = useState('frame')
+  const [generateMode, setGenerateMode] = useState('text')
   const [generateStartFrameId, setGenerateStartFrameId] = useState('')
   const [generatePersonaId, setGeneratePersonaId] = useState('')
   const [generatePrompt, setGeneratePrompt] = useState('')
@@ -282,6 +282,11 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
     } finally {
       setGenerateBusy(false)
     }
+  }
+
+  const openGeneratePanel = () => {
+    setActiveToolbar('generate')
+    if (!generatePrompt.trim()) setGenerateMode('text')
   }
 
   const saveGeneratedVideo = (result, media, index) => {
@@ -986,6 +991,9 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           <button type="button" className="toolbar-btn" onClick={exportTimeline} disabled={isExporting}>
             {isExporting ? `Exporting ${exportProgress}%` : '⬇ Export video'}
           </button>
+          <button type="button" className="toolbar-btn video-toolbar-generate" onClick={generateVideo} disabled={generateBusy}>
+            {generateBusy ? 'Generating...' : '✦ Generate'}
+          </button>
           {statusMessage && <span className="muted">{statusMessage}</span>}
         </div>
 
@@ -1009,6 +1017,9 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             <div className="tool-panel video-generation-panel">
               <h3>Generate video</h3>
               <p className="muted">Create a short scene with your in-house AI, then save it or add it to the timeline.</p>
+              {!agentConfig?.enabled || !agentConfig?.endpoint ? (
+                <p className="video-generation-warning">Connect and enable your in-house AI endpoint in Integrations before generating video.</p>
+              ) : null}
               <div className="video-generation-modes">
                 {GENERATE_MODES.map((item) => (
                   <button key={item.key} type="button" className={generateMode === item.key ? 'active' : ''} onClick={() => setGenerateMode(item.key)}>
@@ -1298,7 +1309,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                       ? 'Re-upload this file to enable playback'
                       : 'Add a start frame or describe your video to begin'}
                   </small>
-                  {!activeVisualClip && <button type="button" className="preview-generate-button" onClick={() => setActiveToolbar('generate')}>✦ Go generate <span>›</span></button>}
+                  {!activeVisualClip && <button type="button" className="preview-generate-button" onClick={openGeneratePanel}>✦ Go generate <span>›</span></button>}
                 </div>
               )}
 
