@@ -76,6 +76,12 @@
   border-color: #1d4ed8;
 }
 
+.video-toolbar-generate {
+  border-color: #ec4899;
+  color: #f9a8d4;
+  background: rgba(157, 23, 77, 0.28);
+}
+
 .time-display {
   font-weight: 600;
   min-width: 100px;
@@ -339,6 +345,17 @@
   color: #fff;
   border-color: #ec4899;
   background: linear-gradient(90deg, #be185d, #9333ea);
+}
+
+.video-generation-warning {
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 0.45rem;
+  color: #fde68a;
+  background: rgba(120, 53, 15, 0.24);
+  font-size: 0.78rem;
+  line-height: 1.4;
 }
 
 .video-generation-results {
