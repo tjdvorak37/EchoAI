@@ -581,6 +581,18 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
   const timelinePixelsPerSecond = 40 * zoom
   const totalPixels = duration * timelinePixelsPerSecond
+  const timelineLabelWidth = 150
+
+  const setTimelineTimeFromPointer = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const scrollLeft = event.currentTarget.scrollLeft || 0
+    const contentX = event.clientX - rect.left + scrollLeft - timelineLabelWidth
+    setPlaybackTime(Math.max(0, Math.min(duration, contentX / timelinePixelsPerSecond)))
+  }
+
+  const scrubTimeline = (event) => {
+    if (event.buttons === 1) setTimelineTimeFromPointer(event)
+  }
 
   const assetById = useMemo(() => {
     const map = new Map()
@@ -1240,7 +1252,12 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             </div>
           )}
           <div className="preview-area">
-            {previewSrc && previewType === 'video' ? (
+            <div className="preview-stage-shell">
+              <div className="preview-stage-toolbar">
+                <span>{activeVisualClip?.assetName || 'Video canvas'}</span>
+                <span>{generateAspectRatio} · {Math.floor(playbackTime)}s</span>
+              </div>
+              {previewSrc && previewType === 'video' ? (
               <video
                 ref={videoRef}
                 src={previewSrc}
@@ -1261,7 +1278,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                 onEnded={() => setIsPlaying(false)}
                 playsInline
               />
-            ) : previewSrc && previewType === 'image' ? (
+              ) : previewSrc && previewType === 'image' ? (
               <img
                 src={previewSrc}
                 className="preview-image"
@@ -1272,54 +1289,57 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                   transform: `scale(${activeTransition.scale}) translateX(${activeTransition.offset * 100}%)`,
                 }}
               />
-            ) : (
-              <div className="preview-placeholder">
-                <p>{activeVisualClip ? 'No preview available' : 'Preview'}</p>
-                <small>
-                  {activeVisualClip
-                    ? 'Re-upload this file to enable playback'
-                    : 'Drop a file on a track, then press play'}
-                </small>
-              </div>
-            )}
-
-            {activeTextClips.map((clip) => {
-              const overlayTransition = transitionStateAt(clip, playbackTime - clip.startTime)
-              return (
-                <div
-                  key={`overlay-${clip.id}`}
-                  className="preview-text-overlay"
-                  style={{
-                    position: 'absolute',
-                    left: '50%',
-                    top: `${clip.y}%`,
-                    transform: 'translate(-50%, -50%)',
-                    fontSize: `${clip.fontSize * 0.5}px`,
-                    fontWeight: clip.weight,
-                    color: clip.color,
-                    background: clip.background,
-                    padding: clip.background === 'transparent' ? 0 : '0.35rem 0.9rem',
-                    borderRadius: '10px',
-                    opacity: overlayTransition.opacity,
-                    textShadow: '0 2px 12px rgba(2, 6, 23, 0.6)',
-                    pointerEvents: 'none',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {clip.value}
+              ) : (
+                <div className="preview-placeholder">
+                  <div className="preview-empty-icon">✦</div>
+                  <p>{activeVisualClip ? 'Media unavailable' : 'Nothing here yet'}</p>
+                  <small>
+                    {activeVisualClip
+                      ? 'Re-upload this file to enable playback'
+                      : 'Add a start frame or describe your video to begin'}
+                  </small>
+                  {!activeVisualClip && <button type="button" className="preview-generate-button" onClick={() => setActiveToolbar('generate')}>✦ Go generate <span>›</span></button>}
                 </div>
-              )
-            })}
+              )}
+
+              {activeTextClips.map((clip) => {
+                const overlayTransition = transitionStateAt(clip, playbackTime - clip.startTime)
+                return (
+                  <div
+                    key={`overlay-${clip.id}`}
+                    className="preview-text-overlay"
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      top: `${clip.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      fontSize: `${clip.fontSize * 0.5}px`,
+                      fontWeight: clip.weight,
+                      color: clip.color,
+                      background: clip.background,
+                      padding: clip.background === 'transparent' ? 0 : '0.35rem 0.9rem',
+                      borderRadius: '10px',
+                      opacity: overlayTransition.opacity,
+                      textShadow: '0 2px 12px rgba(2, 6, 23, 0.6)',
+                      pointerEvents: 'none',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {clip.value}
+                  </div>
+                )
+              })}
+            </div>
           </div>
 
           <div className="timeline-container" ref={timelineRef}>
-            <div className="timeline-header">
-              <div className="timeline-ruler">
+            <div className="timeline-header" onPointerDown={setTimelineTimeFromPointer} onPointerMove={scrubTimeline}>
+              <div className="timeline-ruler" style={{ minWidth: `${timelineLabelWidth + totalPixels}px` }}>
                 {Array.from({ length: duration + 1 }).map((_, i) => (
                   <div
                     key={i}
                     className="timeline-tick"
-                    style={{ left: `${i * timelinePixelsPerSecond}px` }}
+                    style={{ left: `${timelineLabelWidth + i * timelinePixelsPerSecond}px` }}
                   >
                     {i}s
                   </div>
@@ -1372,7 +1392,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                         }}
                         onDragEnd={(event) => {
                           if (event.clientX) {
-                            const offset = event.clientX - timelineRef.current.getBoundingClientRect().left
+                            const offset = event.clientX - timelineRef.current.getBoundingClientRect().left - timelineLabelWidth
                             const newTime = snapTime(offset / timelinePixelsPerSecond)
                             commitHistory()
                             handleMoveClip(track.id, clip.id, newTime)
@@ -1418,7 +1438,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
             <div
               className="playhead"
-              style={{ left: `${playbackTime * timelinePixelsPerSecond}px` }}
+              style={{ left: `${timelineLabelWidth + playbackTime * timelinePixelsPerSecond}px` }}
             />
           </div>
         </div>
