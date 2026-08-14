@@ -559,7 +559,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   }, [assets])
 
   const clipSource = useCallback(
-    (clip) => clip?.previewUrl ?? assetById.get(clip?.assetId)?.previewUrl ?? '',
+    (clip) => clip?.previewUrl || assetById.get(clip?.assetId)?.previewUrl || '',
     [assetById],
   )
 
@@ -587,7 +587,8 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
   const previewAsset = activeVisualClip ? assetById.get(activeVisualClip.assetId) ?? null : null
   const previewSrc = clipSource(activeVisualClip)
-  const previewType = previewAsset?.type ?? (activeVisualClip?.previewUrl ? 'video' : '')
+  const previewType = previewAsset?.type
+    ?? (activeVisualClip?.previewUrl ? 'video' : '')
 
   const videoRef = useRef(null)
 
@@ -1217,6 +1218,11 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                     ? `inset(0 ${activeTransition.clip * 100}% 0 0)`
                     : 'none',
                 }}
+                onLoadedMetadata={(event) => {
+                  const localTime = playbackTime - (activeVisualClip?.startTime ?? 0) + (activeVisualClip?.trim?.start ?? 0)
+                  event.currentTarget.currentTime = Math.max(0, localTime)
+                }}
+                onError={() => setStatusMessage('This video could not be decoded by the browser. Try re-uploading it or use a current Chromium browser.')}
                 onEnded={() => setIsPlaying(false)}
                 playsInline
               />
@@ -1321,7 +1327,10 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                           left: `${clip.startTime * timelinePixelsPerSecond}px`,
                           width: `${clip.duration * timelinePixelsPerSecond}px`,
                         }}
-                        onClick={() => setSelectedClip(clip)}
+                        onClick={() => {
+                          setSelectedClip(clip)
+                          setPlaybackTime(clip.startTime)
+                        }}
                         draggable
                         onDragStart={(event) => {
                           event.dataTransfer.effectAllowed = 'move'
