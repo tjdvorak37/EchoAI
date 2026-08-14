@@ -1,3 +1,5 @@
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
+
 const parseResponsePayload = async (response) => {
   const contentType = response.headers.get('content-type') || ''
 
@@ -80,26 +82,46 @@ export const runUserAiAgent = async ({ agentConfig, mode, payload, prompt, perso
     return { usedAgent: false, payload: null }
   }
 
-  const response = await fetch(agentConfig.endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(agentConfig.apiKey ? { Authorization: `Bearer ${agentConfig.apiKey}` } : {}),
-    },
-    body: JSON.stringify({
-      contractVersion: '2.0',
-      requestId: createRequestId(),
-      mode,
-      capability: resolveCapability(mode),
-      model: agentConfig.model || 'default',
-      agentName: agentConfig.name || 'My AI Agent',
-      capabilities: agentConfig.capabilities || [],
-      routing: agentConfig.routing || { strategy: 'best_quality', allowFallback: true },
-      persona: persona || null,
-      output: output || null,
-      ...payload,
-    }),
-  })
+  const requestBody = {
+    contractVersion: '2.0',
+    requestId: createRequestId(),
+    mode,
+    capability: resolveCapability(mode),
+    model: agentConfig.model || 'default',
+    agentName: agentConfig.name || 'My AI Agent',
+    capabilities: agentConfig.capabilities || [],
+    routing: agentConfig.routing || { strategy: 'best_quality', allowFallback: true },
+    persona: persona || null,
+    output: output || null,
+    ...payload,
+  }
+
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase.functions.invoke('inhouse-ai', { body: requestBody })
+    if (error) throw new Error(error.message)
+    return {
+      usedAgent: true,
+      payload: data,
+      suggestions: normalizeSuggestions(data, prompt || payload?.prompt || ''),
+    }
+  }
+
+  let response
+  try {
+    response = await fetch(agentConfig.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(agentConfig.apiKey ? { Authorization: `Bearer ${agentConfig.apiKey}` } : {}),
+      },
+      body: JSON.stringify(requestBody),
+    })
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error('The AI endpoint could not be reached from this browser. Check HTTPS and CORS. The endpoint must allow this EchoAI origin and respond to OPTIONS preflight requests; a provider website URL cannot be used directly.', { cause: error })
+    }
+    throw error
+  }
 
   if (!response.ok) {
     throw new Error(`AI agent sync failed (${response.status})`)

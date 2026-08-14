@@ -35,7 +35,7 @@ import { CLOUD_PROVIDERS, cloudDriveService, toLinkedAsset } from './services/cl
 import { getPlan, getStorageMb } from './data/plans'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
-import { isSupabaseConfigured } from './lib/supabase'
+import { isSupabaseConfigured, supabase } from './lib/supabase'
 import echoMascot from './assets/echo-mascot.svg'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
 
@@ -974,6 +974,21 @@ function App() {
       return
     }
 
+    let endpointUrl
+    try {
+      endpointUrl = new URL(endpoint)
+    } catch {
+      setAiAgentFeedbackTone('error')
+      setAiAgentFeedback('Use a complete HTTPS API endpoint, for example https://your-domain.com/echoai-agent.')
+      return
+    }
+
+    if (endpointUrl.protocol !== 'https:' && endpointUrl.hostname !== 'localhost') {
+      setAiAgentFeedbackTone('error')
+      setAiAgentFeedback('Use an HTTPS API endpoint. Do not paste a normal OpenArt, ChatGPT, or dashboard webpage URL; EchoAI needs an endpoint that accepts POST requests.')
+      return
+    }
+
     setAiAgentTesting(true)
     setAiAgentFeedback('')
 
@@ -990,13 +1005,7 @@ function App() {
         enabled: true,
       }
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(testConfig.apiKey ? { Authorization: `Bearer ${testConfig.apiKey}` } : {}),
-        },
-        body: JSON.stringify({
+      const testPayload = {
           contractVersion: '2.0',
           mode: 'test',
           capability: 'test',
@@ -1005,18 +1014,32 @@ function App() {
           capabilities: testConfig.capabilities,
           routing: testConfig.routing,
           prompt: 'EchoAI connection test',
-        }),
-      })
+      }
 
-      if (!response.ok) {
-        throw new Error(`AI agent test failed (${response.status})`)
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase.functions.invoke('inhouse-ai', { body: testPayload })
+        if (error) throw new Error(error.message)
+        if (data?.error) throw new Error(data.error)
+      } else {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(testConfig.apiKey ? { Authorization: `Bearer ${testConfig.apiKey}` } : {}),
+          },
+          body: JSON.stringify(testPayload),
+        })
+        if (!response.ok) throw new Error(`AI agent test failed (${response.status})`)
       }
 
       setAiAgentFeedbackTone('success')
       setAiAgentFeedback('AI agent connection verified successfully.')
     } catch (error) {
       setAiAgentFeedbackTone('error')
-      setAiAgentFeedback(error.message)
+      const message = error instanceof TypeError
+        ? 'The browser blocked this connection, usually because of CORS. Your endpoint must allow POST and OPTIONS requests from this EchoAI site. A provider website URL such as openart.ai/home cannot be connected directly.'
+        : error.message
+      setAiAgentFeedback(message)
     } finally {
       setAiAgentTesting(false)
     }
@@ -3446,6 +3469,12 @@ function App() {
             <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <h3>In-house AI engine</h3>
               <p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p>
+              <div className="agent-connection-note">
+                <strong>How connection works</strong>
+                <p>EchoAI connects to an API bridge, not a provider&apos;s public website. OpenArt, ChatGPT, and similar dashboard URLs cannot be pasted here because browsers block cross-site requests and those pages do not implement EchoAI&apos;s API contract.</p>
+                <p>Your bridge should call the provider server-side, allow this app&apos;s origin with CORS, accept <code>POST</code> plus <code>OPTIONS</code>, and return the version 2 response shown below.</p>
+                <a href="https://github.com/tjdvorak37/EchoAI/blob/main/docs/INHOUSE_AI_AGENT.md" target="_blank" rel="noreferrer">View the endpoint contract</a>
+              </div>
               <div className="agent-setup-guide">
                 <div className="agent-guide-card hero">
                   <p className="section-label">Quick setup</p>

@@ -1008,6 +1008,27 @@ main {
   gap: 0.55rem;
 }
 
+.agent-connection-note {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border-left: 4px solid #ec4899;
+  border-radius: 0.6rem;
+  color: #475569;
+  background: linear-gradient(135deg, #fff1f8, #f5f8ff);
+}
+
+.agent-connection-note p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.agent-connection-note a {
+  color: #7c3aed;
+  font-weight: 700;
+}
+
 .agent-capability-card {
   display: flex;
   align-items: flex-start;
