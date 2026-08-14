@@ -319,11 +319,18 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   }
 
   const handleDropAssetToTrack = (trackId, asset) => {
+    const source = asset.previewUrl || asset.url || ''
+    if (!source) {
+      setStatusMessage(`${asset.name} has no playable preview. Re-upload the original file first.`)
+      return
+    }
+
     const track = tracks.find((item) => item.id === trackId)
     const newClip = {
       id: `clip-${(clipCounter.current += 1)}`,
       assetId: asset.id,
       assetName: asset.name,
+      previewUrl: source,
       startTime: playbackTime,
       duration: asset.type === 'video' ? 3 : 5,
       trim: { start: 0, end: asset.type === 'video' ? 3 : 5 },
@@ -356,6 +363,29 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
     handleDropAssetToTrack(targetTrack.id, asset)
     setStatusMessage(`Added ${asset.name} at ${playbackTime.toFixed(1)}s.`)
+  }
+
+  const handleUploadVideo = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('video/')) {
+      setStatusMessage('Choose an MP4 or another supported video file.')
+      event.target.value = ''
+      return
+    }
+
+    const asset = {
+      id: `video-upload-${Date.now()}`,
+      name: file.name,
+      type: 'video',
+      mime: file.type,
+      previewUrl: URL.createObjectURL(file),
+      size: file.size,
+      summary: 'Uploaded directly to Video Studio',
+    }
+    onAddAsset?.(asset)
+    addAssetAtPlayhead(asset)
+    event.target.value = ''
   }
 
   const updateClip = (clipId, patch) => {
@@ -1015,11 +1045,16 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             <div className="tool-panel">
               <h3>Media</h3>
               <p className="muted">Tap an image, video, or audio file to add it at the playhead.</p>
+              <label className="video-direct-upload">
+                <strong>Upload video to timeline</strong>
+                <span>Choose a local MP4 or supported video file</span>
+                <input type="file" accept="video/*" onChange={handleUploadVideo} />
+              </label>
               <div className="video-media-list">
                 {(assets ?? []).filter((asset) => asset.type === 'image' || asset.type === 'video' || asset.mime?.startsWith('audio/')).map((asset) => (
-                  <button key={asset.id} type="button" className="video-media-item" onClick={() => addAssetAtPlayhead(asset)}>
+                  <button key={asset.id} type="button" className="video-media-item" disabled={!asset.previewUrl} onClick={() => addAssetAtPlayhead(asset)}>
                     {asset.previewUrl && asset.type === 'image' ? <img src={asset.previewUrl} alt="" /> : <span>{asset.type === 'video' ? 'VID' : asset.mime?.startsWith('audio/') ? 'AUD' : 'IMG'}</span>}
-                    <strong>{asset.name}</strong>
+                    <strong>{asset.name}<small>{asset.previewUrl ? 'Tap to add' : 'Re-upload required'}</small></strong>
                   </button>
                 ))}
                 {!assets?.some((asset) => asset.type === 'image' || asset.type === 'video' || asset.mime?.startsWith('audio/')) && (

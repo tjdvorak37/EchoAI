@@ -190,9 +190,44 @@
 }
 
 .video-media-item strong {
+  display: grid;
+  gap: 0.15rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.video-media-item small {
+  color: #7d8796;
+  font-size: 0.68rem;
+  font-weight: 400;
+}
+
+.video-media-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.video-direct-upload {
+  min-height: 76px;
+  display: grid;
+  align-content: center;
+  gap: 0.2rem;
+  padding: 0.75rem;
+  border: 1px dashed #ec4899;
+  border-radius: 0.5rem;
+  color: #fbcfe8;
+  background: rgba(157, 23, 77, 0.2);
+  cursor: pointer;
+}
+
+.video-direct-upload span {
+  color: #a0a0a0;
+  font-size: 0.75rem;
+}
+
+.video-direct-upload input {
+  display: none;
 }
 
 .video-generation-panel {
