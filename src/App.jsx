@@ -30,10 +30,14 @@ import {
 } from './data/demoData'
 import { authService } from './services/authService'
 import { billingService } from './services/billingService'
+import { brandService, createEmptyBrandKit, loadBrandFonts, MAX_LOGO_BYTES } from './services/brandService'
+import { CLOUD_PROVIDERS, cloudDriveService, toLinkedAsset } from './services/cloudDriveService'
 import { getPlan, getStorageMb } from './data/plans'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
 import { isSupabaseConfigured } from './lib/supabase'
+import echoMascot from './assets/echo-mascot.svg'
+import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
 
 const VideoEditor = lazy(() => import('./components/VideoEditor').then((module) => ({ default: module.VideoEditor })))
 const PhotoEditor = lazy(() => import('./components/PhotoEditor').then((module) => ({ default: module.PhotoEditor })))
@@ -42,6 +46,9 @@ const LandingPage = lazy(() => import('./components/LandingPage').then((module) 
 const PurchasePage = lazy(() => import('./components/PurchasePage').then((module) => ({ default: module.PurchasePage })))
 const AdminPanel = lazy(() => import('./components/AdminPanel').then((module) => ({ default: module.AdminPanel })))
 const FinancePanel = lazy(() => import('./components/FinancePanel').then((module) => ({ default: module.FinancePanel })))
+const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((module) => ({ default: module.CreativeBrief })))
+const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
+const InhouseAiStudio = lazy(() => import('./components/InhouseAiStudio').then((module) => ({ default: module.InhouseAiStudio })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
@@ -69,10 +76,14 @@ const createDefaultAiAgentConfig = () => ({
   endpoint: '',
   apiKey: '',
   model: '',
-  capabilities: ['message', 'image', 'video'],
+  capabilities: DEFAULT_AGENT_CAPABILITIES,
+  personas: [],
+  routing: { strategy: 'best_quality', allowFallback: true },
+  negativePrompt: '',
+  defaultStyle: '',
   lastSyncedAt: '',
   status: 'not connected',
-  message: 'Connect a personal AI agent endpoint to personalize copy and image generation.',
+  message: 'Connect an in-house AI endpoint for writing, documents, images, characters, video, audio, and media analysis.',
 })
 
 const hydrateWorkspaceAssets = (assets) =>
@@ -89,23 +100,7 @@ const hydrateWorkspaceAssets = (assets) =>
     return { ...asset, previewUrl: seededAsset.previewUrl }
   })
 
-const AI_AGENT_CAPABILITIES = [
-  {
-    key: 'message',
-    title: 'Message assistance',
-    description: 'Captions, replies, post copy, and campaign wording.',
-  },
-  {
-    key: 'image',
-    title: 'Image assistance',
-    description: 'Photo prompts, creative directions, and generated concepts.',
-  },
-  {
-    key: 'video',
-    title: 'Video assistance',
-    description: 'Scripts, scene ideas, hooks, and edit suggestions.',
-  },
-]
+const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 
 function App() {
   const [authView, setAuthView] = useState(() =>
@@ -131,6 +126,18 @@ function App() {
   const [mfaBusy, setMfaBusy] = useState(false)
   const [recoveryMode, setRecoveryMode] = useState(false)
   const [recoveryCodeInput, setRecoveryCodeInput] = useState('')
+  const [brandKit, setBrandKit] = useState(createEmptyBrandKit)
+  const [brandDraft, setBrandDraft] = useState(createEmptyBrandKit)
+  const [brandBusy, setBrandBusy] = useState(false)
+  const [brandNotice, setBrandNotice] = useState('')
+  const [brandError, setBrandError] = useState('')
+  const [cloudConnections, setCloudConnections] = useState([])
+  const [cloudProvider, setCloudProvider] = useState('')
+  const [cloudItems, setCloudItems] = useState([])
+  const [cloudPath, setCloudPath] = useState([])
+  const [cloudSearch, setCloudSearch] = useState('')
+  const [cloudBusy, setCloudBusy] = useState(false)
+  const [cloudError, setCloudError] = useState('')
   const [pendingEmail, setPendingEmail] = useState('')
   const [session, setSession] = useState(null)
 
@@ -180,6 +187,7 @@ function App() {
   const [aiInput, setAiInput] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState([])
   const [aiLoading, setAiLoading] = useState(false)
+  const [creativeProject, setCreativeProject] = useState(null)
   const [aiAgentConfig, setAiAgentConfig] = useState(() => createDefaultAiAgentConfig())
   const [aiAgentDraft, setAiAgentDraft] = useState(() => createDefaultAiAgentConfig())
   const [aiAgentSaving, setAiAgentSaving] = useState(false)
@@ -193,7 +201,7 @@ function App() {
   const [newFolderName, setNewFolderName] = useState('')
   const [editingItem, setEditingItem] = useState(null)
   const [editingName, setEditingName] = useState('')
-  const [isAssetPanelOpen, setIsAssetPanelOpen] = useState(true)
+  const [isAssetPanelOpen, setIsAssetPanelOpen] = useState(() => window.innerWidth > 768)
   const [drawerDragActive, setDrawerDragActive] = useState(false)
   const [quotaEditingUserId, setQuotaEditingUserId] = useState('')
   const [quotaDraftMb, setQuotaDraftMb] = useState('2048')
@@ -208,6 +216,7 @@ function App() {
   const [refunds, setRefunds] = useState(refundsSeed)
   const [financialTasks, setFinancialTasks] = useState(financialTasksSeed)
   const [showPurchase, setShowPurchase] = useState(false)
+  const [purchasePlan, setPurchasePlan] = useState('storage_pro')
   // Stripe sends the buyer back here after checkout; they still need a login.
   const [checkoutReturn] = useState(
     () => new URLSearchParams(window.location.search).get('checkout') || '',
@@ -362,8 +371,12 @@ function App() {
     [repostQueue],
   )
 
+  // Linked cloud files live in the customer's own drive, so they cost no quota.
   const storageUsedMb = useMemo(
-    () => workspaceAssets.reduce((sum, asset) => sum + asset.size / 1024 / 1024, 0),
+    () =>
+      workspaceAssets
+        .filter((asset) => !asset.linked)
+        .reduce((sum, asset) => sum + asset.size / 1024 / 1024, 0),
     [workspaceAssets],
   )
 
@@ -548,6 +561,178 @@ function App() {
     }
   }
 
+  const loadCloudConnections = async () => {
+    if (!isSupabaseConfigured) return
+
+    try {
+      setCloudConnections(await cloudDriveService.listConnections())
+    } catch (error) {
+      setCloudError(error.message)
+    }
+  }
+
+  const browseCloud = async ({ provider, folderId = '', search = '', label = '' }) => {
+    setCloudError('')
+    setCloudBusy(true)
+    setCloudProvider(provider)
+
+    try {
+      const items = await cloudDriveService.listFiles({ provider, folderId, search })
+      setCloudItems(items)
+
+      if (search) {
+        setCloudPath([{ id: '', label: `Search: ${search}` }])
+      } else if (!folderId) {
+        setCloudPath([])
+      } else {
+        setCloudPath((prev) => [...prev, { id: folderId, label }])
+      }
+    } catch (error) {
+      setCloudError(
+        error.message === 'reauth_required'
+          ? 'That connection expired. Reconnect the provider to continue.'
+          : error.message === 'not_connected'
+            ? 'Connect this provider first.'
+            : error.message,
+      )
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  // Adds a pointer to the file. Nothing is copied, so the quota is untouched.
+  const linkCloudFile = (item) => {
+    const asset = toLinkedAsset({ item, provider: cloudProvider, folderId: selectedFolderId })
+
+    if (workspaceAssets.some((existing) => existing.id === asset.id)) {
+      setCloudError(`${item.name} is already in this workspace.`)
+      return
+    }
+
+    setWorkspaceAssets((prev) => [asset, ...prev])
+    setCloudError('')
+  }
+
+  const handleDisconnectCloud = async (provider) => {
+    try {
+      await cloudDriveService.disconnect(provider)
+      setCloudConnections((prev) => prev.filter((entry) => entry.provider !== provider))
+      if (cloudProvider === provider) {
+        setCloudItems([])
+        setCloudProvider('')
+      }
+    } catch (error) {
+      setCloudError(error.message)
+    }
+  }
+
+  const loadBrandKit = async () => {
+    setBrandError('')
+
+    try {
+      const kit = await brandService.getBrandKit()
+      setBrandKit(kit)
+      setBrandDraft(kit)
+      await loadBrandFonts(kit.fonts)
+    } catch (error) {
+      setBrandError(error.message)
+    }
+  }
+
+  const handleSaveBrandKit = async () => {
+    setBrandError('')
+    setBrandNotice('')
+    setBrandBusy(true)
+
+    try {
+      const saved = await brandService.saveBrandKit(brandDraft)
+      setBrandKit(saved)
+      setBrandDraft(saved)
+      await loadBrandFonts(saved.fonts)
+      setBrandNotice('Brand kit saved. It now applies across the editors.')
+    } catch (error) {
+      setBrandError(error.message)
+    } finally {
+      setBrandBusy(false)
+    }
+  }
+
+  const addBrandColor = () => {
+    setBrandDraft((prev) => ({
+      ...prev,
+      colors: [
+        ...prev.colors,
+        { id: `color-${prev.colors.length + 1}-${prev.colors.length}`, label: 'New colour', value: '#3b82f6' },
+      ],
+    }))
+  }
+
+  const updateBrandColor = (id, patch) => {
+    setBrandDraft((prev) => ({
+      ...prev,
+      colors: prev.colors.map((color) => (color.id === id ? { ...color, ...patch } : color)),
+    }))
+  }
+
+  const removeBrandItem = (collection, id) => {
+    setBrandDraft((prev) => ({
+      ...prev,
+      [collection]: prev[collection].filter((item) => item.id !== id),
+    }))
+  }
+
+  const addBrandFont = () => {
+    setBrandDraft((prev) => ({
+      ...prev,
+      fonts: [
+        ...prev.fonts,
+        {
+          id: `font-${prev.fonts.length + 1}-${prev.fonts.length}`,
+          label: 'Heading font',
+          family: '',
+          sourceUrl: '',
+          fallback: 'system-ui, sans-serif',
+        },
+      ],
+    }))
+  }
+
+  const updateBrandFont = (id, patch) => {
+    setBrandDraft((prev) => ({
+      ...prev,
+      fonts: prev.fonts.map((font) => (font.id === id ? { ...font, ...patch } : font)),
+    }))
+  }
+
+  const handleBrandLogoUpload = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (file.size > MAX_LOGO_BYTES) {
+      setBrandError(`Logos must be under ${Math.round(MAX_LOGO_BYTES / 1024)} KB. Try an SVG or compressed PNG.`)
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      setBrandError('')
+      setBrandDraft((prev) => ({
+        ...prev,
+        logos: [
+          ...prev.logos,
+          {
+            id: `logo-${prev.logos.length + 1}-${prev.logos.length}`,
+            label: file.name.replace(/\.[^.]+$/, ''),
+            dataUrl: String(reader.result),
+            usage: 'primary',
+          },
+        ],
+      }))
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }
+
   const handleStartMfaEnrollment = async () => {
     setMfaError('')
     setMfaBusy(true)
@@ -621,6 +806,8 @@ function App() {
       setSession(result.user)
       await applyUserData(result.user)
       await loadRepostWorkspace()
+      await loadBrandKit()
+      await loadCloudConnections()
       if (result.user?.role === 'admin') {
         await loadAdminData()
       }
@@ -687,6 +874,21 @@ function App() {
     }
   }
 
+  const handleEditCreativeProject = (project) => {
+    setCreativeProject(project)
+    setActiveTab(project.outputType === 'video' ? 'studio' : 'photo')
+  }
+
+  const handleUseCreativeDraft = (project) => {
+    setComposer((prev) => ({
+      ...prev,
+      campaign: project.title || prev.campaign,
+      message: project.caption || prev.message,
+      imageIdea: project.visualPrompt || prev.imageIdea,
+    }))
+    setActiveTab('scheduler')
+  }
+
   const handleSaveAiAgent = async (event) => {
     event.preventDefault()
     setAiAgentSaving(true)
@@ -709,8 +911,8 @@ function App() {
           model: aiAgentDraft.model.trim(),
           status: aiAgentDraft.endpoint.trim() ? 'connected' : 'not connected',
           message: aiAgentDraft.endpoint.trim()
-            ? 'Your personal AI agent is ready for copy and image generation.'
-            : 'Connect a personal AI agent endpoint to personalize copy and image generation.',
+            ? 'Your in-house AI is ready for its enabled creative capabilities.'
+            : 'Connect an in-house AI endpoint to activate creative generation.',
           lastSyncedAt: aiAgentDraft.endpoint.trim() ? new Date().toISOString() : '',
         },
       })
@@ -726,6 +928,27 @@ function App() {
     } finally {
       setAiAgentSaving(false)
     }
+  }
+
+  const saveInhouseAiConfig = async (nextConfig) => {
+    const savedConfig = await authService.updateUserAiAgentConfig({
+      userId: session.id,
+      aiAgentConfig: nextConfig,
+    })
+    const normalized = { ...createDefaultAiAgentConfig(), ...savedConfig }
+    setAiAgentConfig(normalized)
+    setAiAgentDraft(normalized)
+    return normalized
+  }
+
+  const handleInhouseAiAsset = (asset) => {
+    setWorkspaceAssets((prev) => [{
+      id: `asset_${Date.now()}`,
+      size: 0,
+      folderId: selectedFolderId,
+      createdAt: new Date().toISOString(),
+      ...asset,
+    }, ...prev])
   }
 
   const handleAiAgentDraftChange = (field, value) => {
@@ -774,9 +997,13 @@ function App() {
           ...(testConfig.apiKey ? { Authorization: `Bearer ${testConfig.apiKey}` } : {}),
         },
         body: JSON.stringify({
+          contractVersion: '2.0',
           mode: 'test',
+          capability: 'test',
           model: testConfig.model || 'default',
           agentName: testConfig.name || 'My AI Agent',
+          capabilities: testConfig.capabilities,
+          routing: testConfig.routing,
           prompt: 'EchoAI connection test',
         }),
       })
@@ -1600,6 +1827,7 @@ function App() {
       return (
         <Suspense fallback={loadingPanel}>
           <PurchasePage
+            initialPlan={purchasePlan}
             validatePromoCode={validatePromoCode}
             referralCode={incomingReferralCode}
             billingLive={isSupabaseConfigured}
@@ -1684,7 +1912,10 @@ function App() {
         <Suspense fallback={loadingPanel}>
           <LandingPage
             onSignIn={() => setAuthView('signin')}
-            onPurchase={() => setShowPurchase(true)}
+            onPurchase={(planKey) => {
+              if (planKey) setPurchasePlan(planKey)
+              setShowPurchase(true)
+            }}
           />
         </Suspense>
       )
@@ -2011,9 +2242,12 @@ function App() {
       )}
 
       <header className="top-bar">
-        <div>
+        <div className="app-brand-heading">
+          <img src={echoMascot} alt="EchoAI mascot" />
+          <div>
           <p className="brand">EchoAI</p>
           <h1>Campaign command center</h1>
+          </div>
         </div>
         <div className="top-actions">
           <button type="button" className="ghost-button" onClick={openSupportModal}>
@@ -2032,9 +2266,11 @@ function App() {
           ['repost', 'Repost Hub'],
           ['scheduler', 'Scheduler'],
           ['assistant', 'AI Studio'],
+          ['inhouse-ai', 'In-house AI'],
           ['photo', 'Photo Creator'],
           ['studio', 'Video Studio'],
           ['integrations', 'Integrations'],
+          ['help', 'How To'],
           ...(canViewManagementBoard ? [['admin', 'IT / Management']] : []),
         ].map(([key, label]) => (
           <button
@@ -2048,7 +2284,8 @@ function App() {
         ))}
       </nav>
 
-      <main className={activeTab === 'photo' ? 'app-main photo-workspace-layout' : 'app-main'}>
+      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''}`}>
+        {activeTab !== 'help' && (
         <aside
           className={`asset-drawer ${activeTab === 'photo' ? 'photo-workspace-drawer' : ''} ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
           onDragEnter={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); setDrawerDragActive(true) } }}
@@ -2115,6 +2352,120 @@ function App() {
               <div className="asset-usage-banner">
                 <strong>Quota</strong>
                 <span>{storageUsedMb.toFixed(1)} MB / {storageQuotaMb} MB used</span>
+              </div>
+
+              <div className="cloud-drive-panel">
+                <strong>Cloud drives</strong>
+                <p className="muted">
+                  Browse and link files without using your quota — they stay in your own drive.
+                </p>
+
+                <div className="chip-row">
+                  {Object.values(CLOUD_PROVIDERS).map((provider) => {
+                    const connection = cloudConnections.find((entry) => entry.provider === provider.key)
+                    return connection ? (
+                      <button
+                        key={provider.key}
+                        type="button"
+                        className={cloudProvider === provider.key ? 'chip active' : 'chip'}
+                        title={connection.accountEmail}
+                        onClick={() => browseCloud({ provider: provider.key })}
+                      >
+                        {provider.icon} {provider.label}
+                      </button>
+                    ) : (
+                      <button
+                        key={provider.key}
+                        type="button"
+                        className="chip"
+                        disabled={!isSupabaseConfigured}
+                        onClick={() => cloudDriveService.connect(provider.key).catch((error) => setCloudError(error.message))}
+                      >
+                        + Connect {provider.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {cloudProvider && (
+                  <>
+                    <div className="chip-row">
+                      <button
+                        type="button"
+                        className="chip"
+                        onClick={() => browseCloud({ provider: cloudProvider })}
+                      >
+                        ← Top level
+                      </button>
+                      {cloudPath.map((crumb) => (
+                        <span key={`${crumb.id}-${crumb.label}`} className="chip">{crumb.label}</span>
+                      ))}
+                      <button
+                        type="button"
+                        className="chip"
+                        onClick={() => handleDisconnectCloud(cloudProvider)}
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+
+                    <label>
+                      Search this drive
+                      <input
+                        value={cloudSearch}
+                        onChange={(event) => setCloudSearch(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            browseCloud({ provider: cloudProvider, search: cloudSearch })
+                          }
+                        }}
+                        placeholder="Press Enter to search"
+                      />
+                    </label>
+
+                    {cloudBusy && <p className="muted">Loading…</p>}
+
+                    <div className="asset-list">
+                      {cloudItems.map((item) => (
+                        <div key={item.id} className="asset-card">
+                          <div className="asset-card-main">
+                            <span>{item.isFolder ? '📁' : '📄'} {item.name}</span>
+                            {!item.isFolder && (
+                              <small className="muted">
+                                {(item.size / 1024 / 1024).toFixed(1)} MB • no quota used
+                              </small>
+                            )}
+                          </div>
+                          {item.isFolder ? (
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() =>
+                                browseCloud({
+                                  provider: cloudProvider,
+                                  folderId: item.id,
+                                  label: item.name,
+                                })
+                              }
+                            >
+                              Open
+                            </button>
+                          ) : (
+                            <button type="button" className="ghost-button" onClick={() => linkCloudFile(item)}>
+                              Link
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {!cloudBusy && cloudItems.length === 0 && (
+                        <p className="muted">Nothing here.</p>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {cloudError && <span className="field-error">{cloudError}</span>}
               </div>
 
               <div className="asset-list">
@@ -2186,7 +2537,17 @@ function App() {
                         <div className="asset-card-main">
                           <strong>{asset.type === 'video' ? '🎬' : asset.type === 'image' ? '🖼️' : '📄'} {asset.name}</strong>
                           <span>{asset.summary}</span>
-                          <small>{asset.type} • {(asset.size / 1024 / 1024).toFixed(1)} MB</small>
+                          <small>
+                            {asset.type} • {(asset.size / 1024 / 1024).toFixed(1)} MB
+                            {asset.linked && (
+                              <>
+                                {' '}
+                                <span className="asset-linked-badge">
+                                  Linked · {CLOUD_PROVIDERS[asset.provider]?.label ?? 'cloud'} · no quota
+                                </span>
+                              </>
+                            )}
+                          </small>
                         </div>
                         <div className="asset-actions">
                           <button type="button" className="asset-action-button" onClick={() => startRenameItem('asset', asset.id, asset.name)}>Rename</button>
@@ -2200,6 +2561,7 @@ function App() {
             </>
           )}
         </aside>
+        )}
 
         {activeTab === 'dashboard' && (
           <section className="panel panel-dashboard">
@@ -2644,12 +3006,20 @@ function App() {
 
         {activeTab === 'assistant' && (
           <section className="panel panel-assistant">
-            <h2>AI Message Studio</h2>
+            <h2>AI Content Studio</h2>
             <p className="panel-note">
-              Generate marketing copy, image concepts, and app suggestions from a single prompt.
+              Turn mixed source files into editable campaign visuals, video plans, and publish-ready copy.
             </p>
 
-            <div className="split">
+            <Suspense fallback={loadingPanel}>
+              <CreativeBrief
+                agentConfig={aiAgentConfig}
+                onEditProject={handleEditCreativeProject}
+                onUseDraft={handleUseCreativeDraft}
+              />
+            </Suspense>
+
+            <div className="split assistant-quick-copy">
               <article className="sub-panel tone-indigo">
                 <h3>Prompt builder</h3>
                 <textarea
@@ -2695,11 +3065,23 @@ function App() {
           </section>
         )}
 
+        {activeTab === 'inhouse-ai' && (
+          <Suspense fallback={loadingPanel}>
+            <InhouseAiStudio
+              agentConfig={aiAgentConfig}
+              assets={workspaceAssets}
+              onSaveConfig={saveInhouseAiConfig}
+              onAddAsset={handleInhouseAiAsset}
+            />
+          </Suspense>
+        )}
+
         {activeTab === 'studio' && (
           <Suspense fallback={loadingPanel}>
             <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
               <VideoEditor
                 assets={workspaceAssets}
+                brief={creativeProject?.outputType === 'video' ? creativeProject : null}
                 onExport={(project) => {
                   const exportedAsset = {
                     id: `asset_${Date.now()}`,
@@ -2730,8 +3112,21 @@ function App() {
         {activeTab === 'photo' && (
           <Suspense fallback={loadingPanel}>
             <section style={{ display: 'flex', height: '100%', flexDirection: 'column', gap: 0 }}>
-              <PhotoEditor assets={workspaceAssets} onExport={handlePhotoExport} agentConfig={aiAgentConfig} />
+              <PhotoEditor
+                key={creativeProject?.imageSrc || 'photo-editor'}
+                assets={workspaceAssets}
+                onExport={handlePhotoExport}
+                agentConfig={aiAgentConfig}
+                brandKit={brandKit}
+                initialProject={creativeProject?.outputType !== 'video' ? creativeProject : null}
+              />
             </section>
+          </Suspense>
+        )}
+
+        {activeTab === 'help' && (
+          <Suspense fallback={loadingPanel}>
+            <HelpCenter onContactSupport={openSupportModal} />
           </Suspense>
         )}
 
@@ -2742,6 +3137,134 @@ function App() {
               Link your social media accounts and third-party tools. Each channel you connect
               becomes available in the Scheduler and AI Studio.
             </p>
+
+            <h3 className="section-label">Brand kit</h3>
+            <p className="panel-note">
+              Your company&apos;s colours, licensed fonts, and logos. Everything here is available in
+              the Photo Creator and Video Studio so every post stays on brand.
+            </p>
+
+            <div className="list-row">
+              <div>
+                <p>
+                  {brandKit.colors.length} colours • {brandKit.fonts.length} fonts •{' '}
+                  {brandKit.logos.length} logos
+                </p>
+                <span className="muted">
+                  {brandKit.updatedAt
+                    ? `Last updated ${new Date(brandKit.updatedAt).toLocaleDateString()}`
+                    : 'Not set up yet.'}
+                </span>
+              </div>
+              <button type="button" className="ghost-button" onClick={loadBrandKit}>
+                Reload
+              </button>
+            </div>
+
+            <h4 className="section-label">Colours</h4>
+            {brandDraft.colors.map((color) => (
+              <div key={color.id} className="list-row" style={{ gap: '0.5rem' }}>
+                <input
+                  type="color"
+                  value={color.value}
+                  onChange={(event) => updateBrandColor(color.id, { value: event.target.value })}
+                />
+                <input
+                  type="text"
+                  value={color.label}
+                  placeholder="Primary"
+                  onChange={(event) => updateBrandColor(color.id, { label: event.target.value })}
+                  style={{ flex: 1 }}
+                />
+                <input
+                  type="text"
+                  value={color.value}
+                  onChange={(event) => updateBrandColor(color.id, { value: event.target.value })}
+                  style={{ width: '7rem', fontFamily: 'monospace' }}
+                />
+                <button type="button" className="chip" onClick={() => removeBrandItem('colors', color.id)}>
+                  ✕
+                </button>
+              </div>
+            ))}
+            <button type="button" className="ghost-button" onClick={addBrandColor}>
+              + Add colour
+            </button>
+
+            <h4 className="section-label">Licensed fonts</h4>
+            <p className="muted">
+              Host your licensed font file (woff2 recommended) and paste its URL. EchoAI loads it at
+              runtime — the file is never redistributed, so your licence terms are respected.
+            </p>
+            {brandDraft.fonts.map((font) => (
+              <div key={font.id} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.4rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    value={font.label}
+                    placeholder="Heading font"
+                    onChange={(event) => updateBrandFont(font.id, { label: event.target.value })}
+                    style={{ flex: 1 }}
+                  />
+                  <button type="button" className="chip" onClick={() => removeBrandItem('fonts', font.id)}>
+                    ✕
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={font.family}
+                  placeholder="Font family name, e.g. Acme Grotesk"
+                  onChange={(event) => updateBrandFont(font.id, { family: event.target.value })}
+                />
+                <input
+                  type="url"
+                  value={font.sourceUrl}
+                  placeholder="https://cdn.yourbrand.com/AcmeGrotesk.woff2"
+                  onChange={(event) => updateBrandFont(font.id, { sourceUrl: event.target.value })}
+                />
+                {font.family && (
+                  <span style={{ fontFamily: `${font.family}, ${font.fallback}`, fontSize: '1.25rem' }}>
+                    The quick brown fox — 0123456789
+                  </span>
+                )}
+              </div>
+            ))}
+            <button type="button" className="ghost-button" onClick={addBrandFont}>
+              + Add font
+            </button>
+
+            <h4 className="section-label">Logos</h4>
+            <div className="chip-row">
+              {brandDraft.logos.map((logo) => (
+                <div key={logo.id} className="chip" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <img src={logo.dataUrl} alt={logo.label} style={{ height: 28, width: 'auto' }} />
+                  <span>{logo.label}</span>
+                  <button type="button" className="text-button" onClick={() => removeBrandItem('logos', logo.id)}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+            <label>
+              Upload a logo (PNG, SVG, or JPG — under {Math.round(MAX_LOGO_BYTES / 1024)} KB)
+              <input type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp" onChange={handleBrandLogoUpload} />
+            </label>
+
+            <label>
+              Brand guidelines / voice notes
+              <textarea
+                rows={3}
+                value={brandDraft.guidelines}
+                placeholder="Tone of voice, do's and don'ts, logo clear space rules..."
+                onChange={(event) => setBrandDraft((prev) => ({ ...prev, guidelines: event.target.value }))}
+              />
+            </label>
+
+            {brandError && <span className="field-error">{brandError}</span>}
+            {brandNotice && <p className="muted">{brandNotice}</p>}
+            <button type="button" className="primary-button" onClick={handleSaveBrandKit} disabled={brandBusy}>
+              {brandBusy ? 'Saving...' : 'Save brand kit'}
+            </button>
 
             <h3 className="section-label">Security</h3>
             <div className="list-row">
@@ -2904,16 +3427,16 @@ function App() {
             </div>
 
             <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
-              <h3>Personal AI agent</h3>
-              <p className="muted">Set your own endpoint once, then reuse it across message, image, and video tools.</p>
+              <h3>In-house AI engine</h3>
+              <p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p>
               <div className="agent-setup-guide">
                 <div className="agent-guide-card hero">
                   <p className="section-label">Quick setup</p>
-                  <h4>Connect your bot in 4 steps</h4>
+                  <h4>Connect your AI in 4 steps</h4>
                   <ol className="agent-steps">
                     <li>Give the bot a name users recognize.</li>
                     <li>Paste the endpoint that receives AI requests.</li>
-                    <li>Choose what it should help with: message, image, or video.</li>
+                    <li>Enable only the capabilities your endpoint actually supports.</li>
                     <li>Test the connection, then save the profile.</li>
                   </ol>
                 </div>
@@ -2972,6 +3495,46 @@ function App() {
                     placeholder="default or your model name"
                   />
                 </label>
+                <div className="split" style={{ marginTop: 0 }}>
+                  <label>
+                    Routing strategy
+                    <select
+                      value={aiAgentDraft.routing?.strategy || 'best_quality'}
+                      onChange={(event) => handleAiAgentDraftChange('routing', { ...aiAgentDraft.routing, strategy: event.target.value })}
+                    >
+                      <option value="best_quality">Best quality</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="lowest_cost">Lowest cost</option>
+                      <option value="fastest">Fastest</option>
+                      <option value="private_only">Private models only</option>
+                    </select>
+                  </label>
+                  <label>
+                    Default visual style
+                    <input
+                      value={aiAgentDraft.defaultStyle || ''}
+                      onChange={(event) => handleAiAgentDraftChange('defaultStyle', event.target.value)}
+                      placeholder="Editorial, photoreal, illustrated..."
+                    />
+                  </label>
+                </div>
+                <label>
+                  Global negative prompt
+                  <textarea
+                    rows="3"
+                    value={aiAgentDraft.negativePrompt || ''}
+                    onChange={(event) => handleAiAgentDraftChange('negativePrompt', event.target.value)}
+                    placeholder="Traits, artifacts, subjects, or styles the agent should avoid."
+                  />
+                </label>
+                <label className="toggle-row" style={{ alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={aiAgentDraft.routing?.allowFallback !== false}
+                    onChange={(event) => handleAiAgentDraftChange('routing', { ...aiAgentDraft.routing, allowFallback: event.target.checked })}
+                  />
+                  Allow an approved fallback provider when the preferred model is unavailable
+                </label>
                 <div className="agent-capability-grid">
                   {AI_AGENT_CAPABILITIES.map((capability) => {
                     const checked = (aiAgentDraft.capabilities || []).includes(capability.key)
@@ -3015,10 +3578,16 @@ function App() {
                 <div className="agent-payload-preview">
                   <p className="section-label">Request preview</p>
                   <pre>{JSON.stringify({
-                    mode: 'message | image | video',
+                    contractVersion: '2.0',
+                    mode: 'image | image_edit | character | video | audio | vision | document | message',
+                    capability: 'selected capability',
                     agentName: aiAgentDraft.name || 'My AI Agent',
                     model: aiAgentDraft.model || 'default',
                     capabilities: aiAgentDraft.capabilities || [],
+                    routing: aiAgentDraft.routing,
+                    persona: '{ reusable character profile or null }',
+                    references: '[ workspace assets ]',
+                    output: '{ aspectRatio, durationSeconds, quality, style }',
                     prompt: 'What do you want the bot to help with?',
                   }, null, 2)}</pre>
                 </div>

@@ -75,7 +75,7 @@ const transitionStateAt = (clip, localTime) => {
 
 const clipEnd = (clip) => clip.startTime + clip.duration
 
-export function VideoEditor({ assets, onExport }) {
+export function VideoEditor({ assets, onExport, brief }) {
   const [tracks, setTracks] = useState([
     { id: 'video-1', type: 'video', name: 'Video Track 1', clips: [] },
     { id: 'text-1', type: 'text', name: 'Text Track 1', clips: [] },
@@ -86,7 +86,7 @@ export function VideoEditor({ assets, onExport }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(30)
   const [zoom, setZoom] = useState(1)
-  const [activeToolbar, setActiveToolbar] = useState('transitions')
+  const [activeToolbar, setActiveToolbar] = useState('media')
   const [isRecording, setIsRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [recordingError, setRecordingError] = useState('')
@@ -241,6 +241,23 @@ export function VideoEditor({ assets, onExport }) {
     )
   }
 
+  const addAssetAtPlayhead = (asset) => {
+    const targetTrack = tracks.find((track) => {
+      if (asset.type === 'video') return track.type === 'video'
+      if (asset.type === 'image') return track.type === 'video'
+      if (asset.mime?.startsWith('audio/')) return track.type === 'audio'
+      return false
+    })
+
+    if (!targetTrack) {
+      setStatusMessage(`Add a compatible track before using ${asset.name}.`)
+      return
+    }
+
+    handleDropAssetToTrack(targetTrack.id, asset)
+    setStatusMessage(`Added ${asset.name} at ${playbackTime.toFixed(1)}s.`)
+  }
+
   const updateClip = (clipId, patch) => {
     setTracks((prev) =>
       prev.map((track) => ({
@@ -365,6 +382,31 @@ export function VideoEditor({ assets, onExport }) {
     )
     setSelectedClip(clip)
     setStatusMessage(`Added a ${preset.label.toLowerCase()} overlay.`)
+  }
+
+  const addBriefStoryboard = () => {
+    const textTrack = tracks.find((track) => track.type === 'text')
+    if (!textTrack || !brief?.scenes?.length) return
+    const clips = brief.scenes.map((scene, index) => ({
+      id: `clip-${(clipCounter.current += 1)}`,
+      type: 'text',
+      assetName: scene.title || `Scene ${index + 1}`,
+      value: scene.direction || scene.title,
+      startTime: index * 4,
+      duration: 4,
+      trim: { start: 0, end: 4 },
+      fontSize: index === 0 ? 52 : 34,
+      weight: index === 0 ? 800 : 600,
+      color: '#ffffff',
+      y: index === 0 ? 45 : 78,
+      background: index === 0 ? 'transparent' : 'rgba(2, 6, 23, 0.65)',
+      transition: 'fade',
+      effects: { ...DEFAULT_EFFECTS },
+    }))
+    commitHistory()
+    setTracks((current) => current.map((track) => track.id === textTrack.id ? { ...track, clips: [...track.clips, ...clips] } : track))
+    setDuration((current) => Math.max(current, clips.length * 4))
+    setStatusMessage('Added the generated scene plan to the text track.')
   }
 
   const handleRemoveClip = (trackId, clipId) => {
@@ -712,6 +754,15 @@ export function VideoEditor({ assets, onExport }) {
 
   return (
     <div className="video-editor">
+      {brief && (
+        <div className="video-brief-bar">
+          <div>
+            <strong>{brief.title}</strong>
+            <span>{brief.scenes?.length || 0} scene directions generated from source documents</span>
+          </div>
+          <button type="button" className="rec-btn" onClick={addBriefStoryboard}>Add plan to timeline</button>
+        </div>
+      )}
       <div className="screen-record-bar">
         {isRecording ? (
           <>
@@ -796,7 +847,7 @@ export function VideoEditor({ assets, onExport }) {
         </div>
 
         <div className="toolbar-groups">
-          {['transitions', 'effects', 'filters', 'text', 'audio'].map((tool) => (
+          {['media', 'transitions', 'effects', 'filters', 'text', 'audio'].map((tool) => (
             <button
               key={tool}
               type="button"
@@ -811,6 +862,23 @@ export function VideoEditor({ assets, onExport }) {
 
       <div className="editor-layout">
         <aside className="editor-panel">
+          {activeToolbar === 'media' && (
+            <div className="tool-panel">
+              <h3>Media</h3>
+              <p className="muted">Tap an image, video, or audio file to add it at the playhead.</p>
+              <div className="video-media-list">
+                {(assets ?? []).filter((asset) => asset.type === 'image' || asset.type === 'video' || asset.mime?.startsWith('audio/')).map((asset) => (
+                  <button key={asset.id} type="button" className="video-media-item" onClick={() => addAssetAtPlayhead(asset)}>
+                    {asset.previewUrl && asset.type === 'image' ? <img src={asset.previewUrl} alt="" /> : <span>{asset.type === 'video' ? 'VID' : asset.mime?.startsWith('audio/') ? 'AUD' : 'IMG'}</span>}
+                    <strong>{asset.name}</strong>
+                  </button>
+                ))}
+                {!assets?.some((asset) => asset.type === 'image' || asset.type === 'video' || asset.mime?.startsWith('audio/')) && (
+                  <p className="muted">Upload media in the workspace drawer, then return here.</p>
+                )}
+              </div>
+            </div>
+          )}
           {activeToolbar === 'transitions' && (
             <div className="tool-panel">
               <h3>Transitions</h3>

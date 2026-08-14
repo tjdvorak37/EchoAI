@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { DEFAULT_AGENT_CAPABILITIES } from './aiAgentService'
 
 const DEMO_OTP = '123456'
 const DEMO_USERS = [
@@ -72,7 +73,7 @@ const normalizeAiAgentConfig = (value) => {
   const hasCapabilityField = Object.prototype.hasOwnProperty.call(value, 'capabilities')
   const capabilityList = hasCapabilityField
     ? (Array.isArray(value.capabilities) ? value.capabilities.filter(Boolean) : [])
-    : ['message', 'image', 'video']
+    : DEFAULT_AGENT_CAPABILITIES
 
   return {
     enabled: Boolean(value.enabled),
@@ -81,9 +82,15 @@ const normalizeAiAgentConfig = (value) => {
     apiKey: value.apiKey || '',
     model: value.model || '',
     capabilities: capabilityList,
+    personas: Array.isArray(value.personas) ? value.personas.filter((persona) => persona?.id && persona?.name) : [],
+    routing: value.routing && typeof value.routing === 'object'
+      ? value.routing
+      : { strategy: 'best_quality', allowFallback: true },
+    negativePrompt: value.negativePrompt || '',
+    defaultStyle: value.defaultStyle || '',
     lastSyncedAt: value.lastSyncedAt || '',
     status: value.status || 'not connected',
-    message: value.message || 'Connect a personal AI agent endpoint to personalize copy and image generation.',
+    message: value.message || 'Connect an in-house AI endpoint for writing, documents, images, characters, video, audio, and media analysis.',
   }
 }
 

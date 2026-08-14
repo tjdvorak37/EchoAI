@@ -16,9 +16,9 @@ const CORE_FEATURES = [
   'Multi-channel scheduler, repost workflows, and team collaboration',
 ]
 
-export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode, billingLive }) {
+export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode, billingLive, initialPlan = 'storage_pro' }) {
   const [step, setStep] = useState('plan')
-  const [selectedPlan, setSelectedPlan] = useState('storage_pro')
+  const [selectedPlan, setSelectedPlan] = useState(() => PLANS[initialPlan] ? initialPlan : 'storage_pro')
   const [billingInterval, setBillingInterval] = useState('monthly')
   const [form, setForm] = useState({ fullName: '', email: '' })
   const [errors, setErrors] = useState({})
