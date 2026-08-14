@@ -18,6 +18,9 @@ verify_jwt = false
 [functions.ai-image]
 verify_jwt = true
 
+[functions.inhouse-ai]
+verify_jwt = true
+
 [functions.listening-fetch]
 verify_jwt = true
 
