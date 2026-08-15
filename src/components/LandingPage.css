@@ -734,35 +734,28 @@
 }
 
 .landing-admin-cta {
-  position: fixed;
-  right: 3rem;
-  bottom: 3rem;
-  z-index: 30;
-  min-width: 220px;
-  min-height: 72px;
-  padding: 1rem 1.75rem;
+  justify-self: end;
+  min-width: 180px;
+  min-height: 52px;
+  padding: 0.75rem 1.5rem;
   border: 0;
-  border-radius: 18px;
+  border-radius: 14px;
   background: linear-gradient(180deg, #2364d8 0%, #1d58c5 100%);
   color: #fff;
-  font-size: clamp(1.6rem, 2vw, 2.2rem);
+  font-size: clamp(1.1rem, 2vw, 1.8rem);
   font-weight: 800;
   line-height: 1.1;
-  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.22);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
   cursor: pointer;
 }
 
 .landing-admin-cta:hover {
   transform: translateY(-1px);
-  box-shadow: 0 14px 36px rgba(37, 99, 235, 0.28);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
 }
 
 .landing-footer > span {
   text-align: center;
-}
-
-.landing-footer .landing-login {
-  justify-self: end;
 }
 
 @keyframes visual-arrive {

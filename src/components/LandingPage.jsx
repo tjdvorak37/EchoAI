@@ -179,11 +179,10 @@ export function LandingPage({ onSignIn, onPurchase }) {
       <footer className="landing-footer">
         <a href="#top"><Brand /></a>
         <span>AI content creation, editing, publishing, and listening in one workspace.</span>
+        <button type="button" className="landing-admin-cta" onClick={onSignIn}>
+          Admin Center
+        </button>
       </footer>
-
-      <button type="button" className="landing-admin-cta" onClick={onSignIn}>
-        Admin Center
-      </button>
     </div>
   )
 }
