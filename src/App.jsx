@@ -43,6 +43,7 @@ const VideoEditor = lazy(() => import('./components/VideoEditor').then((module) 
 const PhotoEditor = lazy(() => import('./components/PhotoEditor').then((module) => ({ default: module.PhotoEditor })))
 const SocialListeningPanel = lazy(() => import('./components/SocialListeningPanel').then((module) => ({ default: module.SocialListeningPanel })))
 const LandingPage = lazy(() => import('./components/LandingPage').then((module) => ({ default: module.LandingPage })))
+const CompanyPackageRequest = lazy(() => import('./components/CompanyPackageRequest').then((module) => ({ default: module.CompanyPackageRequest })))
 const PurchasePage = lazy(() => import('./components/PurchasePage').then((module) => ({ default: module.PurchasePage })))
 const AdminPanel = lazy(() => import('./components/AdminPanel').then((module) => ({ default: module.AdminPanel })))
 const FinancePanel = lazy(() => import('./components/FinancePanel').then((module) => ({ default: module.FinancePanel })))
@@ -243,6 +244,7 @@ function App() {
   const [refunds, setRefunds] = useState(refundsSeed)
   const [financialTasks, setFinancialTasks] = useState(financialTasksSeed)
   const [showPurchase, setShowPurchase] = useState(false)
+  const [companyPackageRequested, setCompanyPackageRequested] = useState(false)
   const [purchasePlan, setPurchasePlan] = useState('storage_pro')
   // Stripe sends the buyer back here after checkout; they still need a login.
   const [checkoutReturn] = useState(
@@ -450,12 +452,13 @@ function App() {
     setAdminLoading(true)
 
     try {
-      const [requests, members, subscriptions, payments, seatData] = await Promise.all([
+      const [requests, members, subscriptions, payments, seatData, supportTickets] = await Promise.all([
         authService.getAccessRequests(),
         authService.getManagedUsers(),
         billingService.listSubscriptions(),
         billingService.listPayments(),
         authService.getCompanySeatData({ companyKey: session?.company }),
+        authService.getSupportTickets(),
       ])
 
       if (requests.length) {
@@ -468,6 +471,7 @@ function App() {
 
       setCompanySeatPackage(seatData.package)
       setCompanySeats(seatData.seats)
+      if (isSupabaseConfigured) setTickets(supportTickets)
 
       if (isSupabaseConfigured) {
         // Subscriptions only carry an email; pair them with profile names.
@@ -494,6 +498,22 @@ function App() {
     const created = await authService.createCompanySeatPackage({ companyKey: session?.company, seatLimit })
     setCompanySeatPackage(created)
     return created
+  }
+
+  const handleUpdateCompanySeatPackage = async (seatLimit) => {
+    const updated = await authService.updateCompanySeatPackage({
+      packageId: companySeatPackage?.id,
+      seatLimit,
+      assignedSeats: companySeats.filter((seat) => seat.status !== 'revoked').length,
+    })
+    setCompanySeatPackage((prev) => ({ ...prev, ...updated }))
+    return updated
+  }
+
+  const handleRespondToSupportTicket = async ({ ticketId, response }) => {
+    const updated = await authService.respondToSupportTicket({ ticketId, response })
+    setTickets((prev) => prev.map((ticket) => ticket.id === ticketId ? { ...ticket, ...updated } : ticket))
+    return updated
   }
 
   const handleAssignCompanySeat = async (employeeEmail) => {
@@ -1574,6 +1594,11 @@ function App() {
     }
   }
 
+  const handleCompanyPackageRequest = async (request) => {
+    await authService.submitCompanyPackageRequest(request)
+    setCompanyPackageRequested(true)
+  }
+
   const getCompanyPostById = (companyPostId) =>
     companyMainPosts.find((item) => item.id === companyPostId)
 
@@ -2202,10 +2227,15 @@ function App() {
         <Suspense fallback={loadingPanel}>
           <LandingPage
             onSignIn={() => setAuthView('signin')}
+            onCompanyPackageRequest={() => setCompanyPackageRequested(false)}
             onPurchase={(planKey) => {
               if (planKey) setPurchasePlan(planKey)
               setShowPurchase(true)
             }}
+          />
+          <CompanyPackageRequest
+            onSubmit={handleCompanyPackageRequest}
+            submitted={companyPackageRequested}
           />
         </Suspense>
       )
@@ -4138,6 +4168,8 @@ function App() {
               companySeatPackage={companySeatPackage}
               companySeats={companySeats}
               handleCreateCompanySeatPackage={handleCreateCompanySeatPackage}
+              handleUpdateCompanySeatPackage={handleUpdateCompanySeatPackage}
+              handleRespondToSupportTicket={handleRespondToSupportTicket}
               handleAssignCompanySeat={handleAssignCompanySeat}
               handleRevokeCompanySeat={handleRevokeCompanySeat}
               adminLoading={adminLoading}

@@ -62,7 +62,8 @@ export function AdminPanel({
   quotaDraftMb, setQuotaDraftMb,
   handleQuotaUpdate, handleToggleUserAccess, handleUpdateUserRole,
   companySeatPackage, companySeats,
-  handleCreateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
+  handleCreateCompanySeatPackage, handleUpdateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
+  handleRespondToSupportTicket,
   adminLoading, adminError,
   currentUser,
 }) {
@@ -97,6 +98,16 @@ export function AdminPanel({
     try {
       await handleAssignCompanySeat(seatEmailDraft)
       setSeatEmailDraft('')
+    } catch (error) {
+      setSeatError(error.message)
+    }
+  }
+
+  const resizeSeatPackage = async (event) => {
+    event.preventDefault()
+    setSeatError('')
+    try {
+      await handleUpdateCompanySeatPackage(seatLimitDraft)
     } catch (error) {
       setSeatError(error.message)
     }
@@ -160,13 +171,20 @@ export function AdminPanel({
     setTicketOpen(null)
   }
 
-  const sendReply = (ticketId) => {
+  const sendReply = async (ticketId) => {
     if (!replyDraft.trim()) return
+    const response = replyDraft.trim()
+    try {
+      await handleRespondToSupportTicket({ ticketId, response })
+    } catch (error) {
+      setSeatError(error.message)
+      return
+    }
     const msg = {
       id: `msg-${Date.now()}`,
       author: currentUser?.fullName || 'Admin',
       role: 'admin',
-      body: replyDraft.trim(),
+      body: response,
       sentAt: new Date().toISOString(),
     }
     setTickets((prev) => prev.map((t) =>
@@ -311,6 +329,14 @@ export function AdminPanel({
                     <strong>{currentUser?.company || companySeatPackage.companyKey}</strong>
                     <span>{assignedSeats} of {companySeatPackage.seatLimit} seats assigned</span>
                   </div>
+                  <form className="composer" onSubmit={resizeSeatPackage}>
+                    <label>
+                      Package seats
+                      <input type="number" min={assignedSeats} step="1" value={seatLimitDraft} onChange={(event) => setSeatLimitDraft(event.target.value)} />
+                    </label>
+                    <button type="submit" className="ghost-button" disabled={adminLoading}>Update package size</button>
+                    <small className="muted">No partial refunds. Downsizing cannot remove seats already assigned.</small>
+                  </form>
                   <form className="composer" onSubmit={assignSeat}>
                     <label>
                       Employee email

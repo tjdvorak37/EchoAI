@@ -911,6 +911,96 @@ export const authService = {
     return data
   },
 
+  async submitCompanyPackageRequest({ fullName, email, company, seatCount, details }) {
+    if (!fullName || !email || !company || !seatCount) {
+      throw new Error('Name, email, company, and seat count are required.')
+    }
+
+    if (!isSupabaseConfigured) {
+      return { ok: true }
+    }
+
+    const { error } = await supabase.rpc('submit_company_package_request', {
+      p_full_name: fullName.trim(),
+      p_email: email.trim().toLowerCase(),
+      p_company: company.trim(),
+      p_seat_count: Number(seatCount),
+      p_details: details?.trim() || '',
+    })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return { ok: true }
+  },
+
+  async getSupportTickets() {
+    if (!isSupabaseConfigured) return []
+
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) throw new Error(error.message)
+
+    return (data ?? []).map((ticket) => ({
+      id: ticket.id,
+      subject: ticket.subject || ticket.category,
+      category: ticket.category,
+      details: ticket.details,
+      userFullName: ticket.requester_name || 'Authenticated user',
+      userEmail: ticket.requester_email || '',
+      status: ticket.status,
+      priority: ticket.category === 'Company package' ? 'high' : 'medium',
+      createdAt: ticket.created_at,
+      updatedAt: ticket.updated_at,
+      messages: [{
+        id: `${ticket.id}-initial`,
+        author: ticket.requester_name || ticket.requester_email || 'Requester',
+        role: 'user',
+        body: ticket.details,
+        sentAt: ticket.created_at,
+      }],
+      adminResponse: ticket.admin_response || '',
+    }))
+  },
+
+  async respondToSupportTicket({ ticketId, response }) {
+    if (!ticketId || !response?.trim()) throw new Error('A ticket response is required.')
+    if (!isSupabaseConfigured) return { id: ticketId, status: 'in_progress', adminResponse: response.trim() }
+
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .update({ admin_response: response.trim(), responded_at: new Date().toISOString(), status: 'in_progress' })
+      .eq('id', ticketId)
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return { id: data.id, status: data.status, adminResponse: data.admin_response }
+  },
+
+  async updateCompanySeatPackage({ packageId, seatLimit, assignedSeats = 0 }) {
+    const parsedLimit = Number(seatLimit)
+    if (!packageId || !Number.isInteger(parsedLimit) || parsedLimit < assignedSeats) {
+      throw new Error(`Seat package must be a whole number of at least ${assignedSeats}.`)
+    }
+
+    if (!isSupabaseConfigured) return { id: packageId, seatLimit: parsedLimit }
+
+    const { data, error } = await supabase
+      .from('company_seat_packages')
+      .update({ seat_limit: parsedLimit })
+      .eq('id', packageId)
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return { id: data.id, companyKey: data.company_key, seatLimit: data.seat_limit, status: data.status }
+  },
+
   async getMyContactCard({ userId, email }) {
     if (!isSupabaseConfigured) {
       return normalizeContactCard({ id: userId, email })
