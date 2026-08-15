@@ -13,6 +13,9 @@ const localhostOrigins = new Set([
 const isAllowedOrigin = (origin: string | null) => {
   if (!origin) return true
   if (appUrl && origin === appUrl) return true
+  // Accept the apex and www forms of the configured domain interchangeably.
+  if (appUrl && origin === appUrl.replace('://www.', '://')) return true
+  if (appUrl && origin === appUrl.replace('://', '://www.')) return true
   if (localhostOrigins.has(origin)) return true
   return /^https?:\/\/.*\.app\.github\.dev$/.test(origin)
 }
