@@ -137,7 +137,11 @@ export const authService = {
         email,
       })
 
-      assertAccountCanAccess(profile?.access_status ?? 'pending', profile?.role)
+      // A null profile here means RLS withheld the row at aal1, not that the
+      // account is pending. The real check runs again after MFA verification.
+      if (profile) {
+        assertAccountCanAccess(profile.access_status ?? 'pending', profile.role)
+      }
     } catch (accessError) {
       await supabase.auth.signOut()
       throw accessError
@@ -154,13 +158,15 @@ export const authService = {
     const totpFactor = (factorData?.totp ?? []).find((factor) => factor.status === 'verified')
 
     if (!totpFactor) {
+      const profile = await getProfileByUser({ userId: data.user?.id, email })
+
       return {
         mfaRequired: false,
         enrollmentRequired: true,
         user: {
           ...data.user,
-          role: 'user',
-          accessStatus: 'active',
+          role: profile?.role ?? 'user',
+          accessStatus: profile?.access_status ?? 'active',
         },
       }
     }

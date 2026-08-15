@@ -102,6 +102,11 @@ const hydrateWorkspaceAssets = (assets) =>
 
 const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 
+// Staff accounts run the platform, so they get the top plan without paying for it.
+const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it']
+const STAFF_PLAN = 'creator'
+const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCase())
+
 function App() {
   const [authView, setAuthView] = useState(() =>
     new URLSearchParams(window.location.search).get('checkout') === 'success' ? 'signup' : 'landing',
@@ -352,8 +357,10 @@ function App() {
   // demo mode and for admins who have no subscription.
   const storageQuotaMb = myEntitlement?.storageGb
     ? myEntitlement.storageGb * 1024
-    : Number(session?.storageQuotaMb ?? session?.storage_quota_mb ?? getStorageMb('standard')) ||
-      getStorageMb('standard')
+    : isStaffRole(session?.role)
+      ? getStorageMb(STAFF_PLAN)
+      : Number(session?.storageQuotaMb ?? session?.storage_quota_mb ?? getStorageMb('standard')) ||
+        getStorageMb('standard')
 
   const upcomingPostCount = useMemo(
     () => scheduledPosts.filter((post) => post.status === 'scheduled').length,
@@ -1917,6 +1924,9 @@ function App() {
     let cancelled = false
 
     const enforceEntitlement = async () => {
+      // Staff run the site itself and are never billed, so entitlement never gates them.
+      if (isStaffRole(session?.role)) return
+
       let entitlement
       try {
         entitlement = await billingService.getMyEntitlement()
