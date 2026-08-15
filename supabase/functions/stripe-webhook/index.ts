@@ -5,7 +5,7 @@ import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
-  apiVersion: '2025-01-27.acacia',
+  apiVersion: '2025-03-31.basil',
   httpClient: Stripe.createFetchHttpClient(),
 })
 
@@ -47,6 +47,11 @@ const STATUS_MAP: Record<string, string> = {
 
 const toIso = (seconds: number | null | undefined) =>
   seconds ? new Date(seconds * 1000).toISOString() : null
+
+// Stripe moved current_period_end onto the subscription item in 2025-03-31.basil.
+const periodEndOf = (subscription: Stripe.Subscription) =>
+  (subscription.items?.data?.[0] as { current_period_end?: number } | undefined)?.current_period_end ??
+  (subscription as unknown as { current_period_end?: number }).current_period_end
 
 const planFromSubscription = (subscription: Stripe.Subscription) => {
   const priceId = subscription.items.data[0]?.price?.id ?? ''
@@ -105,7 +110,7 @@ const applySubscription = async (subscription: Stripe.Subscription) => {
     p_plan: plan,
     p_billing_interval: interval,
     p_status: status,
-    p_current_period_end: toIso(subscription.current_period_end),
+    p_current_period_end: toIso(periodEndOf(subscription)),
     p_cancel_at_period_end: subscription.cancel_at_period_end ?? false,
     p_grace_period_ends_at: graceEndsAt,
   })
