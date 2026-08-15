@@ -169,6 +169,8 @@ function App() {
   const [teamMembers, setTeamMembers] = useState(teamMembersSeed)
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminError, setAdminError] = useState('')
+  const [companySeatPackage, setCompanySeatPackage] = useState(null)
+  const [companySeats, setCompanySeats] = useState([])
   const [supportModalOpen, setSupportModalOpen] = useState(false)
   const [supportLoading, setSupportLoading] = useState(false)
   const [supportError, setSupportError] = useState('')
@@ -419,11 +421,12 @@ function App() {
     setAdminLoading(true)
 
     try {
-      const [requests, members, subscriptions, payments] = await Promise.all([
+      const [requests, members, subscriptions, payments, seatData] = await Promise.all([
         authService.getAccessRequests(),
         authService.getManagedUsers(),
         billingService.listSubscriptions(),
         billingService.listPayments(),
+        authService.getCompanySeatData({ companyKey: session?.company }),
       ])
 
       if (requests.length) {
@@ -433,6 +436,9 @@ function App() {
       if (members.length) {
         setTeamMembers(members)
       }
+
+      setCompanySeatPackage(seatData.package)
+      setCompanySeats(seatData.seats)
 
       if (isSupabaseConfigured) {
         // Subscriptions only carry an email; pair them with profile names.
@@ -453,6 +459,27 @@ function App() {
     } finally {
       setAdminLoading(false)
     }
+  }
+
+  const handleCreateCompanySeatPackage = async (seatLimit) => {
+    const created = await authService.createCompanySeatPackage({ companyKey: session?.company, seatLimit })
+    setCompanySeatPackage(created)
+    return created
+  }
+
+  const handleAssignCompanySeat = async (employeeEmail) => {
+    const created = await authService.assignCompanySeat({
+      packageId: companySeatPackage?.id,
+      companyKey: session?.company,
+      employeeEmail,
+    })
+    setCompanySeats((prev) => [created, ...prev])
+    return created
+  }
+
+  const handleRevokeCompanySeat = async (seatId) => {
+    const updated = await authService.revokeCompanySeat({ seatId })
+    setCompanySeats((prev) => prev.map((seat) => (seat.id === updated.id ? { ...seat, ...updated } : seat)))
   }
 
   const loadRepostWorkspace = async () => {
@@ -534,7 +561,9 @@ function App() {
       })
       setAuthNotice(
         result?.activated
-          ? 'Account created and your subscription is attached. Check your inbox to verify your email, then sign in.'
+          ? result.seatActivated
+            ? 'Account created and your company seat is assigned. Check your inbox to verify your email, then sign in.'
+            : 'Account created and your subscription is attached. Check your inbox to verify your email, then sign in.'
           : 'Account request submitted. Check your inbox to verify your email. Access unlocks once your subscription is active or a manager approves you.',
       )
       setAuthView('signin')
@@ -3699,6 +3728,11 @@ function App() {
               handleQuotaUpdate={handleQuotaUpdate}
               handleToggleUserAccess={handleToggleUserAccess}
               handleUpdateUserRole={handleUpdateUserRole}
+              companySeatPackage={companySeatPackage}
+              companySeats={companySeats}
+              handleCreateCompanySeatPackage={handleCreateCompanySeatPackage}
+              handleAssignCompanySeat={handleAssignCompanySeat}
+              handleRevokeCompanySeat={handleRevokeCompanySeat}
               adminLoading={adminLoading}
               adminError={adminError}
               currentUser={session}

@@ -355,6 +355,14 @@ export const authService = {
       throw new Error(profileError.message)
     }
 
+    const { data: seatClaimed, error: seatClaimError } = await supabase.rpc('claim_company_seat', {
+      p_user_id: userId,
+    })
+
+    if (seatClaimError) {
+      throw new Error(seatClaimError.message)
+    }
+
     // The claim_subscription_for_new_profile trigger attaches any subscription
     // already paid for under this email and flips access to active. Only accounts
     // without billing coverage fall back to the manual approval queue.
@@ -365,7 +373,7 @@ export const authService = {
       .maybeSingle()
 
     if (createdProfile?.access_status === 'active') {
-      return { ok: true, activated: true }
+      return { ok: true, activated: true, seatActivated: Boolean(seatClaimed) }
     }
 
     const { error: requestError } = await supabase.from('access_requests').insert({
@@ -380,7 +388,7 @@ export const authService = {
       throw new Error(requestError.message)
     }
 
-    return { ok: true, activated: false }
+    return { ok: true, activated: false, seatActivated: Boolean(seatClaimed) }
   },
 
   async getAccessRequests() {
@@ -421,6 +429,93 @@ export const authService = {
     }
 
     return (data ?? []).map(normalizeMember)
+  },
+
+  async getCompanySeatData({ companyKey }) {
+    if (!companyKey) return { package: null, seats: [] }
+
+    if (!isSupabaseConfigured) {
+      return { package: null, seats: [] }
+    }
+
+    const [{ data: packages, error: packageError }, { data: seats, error: seatError }] = await Promise.all([
+      supabase.from('company_seat_packages').select('*').eq('company_key', companyKey).maybeSingle(),
+      supabase.from('company_seats').select('*').eq('company_key', companyKey).order('assigned_at', { ascending: false }),
+    ])
+
+    if (packageError) throw new Error(packageError.message)
+    if (seatError) throw new Error(seatError.message)
+
+    return {
+      package: packages
+        ? { id: packages.id, companyKey: packages.company_key, seatLimit: packages.seat_limit, status: packages.status }
+        : null,
+      seats: (seats ?? []).map((seat) => ({
+        id: seat.id,
+        packageId: seat.package_id,
+        employeeEmail: seat.employee_email,
+        profileId: seat.profile_id,
+        status: seat.status,
+        assignedAt: seat.assigned_at,
+        claimedAt: seat.claimed_at,
+      })),
+    }
+  },
+
+  async createCompanySeatPackage({ companyKey, seatLimit }) {
+    const normalizedCompany = companyKey?.trim().toLowerCase()
+    const parsedLimit = Number(seatLimit)
+    if (!normalizedCompany || !Number.isInteger(parsedLimit) || parsedLimit < 1) {
+      throw new Error('A company name and a positive whole-number seat limit are required.')
+    }
+
+    if (!isSupabaseConfigured) {
+      return { id: 'demo-seat-package', companyKey: normalizedCompany, seatLimit: parsedLimit, status: 'active' }
+    }
+
+    const { data, error } = await supabase
+      .from('company_seat_packages')
+      .insert({ company_key: normalizedCompany, seat_limit: parsedLimit, created_by: (await supabase.auth.getUser()).data.user?.id })
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return { id: data.id, companyKey: data.company_key, seatLimit: data.seat_limit, status: data.status }
+  },
+
+  async assignCompanySeat({ packageId, companyKey, employeeEmail }) {
+    const normalizedEmail = employeeEmail?.trim().toLowerCase()
+    if (!packageId || !companyKey || !normalizedEmail) {
+      throw new Error('A seat package and employee email are required.')
+    }
+
+    if (!isSupabaseConfigured) {
+      return { id: `demo-seat-${Date.now()}`, packageId, employeeEmail: normalizedEmail, status: 'assigned' }
+    }
+
+    const { data, error } = await supabase
+      .from('company_seats')
+      .insert({ package_id: packageId, company_key: companyKey.trim().toLowerCase(), employee_email: normalizedEmail, assigned_by: (await supabase.auth.getUser()).data.user?.id })
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return { id: data.id, packageId: data.package_id, employeeEmail: data.employee_email, profileId: data.profile_id, status: data.status, assignedAt: data.assigned_at, claimedAt: data.claimed_at }
+  },
+
+  async revokeCompanySeat({ seatId }) {
+    if (!seatId) throw new Error('Seat ID is required.')
+    if (!isSupabaseConfigured) return { id: seatId, status: 'revoked' }
+
+    const { data, error } = await supabase
+      .from('company_seats')
+      .update({ status: 'revoked' })
+      .eq('id', seatId)
+      .select('*')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return { id: data.id, status: data.status }
   },
 
   async reviewAccessRequest({ requestId, decision }) {
@@ -558,8 +653,8 @@ export const authService = {
       throw new Error('User ID and role are required.')
     }
 
-    if (!['user', 'manager', 'it', 'admin'].includes(role)) {
-      throw new Error('Role must be user, manager, it, or admin.')
+    if (!['user', 'manager', 'it', 'accountant', 'admin'].includes(role)) {
+      throw new Error('Role must be user, manager, it, accountant, or admin.')
     }
 
     if (!isSupabaseConfigured) {
