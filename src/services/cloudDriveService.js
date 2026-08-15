@@ -70,14 +70,30 @@ export const cloudDriveService = {
     return data?.items ?? []
   },
 
-  async listCalendarEvents({ timeMin, timeMax }) {
+  async listCalendarEvents({ timeMin, timeMax, calendarId = 'primary' }) {
     const data = await invoke({
       action: 'calendar',
       provider: 'google',
       timeMin,
       timeMax,
+      calendarId,
     })
     return data?.events ?? []
+  },
+
+  async listCalendars() {
+    const data = await invoke({ action: 'calendar-list', provider: 'google' })
+    return data?.calendars ?? []
+  },
+
+  async createCalendarEvent({ calendarId = 'primary', title, description, start, end }) {
+    const data = await invoke({
+      action: 'calendar-create-event',
+      provider: 'google',
+      calendarId,
+      event: { title, description, start, end },
+    })
+    return data?.event ?? null
   },
 
   async listSharePointSites() {

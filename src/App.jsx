@@ -49,6 +49,7 @@ const FinancePanel = lazy(() => import('./components/FinancePanel').then((module
 const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((module) => ({ default: module.CreativeBrief })))
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
 const InhouseAiStudio = lazy(() => import('./components/InhouseAiStudio').then((module) => ({ default: module.InhouseAiStudio })))
+const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
@@ -153,6 +154,17 @@ function App() {
   const [contactCardSaving, setContactCardSaving] = useState(false)
   const [contactCardError, setContactCardError] = useState('')
   const [contactCardNotice, setContactCardNotice] = useState('')
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [googleCalendars, setGoogleCalendars] = useState([])
+  const [googleEvents, setGoogleEvents] = useState([])
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const [calendarError, setCalendarError] = useState('')
+  const [selectedCalendarId, setSelectedCalendarId] = useState(
+    () => localStorage.getItem('echoai-calendar-id') || 'primary',
+  )
+  const [calendarSyncEnabled, setCalendarSyncEnabled] = useState(
+    () => localStorage.getItem('echoai-calendar-sync') !== 'false',
+  )
 
   const [activeTab, setActiveTab] = useState('dashboard')
   const [connectedAccounts, setConnectedAccounts] = useState(connectedAccountsSeed)
@@ -526,47 +538,6 @@ function App() {
     setAuthState((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleQuickAccess = async ({ email, password, label }) => {
-    setAuthError('')
-    setAuthNotice(`${label} access loading...`)
-    setAuthLoading(true)
-
-    try {
-      const result = await authService.signIn({ email, password })
-
-      if (result.mfaRequired) {
-        setPendingEmail(email)
-        setMfaChallenge({ factorId: result.factorId, challengeId: result.challengeId })
-        setAuthNotice('')
-        setMfaPending(true)
-        return
-      }
-
-      if (result.enrollmentRequired) {
-        setPendingEmail(email)
-        setSession(result.user)
-        await applyUserData(result.user)
-        setAuthNotice('')
-        setMfaEnrollOpen(true)
-        return
-      }
-
-      setSession(result.user)
-      await applyUserData(result.user)
-      await loadRepostWorkspace()
-      await loadBrandKit()
-      await loadCloudConnections()
-      if (result.user?.role === 'admin' || result.user?.isSuperAdmin) {
-        await loadAdminData()
-      }
-      setAuthNotice('')
-    } catch (error) {
-      setAuthError(error.message)
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
   const handleSignIn = async (event) => {
     event.preventDefault()
     setAuthError('')
@@ -745,6 +716,66 @@ function App() {
       setContactCardError(error.message)
     } finally {
       setContactCardSaving(false)
+    }
+  }
+
+  const isGoogleConnected = cloudConnections.some((connection) => connection.provider === 'google')
+
+  const loadCalendarMonth = async (month, calendarId = selectedCalendarId) => {
+    if (!isSupabaseConfigured || !isGoogleConnected) return
+
+    const timeMin = new Date(month.getFullYear(), month.getMonth() - 1, 1).toISOString()
+    const timeMax = new Date(month.getFullYear(), month.getMonth() + 2, 0, 23, 59, 59).toISOString()
+
+    setCalendarError('')
+    setCalendarLoading(true)
+
+    try {
+      const [events, calendars] = await Promise.all([
+        cloudDriveService.listCalendarEvents({ timeMin, timeMax, calendarId }),
+        googleCalendars.length === 0 ? cloudDriveService.listCalendars() : Promise.resolve(googleCalendars),
+      ])
+      setGoogleEvents(events)
+      setGoogleCalendars(calendars)
+    } catch (error) {
+      setCalendarError(
+        error.message === 'reauth_required'
+          ? 'Your Google connection expired. Reconnect it in Integrations.'
+          : error.message,
+      )
+    } finally {
+      setCalendarLoading(false)
+    }
+  }
+
+  const handleSelectCalendar = (calendarId) => {
+    setSelectedCalendarId(calendarId)
+    localStorage.setItem('echoai-calendar-id', calendarId)
+    loadCalendarMonth(new Date(), calendarId)
+  }
+
+  const handleToggleCalendarSync = (enabled) => {
+    setCalendarSyncEnabled(enabled)
+    localStorage.setItem('echoai-calendar-sync', String(enabled))
+  }
+
+  // Mirrors a newly scheduled post onto the chosen Google calendar.
+  const syncPostToCalendar = async (post) => {
+    if (!calendarSyncEnabled || !isGoogleConnected || !post?.scheduledAt) return
+
+    const start = new Date(post.scheduledAt)
+    if (Number.isNaN(start.getTime())) return
+
+    try {
+      await cloudDriveService.createCalendarEvent({
+        calendarId: selectedCalendarId,
+        title: post.campaign || 'EchoAI scheduled post',
+        description: [post.message, (post.channels ?? []).join(', ')].filter(Boolean).join('\n\n'),
+        start: start.toISOString(),
+        end: new Date(start.getTime() + 30 * 60000).toISOString(),
+      })
+    } catch (error) {
+      setCalendarError(`Calendar sync failed: ${error.message}`)
     }
   }
 
@@ -1037,6 +1068,7 @@ function App() {
     })
 
     setScheduledPosts((prev) => [newPost, ...prev])
+    await syncPostToCalendar(newPost)
     setComposer({
       campaign: '',
       message: '',
@@ -2012,7 +2044,7 @@ function App() {
       clearInterval(timer)
       window.removeEventListener('focus', enforceEntitlement)
     }
-  }, [session?.id])
+  }, [session?.id, session?.role])
 
   const signOut = async () => {
     await authService.signOut()
@@ -2405,6 +2437,25 @@ function App() {
 
   return (
     <div className="app-shell">
+      <Suspense fallback={null}>
+        <CalendarPopout
+          open={calendarOpen}
+          onClose={() => setCalendarOpen(false)}
+          scheduledPosts={scheduledPosts}
+          googleEvents={googleEvents}
+          calendars={googleCalendars}
+          selectedCalendarId={selectedCalendarId}
+          onSelectCalendar={handleSelectCalendar}
+          connected={isGoogleConnected}
+          onConnect={() => cloudDriveService.connect('google').catch((error) => setCalendarError(error.message))}
+          syncEnabled={calendarSyncEnabled}
+          onToggleSync={handleToggleCalendarSync}
+          loading={calendarLoading}
+          error={calendarError}
+          onMonthChange={loadCalendarMonth}
+        />
+      </Suspense>
+
       {mfaEnrollOpen && (
         <div className="modal-overlay">
           <div className="modal-panel" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
@@ -2634,16 +2685,16 @@ function App() {
           </div>
         </div>
         <div className="top-actions">
-          <a
+          <button
+            type="button"
             className="icon-button"
-            href={contactCard?.calendarUrl || 'https://calendar.google.com/calendar/r'}
-            target="_blank"
-            rel="noreferrer"
-            title="Open Google Calendar"
-            aria-label="Open Google Calendar"
+            onClick={() => setCalendarOpen((open) => !open)}
+            title="Open calendar"
+            aria-label="Open calendar"
+            aria-expanded={calendarOpen}
           >
             <span aria-hidden="true">📅</span>
-          </a>
+          </button>
           <button
             type="button"
             className="contact-chip"

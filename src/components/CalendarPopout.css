@@ -1,0 +1,238 @@
+.calendar-popout-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: rgba(15, 23, 42, 0.28);
+  cursor: default;
+}
+
+.calendar-popout {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 41;
+  width: min(420px, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.1rem;
+  overflow-y: auto;
+  border: 1px solid #dbeafe;
+  border-radius: 1.1rem;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+}
+
+.calendar-popout-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.calendar-popout-head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.calendar-popout-kicker {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.calendar-popout-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.calendar-popout-nav button {
+  min-width: 34px;
+  padding: 0.35rem 0.6rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.calendar-popout-nav button:hover {
+  background: #dbeafe;
+}
+
+.calendar-popout-close {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.calendar-popout-source {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.85rem;
+  background: #f8fafc;
+  font-size: 0.85rem;
+}
+
+.calendar-popout-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.calendar-popout-toggle input {
+  width: auto;
+}
+
+.calendar-popout-connect {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.calendar-popout-connect p {
+  margin: 0;
+  color: #475569;
+}
+
+.calendar-popout-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.calendar-popout-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.85rem;
+}
+
+.calendar-popout-weekdays,
+.calendar-popout-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.calendar-popout-weekdays span {
+  padding: 0.2rem 0;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.calendar-day {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  align-content: start;
+  min-height: 48px;
+  padding: 0.3rem 0.2rem;
+  border: 1px solid transparent;
+  border-radius: 0.55rem;
+  background: #f8fafc;
+  font: inherit;
+}
+
+.calendar-day:hover {
+  background: #eff6ff;
+}
+
+.calendar-day.is-outside .calendar-day-number {
+  color: #cbd5e1;
+}
+
+.calendar-day.is-today {
+  border-color: #60a5fa;
+}
+
+.calendar-day.is-selected {
+  background: #dbeafe;
+  border-color: #2563eb;
+}
+
+.calendar-day-number {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.calendar-day-dots {
+  display: flex;
+  gap: 2px;
+  min-height: 6px;
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.dot-echoai {
+  background: #2563eb;
+}
+
+.dot-google {
+  background: #16a34a;
+}
+
+.calendar-popout-agenda h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.calendar-popout-agenda ul {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agenda-item {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-left: 3px solid #2563eb;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+}
+
+.agenda-google {
+  border-left-color: #16a34a;
+}
+
+.agenda-time {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.agenda-body {
+  display: grid;
+  min-width: 0;
+}
+
+.agenda-body small {
+  color: #64748b;
+}
+
+@media (max-width: 640px) {
+  .calendar-popout {
+    top: 0.5rem;
+    right: 0.5rem;
+    left: 0.5rem;
+    bottom: 0.5rem;
+    width: auto;
+  }
+}

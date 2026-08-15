@@ -18,8 +18,8 @@ const PROVIDERS = {
     tokenUrl: 'https://oauth2.googleapis.com/token',
     clientId: Deno.env.get('GOOGLE_CLIENT_ID') ?? '',
     clientSecret: Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '',
-    // Read-only: EchoAI never needs to modify a customer's drive.
-    scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/calendar.readonly openid email',
+    // Drive stays read-only; calendar needs write so scheduled posts can sync.
+    scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/calendar openid email',
   },
   microsoft: {
     authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
@@ -127,8 +127,61 @@ const listGoogle = async (accessToken: string, folderId: string, search: string)
   }))
 }
 
-const listGoogleCalendarEvents = async (accessToken: string, timeMin: string, timeMax: string) => {
-  const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
+const listGoogleCalendars = async (accessToken: string) => {
+  const response = await fetch(
+    'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250',
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  if (!response.ok) throw new Error(`Google Calendar returned ${response.status}`)
+
+  const payload = await response.json()
+  return (payload.items ?? []).map((item: Record<string, any>) => ({
+    id: item.id,
+    name: item.summary ?? item.id,
+    description: item.description ?? '',
+    primary: Boolean(item.primary),
+    accessRole: item.accessRole ?? '',
+    color: item.backgroundColor ?? '',
+  }))
+}
+
+const createGoogleCalendarEvent = async (
+  accessToken: string,
+  calendarId: string,
+  event: Record<string, any>,
+) => {
+  const response = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        summary: event.title ?? 'EchoAI scheduled post',
+        description: event.description ?? '',
+        start: { dateTime: event.start },
+        end: { dateTime: event.end },
+      }),
+    },
+  )
+
+  if (!response.ok) throw new Error(`Google Calendar returned ${response.status}`)
+
+  const created = await response.json()
+  return { id: created.id, htmlLink: created.htmlLink ?? '' }
+}
+
+const listGoogleCalendarEvents = async (
+  accessToken: string,
+  timeMin: string,
+  timeMax: string,
+  calendarId = 'primary',
+) => {
+  const url = new URL(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+  )
   url.searchParams.set('timeMin', timeMin)
   url.searchParams.set('timeMax', timeMax)
   url.searchParams.set('singleEvents', 'true')
@@ -309,8 +362,28 @@ Deno.serve(async (request) => {
       const accessToken = await freshAccessToken(user.id, provider)
       const timeMin = body.timeMin ?? new Date().toISOString()
       const timeMax = body.timeMax ?? new Date(Date.now() + 31 * 86400000).toISOString()
-      const events = await listGoogleCalendarEvents(accessToken, timeMin, timeMax)
+      const events = await listGoogleCalendarEvents(
+        accessToken,
+        timeMin,
+        timeMax,
+        body.calendarId || 'primary',
+      )
       return json({ events })
+    }
+
+    if (action === 'calendar-list' && provider === 'google') {
+      const accessToken = await freshAccessToken(user.id, provider)
+      return json({ calendars: await listGoogleCalendars(accessToken) })
+    }
+
+    if (action === 'calendar-create-event' && provider === 'google') {
+      const accessToken = await freshAccessToken(user.id, provider)
+      const event = await createGoogleCalendarEvent(
+        accessToken,
+        body.calendarId || 'primary',
+        body.event ?? {},
+      )
+      return json({ event })
     }
 
     // A fresh, short-lived link for previewing or dragging a file into an editor.
