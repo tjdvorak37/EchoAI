@@ -24,7 +24,7 @@ const Brand = () => (
   </span>
 )
 
-export function LandingPage({ onSignIn, onPurchase }) {
+export function LandingPage({ onSignIn, onPurchase, onEmployeeAccess, onAdminAccess }) {
   return (
     <div className="landing-page" id="top">
       <header className="landing-nav">
@@ -176,6 +176,18 @@ export function LandingPage({ onSignIn, onPurchase }) {
           <p className="landing-pricing-note">Annual billing saves 15%. Secure checkout powered by Stripe. Cancel anytime.</p>
         </section>
       </main>
+
+      <section className="landing-admin-cta" aria-label="Employee login and admin center">
+        <div className="landing-admin-copy">
+          <p>Internal access</p>
+          <h2>Employee login &amp; admin center</h2>
+          <span>Built for staff, managers, and super admins to bypass the public subscription flow and manage company access without going through customer checkout.</span>
+        </div>
+        <div className="landing-admin-actions">
+          <button type="button" className="landing-secondary-action" onClick={onEmployeeAccess}>Employee login</button>
+          <button type="button" className="landing-primary-action" onClick={onAdminAccess}>Admin center</button>
+        </div>
+      </section>
 
       <footer className="landing-footer">
         <a href="#top"><Brand /></a>

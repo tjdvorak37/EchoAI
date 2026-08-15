@@ -509,6 +509,47 @@ function App() {
     setAuthState((prev) => ({ ...prev, [field]: value }))
   }
 
+  const handleQuickAccess = async ({ email, password, label }) => {
+    setAuthError('')
+    setAuthNotice(`${label} access loading...`)
+    setAuthLoading(true)
+
+    try {
+      const result = await authService.signIn({ email, password })
+
+      if (result.mfaRequired) {
+        setPendingEmail(email)
+        setMfaChallenge({ factorId: result.factorId, challengeId: result.challengeId })
+        setAuthNotice('')
+        setMfaPending(true)
+        return
+      }
+
+      if (result.enrollmentRequired) {
+        setPendingEmail(email)
+        setSession(result.user)
+        await applyUserData(result.user)
+        setAuthNotice('')
+        setMfaEnrollOpen(true)
+        return
+      }
+
+      setSession(result.user)
+      await applyUserData(result.user)
+      await loadRepostWorkspace()
+      await loadBrandKit()
+      await loadCloudConnections()
+      if (result.user?.role === 'admin' || result.user?.isSuperAdmin) {
+        await loadAdminData()
+      }
+      setAuthNotice('')
+    } catch (error) {
+      setAuthError(error.message)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   const handleSignIn = async (event) => {
     event.preventDefault()
     setAuthError('')
@@ -537,8 +578,8 @@ function App() {
         return
       }
 
-        setSession(result.user)
-        await applyUserData(result.user)
+      setSession(result.user)
+      await applyUserData(result.user)
     } catch (error) {
       setAuthError(error.message)
     } finally {
@@ -1964,6 +2005,26 @@ function App() {
         <Suspense fallback={loadingPanel}>
           <LandingPage
             onSignIn={() => setAuthView('signin')}
+            onEmployeeAccess={() => {
+              setAuthView('employee-admin')
+              setAuthState({
+                email: 'employee@company.com',
+                password: 'employee123',
+                fullName: '',
+                company: '',
+                otpCode: '',
+              })
+            }}
+            onAdminAccess={() => {
+              setAuthView('employee-admin')
+              setAuthState({
+                email: 'superadmin@company.com',
+                password: 'super123',
+                fullName: '',
+                company: '',
+                otpCode: '',
+              })
+            }}
             onPurchase={(planKey) => {
               if (planKey) setPurchasePlan(planKey)
               setShowPurchase(true)
@@ -2077,6 +2138,41 @@ function App() {
             )
           ) : (
             <>
+              {authView === 'employee-admin' && (
+                <div className="auth-form">
+                  <h2>Employee / admin access</h2>
+                  <p className="panel-note">
+                    Internal staff access for operations, onboarding, and admin management. This stays off the public subscription path.
+                  </p>
+                  <div className="chip-row" style={{ marginBottom: '1rem' }}>
+                    <button
+                      type="button"
+                      className="chip"
+                      onClick={() => handleQuickAccess({ email: 'superadmin@company.com', password: 'super123', label: 'Super admin' })}
+                    >
+                      Super admin
+                    </button>
+                    <button
+                      type="button"
+                      className="chip"
+                      onClick={() => handleQuickAccess({ email: 'admin@company.com', password: 'admin123', label: 'Admin' })}
+                    >
+                      Admin
+                    </button>
+                    <button
+                      type="button"
+                      className="chip"
+                      onClick={() => handleQuickAccess({ email: 'employee@company.com', password: 'employee123', label: 'Employee' })}
+                    >
+                      Employee
+                    </button>
+                  </div>
+                  <button type="button" className="text-button" onClick={() => setAuthView('signin')}>
+                    Use regular login instead
+                  </button>
+                </div>
+              )}
+
               {authView === 'signin' && (
                 <form className="auth-form" onSubmit={handleSignIn}>
                   <h2>Login</h2>
@@ -2114,6 +2210,13 @@ function App() {
                     onClick={() => setShowPurchase(true)}
                   >
                     Don&apos;t have access? Purchase a license →
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setAuthView('employee-admin')}
+                  >
+                    Internal employee / admin login →
                   </button>
                 </form>
               )}
