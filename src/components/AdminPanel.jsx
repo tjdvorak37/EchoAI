@@ -61,6 +61,8 @@ export function AdminPanel({
   quotaEditingUserId, setQuotaEditingUserId,
   quotaDraftMb, setQuotaDraftMb,
   handleQuotaUpdate, handleToggleUserAccess, handleUpdateUserRole,
+  companySeatPackage, companySeats,
+  handleCreateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
   adminLoading, adminError,
   currentUser,
 }) {
@@ -69,11 +71,45 @@ export function AdminPanel({
   const [replyDraft, setReplyDraft] = useState('')
   const [licenseNote, setLicenseNote] = useState({})
   const [userSearch, setUserSearch] = useState('')
+  const [seatLimitDraft, setSeatLimitDraft] = useState('10')
+  const [seatEmailDraft, setSeatEmailDraft] = useState('')
+  const [seatError, setSeatError] = useState('')
 
   const activeLicenses = licenses.filter((l) => l.status === 'active').length
   const pendingLicenses = licenses.filter((l) => l.status === 'pending_payment').length
   const openTickets = tickets.filter((t) => t.status === 'open').length
   const totalRevenue = purchaseHistory.filter((p) => p.status === 'confirmed').reduce((sum, p) => sum + p.amountUsd, 0)
+  const assignedSeats = companySeats.filter((seat) => seat.status !== 'revoked').length
+
+  const createSeatPackage = async (event) => {
+    event.preventDefault()
+    setSeatError('')
+    try {
+      await handleCreateCompanySeatPackage(seatLimitDraft)
+    } catch (error) {
+      setSeatError(error.message)
+    }
+  }
+
+  const assignSeat = async (event) => {
+    event.preventDefault()
+    setSeatError('')
+    try {
+      await handleAssignCompanySeat(seatEmailDraft)
+      setSeatEmailDraft('')
+    } catch (error) {
+      setSeatError(error.message)
+    }
+  }
+
+  const revokeSeat = async (seatId) => {
+    setSeatError('')
+    try {
+      await handleRevokeCompanySeat(seatId)
+    } catch (error) {
+      setSeatError(error.message)
+    }
+  }
 
   const confirmLicense = (licenseId) => {
     setLicenses((prev) => prev.map((l) =>
@@ -257,6 +293,48 @@ export function AdminPanel({
 
         {itTab === 'licenses' && (
           <div>
+            <Section title="Company email seats">
+              <p className="panel-note">
+                Assign individual seats to employee email addresses. Employees claim access when they sign up with the assigned email.
+              </p>
+              {!companySeatPackage ? (
+                <form className="composer" onSubmit={createSeatPackage}>
+                  <label>
+                    Seat package size
+                    <input type="number" min="1" step="1" value={seatLimitDraft} onChange={(event) => setSeatLimitDraft(event.target.value)} />
+                  </label>
+                  <button type="submit" className="primary-button" disabled={adminLoading}>Create company seat package</button>
+                </form>
+              ) : (
+                <>
+                  <div className="asset-usage-banner">
+                    <strong>{currentUser?.company || companySeatPackage.companyKey}</strong>
+                    <span>{assignedSeats} of {companySeatPackage.seatLimit} seats assigned</span>
+                  </div>
+                  <form className="composer" onSubmit={assignSeat}>
+                    <label>
+                      Employee email
+                      <input type="email" required value={seatEmailDraft} onChange={(event) => setSeatEmailDraft(event.target.value)} placeholder="employee@company.com" />
+                    </label>
+                    <button type="submit" className="primary-button" disabled={adminLoading || assignedSeats >= companySeatPackage.seatLimit}>Assign seat</button>
+                  </form>
+                  {companySeats.map((seat) => (
+                    <div key={seat.id} className="it-row">
+                      <div>
+                        <strong>{seat.employeeEmail}</strong>
+                        <br />
+                        <small>{seat.claimedAt ? 'Claimed' : 'Awaiting signup'}</small>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <StatusBadge value={seat.status} />
+                        {seat.status !== 'revoked' && <button type="button" className="ghost-button" onClick={() => revokeSeat(seat.id)}>Revoke</button>}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+              {seatError && <p className="auth-message auth-error">{seatError}</p>}
+            </Section>
             <Section title="All licenses">
               <p className="panel-note">
                 Activation and revocation are automatic — a successful payment or promo redemption

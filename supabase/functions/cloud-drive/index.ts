@@ -19,7 +19,7 @@ const PROVIDERS = {
     clientId: Deno.env.get('GOOGLE_CLIENT_ID') ?? '',
     clientSecret: Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '',
     // Read-only: EchoAI never needs to modify a customer's drive.
-    scope: 'https://www.googleapis.com/auth/drive.readonly openid email',
+    scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/calendar.readonly openid email',
   },
   microsoft: {
     authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
@@ -124,6 +124,30 @@ const listGoogle = async (accessToken: string, folderId: string, search: string)
     thumbnailUrl: file.thumbnailLink ?? '',
     webUrl: file.webViewLink ?? '',
     modifiedAt: file.modifiedTime ?? '',
+  }))
+}
+
+const listGoogleCalendarEvents = async (accessToken: string, timeMin: string, timeMax: string) => {
+  const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
+  url.searchParams.set('timeMin', timeMin)
+  url.searchParams.set('timeMax', timeMax)
+  url.searchParams.set('singleEvents', 'true')
+  url.searchParams.set('orderBy', 'startTime')
+  url.searchParams.set('maxResults', '250')
+
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+  if (!response.ok) throw new Error(`Google Calendar returned ${response.status}`)
+
+  const payload = await response.json()
+  return (payload.items ?? []).map((event: Record<string, any>) => ({
+    id: event.id,
+    title: event.summary ?? 'Untitled event',
+    description: event.description ?? '',
+    location: event.location ?? '',
+    htmlLink: event.htmlLink ?? '',
+    start: event.start?.dateTime ?? event.start?.date ?? '',
+    end: event.end?.dateTime ?? event.end?.date ?? '',
+    allDay: Boolean(event.start?.date),
   }))
 }
 
@@ -279,6 +303,14 @@ Deno.serve(async (request) => {
         : await listMicrosoft(accessToken, body.folderId ?? '', body.search ?? '', body.siteId ?? '')
 
       return json({ items })
+    }
+
+    if (action === 'calendar' && provider === 'google') {
+      const accessToken = await freshAccessToken(user.id, provider)
+      const timeMin = body.timeMin ?? new Date().toISOString()
+      const timeMax = body.timeMax ?? new Date(Date.now() + 31 * 86400000).toISOString()
+      const events = await listGoogleCalendarEvents(accessToken, timeMin, timeMax)
+      return json({ events })
     }
 
     // A fresh, short-lived link for previewing or dragging a file into an editor.
