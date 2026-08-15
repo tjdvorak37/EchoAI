@@ -13,33 +13,6 @@ create extension if not exists pgcrypto;
 
 create schema if not exists app;
 
--- These helpers read public.profiles and are used inside public.profiles RLS
--- policies below. Without SECURITY DEFINER that is infinite recursion (42P17)
--- as soon as RLS is enabled on the table.
-create or replace function app.current_company_key()
-returns text
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select lower(trim(coalesce(p.company, '')))
-  from public.profiles p
-  where p.id = auth.uid()
-$$;
-
-create or replace function app.current_role()
-returns text
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select coalesce(p.role, 'user')
-  from public.profiles p
-  where p.id = auth.uid()
-$$;
-
 -- ---------------------------------------------------------------------------
 -- profiles
 -- ---------------------------------------------------------------------------
@@ -79,6 +52,35 @@ alter table public.access_requests add column if not exists requested_at timesta
 alter table public.access_requests add column if not exists reviewed_at timestamptz;
 
 create index if not exists access_requests_status_idx on public.access_requests (status, requested_at desc);
+
+-- These helpers read public.profiles and are used inside public.profiles RLS
+-- policies below. Without SECURITY DEFINER that is infinite recursion (42P17)
+-- as soon as RLS is enabled on the table.
+create or replace function app.current_company_key()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select lower(trim(coalesce(p.company, '')))
+  from public.profiles p
+  where p.id = auth.uid()
+$$;
+
+create or replace function app.current_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select coalesce(p.role, 'user')
+  from public.profiles p
+  where p.id = auth.uid()
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Row level security

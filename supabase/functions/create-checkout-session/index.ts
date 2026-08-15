@@ -2,7 +2,7 @@
 // never be tampered with by the browser.
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
-import { corsHeaders, json } from '../_shared/cors.ts'
+import { corsHeaders, getCorsHeaders, json } from '../_shared/cors.ts'
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
   apiVersion: '2025-01-27.acacia',
@@ -46,10 +46,10 @@ const userFromAuthHeader = async (authHeader: string | null) => {
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: getCorsHeaders(request) })
   }
   if (request.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, 405)
+    return json({ error: 'Method not allowed' }, 405, request)
   }
 
   try {
@@ -58,19 +58,19 @@ Deno.serve(async (request) => {
     const interval = billingInterval === 'annual' ? 'annual' : 'monthly'
 
     if (!PLAN_KEYS.includes(plan)) {
-      return json({ error: 'Unknown plan.' }, 400)
+      return json({ error: 'Unknown plan.' }, 400, request)
     }
 
     const priceId = priceFor(plan, interval)
     if (!priceId) {
-      return json({ error: 'That plan is not available for purchase yet.' }, 400)
+      return json({ error: 'That plan is not available for purchase yet.' }, 400, request)
     }
 
     const user = await userFromAuthHeader(request.headers.get('Authorization'))
     const email = user?.email ?? (typeof bodyEmail === 'string' ? bodyEmail.trim() : '')
 
     if (!email || !email.includes('@')) {
-      return json({ error: 'A valid email address is required.' }, 400)
+      return json({ error: 'A valid email address is required.' }, 400, request)
     }
 
     // Referral eligibility is decided server-side; the browser only supplies the code.
@@ -111,9 +111,9 @@ Deno.serve(async (request) => {
       cancel_url: `${APP_URL}/?checkout=cancelled`,
     })
 
-    return json({ url: session.url, referralApplied: Boolean(appliedReferralCode) })
+    return json({ url: session.url, referralApplied: Boolean(appliedReferralCode) }, 200, request)
   } catch (error) {
     console.error('create-checkout-session failed', error)
-    return json({ error: 'Unable to start checkout.' }, 500)
+    return json({ error: 'Unable to start checkout.' }, 500, request)
   }
 })
