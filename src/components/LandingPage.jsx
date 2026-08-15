@@ -24,7 +24,7 @@ const Brand = () => (
   </span>
 )
 
-export function LandingPage({ onSignIn, onPurchase, onEmployeeAccess, onAdminAccess }) {
+export function LandingPage({ onSignIn, onPurchase }) {
   return (
     <div className="landing-page" id="top">
       <header className="landing-nav">
@@ -35,7 +35,6 @@ export function LandingPage({ onSignIn, onPurchase, onEmployeeAccess, onAdminAcc
           <a href="#pricing">Pricing</a>
         </nav>
         <div className="landing-nav-actions">
-          <button type="button" className="landing-login" onClick={onSignIn}>Sign in</button>
           <button type="button" className="landing-primary-action" onClick={onPurchase}>Start creating</button>
         </div>
       </header>
@@ -53,8 +52,8 @@ export function LandingPage({ onSignIn, onPurchase, onEmployeeAccess, onAdminAcc
               <button type="button" className="landing-primary-action landing-hero-btn" onClick={onPurchase}>
                 Create your first project <span aria-hidden="true">→</span>
               </button>
-              <button type="button" className="landing-secondary-action landing-hero-btn" onClick={onSignIn}>
-                Open your workspace
+              <button type="button" className="landing-secondary-action landing-hero-btn" onClick={onPurchase}>
+                See plans
               </button>
             </div>
             <div className="landing-proof-row" aria-label="Plan highlights">
@@ -177,23 +176,14 @@ export function LandingPage({ onSignIn, onPurchase, onEmployeeAccess, onAdminAcc
         </section>
       </main>
 
-      <section className="landing-admin-cta" aria-label="Employee login and admin center">
-        <div className="landing-admin-copy">
-          <p>Internal access</p>
-          <h2>Employee login &amp; admin center</h2>
-          <span>Built for staff, managers, and super admins to bypass the public subscription flow and manage company access without going through customer checkout.</span>
-        </div>
-        <div className="landing-admin-actions">
-          <button type="button" className="landing-secondary-action" onClick={onEmployeeAccess}>Employee login</button>
-          <button type="button" className="landing-primary-action" onClick={onAdminAccess}>Admin center</button>
-        </div>
-      </section>
-
       <footer className="landing-footer">
         <a href="#top"><Brand /></a>
         <span>AI content creation, editing, publishing, and listening in one workspace.</span>
-        <button type="button" className="landing-login" onClick={onSignIn}>Sign in</button>
       </footer>
+
+      <button type="button" className="landing-admin-cta" onClick={onSignIn}>
+        Admin Center
+      </button>
     </div>
   )
 }

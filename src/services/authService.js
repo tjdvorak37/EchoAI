@@ -1,71 +1,12 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { DEFAULT_AGENT_CAPABILITIES } from './aiAgentService'
 
-const DEMO_OTP = '123456'
-const DEMO_USERS = [
-  {
-    id: 'demo-super-admin-1',
-    fullName: 'Super Admin',
-    email: 'superadmin@company.com',
-    company: 'EchoAI Media',
-    password: 'super123',
-    role: 'admin',
-    accessStatus: 'active',
-    storageQuotaMb: 4096,
-    isSuperAdmin: true,
-  },
-  {
-    id: 'demo-admin-1',
-    fullName: 'Admin User',
-    email: 'admin@company.com',
-    company: 'EchoAI Media',
-    password: 'admin123',
-    role: 'admin',
-    accessStatus: 'active',
-    storageQuotaMb: 2048,
-  },
-  {
-    id: 'demo-employee-1',
-    fullName: 'Employee User',
-    email: 'employee@company.com',
-    company: 'EchoAI Media',
-    password: 'employee123',
-    role: 'user',
-    accessStatus: 'active',
-    storageQuotaMb: 2048,
-  },
-  {
-    id: 'demo-user-3',
-    fullName: 'Taylor Morgan',
-    email: 'taylor@company.com',
-    company: 'EchoAI Media',
-    password: 'user123',
-    role: 'user',
-    accessStatus: 'active',
-    storageQuotaMb: 2048,
-  },
-  {
-    id: 'demo-accountant-1',
-    fullName: 'Sam Rivers',
-    email: 'accountant@company.com',
-    company: 'EchoAI Media',
-    password: 'acct123',
-    role: 'accountant',
-    accessStatus: 'active',
-    storageQuotaMb: 2048,
-  },
-]
-
 const DEMO_ACCESS_REQUESTS = []
 
-const BLOCKED_STATUS_MESSAGES = {
-  pending: 'Your account is not active yet. Complete your subscription to unlock access.',
-  denied: 'Your account request was denied. Contact Management or IT for help.',
-  deactivated: 'Your access is inactive. This usually means a subscription lapsed or a payment failed — renew to restore it instantly.',
-}
+const assertAccountCanAccess = (accessStatus, role = 'user', email = '') => {
+  const normalizedRole = String(role || '').toLowerCase()
 
-const assertAccountCanAccess = (accessStatus, role = 'user') => {
-  if (role === 'admin') {
+  if (normalizedRole === 'admin' || normalizedRole === 'super_admin') {
     return
   }
 
@@ -77,6 +18,12 @@ const assertAccountCanAccess = (accessStatus, role = 'user') => {
     BLOCKED_STATUS_MESSAGES[accessStatus] ??
       'Your account does not currently have access. Contact Management or IT.',
   )
+}
+
+const BLOCKED_STATUS_MESSAGES = {
+  pending: 'Your account is not active yet. Complete your subscription to unlock access.',
+  denied: 'Your account request was denied. Contact Management or IT for help.',
+  deactivated: 'Your access is inactive. This usually means a subscription lapsed or a payment failed — renew to restore it instantly.',
 }
 
 const normalizeRequest = (record) => ({
@@ -152,10 +99,11 @@ const getProfileByUser = async ({ userId, email }) => {
   }
 
   if (email) {
+    const normalizedEmail = String(email).trim()
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('email', email)
+      .ilike('email', normalizedEmail)
       .maybeSingle()
 
     if (error) {
@@ -175,22 +123,7 @@ export const authService = {
     }
 
     if (!isSupabaseConfigured) {
-      const demoUser = DEMO_USERS.find(
-        (user) =>
-          user.email.toLowerCase() === email.toLowerCase() &&
-          user.password === password,
-      )
-
-      if (!demoUser) {
-        throw new Error('Invalid demo credentials.')
-      }
-
-      assertAccountCanAccess(demoUser.accessStatus, demoUser.role)
-
-      return {
-        mfaRequired: true,
-        user: null,
-      }
+      throw new Error('Supabase is not configured. Contact support to restore access.')
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
@@ -254,26 +187,7 @@ export const authService = {
     }
 
     if (!isSupabaseConfigured) {
-      if (code !== DEMO_OTP) {
-        throw new Error('Invalid code. Use 123456 in demo mode.')
-      }
-
-      const demoUser = DEMO_USERS.find(
-        (user) => user.email.toLowerCase() === email.toLowerCase(),
-      )
-
-      assertAccountCanAccess(demoUser?.accessStatus ?? 'pending')
-
-      return {
-        user: {
-          id: demoUser?.id ?? 'demo-user-1',
-          email: demoUser?.email ?? email,
-          role: demoUser?.role ?? 'user',
-          accessStatus: demoUser?.accessStatus ?? 'active',
-          storageQuotaMb: demoUser?.storageQuotaMb ?? 2048,
-          isSuperAdmin: Boolean(demoUser?.isSuperAdmin),
-        },
-      }
+      throw new Error('Supabase is not configured. Contact support to restore access.')
     }
 
     if (!factorId || !challengeId) {
@@ -296,7 +210,7 @@ export const authService = {
     })
 
     try {
-      assertAccountCanAccess(profile?.access_status ?? 'pending', profile?.role)
+      assertAccountCanAccess(profile?.access_status ?? 'pending', profile?.role, profile?.email ?? email)
     } catch (accessError) {
       await supabase.auth.signOut()
       throw accessError

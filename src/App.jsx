@@ -116,6 +116,8 @@ function App() {
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
+  const [resetPassword, setResetPassword] = useState({ newPassword: '', confirmPassword: '' })
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
   const [mfaPending, setMfaPending] = useState(false)
   const [mfaChallenge, setMfaChallenge] = useState({ factorId: '', challengeId: '' })
   const [mfaEnrollOpen, setMfaEnrollOpen] = useState(false)
@@ -628,6 +630,55 @@ function App() {
       setAuthError(error.message)
     } finally {
       setAuthLoading(false)
+    }
+  }
+
+  const handleResetPasswordSubmit = async (event) => {
+    event.preventDefault()
+    setAuthError('')
+    setAuthNotice('')
+
+    if (!resetPassword.newPassword || !resetPassword.confirmPassword) {
+      setAuthError('Both password fields are required.')
+      return
+    }
+
+    if (resetPassword.newPassword !== resetPassword.confirmPassword) {
+      setAuthError('The new passwords do not match.')
+      return
+    }
+
+    if (resetPassword.newPassword.length < 8) {
+      setAuthError('Choose a password with at least 8 characters.')
+      return
+    }
+
+    setResetPasswordLoading(true)
+
+    try {
+      if (!isSupabaseConfigured) {
+        setAuthNotice('Password reset is unavailable because Supabase is not configured.')
+        return
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: resetPassword.newPassword,
+      })
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      setAuthNotice('Your password has been updated. You can sign in now.')
+      setResetPassword({ newPassword: '', confirmPassword: '' })
+      setTimeout(() => {
+        setAuthView('signin')
+        window.history.replaceState({}, '', window.location.origin)
+      }, 1200)
+    } catch (error) {
+      setAuthError(error.message)
+    } finally {
+      setResetPasswordLoading(false)
     }
   }
 
@@ -1915,6 +1966,52 @@ function App() {
     setAiAgentDraft(createDefaultAiAgentConfig())
   }
 
+  const isResetPasswordRoute = typeof window !== 'undefined' && window.location.pathname === '/reset-password'
+
+  if (isResetPasswordRoute) {
+    return (
+      <div className="auth-page">
+        <header className="auth-header">
+          <button type="button" className="text-button" onClick={() => setAuthView('signin')}>
+            ← Back to sign in
+          </button>
+        </header>
+
+        <section className="auth-panel">
+          <h1>Set a new password</h1>
+          <p>Choose a new password for your account.</p>
+
+          <form className="auth-form" onSubmit={handleResetPasswordSubmit}>
+            <label>
+              New password
+              <input
+                type="password"
+                value={resetPassword.newPassword}
+                onChange={(event) => setResetPassword((prev) => ({ ...prev, newPassword: event.target.value }))}
+                placeholder="••••••••"
+              />
+            </label>
+            <label>
+              Confirm new password
+              <input
+                type="password"
+                value={resetPassword.confirmPassword}
+                onChange={(event) => setResetPassword((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+                placeholder="••••••••"
+              />
+            </label>
+            <button type="submit" disabled={resetPasswordLoading}>
+              {resetPasswordLoading ? 'Updating...' : 'Update password'}
+            </button>
+          </form>
+
+          {authError && <p className="auth-message auth-error">{authError}</p>}
+          {authNotice && <p className="auth-message">{authNotice}</p>}
+        </section>
+      </div>
+    )
+  }
+
   if (!session) {
     if (showPurchase) {
       return (
@@ -2005,26 +2102,6 @@ function App() {
         <Suspense fallback={loadingPanel}>
           <LandingPage
             onSignIn={() => setAuthView('signin')}
-            onEmployeeAccess={() => {
-              setAuthView('employee-admin')
-              setAuthState({
-                email: 'employee@company.com',
-                password: 'employee123',
-                fullName: '',
-                company: '',
-                otpCode: '',
-              })
-            }}
-            onAdminAccess={() => {
-              setAuthView('employee-admin')
-              setAuthState({
-                email: 'superadmin@company.com',
-                password: 'super123',
-                fullName: '',
-                company: '',
-                otpCode: '',
-              })
-            }}
             onPurchase={(planKey) => {
               if (planKey) setPurchasePlan(planKey)
               setShowPurchase(true)
@@ -2138,44 +2215,9 @@ function App() {
             )
           ) : (
             <>
-              {authView === 'employee-admin' && (
-                <div className="auth-form">
-                  <h2>Employee / admin access</h2>
-                  <p className="panel-note">
-                    Internal staff access for operations, onboarding, and admin management. This stays off the public subscription path.
-                  </p>
-                  <div className="chip-row" style={{ marginBottom: '1rem' }}>
-                    <button
-                      type="button"
-                      className="chip"
-                      onClick={() => handleQuickAccess({ email: 'superadmin@company.com', password: 'super123', label: 'Super admin' })}
-                    >
-                      Super admin
-                    </button>
-                    <button
-                      type="button"
-                      className="chip"
-                      onClick={() => handleQuickAccess({ email: 'admin@company.com', password: 'admin123', label: 'Admin' })}
-                    >
-                      Admin
-                    </button>
-                    <button
-                      type="button"
-                      className="chip"
-                      onClick={() => handleQuickAccess({ email: 'employee@company.com', password: 'employee123', label: 'Employee' })}
-                    >
-                      Employee
-                    </button>
-                  </div>
-                  <button type="button" className="text-button" onClick={() => setAuthView('signin')}>
-                    Use regular login instead
-                  </button>
-                </div>
-              )}
-
               {authView === 'signin' && (
                 <form className="auth-form" onSubmit={handleSignIn}>
-                  <h2>Login</h2>
+                  <h2>Sign in</h2>
                   <label>
                     Email
                     <input
@@ -2210,13 +2252,6 @@ function App() {
                     onClick={() => setShowPurchase(true)}
                   >
                     Don&apos;t have access? Purchase a license →
-                  </button>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => setAuthView('employee-admin')}
-                  >
-                    Internal employee / admin login →
                   </button>
                 </form>
               )}
