@@ -599,7 +599,7 @@ export function AdminPanel({
                     <span>{member.email}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    {['manager', 'it', 'user'].map((role) => (
+                    {['admin', 'manager', 'it', 'accountant', 'user'].map((role) => (
                       <button
                         key={role}
                         type="button"

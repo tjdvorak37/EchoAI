@@ -558,8 +558,8 @@ export const authService = {
       throw new Error('User ID and role are required.')
     }
 
-    if (!['user', 'manager', 'it', 'admin'].includes(role)) {
-      throw new Error('Role must be user, manager, it, or admin.')
+    if (!['user', 'manager', 'it', 'accountant', 'admin'].includes(role)) {
+      throw new Error('Role must be user, manager, it, accountant, or admin.')
     }
 
     if (!isSupabaseConfigured) {
