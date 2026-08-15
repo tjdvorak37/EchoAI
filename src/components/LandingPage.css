@@ -721,6 +721,48 @@
   font-size: 0.8rem;
 }
 
+.landing-admin-cta {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 clamp(1.25rem, 5vw, 4rem) 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.landing-admin-copy {
+  max-width: 680px;
+}
+
+.landing-admin-copy p {
+  margin: 0 0 0.5rem;
+  color: var(--landing-coral);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.landing-admin-copy h2 {
+  margin: 0;
+  font-size: clamp(2rem, 3vw, 3rem);
+  line-height: 1.04;
+}
+
+.landing-admin-copy span {
+  display: block;
+  margin-top: 0.8rem;
+  color: var(--landing-muted);
+  line-height: 1.6;
+}
+
+.landing-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.8rem;
+}
+
 .landing-footer {
   min-height: 110px;
   padding: 1.5rem clamp(1.25rem, 5vw, 4rem);

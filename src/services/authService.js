@@ -4,12 +4,33 @@ import { DEFAULT_AGENT_CAPABILITIES } from './aiAgentService'
 const DEMO_OTP = '123456'
 const DEMO_USERS = [
   {
+    id: 'demo-super-admin-1',
+    fullName: 'Super Admin',
+    email: 'superadmin@company.com',
+    company: 'EchoAI Media',
+    password: 'super123',
+    role: 'admin',
+    accessStatus: 'active',
+    storageQuotaMb: 4096,
+    isSuperAdmin: true,
+  },
+  {
     id: 'demo-admin-1',
     fullName: 'Admin User',
     email: 'admin@company.com',
     company: 'EchoAI Media',
     password: 'admin123',
     role: 'admin',
+    accessStatus: 'active',
+    storageQuotaMb: 2048,
+  },
+  {
+    id: 'demo-employee-1',
+    fullName: 'Employee User',
+    email: 'employee@company.com',
+    company: 'EchoAI Media',
+    password: 'employee123',
+    role: 'user',
     accessStatus: 'active',
     storageQuotaMb: 2048,
   },
@@ -43,7 +64,11 @@ const BLOCKED_STATUS_MESSAGES = {
   deactivated: 'Your access is inactive. This usually means a subscription lapsed or a payment failed — renew to restore it instantly.',
 }
 
-const assertAccountCanAccess = (accessStatus) => {
+const assertAccountCanAccess = (accessStatus, role = 'user') => {
+  if (role === 'admin') {
+    return
+  }
+
   if (!accessStatus || accessStatus === 'active' || accessStatus === 'approved') {
     return
   }
@@ -160,7 +185,7 @@ export const authService = {
         throw new Error('Invalid demo credentials.')
       }
 
-      assertAccountCanAccess(demoUser.accessStatus)
+      assertAccountCanAccess(demoUser.accessStatus, demoUser.role)
 
       return {
         mfaRequired: true,
@@ -179,7 +204,7 @@ export const authService = {
         email,
       })
 
-      assertAccountCanAccess(profile?.access_status ?? 'pending')
+      assertAccountCanAccess(profile?.access_status ?? 'pending', profile?.role)
     } catch (accessError) {
       await supabase.auth.signOut()
       throw accessError
@@ -246,6 +271,7 @@ export const authService = {
           role: demoUser?.role ?? 'user',
           accessStatus: demoUser?.accessStatus ?? 'active',
           storageQuotaMb: demoUser?.storageQuotaMb ?? 2048,
+          isSuperAdmin: Boolean(demoUser?.isSuperAdmin),
         },
       }
     }
@@ -270,7 +296,7 @@ export const authService = {
     })
 
     try {
-      assertAccountCanAccess(profile?.access_status ?? 'pending')
+      assertAccountCanAccess(profile?.access_status ?? 'pending', profile?.role)
     } catch (accessError) {
       await supabase.auth.signOut()
       throw accessError
@@ -820,7 +846,7 @@ export const authService = {
 
     const { data, error } = await supabase.auth.mfa.enroll({
       factorType: 'totp',
-      friendlyName: `EchoAI ${new Date().toISOString().slice(0, 10)}`,
+      friendlyName: 'EchoAI',
     })
 
     if (error) {

@@ -86,10 +86,10 @@ begin
   delete from public.mfa_recovery_codes where user_id = v_uid;
 
   for i in 1..10 loop
-    v_code := upper(encode(gen_random_bytes(5), 'hex'));
+    v_code := upper(encode(extensions.gen_random_bytes(5), 'hex'));
     v_codes := array_append(v_codes, v_code);
     insert into public.mfa_recovery_codes (user_id, code_hash)
-    values (v_uid, crypt(v_code, gen_salt('bf')));
+    values (v_uid, extensions.crypt(v_code, extensions.gen_salt('bf')));
   end loop;
 
   return v_codes;
@@ -110,7 +110,7 @@ begin
     from public.mfa_recovery_codes
    where user_id = p_user_id
      and used_at is null
-     and code_hash = crypt(upper(btrim(p_code)), code_hash)
+    and code_hash = extensions.crypt(upper(btrim(p_code)), code_hash)
    limit 1;
 
   if v_id is null then
