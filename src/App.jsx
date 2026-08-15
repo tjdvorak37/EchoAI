@@ -147,6 +147,12 @@ function App() {
   const [cloudError, setCloudError] = useState('')
   const [pendingEmail, setPendingEmail] = useState('')
   const [session, setSession] = useState(null)
+  const [contactCard, setContactCard] = useState(null)
+  const [contactCardDraft, setContactCardDraft] = useState(null)
+  const [contactCardOpen, setContactCardOpen] = useState(false)
+  const [contactCardSaving, setContactCardSaving] = useState(false)
+  const [contactCardError, setContactCardError] = useState('')
+  const [contactCardNotice, setContactCardNotice] = useState('')
 
   const [activeTab, setActiveTab] = useState('dashboard')
   const [connectedAccounts, setConnectedAccounts] = useState(connectedAccountsSeed)
@@ -275,6 +281,8 @@ function App() {
       d.workspaceFolders ?? [{ id: 'folder-root', name: 'My workspace', parentId: null, createdAt: new Date().toISOString() }],
     )
     setWorkspaceAssets(hydrateWorkspaceAssets(d.workspaceAssets ?? []))
+
+    await loadContactCard(user)
 
     if (isSupabaseConfigured) {
       const profileAiAgentConfig = await authService.getUserAiAgentConfig({
@@ -689,9 +697,59 @@ function App() {
     }
   }
 
+  const loadContactCard = async (user) => {
+    try {
+      const card = await authService.getMyContactCard({ userId: user.id, email: user.email })
+      setContactCard(card)
+      setContactCardDraft(card)
+    } catch (error) {
+      setContactCardError(error.message)
+    }
+  }
+
+  const openContactCard = () => {
+    setContactCardError('')
+    setContactCardNotice('')
+    setContactCardDraft(contactCard)
+    setContactCardOpen(true)
+  }
+
+  const handleContactCardChange = (field, value) => {
+    setContactCardDraft((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleSaveContactCard = async (event) => {
+    event.preventDefault()
+    setContactCardError('')
+    setContactCardNotice('')
+
+    if (!contactCardDraft?.fullName?.trim()) {
+      setContactCardError('A name is required.')
+      return
+    }
+
+    setContactCardSaving(true)
+
+    try {
+      if (!isSupabaseConfigured) {
+        setContactCard(contactCardDraft)
+        setContactCardNotice('Contact card updated.')
+        return
+      }
+
+      const saved = await authService.updateMyContactCard(contactCardDraft)
+      setContactCard(saved)
+      setContactCardDraft(saved)
+      setContactCardNotice('Contact card updated.')
+    } catch (error) {
+      setContactCardError(error.message)
+    } finally {
+      setContactCardSaving(false)
+    }
+  }
+
   const loadCloudConnections = async () => {
     if (!isSupabaseConfigured) return
-
     try {
       setCloudConnections(await cloudDriveService.listConnections())
     } catch (error) {
@@ -2441,6 +2499,132 @@ function App() {
         </div>
       )}
 
+      {contactCardOpen && contactCardDraft && (
+        <div className="modal-overlay">
+          <div className="modal-panel contact-card-panel">
+            <h2>Your contact card</h2>
+            <p className="panel-note">
+              Teammates see this instead of just your email address. Everything except your name is
+              optional.
+            </p>
+
+            <form className="contact-card-form" onSubmit={handleSaveContactCard}>
+              <label>
+                Full name
+                <input
+                  type="text"
+                  value={contactCardDraft.fullName}
+                  onChange={(event) => handleContactCardChange('fullName', event.target.value)}
+                  placeholder="Alex Rivera"
+                />
+              </label>
+              <label>
+                Email
+                <input type="email" value={contactCardDraft.email} disabled />
+              </label>
+              <label>
+                Job title
+                <input
+                  type="text"
+                  value={contactCardDraft.jobTitle}
+                  onChange={(event) => handleContactCardChange('jobTitle', event.target.value)}
+                  placeholder="Marketing Manager"
+                />
+              </label>
+              <label>
+                Company
+                <input
+                  type="text"
+                  value={contactCardDraft.company}
+                  onChange={(event) => handleContactCardChange('company', event.target.value)}
+                  placeholder="EchoAI Media"
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  type="tel"
+                  value={contactCardDraft.phone}
+                  onChange={(event) => handleContactCardChange('phone', event.target.value)}
+                  placeholder="(555) 123-4567"
+                />
+              </label>
+              <label>
+                Calendar link
+                <input
+                  type="url"
+                  value={contactCardDraft.calendarUrl}
+                  onChange={(event) => handleContactCardChange('calendarUrl', event.target.value)}
+                  placeholder="https://calendar.google.com/..."
+                />
+              </label>
+              <label className="contact-card-wide">
+                Address
+                <input
+                  type="text"
+                  value={contactCardDraft.addressLine1}
+                  onChange={(event) => handleContactCardChange('addressLine1', event.target.value)}
+                  placeholder="123 Main St"
+                />
+              </label>
+              <label className="contact-card-wide">
+                Address line 2
+                <input
+                  type="text"
+                  value={contactCardDraft.addressLine2}
+                  onChange={(event) => handleContactCardChange('addressLine2', event.target.value)}
+                  placeholder="Suite 400"
+                />
+              </label>
+              <label>
+                City
+                <input
+                  type="text"
+                  value={contactCardDraft.city}
+                  onChange={(event) => handleContactCardChange('city', event.target.value)}
+                />
+              </label>
+              <label>
+                State / region
+                <input
+                  type="text"
+                  value={contactCardDraft.stateRegion}
+                  onChange={(event) => handleContactCardChange('stateRegion', event.target.value)}
+                />
+              </label>
+              <label>
+                Postal code
+                <input
+                  type="text"
+                  value={contactCardDraft.postalCode}
+                  onChange={(event) => handleContactCardChange('postalCode', event.target.value)}
+                />
+              </label>
+              <label>
+                Country
+                <input
+                  type="text"
+                  value={contactCardDraft.country}
+                  onChange={(event) => handleContactCardChange('country', event.target.value)}
+                />
+              </label>
+
+              {contactCardError && <span className="field-error contact-card-wide">{contactCardError}</span>}
+              {contactCardNotice && <p className="panel-note contact-card-wide">{contactCardNotice}</p>}
+
+              <div className="contact-card-actions contact-card-wide">
+                <button type="submit" className="primary-button" disabled={contactCardSaving}>
+                  {contactCardSaving ? 'Saving...' : 'Save contact card'}
+                </button>
+                <button type="button" className="text-button" onClick={() => setContactCardOpen(false)}>
+                  Close
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <header className="top-bar">
         <div className="app-brand-heading">
           <img src={echoMascot} alt="EchoAI mascot" />
@@ -2450,6 +2634,30 @@ function App() {
           </div>
         </div>
         <div className="top-actions">
+          <a
+            className="icon-button"
+            href={contactCard?.calendarUrl || 'https://calendar.google.com/calendar/r'}
+            target="_blank"
+            rel="noreferrer"
+            title="Open Google Calendar"
+            aria-label="Open Google Calendar"
+          >
+            <span aria-hidden="true">📅</span>
+          </a>
+          <button
+            type="button"
+            className="contact-chip"
+            onClick={openContactCard}
+            title="View and edit your contact card"
+          >
+            <span className="contact-chip-avatar" aria-hidden="true">
+              {(contactCard?.fullName || session?.email || '?').trim().charAt(0).toUpperCase()}
+            </span>
+            <span className="contact-chip-text">
+              <strong>{contactCard?.fullName || session?.email}</strong>
+              <small>{contactCard?.jobTitle || contactCard?.company || session?.email}</small>
+            </span>
+          </button>
           <button type="button" className="ghost-button" onClick={openSupportModal}>
             Contact support
           </button>

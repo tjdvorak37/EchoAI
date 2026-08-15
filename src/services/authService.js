@@ -77,6 +77,37 @@ const normalizeMember = (record) => ({
   aiAgentConfig: normalizeAiAgentConfig(record.ai_agent_config ?? record.aiAgentConfig),
 })
 
+const CONTACT_CARD_COLUMNS = {
+  fullName: 'full_name',
+  company: 'company',
+  phone: 'phone',
+  jobTitle: 'job_title',
+  addressLine1: 'address_line1',
+  addressLine2: 'address_line2',
+  city: 'city',
+  stateRegion: 'state_region',
+  postalCode: 'postal_code',
+  country: 'country',
+  calendarUrl: 'calendar_url',
+}
+
+const normalizeContactCard = (record = {}) => ({
+  id: record.id ?? '',
+  email: record.email ?? '',
+  role: record.role ?? 'user',
+  fullName: record.full_name ?? '',
+  company: record.company ?? '',
+  phone: record.phone ?? '',
+  jobTitle: record.job_title ?? '',
+  addressLine1: record.address_line1 ?? '',
+  addressLine2: record.address_line2 ?? '',
+  city: record.city ?? '',
+  stateRegion: record.state_region ?? '',
+  postalCode: record.postal_code ?? '',
+  country: record.country ?? '',
+  calendarUrl: record.calendar_url ?? '',
+})
+
 const getProfileByUser = async ({ userId, email }) => {
   if (!userId && !email) {
     return null
@@ -878,6 +909,50 @@ export const authService = {
     }
 
     return data
+  },
+
+  async getMyContactCard({ userId, email }) {
+    if (!isSupabaseConfigured) {
+      return normalizeContactCard({ id: userId, email })
+    }
+
+    const profile = await getProfileByUser({ userId, email })
+    return normalizeContactCard(profile ?? { id: userId, email })
+  },
+
+  async updateMyContactCard(card) {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError) {
+      throw new Error(userError.message)
+    }
+
+    if (!user) {
+      throw new Error('You must be signed in to update your contact card.')
+    }
+
+    const payload = Object.entries(CONTACT_CARD_COLUMNS).reduce((acc, [field, column]) => {
+      if (card[field] !== undefined) {
+        acc[column] = String(card[field]).trim() || null
+      }
+      return acc
+    }, {})
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(payload)
+      .eq('id', user.id)
+      .select('*')
+      .single()
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return normalizeContactCard(data)
   },
 
   async requestPasswordReset(email) {
