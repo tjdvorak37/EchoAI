@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { buildCreativeProject, readBriefFile } from '../services/documentBriefService'
+import { briefSourceFromAsset, buildCreativeProject, readBriefFile } from '../services/documentBriefService'
 
 const ACCEPTED_FILES = '.pdf,.docx,.pptx,.xlsx,.csv,.json,.txt,.md,image/*,video/*'
 
@@ -9,7 +9,7 @@ const formatSize = (bytes) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveToWorkspace }) {
+export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject, onUseDraft, onSaveToWorkspace }) {
   const [sources, setSources] = useState([])
   const [instruction, setInstruction] = useState('Create a polished campaign flyer based on this information.')
   const [outputType, setOutputType] = useState('flyer')
@@ -43,6 +43,21 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
         inputRef.current.value = ''
       }
     }
+  }
+
+  const addAssets = (assetIds) => {
+    setError('')
+    const picked = assetIds
+      .map((assetId) => workspaceAssets.find((asset) => asset.id === assetId))
+      .filter(Boolean)
+      .map(briefSourceFromAsset)
+
+    if (!picked.length) return
+
+    setSources((current) => [
+      ...current,
+      ...picked.filter((item) => !current.some((source) => source.id === item.id)),
+    ])
   }
 
   const generate = async () => {
@@ -120,6 +135,13 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
             event.stopPropagation()
             setDragActive(false)
 
+            // Cards in the media library drag their id, not file bytes.
+            const assetId = event.dataTransfer.getData('assetId')
+            if (assetId) {
+              addAssets([assetId])
+              return
+            }
+
             // dataTransfer must be read synchronously; it is cleared once the event ends.
             const items = event.dataTransfer.items
             if (items?.length > 0) {
@@ -134,11 +156,7 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
               if (draggedFiles.length > 0) {
                 addFiles(draggedFiles)
               } else {
-                // kind is 'string' when the drag came from a web page (cloud storage,
-                // webmail) rather than the filesystem, so there are no bytes to read.
-                setError(
-                  'That drag carried a link, not a file. Files dragged from a browser tab or cloud storage have no data attached — download it first, then drag it from your file manager, or click this box to browse.',
-                )
+                setError('That drag did not carry a file. Drag from your file manager or the media library, or click this box to browse.')
               }
             } else if (event.dataTransfer.files?.length > 0) {
               addFiles(Array.from(event.dataTransfer.files))
@@ -155,7 +173,7 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
           }}
         >
           <strong>Add campaign files</strong>
-          <span>PowerPoint, Word, Excel, PDF, text, images, or video</span>
+          <span>Drag in media library assets, or click to browse for PowerPoint, Word, Excel, PDF, text, images, or video</span>
           <input
             ref={inputRef}
             type="file"

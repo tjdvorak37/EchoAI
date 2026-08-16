@@ -3769,6 +3769,7 @@ function App() {
             <Suspense fallback={loadingPanel}>
               <CreativeBrief
                 agentConfig={aiAgentConfig}
+                workspaceAssets={workspaceAssets}
                 onEditProject={handleEditCreativeProject}
                 onUseDraft={handleUseCreativeDraft}
                 onSaveToWorkspace={handleSaveCreativeProjectToWorkspace}
