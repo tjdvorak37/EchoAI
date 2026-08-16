@@ -2,21 +2,21 @@
 // browser) means a recovery code can never mint a session by itself: it only
 // removes the lost factor, and the user must re-enrol on their next sign-in.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
-import { corsHeaders, json } from '../_shared/cors.ts'
+import { getCorsHeaders, json } from '../_shared/cors.ts'
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { status: 204, headers: getCorsHeaders(request) })
   }
   if (request.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, 405)
+    return json({ error: 'Method not allowed' }, 405, request)
   }
 
   try {
     const { email, password, recoveryCode } = await request.json()
 
     if (!email || !password || !recoveryCode) {
-      return json({ error: 'Email, password, and a recovery code are required.' }, 400)
+      return json({ error: 'Email, password, and a recovery code are required.' }, 400, request)
     }
 
     // The password must still be correct: a stolen recovery code alone is useless.
@@ -33,7 +33,7 @@ Deno.serve(async (request) => {
 
     if (signInError || !signIn.user) {
       // Deliberately vague: do not confirm whether the email exists.
-      return json({ error: 'Those details did not match.' }, 401)
+      return json({ error: 'Those details did not match.' }, 401, request)
     }
 
     const adminClient = createClient(
@@ -49,11 +49,11 @@ Deno.serve(async (request) => {
 
     if (consumeError) {
       console.error('recovery code check failed', consumeError)
-      return json({ error: 'Unable to verify that code.' }, 500)
+      return json({ error: 'Unable to verify that code.' }, 500, request)
     }
 
     if (!consumed) {
-      return json({ error: 'Those details did not match.' }, 401)
+      return json({ error: 'Those details did not match.' }, 401, request)
     }
 
     const { data: factors, error: factorError } =
@@ -61,7 +61,7 @@ Deno.serve(async (request) => {
 
     if (factorError) {
       console.error('listFactors failed', factorError)
-      return json({ error: 'Unable to reset your authenticator.' }, 500)
+      return json({ error: 'Unable to reset your authenticator.' }, 500, request)
     }
 
     for (const factor of factors?.factors ?? []) {
@@ -74,9 +74,9 @@ Deno.serve(async (request) => {
     return json({
       ok: true,
       message: 'Authenticator removed. Sign in with your password and set up a new one.',
-    })
+    }, 200, request)
   } catch (error) {
     console.error('mfa-recover failed', error)
-    return json({ error: 'Recovery failed. Please contact support.' }, 500)
+    return json({ error: 'Recovery failed. Please contact support.' }, 500, request)
   }
 })

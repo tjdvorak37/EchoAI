@@ -7,7 +7,7 @@
 // OAuth client secrets and user tokens stay in this function; the browser only
 // ever sees file metadata.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
-import { corsHeaders, json } from '../_shared/cors.ts'
+import { getCorsHeaders, json } from '../_shared/cors.ts'
 
 const APP_URL = Deno.env.get('APP_URL') ?? 'http://localhost:5173'
 const FUNCTION_URL = `${Deno.env.get('SUPABASE_URL')}/functions/v1/cloud-drive`
@@ -237,7 +237,7 @@ const listMicrosoft = async (accessToken: string, folderId: string, search: stri
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { status: 204, headers: getCorsHeaders(request) })
   }
 
   const url = new URL(request.url)
@@ -312,12 +312,12 @@ Deno.serve(async (request) => {
   }
 
   if (request.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, 405)
+    return json({ error: 'Method not allowed' }, 405, request)
   }
 
   const user = await userFromRequest(request)
   if (!user) {
-    return json({ error: 'Authentication required.' }, 401)
+    return json({ error: 'Authentication required.' }, 401, request)
   }
 
   try {
@@ -328,7 +328,7 @@ Deno.serve(async (request) => {
     if (action === 'connect') {
       const config = PROVIDERS[provider]
       if (!config?.clientId) {
-        return json({ error: `${provider} is not configured on this deployment.` }, 503)
+        return json({ error: `${provider} is not configured on this deployment.` }, 503, request)
       }
 
       const db = admin()
@@ -346,7 +346,7 @@ Deno.serve(async (request) => {
       authUrl.searchParams.set('access_type', 'offline')
       authUrl.searchParams.set('prompt', 'consent')
 
-      return json({ url: authUrl.toString() })
+      return json({ url: authUrl.toString() }, 200, request)
     }
 
     if (action === 'list') {
@@ -355,7 +355,7 @@ Deno.serve(async (request) => {
         ? await listGoogle(accessToken, body.folderId ?? '', body.search ?? '')
         : await listMicrosoft(accessToken, body.folderId ?? '', body.search ?? '', body.siteId ?? '')
 
-      return json({ items })
+      return json({ items }, 200, request)
     }
 
     if (action === 'calendar' && provider === 'google') {
@@ -368,12 +368,12 @@ Deno.serve(async (request) => {
         timeMax,
         body.calendarId || 'primary',
       )
-      return json({ events })
+      return json({ events }, 200, request)
     }
 
     if (action === 'calendar-list' && provider === 'google') {
       const accessToken = await freshAccessToken(user.id, provider)
-      return json({ calendars: await listGoogleCalendars(accessToken) })
+      return json({ calendars: await listGoogleCalendars(accessToken) }, 200, request)
     }
 
     if (action === 'calendar-create-event' && provider === 'google') {
@@ -383,7 +383,7 @@ Deno.serve(async (request) => {
         body.calendarId || 'primary',
         body.event ?? {},
       )
-      return json({ event })
+      return json({ event }, 200, request)
     }
 
     // A fresh, short-lived link for previewing or dragging a file into an editor.
@@ -395,7 +395,7 @@ Deno.serve(async (request) => {
           url: `https://www.googleapis.com/drive/v3/files/${body.fileId}?alt=media`,
           token: accessToken,
           expiresIn: 3600,
-        })
+        }, 200, request)
       }
 
       const response = await fetch(
@@ -403,7 +403,7 @@ Deno.serve(async (request) => {
         { headers: { Authorization: `Bearer ${accessToken}` } },
       )
       const item = await response.json()
-      return json({ url: item['@microsoft.graph.downloadUrl'] ?? item.webUrl, expiresIn: 3600 })
+      return json({ url: item['@microsoft.graph.downloadUrl'] ?? item.webUrl, expiresIn: 3600 }, 200, request)
     }
 
     if (action === 'sites' && provider === 'microsoft') {
@@ -419,16 +419,16 @@ Deno.serve(async (request) => {
           name: site.displayName ?? site.name,
           webUrl: site.webUrl,
         })),
-      })
+      }, 200, request)
     }
 
-    return json({ error: 'Unknown action.' }, 400)
+    return json({ error: 'Unknown action.' }, 400, request)
   } catch (error) {
     const message = (error as Error).message
     if (message === 'not_connected' || message === 'reauth_required') {
-      return json({ error: message }, 409)
+      return json({ error: message }, 409, request)
     }
     console.error('cloud-drive failed', error)
-    return json({ error: 'Cloud drive request failed.' }, 500)
+    return json({ error: 'Cloud drive request failed.' }, 500, request)
   }
 })

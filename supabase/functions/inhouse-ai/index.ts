@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
-import { corsHeaders, json } from '../_shared/cors.ts'
+import { getCorsHeaders, json } from '../_shared/cors.ts'
 
 const getUser = async (request: Request) => {
   const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')
@@ -14,11 +14,11 @@ const getUser = async (request: Request) => {
 }
 
 Deno.serve(async (request) => {
-  if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: getCorsHeaders(request) })
+  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, request)
 
   const user = await getUser(request)
-  if (!user) return json({ error: 'Authentication required.' }, 401)
+  if (!user) return json({ error: 'Authentication required.' }, 401, request)
 
   const admin = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
@@ -31,9 +31,9 @@ Deno.serve(async (request) => {
     .eq('user_id', user.id)
     .maybeSingle()
 
-  if (configError) return json({ error: 'Could not load the AI connection.' }, 500)
+  if (configError) return json({ error: 'Could not load the AI connection.' }, 500, request)
   const config = record?.config ?? {}
-  if (!config.endpoint) return json({ error: 'No AI endpoint is configured. Add one in Integrations.' }, 503)
+  if (!config.endpoint) return json({ error: 'No AI endpoint is configured. Add one in Integrations.' }, 503, request)
 
   try {
     const payload = await request.json()
@@ -49,10 +49,10 @@ Deno.serve(async (request) => {
     const responseBody = contentType.includes('application/json')
       ? await upstream.json()
       : await upstream.text()
-    if (!upstream.ok) return json({ error: `AI provider returned ${upstream.status}.`, detail: responseBody }, 502)
-    return json(responseBody)
+    if (!upstream.ok) return json({ error: `AI provider returned ${upstream.status}.`, detail: responseBody }, 502, request)
+    return json(responseBody, 200, request)
   } catch (error) {
     console.error('inhouse-ai proxy failed', error)
-    return json({ error: 'The configured AI provider could not be reached.' }, 502)
+    return json({ error: 'The configured AI provider could not be reached.' }, 502, request)
   }
 })
