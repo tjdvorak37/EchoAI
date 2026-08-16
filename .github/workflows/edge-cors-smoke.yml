@@ -1,0 +1,64 @@
+name: Edge Function CORS Smoke Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - '.github/workflows/edge-cors-smoke.yml'
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  verify-live-cors:
+    runs-on: ubuntu-latest
+    env:
+      FUNCTIONS_URL: https://yxmsqrtoghrazfwweqqf.supabase.co/functions/v1
+    steps:
+      - name: Check production preflights
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          functions=(
+            cloud-drive
+            listening-fetch
+            create-checkout-session
+            ai-image
+            inhouse-ai
+            mfa-recover
+            billing-portal
+          )
+          origins=(
+            https://echoaipro.com
+            https://www.echoaipro.com
+          )
+
+          for origin in "${origins[@]}"; do
+            for function_name in "${functions[@]}"; do
+              headers_file="$(mktemp)"
+              status="$(curl --silent --show-error \
+                --dump-header "$headers_file" \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                --request OPTIONS \
+                "$FUNCTIONS_URL/$function_name" \
+                --header "Origin: $origin" \
+                --header 'Access-Control-Request-Method: POST' \
+                --header 'Access-Control-Request-Headers: authorization,apikey,content-type')"
+              allowed_origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { gsub("\r", ""); print $2 }' "$headers_file")"
+              rm -f "$headers_file"
+
+              if [[ "$status" != '200' && "$status" != '204' ]]; then
+                echo "::error::$function_name returned HTTP $status for $origin"
+                exit 1
+              fi
+              if [[ "$allowed_origin" != "$origin" ]]; then
+                echo "::error::$function_name allowed '$allowed_origin' instead of '$origin'"
+                exit 1
+              fi
+
+              echo "$function_name: $status $allowed_origin"
+            done
+          done
