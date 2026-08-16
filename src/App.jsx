@@ -616,14 +616,17 @@ function App() {
     if (!isSupabaseConfigured) return undefined
 
     let active = true
+    let restoreTimer
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'INITIAL_SESSION') {
-        restorePersistedSession(() => active)
+        // Defer Supabase calls until after its auth callback completes.
+        restoreTimer = window.setTimeout(() => restorePersistedSession(() => active), 0)
       }
     })
 
     return () => {
       active = false
+      window.clearTimeout(restoreTimer)
       subscription.unsubscribe()
     }
   }, [])
