@@ -163,6 +163,13 @@ export const authService = {
     }
 
     try {
+      const { error: seatClaimError } = await supabase.rpc('claim_company_seat', {
+        p_user_id: data.user?.id,
+      })
+      if (seatClaimError) {
+        throw new Error(seatClaimError.message)
+      }
+
       const profile = await getProfileByUser({
         userId: data.user?.id,
         email,
@@ -316,6 +323,12 @@ export const authService = {
       throw new Error(
         'Signup created an account request but no user ID was returned. Check Supabase auth settings.',
       )
+    }
+
+    // With email confirmation enabled, signUp returns the user but no session.
+    // The auth.users trigger provisions the profile and access request.
+    if (!data.session) {
+      return { ok: true, activated: false, verificationRequired: true }
     }
 
     const { error: profileError } = await supabase.from('profiles').upsert({
