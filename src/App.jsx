@@ -223,6 +223,8 @@ function App() {
   const [companySeats, setCompanySeats] = useState([])
   const [supportModalOpen, setSupportModalOpen] = useState(false)
   const [supportLoading, setSupportLoading] = useState(false)
+  const [supportAttachments, setSupportAttachments] = useState([])
+  const [supportUploading, setSupportUploading] = useState(false)
   const [supportError, setSupportError] = useState('')
   const [supportSuccess, setSupportSuccess] = useState('')
   const [supportTicket, setSupportTicket] = useState({
@@ -1778,6 +1780,27 @@ function App() {
     return result
   }
 
+  const handleSupportAttachmentChange = async (event) => {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+    if (!files.length) return
+
+    setSupportUploading(true)
+    setSupportError('')
+    try {
+      const uploaded = []
+      for (const file of files) {
+        const path = await authService.uploadTicketAttachment(file)
+        uploaded.push({ path, name: file.name })
+      }
+      setSupportAttachments((prev) => [...prev, ...uploaded])
+    } catch (error) {
+      setSupportError(error.message)
+    } finally {
+      setSupportUploading(false)
+    }
+  }
+
   const handleSubmitSupportTicket = async (event) => {
     event.preventDefault()
     setSupportError('')
@@ -1788,6 +1811,7 @@ function App() {
       await authService.createSupportTicket({
         category: supportTicket.category,
         details: supportTicket.details,
+        attachmentPaths: supportAttachments.map((attachment) => attachment.path),
       })
 
       setSupportSuccess('Support ticket sent successfully. Our team will follow up soon.')
@@ -1805,6 +1829,7 @@ function App() {
         category: 'Technical issue',
         details: '',
       })
+      setSupportAttachments([])
     } catch (error) {
       setSupportError(error.message)
     } finally {
@@ -4644,6 +4669,34 @@ function App() {
 
               {supportError && <p className="auth-message auth-error">{supportError}</p>}
               {supportSuccess && <p className="auth-message">{supportSuccess}</p>}
+
+              <label>
+                Screenshots (optional)
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  onChange={handleSupportAttachmentChange}
+                  disabled={supportUploading}
+                />
+              </label>
+              {supportUploading && <p className="panel-note">Uploading screenshot…</p>}
+              {supportAttachments.length > 0 && (
+                <ul className="support-attachment-list">
+                  {supportAttachments.map((attachment) => (
+                    <li key={attachment.path}>
+                      <span>{attachment.name}</span>
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => setSupportAttachments((prev) => prev.filter((item) => item.path !== attachment.path))}
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
               <div className="action-row">
                 <button type="button" className="ghost-button" onClick={closeSupportModal}>

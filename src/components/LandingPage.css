@@ -779,6 +779,117 @@
   text-align: center;
 }
 
+.landing-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-self: end;
+}
+
+.landing-support-link {
+  background: none;
+  border: 0;
+  padding: 0.5rem 0.25rem;
+  color: #2364d8;
+  font-size: 1rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.landing-support-link:hover {
+  color: #1d58c5;
+}
+
+.landing-support-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(9, 14, 26, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.landing-support-modal {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 2rem;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(9, 14, 26, 0.28);
+}
+
+.landing-support-modal h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.6rem;
+}
+
+.landing-support-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  background: none;
+  border: 0;
+  font-size: 1.8rem;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.landing-support-intro {
+  margin: 0 0 1.25rem;
+  color: #475569;
+}
+
+.landing-support-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.landing-support-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #1e293b;
+}
+
+.landing-support-form input,
+.landing-support-form select,
+.landing-support-form textarea {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 400;
+}
+
+.landing-support-form textarea {
+  resize: vertical;
+}
+
+.landing-support-note {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.landing-support-error {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 0.88rem;
+}
+
 @keyframes visual-arrive {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
