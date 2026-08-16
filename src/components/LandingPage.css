@@ -1,19 +1,19 @@
 .landing-page {
-  --landing-ink: #17223b;
-  --landing-muted: #5f6980;
-  --landing-blue: #2364d8;
-  --landing-coral: #ff6b5e;
-  --landing-yellow: #ffd23f;
-  --landing-green: #11866f;
+  --landing-ink: var(--text);
+  --landing-muted: var(--text-soft);
+  --landing-blue: var(--primary);
+  --landing-coral: var(--danger);
+  --landing-yellow: var(--warning);
+  --landing-green: var(--success);
   min-height: 100vh;
   overflow-x: hidden;
   color: var(--landing-ink);
   background:
-    linear-gradient(rgba(35, 100, 216, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(35, 100, 216, 0.045) 1px, transparent 1px),
-    #fffdf8;
+    linear-gradient(rgba(35, 87, 214, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(35, 87, 214, 0.028) 1px, transparent 1px),
+    var(--bg-page);
   background-size: 44px 44px;
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--body-font);
 }
 
 .landing-page main {
@@ -25,8 +25,8 @@
 .landing-page h2,
 .landing-page h3 {
   color: var(--landing-ink);
-  font-family: 'Bricolage Grotesque', sans-serif;
-  letter-spacing: 0;
+  font-family: var(--title-font);
+  letter-spacing: -0.02em;
 }
 
 .landing-page a {

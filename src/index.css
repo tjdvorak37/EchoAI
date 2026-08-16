@@ -1,10 +1,25 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 
 :root {
+  --bg-page: #f3f6fb;
+  --bg-surface: #ffffff;
+  --bg-surface-alt: #eef4ff;
+  --bg-soft: #f8fafc;
+  --border: #dfe7f3;
+  --text: #101827;
+  --text-soft: #475569;
+  --text-muted: #64748b;
+  --primary: #2357d6;
+  --primary-strong: #163d96;
+  --secondary: #7c3aed;
+  --success: #1d9a73;
+  --warning: #f59e0b;
+  --danger: #e11d48;
+  --shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
   --body-font: 'Outfit', 'Segoe UI', sans-serif;
   --title-font: 'Space Grotesk', 'Segoe UI', sans-serif;
-  color: #0f172a;
-  background: #f8fafc;
+  color: var(--text);
+  background: var(--bg-page);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -15,15 +30,52 @@
   box-sizing: border-box;
 }
 
+html {
+  background: var(--bg-page);
+}
+
 body {
   margin: 0;
   font-family: var(--body-font);
+  background: var(--bg-page);
+  color: var(--text);
 }
 
 h1,
 h2,
-h3 {
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
   font-family: var(--title-font);
-  letter-spacing: 0;
-  color: #0f172a;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+p,
+span,
+label,
+input,
+select,
+textarea,
+button {
+  font-family: var(--body-font);
+}
+
+button,
+input,
+select,
+textarea {
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+#root {
+  min-height: 100vh;
+  background: var(--bg-page);
 }
