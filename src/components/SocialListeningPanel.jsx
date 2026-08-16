@@ -12,6 +12,7 @@ import {
   parseTrackedValues,
   summarizeListeningInsights,
 } from '../services/socialListeningService'
+import { isSupabaseConfigured } from '../lib/supabase'
 
 const WINDOWS = [
   { key: '24h', label: 'Last 24h' },
@@ -65,14 +66,14 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
     Object.fromEntries(SOURCE_TYPES_ALL.map((type) => [type, true])),
   )
   const [connectors, setConnectors] = useState(() => createDefaultListeningConnectors())
-  const [useBuiltinAdapters, setUseBuiltinAdapters] = useState(true)
+  const [useBuiltinAdapters, setUseBuiltinAdapters] = useState(() => !isSupabaseConfigured)
   const [autoRefreshMinutes, setAutoRefreshMinutes] = useState(2)
   const [scanLoading, setScanLoading] = useState(false)
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [insights, setInsights] = useState([])
   const [scanWarnings, setScanWarnings] = useState([])
-  const [scanNotice, setScanNotice] = useState('Monitoring is active across social, web, and review sources.')
-  const [lastScanMode, setLastScanMode] = useState('simulated')
+  const [scanNotice, setScanNotice] = useState('Configure your sources, then run a live scan.')
+  const [lastScanMode, setLastScanMode] = useState('not_started')
   const hasBootstrappedLiveRef = useRef(false)
 
   const brandTerms = useMemo(() => parseTrackedValues(config.brandTerms), [config.brandTerms])
@@ -91,15 +92,17 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
   )
 
   const [mentions, setMentions] = useState(() =>
-    generateListeningMentions({
-      brandTerms: parseTrackedValues(defaultConfig.brandTerms),
-      competitorTerms: parseTrackedValues(defaultConfig.competitors),
-      keywordTerms: parseTrackedValues(defaultConfig.keywords),
-      hashtagTerms: parseTrackedValues(defaultConfig.hashtags),
-      connectedPlatforms,
-      enabledSourceTypes: SOURCE_TYPES_ALL,
-      count: 90,
-    }),
+    isSupabaseConfigured
+      ? []
+      : generateListeningMentions({
+          brandTerms: parseTrackedValues(defaultConfig.brandTerms),
+          competitorTerms: parseTrackedValues(defaultConfig.competitors),
+          keywordTerms: parseTrackedValues(defaultConfig.keywords),
+          hashtagTerms: parseTrackedValues(defaultConfig.hashtags),
+          connectedPlatforms,
+          enabledSourceTypes: SOURCE_TYPES_ALL,
+          count: 90,
+        }),
   )
 
   const filteredMentions = useMemo(
@@ -193,16 +196,20 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
       let mode = 'hybrid'
 
       if (!dedupedMentions.length) {
-        refreshedMentions = generateListeningMentions({
-          brandTerms,
-          competitorTerms,
-          keywordTerms,
-          hashtagTerms,
-          connectedPlatforms,
-          enabledSourceTypes,
-          count: 120,
-        })
-        mode = 'simulated'
+        if (isSupabaseConfigured) {
+          mode = 'no_results'
+        } else {
+          refreshedMentions = generateListeningMentions({
+            brandTerms,
+            competitorTerms,
+            keywordTerms,
+            hashtagTerms,
+            connectedPlatforms,
+            enabledSourceTypes,
+            count: 120,
+          })
+          mode = 'simulated'
+        }
       } else if (liveResult.usedLive && builtinResult.usedBuiltin) {
         mode = 'hybrid'
       } else if (liveResult.usedLive) {
@@ -214,7 +221,9 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
       const warningCount = liveResult.errors.length + builtinResult.errors.length
       const nextWarnings = [...liveResult.errors, ...builtinResult.errors]
 
-      if (mode === 'simulated') {
+      if (mode === 'no_results') {
+        setScanNotice('No live mentions were returned. Check that the selected listening connectors are configured and authorized.')
+      } else if (mode === 'simulated') {
         setScanNotice(
           enabledConnectorCount || useBuiltinAdapters
             ? `Live adapters returned no usable mentions, showing modeled stream (${numberFmt.format(refreshedMentions.length)} mentions).`

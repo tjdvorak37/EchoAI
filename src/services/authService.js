@@ -2,8 +2,9 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { DEFAULT_AGENT_CAPABILITIES } from './aiAgentService'
 
 const DEMO_ACCESS_REQUESTS = []
+const DEMO_USERS = []
 
-const assertAccountCanAccess = (accessStatus, role = 'user', email = '') => {
+const assertAccountCanAccess = (accessStatus, role = 'user') => {
   const normalizedRole = String(role || '').toLowerCase()
 
   if (normalizedRole === 'admin' || normalizedRole === 'super_admin') {
@@ -254,7 +255,7 @@ export const authService = {
     })
 
     try {
-      assertAccountCanAccess(profile?.access_status ?? 'pending', profile?.role, profile?.email ?? email)
+      assertAccountCanAccess(profile?.access_status ?? 'pending', profile?.role)
     } catch (accessError) {
       await supabase.auth.signOut()
       throw accessError

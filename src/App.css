@@ -281,6 +281,10 @@ main {
   overflow: hidden;
 }
 
+.app-main.asset-drawer-collapsed {
+  grid-template-columns: 3.75rem minmax(0, 1fr);
+}
+
 .app-main.help-workspace-layout {
   grid-template-columns: minmax(0, 1fr);
   max-width: 1440px;
@@ -563,7 +567,12 @@ main {
 }
 
 .asset-drawer.collapsed {
-  padding-bottom: 0.6rem;
+  padding: 0.6rem;
+  overflow: hidden;
+}
+
+.asset-drawer.collapsed .asset-drawer-header > div {
+  display: none;
 }
 
 .asset-drawer-header {
@@ -571,6 +580,26 @@ main {
   justify-content: space-between;
   gap: 0.6rem;
   align-items: center;
+}
+
+.asset-drawer-toggle {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  color: #1d4ed8;
+  font: inherit;
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.asset-drawer-toggle:hover {
+  background: #eff6ff;
 }
 
 .asset-drawer h3 {
@@ -2533,6 +2562,30 @@ main {
   color: #8b949e;
 }
 
+.brand-kit-resource-grid {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0.85rem 0 1.25rem;
+}
+
+.brand-kit-resource-grid .small-title {
+  margin: 0 0 0.4rem;
+}
+
+.brand-kit-swatch {
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.brand-kit-logo img {
+  max-width: 3.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+}
+
 /* Ticket layout */
 .it-tickets-layout {
   display: grid;
@@ -2648,9 +2701,16 @@ main {
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
   color: #f1f5f9;
+  color-scheme: dark;
   padding: 0.6rem 0.7rem;
   border-radius: 0.45rem;
   font-size: 0.85rem;
+}
+
+.it-ticket-actions-inline select option,
+.it-ticket-filters select option {
+  background: #161b22;
+  color: #f1f5f9;
 }
 
 .it-ticket-detail {

@@ -3,7 +3,36 @@ import { canUseAgentMode, runUserAiAgent } from './aiAgentService'
 
 const randomId = () => `post_${Math.random().toString(36).slice(2, 10)}`
 
+const getCurrentUserId = async () => {
+  const { data, error } = await supabase.auth.getUser()
+  if (error) throw new Error(error.message)
+  if (!data.user) throw new Error('Sign in before scheduling a post.')
+  return data.user.id
+}
+
 export const platformService = {
+  async listPosts() {
+    if (!isSupabaseConfigured) return []
+
+    const { data, error } = await supabase
+      .from('scheduled_posts')
+      .select('*')
+      .order('scheduled_at', { ascending: false })
+
+    if (error) throw new Error(error.message)
+
+    return (data ?? []).map((post) => ({
+      id: post.id,
+      campaign: post.campaign,
+      message: post.message,
+      imageIdea: post.image_idea,
+      scheduledAt: post.scheduled_at,
+      channels: post.channels,
+      media: post.media ?? [],
+      status: post.status,
+    }))
+  },
+
   async schedulePost(payload) {
     const post = {
       id: randomId(),
@@ -15,14 +44,18 @@ export const platformService = {
       return post
     }
 
+    const userId = await getCurrentUserId()
+
     const { data, error } = await supabase
       .from('scheduled_posts')
       .insert({
+        user_id: userId,
         campaign: payload.campaign,
         message: payload.message,
         image_idea: payload.imageIdea,
         scheduled_at: payload.scheduledAt,
         channels: payload.channels,
+        media: payload.media ?? [],
         status: 'scheduled',
       })
       .select('*')
@@ -39,6 +72,7 @@ export const platformService = {
       imageIdea: data.image_idea,
       scheduledAt: data.scheduled_at,
       channels: data.channels,
+      media: data.media ?? [],
       status: data.status,
     }
   },
@@ -56,14 +90,18 @@ export const platformService = {
       return post
     }
 
+    const userId = await getCurrentUserId()
+
     const { data, error } = await supabase
       .from('scheduled_posts')
       .insert({
+        user_id: userId,
         campaign: payload.campaign,
         message: payload.message,
         image_idea: payload.imageIdea,
         scheduled_at: publishedAt,
         channels: payload.channels,
+        media: payload.media ?? [],
         status: 'published',
       })
       .select('*')
@@ -80,6 +118,7 @@ export const platformService = {
       imageIdea: data.image_idea,
       scheduledAt: data.scheduled_at,
       channels: data.channels,
+      media: data.media ?? [],
       status: data.status,
     }
   },

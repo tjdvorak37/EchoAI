@@ -35,6 +35,7 @@ import { CLOUD_PROVIDERS, cloudDriveService, toLinkedAsset } from './services/cl
 import { getPlan, getStorageMb } from './data/plans'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
+import { socialIntegrationService } from './services/socialIntegrationService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import echoMascot from './assets/echo-mascot.svg'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
@@ -81,6 +82,8 @@ const DEFAULT_ACCOUNT_HANDLES = {
   youtube: 'Your channel',
   linkedin: 'Your profile / page',
 }
+
+const SOCIAL_PUBLISHING_SCOPES = ['posts', 'images', 'videos', 'comments', 'analytics']
 
 const getDefaultAccountHandle = (platformName) =>
   DEFAULT_ACCOUNT_HANDLES[String(platformName || '').toLowerCase()] || 'Your account'
@@ -187,6 +190,9 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('dashboard')
   const [connectedAccounts, setConnectedAccounts] = useState(connectedAccountsSeed)
+  const [socialPlatformReadiness, setSocialPlatformReadiness] = useState([])
+  const [socialPlatformReadinessLoading, setSocialPlatformReadinessLoading] = useState(false)
+  const [socialPlatformReadinessError, setSocialPlatformReadinessError] = useState('')
   const [scheduledPosts, setScheduledPosts] = useState(scheduledPostsSeed)
   const [companyMainPosts, setCompanyMainPosts] = useState(companyMainPostsSeed)
   const [companySocialAccounts, setCompanySocialAccounts] = useState(companySocialAccountsSeed)
@@ -229,7 +235,9 @@ function App() {
     imageIdea: '',
     scheduledAt: '',
     channels: ['instagram'],
+    mediaAssetIds: [],
   })
+  const [schedulerError, setSchedulerError] = useState('')
   const [accountHandleDrafts, setAccountHandleDrafts] = useState(() => ({
     instagram: '@youraccount',
     facebook: 'Your page name',
@@ -239,6 +247,8 @@ function App() {
     youtube: 'Your channel',
     linkedin: 'Your profile / page',
   }))
+  const [accountScopeDrafts, setAccountScopeDrafts] = useState({})
+  const [integrationError, setIntegrationError] = useState('')
   const [aiInput, setAiInput] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState([])
   const [aiLoading, setAiLoading] = useState(false)
@@ -333,6 +343,12 @@ function App() {
     await loadContactCard(user)
 
     if (isSupabaseConfigured) {
+      const [socialAccounts, savedPosts] = await Promise.all([
+        socialIntegrationService.listAccounts(),
+        platformService.listPosts(),
+      ])
+      setConnectedAccounts(socialAccounts)
+      setScheduledPosts(savedPosts)
       const profileAiAgentConfig = await authService.getUserAiAgentConfig({
         userId: user.id,
         email: user.email,
@@ -488,6 +504,7 @@ function App() {
 
   const isAdminUser = session?.role === 'admin'
   const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant'].includes(session?.role || '')
+  const canManageBrandKit = ['admin', 'manager'].includes(session?.role || '')
 
   const loadAdminData = async () => {
     setAdminError('')
@@ -1115,18 +1132,88 @@ function App() {
     setComposer((prev) => ({ ...prev, [field]: value }))
   }
 
+  const saveSocialAccount = async ({ platform, accountName, accountType = 'profile', publishingScopes = [] }) => {
+    setIntegrationError('')
+    const normalizedPlatform = platform.toLowerCase()
+    const normalizedName = accountName.trim()
+
+    if (!normalizedName || isPlaceholderAccountHandle(normalizedPlatform, normalizedName)) {
+      setIntegrationError(`Enter the real ${getPlatformMeta(normalizedPlatform).label} account name before saving.`)
+      return
+    }
+
+    try {
+      const saved = await socialIntegrationService.saveAccount({
+        platform: normalizedPlatform,
+        accountName: normalizedName,
+        accountType,
+        publishingScopes,
+      })
+      const nextAccount = saved ?? {
+        id: nextLocalId('acc'),
+        platform: getPlatformMeta(normalizedPlatform).label,
+        accountName: normalizedName,
+        accountType,
+        publishingScopes,
+        status: 'oauth required',
+        connectionStatus: 'profile_saved',
+      }
+      setConnectedAccounts((prev) => [
+        ...prev.filter((account) => account.platform.toLowerCase() !== normalizedPlatform),
+        nextAccount,
+      ])
+      setAccountHandleDrafts((prev) => ({ ...prev, [normalizedPlatform]: normalizedName }))
+    } catch (error) {
+      setIntegrationError(error.message)
+    }
+  }
+
+  const removeSocialAccount = async (account) => {
+    setIntegrationError('')
+    try {
+      await socialIntegrationService.removeAccount(account.id)
+      setConnectedAccounts((prev) => prev.filter((item) => item.id !== account.id))
+    } catch (error) {
+      setIntegrationError(error.message)
+    }
+  }
+
+  const connectSocialAccount = async ({ platform, requestedScopes }) => {
+    setIntegrationError('')
+    try {
+      await socialIntegrationService.connectAccount({ platform, requestedScopes })
+    } catch (error) {
+      setIntegrationError(error.message)
+    }
+  }
+
+  const loadSocialPlatformReadiness = async () => {
+    setSocialPlatformReadinessError('')
+    setSocialPlatformReadinessLoading(true)
+    try {
+      setSocialPlatformReadiness(await socialIntegrationService.getPlatformReadiness())
+    } catch (error) {
+      setSocialPlatformReadinessError(error.message)
+    } finally {
+      setSocialPlatformReadinessLoading(false)
+    }
+  }
+
   const handleSchedulePost = async (event) => {
     event.preventDefault()
+    setSchedulerError('')
     if (!composer.message.trim() || !composer.scheduledAt || !composer.channels.length) {
+      setSchedulerError('Add a message, at least one channel, and a deployment date and time.')
       return
     }
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
-      return !linkedAccount || isPlaceholderAccountHandle(channel, linkedAccount.accountName)
+      return !linkedAccount || linkedAccount.status !== 'healthy' || isPlaceholderAccountHandle(channel, linkedAccount.accountName)
     })
 
     if (invalidSelectedChannels.length) {
+      setSchedulerError(`Connect a real ${invalidSelectedChannels.join(', ')} account before queuing this post.`)
       return
     }
 
@@ -1136,6 +1223,11 @@ function App() {
       imageIdea: composer.imageIdea,
       scheduledAt: composer.scheduledAt,
       channels: composer.channels,
+      media: workspaceAssets
+        .filter((asset) => composer.mediaAssetIds.includes(asset.id))
+        .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl }) => ({
+          id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl,
+        })),
     })
 
     setScheduledPosts((prev) => [newPost, ...prev])
@@ -1146,21 +1238,25 @@ function App() {
       imageIdea: '',
       scheduledAt: '',
       channels: ['instagram'],
+      mediaAssetIds: [],
     })
   }
 
   const handlePostNow = async (event) => {
     event.preventDefault()
+    setSchedulerError('')
     if (!composer.message.trim() || !composer.channels.length) {
+      setSchedulerError('Add a message and at least one channel before posting.')
       return
     }
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
-      return !linkedAccount || isPlaceholderAccountHandle(channel, linkedAccount.accountName)
+      return !linkedAccount || linkedAccount.status !== 'healthy' || isPlaceholderAccountHandle(channel, linkedAccount.accountName)
     })
 
     if (invalidSelectedChannels.length) {
+      setSchedulerError(`Connect a real ${invalidSelectedChannels.join(', ')} account before posting.`)
       return
     }
 
@@ -1169,6 +1265,11 @@ function App() {
       message: composer.message,
       imageIdea: composer.imageIdea,
       channels: composer.channels,
+      media: workspaceAssets
+        .filter((asset) => composer.mediaAssetIds.includes(asset.id))
+        .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl }) => ({
+          id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl,
+        })),
     })
 
     setScheduledPosts((prev) => [newPost, ...prev])
@@ -1178,6 +1279,7 @@ function App() {
       imageIdea: '',
       scheduledAt: '',
       channels: ['instagram'],
+      mediaAssetIds: [],
     })
   }
 
@@ -2168,7 +2270,7 @@ function App() {
     setUserReposts([])
     setWorkspaceFolders([])
     setWorkspaceAssets([])
-    setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: ['instagram'] })
+    setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: ['instagram'], mediaAssetIds: [] })
     setAiSuggestions([])
     setAiAgentConfig(createDefaultAiAgentConfig())
     setAiAgentDraft(createDefaultAiAgentConfig())
@@ -2316,11 +2418,12 @@ function App() {
               if (planKey) setPurchasePlan(planKey)
               setShowPurchase(true)
             }}
-          />
-          <CompanyPackageRequest
-            onSubmit={handleCompanyPackageRequest}
-            submitted={companyPackageRequested}
-          />
+          >
+            <CompanyPackageRequest
+              onSubmit={handleCompanyPackageRequest}
+              submitted={companyPackageRequested}
+            />
+          </LandingPage>
         </Suspense>
       )
     }
@@ -2856,7 +2959,7 @@ function App() {
         ))}
       </nav>
 
-      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''}`}>
+      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${isAssetPanelOpen ? '' : 'asset-drawer-collapsed'}`}>
         {activeTab !== 'help' && (
         <aside
           className={`asset-drawer ${activeTab === 'photo' ? 'photo-workspace-drawer' : ''} ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
@@ -2875,8 +2978,15 @@ function App() {
               <p className="small-title">Workspace</p>
               <h3>Media library</h3>
             </div>
-            <button type="button" className="ghost-button" onClick={() => setIsAssetPanelOpen((prev) => !prev)}>
-              {isAssetPanelOpen ? 'Hide' : 'Show'}
+            <button
+              type="button"
+              className="asset-drawer-toggle"
+              onClick={() => setIsAssetPanelOpen((prev) => !prev)}
+              title={isAssetPanelOpen ? 'Collapse media library' : 'Expand media library'}
+              aria-label={isAssetPanelOpen ? 'Collapse media library' : 'Expand media library'}
+              aria-expanded={isAssetPanelOpen}
+            >
+              {isAssetPanelOpen ? '<' : '>'}
             </button>
           </div>
 
@@ -3520,6 +3630,34 @@ function App() {
                 />
               </label>
 
+              <div>
+                <p className="small-title">Photos and videos</p>
+                <p className="muted">Attach media from your private workspace. Upload more from the Media library.</p>
+                <div className="chip-row">
+                  {workspaceAssets.filter((asset) => ['image', 'video'].includes(asset.type)).map((asset) => {
+                    const selected = composer.mediaAssetIds.includes(asset.id)
+                    return (
+                      <button
+                        key={asset.id}
+                        type="button"
+                        className={selected ? 'chip active' : 'chip'}
+                        onClick={() => setComposer((prev) => ({
+                          ...prev,
+                          mediaAssetIds: selected
+                            ? prev.mediaAssetIds.filter((id) => id !== asset.id)
+                            : [...prev.mediaAssetIds, asset.id],
+                        }))}
+                      >
+                        {asset.type === 'video' ? 'Video' : 'Image'}: {asset.name}
+                      </button>
+                    )
+                  })}
+                  {workspaceAssets.every((asset) => !['image', 'video'].includes(asset.type)) && (
+                    <span className="muted">No media available yet.</span>
+                  )}
+                </div>
+              </div>
+
               <label>
                 Deployment date/time
                 <input
@@ -3559,6 +3697,7 @@ function App() {
                   Queue post
                 </button>
               </div>
+              {schedulerError && <span className="field-error">{schedulerError}</span>}
             </form>
 
             <article className="sub-panel tone-sun">
@@ -3568,6 +3707,7 @@ function App() {
                   <div>
                     <p>{post.campaign}</p>
                     <span>{post.message}</span>
+                    {post.media?.length > 0 && <small>{post.media.length} media attachment{post.media.length === 1 ? '' : 's'}</small>}
                   </div>
                   <div className="queue-meta">
                     <span>{new Date(post.scheduledAt).toLocaleString()}</span>
@@ -3733,7 +3873,74 @@ function App() {
               becomes available in the Scheduler and AI Studio.
             </p>
 
-            <h3 className="section-label">Brand kit</h3>
+            <h3 className="section-label">Your company brand kit</h3>
+            <p className="panel-note">
+              Use your company&apos;s approved colours, fonts, and logos in creative work. This does not change EchoAI&apos;s application styling.
+            </p>
+            <div className="list-row">
+              <div>
+                <p>{brandKit.companyName || 'Your company'} brand resources</p>
+                <span className="muted">
+                  {brandKit.colors.length} colours • {brandKit.fonts.length} fonts • {brandKit.logos.length} logos
+                </span>
+              </div>
+              <button type="button" className="ghost-button" onClick={loadBrandKit}>
+                Refresh
+              </button>
+            </div>
+            {(brandKit.colors.length || brandKit.fonts.length || brandKit.logos.length || brandKit.guidelines) ? (
+              <div className="brand-kit-resource-grid">
+                {brandKit.colors.length > 0 && (
+                  <div>
+                    <p className="small-title">Colours</p>
+                    <div className="chip-row">
+                      {brandKit.colors.map((color) => (
+                        <span key={color.id} className="chip">
+                          <span className="brand-kit-swatch" style={{ background: color.value }} />
+                          {color.label || color.value}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {brandKit.fonts.length > 0 && (
+                  <div>
+                    <p className="small-title">Fonts</p>
+                    <div className="chip-row">
+                      {brandKit.fonts.map((font) => (
+                        <span key={font.id} className="chip" style={{ fontFamily: `${font.family}, ${font.fallback || 'sans-serif'}` }}>
+                          {font.label || font.family}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {brandKit.logos.length > 0 && (
+                  <div>
+                    <p className="small-title">Logos</p>
+                    <div className="chip-row">
+                      {brandKit.logos.map((logo) => (
+                        <span key={logo.id} className="chip brand-kit-logo">
+                          <img src={logo.dataUrl} alt={logo.label || 'Company logo'} />
+                          {logo.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {brandKit.guidelines && (
+                  <div>
+                    <p className="small-title">Usage notes</p>
+                    <p className="muted">{brandKit.guidelines}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="muted">Your company has not added brand resources yet.</p>
+            )}
+
+            {canManageBrandKit && <>
+            <h3 className="section-label">Manage company brand kit</h3>
             <p className="panel-note">
               Your company&apos;s colours, licensed fonts, and logos. Everything here is available in
               the Photo Creator and Video Studio so every post stays on brand.
@@ -3860,6 +4067,7 @@ function App() {
             <button type="button" className="primary-button" onClick={handleSaveBrandKit} disabled={brandBusy}>
               {brandBusy ? 'Saving...' : 'Save brand kit'}
             </button>
+            </>}
 
             <h3 className="section-label">Security</h3>
             <div className="list-row">
@@ -3963,7 +4171,8 @@ function App() {
                 const meta = getPlatformMeta(key)
                 const linked = connectedAccounts.find((a) => a.platform.toLowerCase() === key)
                 const isInvalidHandle = linked && isPlaceholderAccountHandle(key, linked.accountName)
-                const inputValue = accountHandleDrafts[key] ?? accountPlaceholder
+                const inputValue = accountHandleDrafts[key] ?? linked?.accountName ?? accountPlaceholder
+                const selectedScopes = accountScopeDrafts[key] ?? linked?.publishingScopes ?? ['posts']
                 return (
                   <div
                     key={key}
@@ -3978,7 +4187,7 @@ function App() {
                       </div>
                       {linked && (
                         <span className={`integration-status-badge ${linked.status === 'healthy' && !isInvalidHandle ? 'good' : 'warn'}`}>
-                          {linked.status === 'healthy' && !isInvalidHandle ? '● Live' : '⚠ Needs refresh'}
+                          {linked.status === 'healthy' && !isInvalidHandle ? '● OAuth connected' : 'OAuth access required'}
                         </span>
                       )}
                     </div>
@@ -3990,32 +4199,11 @@ function App() {
                             Handle / profile name
                             <input
                               type="text"
-                              value={linked.accountName}
-                              onChange={(event) => setConnectedAccounts((prev) =>
-                                prev.map((a) => a.id === linked.id ? { ...a, accountName: event.target.value, status: isPlaceholderAccountHandle(key, event.target.value) ? 'token refresh due' : 'healthy' } : a)
-                              )}
+                              value={inputValue}
+                              onChange={(event) => setAccountHandleDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
                               placeholder={accountPlaceholder}
                             />
                           </label>
-                          <div className="integration-actions">
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              onClick={() => setConnectedAccounts((prev) =>
-                                prev.map((a) => a.id === linked.id ? { ...a, status: isPlaceholderAccountHandle(key, a.accountName) ? 'token refresh due' : 'healthy' } : a)
-                              )}
-                            >
-                              Refresh status
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              style={{ color: '#ef4444' }}
-                              onClick={() => setConnectedAccounts((prev) => prev.filter((a) => a.id !== linked.id))}
-                            >
-                              Disconnect
-                            </button>
-                          </div>
                         </>
                       ) : (
                         <>
@@ -4028,28 +4216,74 @@ function App() {
                               placeholder={accountPlaceholder}
                             />
                           </label>
-                          <button
-                            type="button"
-                            className="primary-button"
-                            style={{ background: meta.color, borderColor: meta.color }}
-                            onClick={() => {
-                              const nextHandle = (accountHandleDrafts[key] ?? '').trim() || accountPlaceholder
-                              setConnectedAccounts((prev) => [
-                                ...prev,
-                                { id: `acc_${Date.now()}`, platform: meta.label, accountName: nextHandle, status: isPlaceholderAccountHandle(key, nextHandle) ? 'token refresh due' : 'healthy' },
-                              ])
-                              setAccountHandleDrafts((prev) => ({ ...prev, [key]: nextHandle }))
-                            }}
-                          >
-                            Connect {meta.label}
-                          </button>
                         </>
                       )}
+                      <div>
+                        <p className="small-title">Requested access</p>
+                        <div className="chip-row">
+                          {SOCIAL_PUBLISHING_SCOPES.map((scope) => {
+                            const selected = selectedScopes.includes(scope)
+                            return (
+                              <button
+                                key={scope}
+                                type="button"
+                                className={selected ? 'chip active' : 'chip'}
+                                onClick={() => setAccountScopeDrafts((prev) => ({
+                                  ...prev,
+                                  [key]: selected
+                                    ? selectedScopes.filter((item) => item !== scope)
+                                    : [...selectedScopes, scope],
+                                }))}
+                              >
+                                {scope}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      <p className="muted">Your account profile and access preferences are private. Publishing stays disabled until this account completes OAuth authorization.</p>
+                      <div className="integration-actions">
+                        <button
+                          type="button"
+                          className="primary-button"
+                          style={{ background: meta.color, borderColor: meta.color }}
+                          onClick={() => saveSocialAccount({
+                            platform: key,
+                            accountName: inputValue,
+                            publishingScopes: selectedScopes,
+                          })}
+                        >
+                          Save account profile
+                        </button>
+                        {['instagram', 'facebook', 'youtube'].includes(key) && (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => connectSocialAccount({
+                              platform: key,
+                              requestedScopes: selectedScopes,
+                            })}
+                          >
+                            {linked?.status === 'healthy' ? 'Reconnect OAuth' : `Authorize ${meta.label}`}
+                          </button>
+                        )}
+                        {linked && (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            style={{ color: '#ef4444' }}
+                            onClick={() => removeSocialAccount(linked)}
+                          >
+                            Remove account
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )
               })}
             </div>
+            {integrationError && <span className="field-error">{integrationError}</span>}
 
             <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <h3>In-house AI engine</h3>
@@ -4225,6 +4459,7 @@ function App() {
               </form>
             </article>
 
+            {canViewManagementBoard && <>
             <h3 className="section-label" style={{ marginTop: '2rem' }}>Third-party tools</h3>
             <div className="cards">
               {[
@@ -4240,14 +4475,15 @@ function App() {
                     <h3>{item.name}</h3>
                   </div>
                   <p>{item.desc}</p>
-                  <button type="button" className="ghost-button">Connect</button>
+                  <span className="muted">Managed by IT / Management</span>
                 </article>
               ))}
             </div>
+            </>}
           </section>
         )}
 
-        {activeTab === 'admin' && isAdminUser && (
+        {activeTab === 'admin' && ['admin', 'manager', 'it'].includes(session?.role || '') && (
           <Suspense fallback={loadingPanel}>
             <AdminPanel
               teamMembers={teamMembers}
@@ -4293,6 +4529,10 @@ function App() {
               handleRespondToSupportTicket={handleRespondToSupportTicket}
               handleAssignCompanySeat={handleAssignCompanySeat}
               handleRevokeCompanySeat={handleRevokeCompanySeat}
+              socialPlatformReadiness={socialPlatformReadiness}
+              socialPlatformReadinessLoading={socialPlatformReadinessLoading}
+              socialPlatformReadinessError={socialPlatformReadinessError}
+              handleRefreshSocialPlatformReadiness={loadSocialPlatformReadiness}
               adminLoading={adminLoading}
               adminError={adminError}
               currentUser={session}
@@ -4300,7 +4540,7 @@ function App() {
           </Suspense>
         )}
 
-        {activeTab === 'admin' && !isAdminUser && canViewManagementBoard && (
+        {activeTab === 'admin' && session?.role === 'accountant' && (
           <Suspense fallback={loadingPanel}>
             <FinancePanel
               purchaseHistory={purchaseHistory}
