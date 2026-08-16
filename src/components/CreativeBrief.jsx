@@ -9,28 +9,59 @@ const formatSize = (bytes) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function CreativeBrief({ agentConfig, onEditProject, onUseDraft }) {
+export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveToWorkspace }) {
   const [sources, setSources] = useState([])
   const [instruction, setInstruction] = useState('Create a polished campaign flyer based on this information.')
   const [outputType, setOutputType] = useState('flyer')
   const [busy, setBusy] = useState(false)
+  const [readingFiles, setReadingFiles] = useState(false)
   const [error, setError] = useState('')
   const [project, setProject] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
   const inputRef = useRef(null)
 
   const addFiles = async (files) => {
     setError('')
-    const nextFiles = Array.from(files)
-    if (!nextFiles.length) return
-    setBusy(true)
+    setDragActive(false)
+    const nextFiles = Array.from(files || [])
+    console.log('🔍 addFiles triggered:', { count: nextFiles.length, files: nextFiles.map(f => ({ name: f.name, type: f.type, size: f.size })) })
+    
+    if (!nextFiles.length) {
+      console.warn('⚠️ No files provided to addFiles')
+      return
+    }
+    
+    setReadingFiles(true)
     try {
-      const parsed = await Promise.all(nextFiles.map(readBriefFile))
-      setSources((current) => [...current, ...parsed.filter((item) => !current.some((source) => source.id === item.id))])
+      console.log('📖 Starting file parsing...')
+      const parsed = await Promise.all(nextFiles.map(async (file) => {
+        console.log(`📄 Parsing: ${file.name} (${file.type})`)
+        try {
+          const result = await readBriefFile(file)
+          console.log(`✅ Parsed: ${result.name}`)
+          return result
+        } catch (err) {
+          console.error(`❌ Error parsing ${file.name}:`, err)
+          throw err
+        }
+      }))
+      
+      console.log('✅ All files parsed. Adding to state:', parsed.map(p => p.name))
+      setSources((current) => {
+        const filtered = parsed.filter((item) => !current.some((source) => source.id === item.id))
+        const updated = [...current, ...filtered]
+        console.log('📊 Sources state updated. New count:', updated.length, 'Files:', updated.map(s => s.name))
+        return updated
+      })
     } catch (readError) {
-      setError(readError.message)
+      console.error('❌ Error reading files:', readError)
+      setError(`Error reading files: ${readError.message}`)
     } finally {
-      setBusy(false)
-      if (inputRef.current) inputRef.current.value = ''
+      setReadingFiles(false)
+      if (inputRef.current) {
+        inputRef.current.value = ''
+      }
     }
   }
 
@@ -55,6 +86,27 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft }) {
     }
   }
 
+  const handleSaveToWorkspace = async () => {
+    if (!project) return
+    setSaving(true)
+    try {
+      await onSaveToWorkspace(project)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRegenerateWithNewKeywords = () => {
+    // Just re-run generation with current instruction and outputType
+    generate()
+  }
+
+  const handleBrowseClick = () => {
+    if (inputRef.current) {
+      inputRef.current.click()
+    }
+  }
+
   return (
     <div className="creative-brief-layout">
       <article className="sub-panel creative-brief-builder">
@@ -63,30 +115,117 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft }) {
           <h3>Build from your documents</h3>
         </div>
 
-        <label
+        <div
           className="brief-dropzone"
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
+          onDragEnter={(event) => {
+            console.log('🎯 dragenter event')
             event.preventDefault()
-            addFiles(event.dataTransfer.files)
+            event.stopPropagation()
+            setDragActive(true)
+          }}
+          onDragOver={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            event.dataTransfer.dropEffect = 'copy'
+          }}
+          onDragLeave={(event) => {
+            console.log('🎯 dragleave event')
+            event.preventDefault()
+            event.stopPropagation()
+            // Only set dragActive to false if leaving the dropzone entirely
+            if (event.target === event.currentTarget) {
+              setDragActive(false)
+            }
+          }}
+          onDrop={(event) => {
+            console.log('🎯 drop event fired!', { dataTransfer: event.dataTransfer, files: event.dataTransfer?.files })
+            event.preventDefault()
+            event.stopPropagation()
+            setDragActive(false)
+            
+            const files = event.dataTransfer?.files
+            console.log('💾 Drop detected. Files:', files)
+            
+            if (files && files.length > 0) {
+              console.log(`✨ Processing ${files.length} files from drop`)
+              addFiles(files)
+            } else {
+              console.warn('⚠️ Drop event fired but no files detected')
+              setError('No files detected in drop. Try selecting files using the browse button.')
+            }
+          }}
+          onClick={handleBrowseClick}
+          style={{ 
+            cursor: 'pointer',
+            borderColor: dragActive ? 'rgb(59, 130, 246)' : undefined,
+            backgroundColor: dragActive ? 'rgba(59, 130, 246, 0.05)' : undefined,
+            transition: 'all 0.2s ease'
           }}
         >
           <strong>Add campaign files</strong>
           <span>PowerPoint, Word, Excel, PDF, text, images, or video</span>
-          <input ref={inputRef} type="file" accept={ACCEPTED_FILES} multiple onChange={(event) => addFiles(event.target.files)} />
-        </label>
-
-        <div className="brief-source-list">
-          {sources.map((source) => (
-            <div className="brief-source" key={source.id}>
-              <div>
-                <strong>{source.name}</strong>
-                <span>{formatSize(source.size)} · {source.text ? `${source.text.length.toLocaleString()} characters read` : 'reference attached'}</span>
-              </div>
-              <button type="button" className="text-button" title={`Remove ${source.name}`} onClick={() => setSources((current) => current.filter((item) => item.id !== source.id))}>Remove</button>
-            </div>
-          ))}
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ACCEPTED_FILES}
+            multiple
+            onChange={(event) => {
+              console.log('📁 File input changed:', event.target.files)
+              if (event.target.files?.length) {
+                addFiles(event.target.files)
+              }
+            }}
+            style={{ display: 'none' }}
+          />
         </div>
+
+        {readingFiles && (
+          <div style={{ padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', marginBottom: '16px', borderLeft: '4px solid rgb(59, 130, 246)' }}>
+            <p style={{ margin: 0, color: 'rgb(59, 130, 246)', fontSize: '14px', fontWeight: '500' }}>📖 Reading and parsing files...</p>
+          </div>
+        )}
+
+        {sources.length > 0 && (
+          <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '8px', borderLeft: '4px solid rgb(34, 197, 94)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <p style={{ margin: 0, color: 'rgb(34, 197, 94)', fontSize: '14px', fontWeight: '600' }}>✓ {sources.length} file{sources.length === 1 ? '' : 's'} added</p>
+              <button
+                type="button"
+                className="text-button"
+                style={{ fontSize: '12px', color: '#ef4444' }}
+                onClick={() => setSources([])}
+              >
+                Clear all
+              </button>
+            </div>
+            <div className="brief-source-list">
+              {sources.map((source) => (
+                <div className="brief-source" key={source.id}>
+                  <div>
+                    <strong>{source.name}</strong>
+                    <span>{formatSize(source.size)} · {source.text ? `${source.text.length.toLocaleString()} characters read` : 'reference attached'}</span>
+                  </div>
+                  <button type="button" className="text-button" title={`Remove ${source.name}`} onClick={() => setSources((current) => current.filter((item) => item.id !== source.id))}>Remove</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!sources.length && !readingFiles && (
+          <p style={{ padding: '12px', fontSize: '13px', color: '#94a3b8', textAlign: 'center', margin: '16px 0' }}>
+            No files added yet. Drag files here or click to browse.
+          </p>
+        )}
+
+        {error && (
+          <div style={{ padding: '12px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', borderLeft: '4px solid rgb(239, 68, 68)', marginTop: '12px' }}>
+            <p style={{ margin: 0, color: 'rgb(239, 68, 68)', fontSize: '13px' }}>❌ {error}</p>
+            <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#666' }}>
+              💡 <strong>Debug tip:</strong> Open the browser console (F12) to see detailed logs. Check that files are not already in the list above.
+            </p>
+          </div>
+        )}
 
         <label>
           What should EchoAI create?
@@ -142,7 +281,12 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft }) {
               {project.outputType === 'video' && (
                 <button type="button" className="primary-button" onClick={() => onEditProject(project)}>Open video editor</button>
               )}
-              <button type="button" className="ghost-button" onClick={() => onUseDraft(project)}>Use copy in scheduler</button>
+              <button type="button" className="ghost-button" disabled={saving} onClick={handleSaveToWorkspace}>
+                {saving ? 'Saving...' : 'Save to workspace'}
+              </button>
+              <button type="button" className="ghost-button" disabled={busy} onClick={handleRegenerateWithNewKeywords}>
+                {busy ? 'Regenerating...' : 'Regenerate with new keywords'}
+              </button>
             </div>
           </>
         )}
