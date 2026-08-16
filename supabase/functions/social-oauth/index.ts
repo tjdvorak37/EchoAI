@@ -33,8 +33,8 @@ const PROVIDERS: Record<'meta' | 'youtube', ProviderConfig> = {
   youtube: {
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: 'https://oauth2.googleapis.com/token',
-    clientId: Deno.env.get('YOUTUBE_CLIENT_ID') ?? '',
-    clientSecret: Deno.env.get('YOUTUBE_CLIENT_SECRET') ?? '',
+    clientId: Deno.env.get('YOUTUBE_CLIENT_ID') ?? Deno.env.get('youtube_client_id') ?? '',
+    clientSecret: Deno.env.get('YOUTUBE_CLIENT_SECRET') ?? Deno.env.get('youtube_client_secret') ?? '',
     scopes: [
       'openid',
       'email',

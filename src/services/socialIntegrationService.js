@@ -14,7 +14,14 @@ export const socialIntegrationService = {
   async getPlatformReadiness() {
     if (!isSupabaseConfigured) return []
 
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData?.session?.access_token
+    if (!accessToken) {
+      throw new Error('Please sign in before loading social integration status.')
+    }
+
     const { data, error } = await supabase.functions.invoke('social-oauth', {
+      headers: { Authorization: `Bearer ${accessToken}` },
       body: { action: 'status' },
     })
     if (error) {
@@ -71,7 +78,14 @@ export const socialIntegrationService = {
       throw new Error('Social authorization requires the live Supabase environment.')
     }
 
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData?.session?.access_token
+    if (!accessToken) {
+      throw new Error('Please sign in before connecting a social account.')
+    }
+
     const { data, error } = await supabase.functions.invoke('social-oauth', {
+      headers: { Authorization: `Bearer ${accessToken}` },
       body: { action: 'connect', platform, requestedScopes },
     })
 
