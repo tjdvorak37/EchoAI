@@ -234,7 +234,7 @@ function App() {
     message: '',
     imageIdea: '',
     scheduledAt: '',
-    channels: ['instagram'],
+    channels: [],
     mediaAssetIds: [],
   })
   const [schedulerError, setSchedulerError] = useState('')
@@ -1237,7 +1237,7 @@ function App() {
       message: '',
       imageIdea: '',
       scheduledAt: '',
-      channels: ['instagram'],
+      channels: [],
       mediaAssetIds: [],
     })
   }
@@ -1278,7 +1278,7 @@ function App() {
       message: '',
       imageIdea: '',
       scheduledAt: '',
-      channels: ['instagram'],
+      channels: [],
       mediaAssetIds: [],
     })
   }
@@ -1309,7 +1309,6 @@ function App() {
       message: project.caption || prev.message,
       imageIdea: project.visualPrompt || prev.imageIdea,
     }))
-    setActiveTab('scheduler')
   }
 
   const handleSaveAiAgent = async (event) => {
@@ -1482,13 +1481,6 @@ function App() {
     }
 
     setWorkspaceAssets((prev) => [exportedAsset, ...prev])
-    setComposer((prev) => ({
-      ...prev,
-      message: project.caption || prev.message,
-      imageIdea: project.prompt || project.headline || prev.imageIdea,
-      campaign: prev.campaign || 'Photo campaign',
-    }))
-    setActiveTab('scheduler')
   }
 
   const handleCreateFolder = (event) => {
@@ -2270,7 +2262,7 @@ function App() {
     setUserReposts([])
     setWorkspaceFolders([])
     setWorkspaceAssets([])
-    setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: ['instagram'], mediaAssetIds: [] })
+    setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: [], mediaAssetIds: [] })
     setAiSuggestions([])
     setAiAgentConfig(createDefaultAiAgentConfig())
     setAiAgentDraft(createDefaultAiAgentConfig())
@@ -3633,6 +3625,15 @@ function App() {
               <div>
                 <p className="small-title">Photos and videos</p>
                 <p className="muted">Attach media from your private workspace. Upload more from the Media library.</p>
+                <div style={{ marginTop: '12px' }}>
+                  <label className="field-label" htmlFor="scheduler-media-upload">Upload media</label>
+                  <input
+                    id="scheduler-media-upload"
+                    type="file"
+                    accept="image/*,video/*"
+                    onChange={handleUploadAsset}
+                  />
+                </div>
                 <div className="chip-row">
                   {workspaceAssets.filter((asset) => ['image', 'video'].includes(asset.type)).map((asset) => {
                     const selected = composer.mediaAssetIds.includes(asset.id)
