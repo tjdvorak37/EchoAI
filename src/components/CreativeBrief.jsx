@@ -9,13 +9,14 @@ const formatSize = (bytes) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function CreativeBrief({ agentConfig, onEditProject, onUseDraft }) {
+export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveToWorkspace }) {
   const [sources, setSources] = useState([])
   const [instruction, setInstruction] = useState('Create a polished campaign flyer based on this information.')
   const [outputType, setOutputType] = useState('flyer')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [project, setProject] = useState(null)
+  const [saving, setSaving] = useState(false)
   const inputRef = useRef(null)
 
   const addFiles = async (files) => {
@@ -53,6 +54,21 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft }) {
     } finally {
       setBusy(false)
     }
+  }
+
+  const handleSaveToWorkspace = async () => {
+    if (!project) return
+    setSaving(true)
+    try {
+      await onSaveToWorkspace(project)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRegenerateWithNewKeywords = () => {
+    // Just re-run generation with current instruction and outputType
+    generate()
   }
 
   return (
@@ -142,7 +158,12 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft }) {
               {project.outputType === 'video' && (
                 <button type="button" className="primary-button" onClick={() => onEditProject(project)}>Open video editor</button>
               )}
-              <button type="button" className="ghost-button" onClick={() => onUseDraft(project)}>Use copy in scheduler</button>
+              <button type="button" className="ghost-button" disabled={saving} onClick={handleSaveToWorkspace}>
+                {saving ? 'Saving...' : 'Save to workspace'}
+              </button>
+              <button type="button" className="ghost-button" disabled={busy} onClick={handleRegenerateWithNewKeywords}>
+                {busy ? 'Regenerating...' : 'Regenerate with new keywords'}
+              </button>
             </div>
           </>
         )}

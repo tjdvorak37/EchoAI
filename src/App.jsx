@@ -1311,6 +1311,33 @@ function App() {
     }))
   }
 
+  const handleSaveCreativeProjectToWorkspace = async (project) => {
+    // Save the generated project (with AI image, headline, caption, etc.) as a workspace asset
+    const asset = {
+      id: `creative_${Date.now()}`,
+      name: project.title || `${project.outputType} - ${new Date().toLocaleDateString()}`,
+      type: project.imageSrc ? 'image' : 'document',
+      mime: project.imageSrc ? 'image/png' : 'application/json',
+      size: project.imageSrc ? Math.round((project.imageSrc.length || 0) * 0.72) : 0,
+      folderId: selectedFolderId,
+      createdAt: new Date().toISOString(),
+      previewUrl: project.imageSrc || '',
+      summary: `AI-generated ${project.outputType}: ${project.headline || project.title}`,
+      // Store the full project metadata so it can be retrieved/edited later
+      projectMetadata: {
+        title: project.title,
+        headline: project.headline,
+        caption: project.caption,
+        visualPrompt: project.visualPrompt,
+        outputType: project.outputType,
+        scenes: project.scenes,
+        imageSource: project.imageSource,
+      },
+    }
+
+    setWorkspaceAssets((prev) => [asset, ...prev])
+  }
+
   const handleSaveAiAgent = async (event) => {
     event.preventDefault()
     setAiAgentSaving(true)
@@ -3744,6 +3771,7 @@ function App() {
                 agentConfig={aiAgentConfig}
                 onEditProject={handleEditCreativeProject}
                 onUseDraft={handleUseCreativeDraft}
+                onSaveToWorkspace={handleSaveCreativeProjectToWorkspace}
               />
             </Suspense>
 
