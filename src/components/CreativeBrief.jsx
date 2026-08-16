@@ -138,20 +138,23 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
             }
           }}
           onDrop={(event) => {
-            console.log('🎯 drop event fired!', { dataTransfer: event.dataTransfer, files: event.dataTransfer?.files })
+            // CRITICAL: Must extract files SYNCHRONOUSLY before event ends
+            console.log('🎯 drop event fired!')
             event.preventDefault()
             event.stopPropagation()
             setDragActive(false)
             
-            const files = event.dataTransfer?.files
-            console.log('💾 Drop detected. Files:', files)
+            // Extract files synchronously - this is the critical line
+            const droppedFiles = event.dataTransfer?.files
+            console.log('💾 dataTransfer.files:', droppedFiles, 'length:', droppedFiles?.length)
             
-            if (files && files.length > 0) {
-              console.log(`✨ Processing ${files.length} files from drop`)
-              addFiles(files)
+            if (droppedFiles && droppedFiles.length > 0) {
+              console.log(`✨ Processing ${droppedFiles.length} files from drop`)
+              // Pass as array, not FileList
+              addFiles(Array.from(droppedFiles))
             } else {
-              console.warn('⚠️ Drop event fired but no files detected')
-              setError('No files detected in drop. Try selecting files using the browse button.')
+              console.warn('⚠️ Drop event fired but no files detected in dataTransfer')
+              setError('No files detected in drop. Try using the browse button to select files.')
             }
           }}
           onClick={handleBrowseClick}
@@ -172,7 +175,7 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
             onChange={(event) => {
               console.log('📁 File input changed:', event.target.files)
               if (event.target.files?.length) {
-                addFiles(event.target.files)
+                addFiles(Array.from(event.target.files))
               }
             }}
             style={{ display: 'none' }}
