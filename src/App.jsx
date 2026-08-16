@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import './App.css'
 import './components/VideoEditor.css'
 import './components/PhotoEditor.css'
@@ -170,6 +170,7 @@ function App() {
   const [cloudError, setCloudError] = useState('')
   const [pendingEmail, setPendingEmail] = useState('')
   const [session, setSession] = useState(null)
+  const [sessionRestoring, setSessionRestoring] = useState(isSupabaseConfigured)
   const [contactCard, setContactCard] = useState(null)
   const [contactCardDraft, setContactCardDraft] = useState(null)
   const [contactCardOpen, setContactCardOpen] = useState(false)
@@ -227,6 +228,7 @@ function App() {
   const [supportUploading, setSupportUploading] = useState(false)
   const [supportError, setSupportError] = useState('')
   const [supportSuccess, setSupportSuccess] = useState('')
+  const supportCloseTimerRef = useRef(null)
   const [supportTicket, setSupportTicket] = useState({
     category: 'Technical issue',
     details: '',
@@ -312,6 +314,16 @@ function App() {
       <p className="panel-note">Preparing tools and data.</p>
     </section>
   )
+
+  async function loadContactCard(user) {
+    try {
+      const card = await authService.getMyContactCard({ userId: user.id, email: user.email })
+      setContactCard(card)
+      setContactCardDraft(card)
+    } catch (error) {
+      setContactCardError(error.message)
+    }
+  }
 
   // Loads and applies this user's persisted data after login.
   // Demo users fall back to seed data on first login; all others start clean.
@@ -508,7 +520,7 @@ function App() {
   const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant'].includes(session?.role || '')
   const canManageBrandKit = ['admin', 'manager'].includes(session?.role || '')
 
-  const loadAdminData = async () => {
+  async function loadAdminData() {
     setAdminError('')
     setAdminLoading(true)
 
@@ -576,6 +588,45 @@ function App() {
     setTickets((prev) => prev.map((ticket) => ticket.id === ticketId ? { ...ticket, ...updated } : ticket))
     return updated
   }
+
+  const handleUpdateSupportTicketStatus = async ({ ticketId, status }) => {
+    const updated = await authService.updateSupportTicketStatus({ ticketId, status })
+    setTickets((prev) => prev.map((ticket) => ticket.id === ticketId ? { ...ticket, ...updated } : ticket))
+    return updated
+  }
+
+  const restorePersistedSession = useEffectEvent(async (isActive) => {
+    try {
+      const restoredUser = await authService.restoreSession()
+      if (!isActive() || !restoredUser) return
+
+      setSession(restoredUser)
+      await applyUserData(restoredUser)
+      if (['admin', 'manager', 'it'].includes(restoredUser.role)) {
+        await loadAdminData()
+      }
+    } catch {
+      // An expired or insufficient-assurance session should fall through to sign-in.
+    } finally {
+      if (isActive()) setSessionRestoring(false)
+    }
+  })
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined
+
+    let active = true
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'INITIAL_SESSION') {
+        restorePersistedSession(() => active)
+      }
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   const handleAssignCompanySeat = async (employeeEmail) => {
     const created = await authService.assignCompanySeat({
@@ -746,16 +797,6 @@ function App() {
       setAuthError(error.message)
     } finally {
       setResetPasswordLoading(false)
-    }
-  }
-
-  const loadContactCard = async (user) => {
-    try {
-      const card = await authService.getMyContactCard({ userId: user.id, email: user.email })
-      setContactCard(card)
-      setContactCardDraft(card)
-    } catch (error) {
-      setContactCardError(error.message)
     }
   }
 
@@ -1747,6 +1788,7 @@ function App() {
   }
 
   const openSupportModal = () => {
+    if (supportCloseTimerRef.current) window.clearTimeout(supportCloseTimerRef.current)
     setSupportError('')
     setSupportSuccess('')
     setSupportTicket({
@@ -1757,9 +1799,11 @@ function App() {
   }
 
   const closeSupportModal = () => {
+    if (supportCloseTimerRef.current) window.clearTimeout(supportCloseTimerRef.current)
     setSupportModalOpen(false)
     setSupportError('')
     setSupportSuccess('')
+    setSupportAttachments([])
   }
 
   const handleSupportTicketChange = (field, value) => {
@@ -1830,6 +1874,10 @@ function App() {
         details: '',
       })
       setSupportAttachments([])
+      supportCloseTimerRef.current = window.setTimeout(() => {
+        setSupportModalOpen(false)
+        setSupportSuccess('')
+      }, 1200)
     } catch (error) {
       setSupportError(error.message)
     } finally {
@@ -2378,6 +2426,10 @@ function App() {
         </section>
       </div>
     )
+  }
+
+  if (sessionRestoring) {
+    return loadingPanel
   }
 
   if (!session) {
@@ -4596,6 +4648,7 @@ function App() {
               handleCreateCompanySeatPackage={handleCreateCompanySeatPackage}
               handleUpdateCompanySeatPackage={handleUpdateCompanySeatPackage}
               handleRespondToSupportTicket={handleRespondToSupportTicket}
+              handleUpdateSupportTicketStatus={handleUpdateSupportTicketStatus}
               onAdminUserAction={handleAdminUserAction}
               handleAssignCompanySeat={handleAssignCompanySeat}
               handleRevokeCompanySeat={handleRevokeCompanySeat}

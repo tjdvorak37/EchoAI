@@ -80,6 +80,7 @@ export function AdminPanel({
   companySeatPackage, companySeats,
   handleCreateCompanySeatPackage, handleUpdateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
   handleRespondToSupportTicket,
+  handleUpdateSupportTicketStatus,
   socialPlatformReadiness, socialPlatformReadinessLoading, socialPlatformReadinessError, handleRefreshSocialPlatformReadiness,
   adminLoading, adminError,
   currentUser,
@@ -152,6 +153,7 @@ export function AdminPanel({
     assignee: 'all',
     search: '',
   })
+  const [ticketView, setTicketView] = useState('active')
   const [announcementDraft, setAnnouncementDraft] = useState(landingAnnouncement)
 
   const activeLicenses = licenses.filter((l) => l.status === 'active').length
@@ -234,22 +236,28 @@ export function AdminPanel({
     ))
   }
 
-  const resolveTicket = (ticketId) => {
-    setTickets((prev) => prev.map((t) =>
-      t.id === ticketId ? { ...t, status: 'resolved', updatedAt: new Date().toISOString() } : t,
-    ))
-    if (ticketOpen?.id === ticketId) {
-      setTicketOpen((prev) => ({ ...prev, status: 'resolved' }))
+  const updateTicketStatus = async (ticketId, status) => {
+    try {
+      const updated = await handleUpdateSupportTicketStatus({ ticketId, status })
+      if (ticketOpen?.id === ticketId) {
+        setTicketOpen((prev) => ({ ...prev, ...updated }))
+      }
+      return updated
+    } catch (error) {
+      setSeatError(error.message)
+      return null
     }
+  }
+
+  const resolveTicket = async (ticketId) => {
+    await updateTicketStatus(ticketId, 'resolved')
   }
 
   const isTicketActionable = (status) => !['resolved', 'closed'].includes(status || 'open')
 
-  const closeTicket = (ticketId) => {
-    setTickets((prev) => prev.map((t) =>
-      t.id === ticketId ? { ...t, status: 'closed', updatedAt: new Date().toISOString() } : t,
-    ))
-    setTicketOpen(null)
+  const closeTicket = async (ticketId) => {
+    const updated = await updateTicketStatus(ticketId, 'closed')
+    if (updated) setTicketOpen(null)
   }
 
   const sendReply = async (ticketId) => {
@@ -335,6 +343,9 @@ export function AdminPanel({
   const ticketAssignees = ['Unassigned', ...new Set(tickets.map((ticket) => ticket.assignee).filter(Boolean))]
   const ticketQueues = ['all', ...new Set(tickets.map((ticket) => ticket.queue).filter(Boolean))]
   const filteredTickets = tickets.filter((ticket) => {
+    const isHistoryTicket = ticket.status === 'closed'
+    if (ticketView === 'active' && isHistoryTicket) return false
+    if (ticketView === 'history' && !isHistoryTicket) return false
     const searchTerm = ticketFilter.search.trim().toLowerCase()
     const matchesSearch = !searchTerm || [
       ticket.subject,
@@ -592,6 +603,30 @@ export function AdminPanel({
             <div className="it-ticket-list">
               <Section title="Support tickets">
                 <div className="it-ticket-filters">
+                  <div className="it-ticket-view-tabs" role="tablist" aria-label="Ticket views">
+                    <button
+                      type="button"
+                      className={ticketView === 'active' ? 'active' : ''}
+                      onClick={() => {
+                        setTicketView('active')
+                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
+                        setTicketOpen(null)
+                      }}
+                    >
+                      Active queue
+                    </button>
+                    <button
+                      type="button"
+                      className={ticketView === 'history' ? 'active' : ''}
+                      onClick={() => {
+                        setTicketView('history')
+                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
+                        setTicketOpen(null)
+                      }}
+                    >
+                      History ({tickets.filter((ticket) => ticket.status === 'closed').length})
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={ticketFilter.search}
@@ -606,8 +641,8 @@ export function AdminPanel({
                       <option value="in_progress">In progress</option>
                       <option value="waiting_customer">Waiting on customer</option>
                       <option value="escalated">Escalated</option>
-                      <option value="resolved">Resolved</option>
-                      <option value="closed">Closed</option>
+                      {ticketView === 'active' && <option value="resolved">Resolved</option>}
+                      {ticketView === 'history' && <option value="closed">Closed</option>}
                     </select>
                     <select value={ticketFilter.priority} onChange={(event) => setTicketFilter((prev) => ({ ...prev, priority: event.target.value }))}>
                       <option value="all">All priorities</option>
@@ -763,7 +798,15 @@ export function AdminPanel({
                 {!isTicketActionable(ticketOpen.status) && (
                   <div className="it-ticket-closed-notice">
                     This ticket is {ticketOpen.status}.
-                    <button type="button" className="text-button" onClick={() => setTickets((prev) => prev.map((t) => t.id === ticketOpen.id ? { ...t, status: 'open' } : t))}>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => {
+                        setTicketView('active')
+                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
+                        updateTicketStatus(ticketOpen.id, 'open')
+                      }}
+                    >
                       Reopen
                     </button>
                   </div>

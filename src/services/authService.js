@@ -149,6 +149,36 @@ const getProfileByUser = async ({ userId, email }) => {
 }
 
 export const authService = {
+  async restoreSession() {
+    if (!isSupabaseConfigured) return null
+
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) throw new Error(error.message)
+    if (!session?.user) return null
+
+    const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    if (assuranceError) throw new Error(assuranceError.message)
+
+    // A verified MFA factor requires an AAL2 session; never restore an AAL1
+    // session into the authenticated workspace.
+    if (assurance?.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2') return null
+
+    const profile = await getProfileByUser({
+      userId: session.user.id,
+      email: session.user.email,
+    })
+    if (!profile) return null
+
+    assertAccountCanAccess(profile.access_status ?? 'pending', profile.role)
+
+    return {
+      ...session.user,
+      role: profile.role ?? session.user.user_metadata?.role ?? 'user',
+      accessStatus: profile.access_status ?? 'active',
+      company: profile.company ?? '',
+    }
+  },
+
   async signIn({ email, password }) {
     if (!email || !password) {
       throw new Error('Email and password are required.')
@@ -1077,6 +1107,21 @@ export const authService = {
 
     if (error) throw new Error(error.message)
     return { id: data.id, status: data.status, adminResponse: data.admin_response }
+  },
+
+  async updateSupportTicketStatus({ ticketId, status }) {
+    if (!ticketId || !status) throw new Error('A ticket and status are required.')
+    if (!isSupabaseConfigured) return { id: ticketId, status, updatedAt: new Date().toISOString() }
+
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .update({ status })
+      .eq('id', ticketId)
+      .select('id, status, updated_at')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return { id: data.id, status: data.status, updatedAt: data.updated_at }
   },
 
   async updateCompanySeatPackage({ packageId, seatLimit, assignedSeats = 0 }) {
