@@ -149,6 +149,20 @@
   flex-wrap: wrap;
 }
 
+.canvas-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.canvas-controls .chip {
+  min-width: 2rem;
+  padding: 0.45rem 0.6rem;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -476,6 +490,12 @@
   gap: 0.6rem;
 }
 
+.source-action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
 .slider-row {
   display: grid;
   gap: 0.35rem;
@@ -616,6 +636,15 @@
 
   .photo-stage-panel {
     padding: 0.65rem;
+  }
+
+  .source-action-row {
+    grid-template-columns: 1fr;
+  }
+
+  .canvas-controls {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .photo-stage-wrap {

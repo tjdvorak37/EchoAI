@@ -519,6 +519,7 @@ const renderComposition = async ({
   maskShape,
   filters,
   preset,
+  backgroundColor,
   layers,
   brushStrokes,
   stageMetrics,
@@ -532,14 +533,7 @@ const renderComposition = async ({
   const height = canvas.height
 
   ctx.clearRect(0, 0, width, height)
-  ctx.fillStyle = preset.base
-  ctx.fillRect(0, 0, width, height)
-
-  const gradient = ctx.createLinearGradient(0, 0, width, height)
-  gradient.addColorStop(0, preset.base)
-  gradient.addColorStop(0.55, preset.accent)
-  gradient.addColorStop(1, preset.secondary)
-  ctx.fillStyle = gradient
+  ctx.fillStyle = backgroundColor || preset.base
   ctx.fillRect(0, 0, width, height)
 
   if (imageSrc) {
@@ -586,13 +580,15 @@ const renderComposition = async ({
     }
   }
 
-  const vignette = ctx.createRadialGradient(width / 2, height / 2, width * 0.18, width / 2, height / 2, width * 0.72)
-  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)')
-  vignette.addColorStop(1, 'rgba(2, 6, 23, 0.55)')
-  ctx.fillStyle = vignette
-  ctx.fillRect(0, 0, width, height)
+  if (imageSrc || layers.length || brushStrokes.length) {
+    const vignette = ctx.createRadialGradient(width / 2, height / 2, width * 0.18, width / 2, height / 2, width * 0.72)
+    vignette.addColorStop(0, 'rgba(0, 0, 0, 0)')
+    vignette.addColorStop(1, 'rgba(2, 6, 23, 0.55)')
+    ctx.fillStyle = vignette
+    ctx.fillRect(0, 0, width, height)
+  }
 
-  if (filters.grain > 0) {
+  if ((imageSrc || layers.length || brushStrokes.length) && filters.grain > 0) {
     const dotCount = Math.round((width * height * filters.grain) / 110000)
     ctx.fillStyle = 'rgba(255, 255, 255, 0.18)'
     for (let index = 0; index < dotCount; index += 1) {
@@ -672,7 +668,7 @@ const renderComposition = async ({
 
 export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialProject }) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
-  const [selectedAssetId, setSelectedAssetId] = useState(imageAssets[0]?.id ?? '')
+  const [selectedAssetId, setSelectedAssetId] = useState('')
   const [uploadedImage, setUploadedImage] = useState('')
   const [generatedImageSrc, setGeneratedImageSrc] = useState(initialProject?.imageSrc || '')
   const [generatedImageMeta, setGeneratedImageMeta] = useState(initialProject ? { source: initialProject.imageSource || initialProject.source, palette: 'editorial' } : null)
@@ -683,8 +679,8 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
   const [prompt, setPrompt] = useState(initialProject?.visualPrompt || DEFAULT_PROMPT)
   const [presetId, setPresetId] = useState('aurora')
   const [aspectRatio, setAspectRatio] = useState(initialProject?.outputType === 'image' ? '1:1' : '4:5')
-  const [headline, setHeadline] = useState(initialProject?.headline || 'Launch the next drop')
-  const [subcopy, setSubcopy] = useState(initialProject?.caption || 'Edit, stylize, and export campaign art without leaving EchoAI.')
+  const [headline, setHeadline] = useState(initialProject?.headline || '')
+  const [subcopy, setSubcopy] = useState(initialProject?.caption || '')
   const [activeTool, setActiveTool] = useState('select')
   const [maskShape, setMaskShape] = useState('none')
   const [brushColor, setBrushColor] = useState('#ffffff')
@@ -692,17 +688,19 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
   const [brushOpacity, setBrushOpacity] = useState(0.8)
   const [brushStrokes, setBrushStrokes] = useState([])
   const [cropRect, setCropRect] = useState({ x: 0, y: 0, w: 100, h: 100 })
+  const [canvasBackground, setCanvasBackground] = useState(initialProject ? '#0f172a' : '#ffffff')
   const [stageMetrics, setStageMetrics] = useState({ width: 1000, height: 1250 })
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [exportFormat, setExportFormat] = useState('png')
   const [exportQuality, setExportQuality] = useState(92)
   const [historyCounts, setHistoryCounts] = useState({ past: 0, future: 0 })
-  const [layers, setLayers] = useState(() => projectLayers(initialProject))
-  const [activeLayerId, setActiveLayerId] = useState('headline')
-  const [notice, setNotice] = useState(initialProject ? 'Generated project loaded. Every layer remains editable.' : 'Ready to create.')
+  const [layers, setLayers] = useState(() => (initialProject ? projectLayers(initialProject) : []))
+  const [activeLayerId, setActiveLayerId] = useState(initialProject ? 'headline' : '')
+  const [notice, setNotice] = useState(initialProject ? 'Generated project loaded. Every layer remains editable.' : 'Blank workspace ready for upload.')
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const [compactMode, setCompactMode] = useState(false)
+  const [canvasZoom, setCanvasZoom] = useState(100)
   const stageRef = useRef(null)
   const stageViewportRef = useRef(null)
   const paintCanvasRef = useRef(null)
@@ -712,7 +710,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
   const layerIdRef = useRef(0)
   const [stageViewportSize, setStageViewportSize] = useState({ width: 900, height: 720 })
 
-  const selectedAsset = imageAssets.find((asset) => asset.id === selectedAssetId) ?? imageAssets[0] ?? null
+  const selectedAsset = imageAssets.find((asset) => asset.id === selectedAssetId) ?? null
   const selectedImageSrc = generatedImageSrc || uploadedImage || selectedAsset?.previewUrl || ''
   const preset = STYLE_PRESETS[presetId] ?? STYLE_PRESETS.aurora
   const aspect = ASPECT_RATIOS[aspectRatio] ?? ASPECT_RATIOS['4:5']
@@ -770,6 +768,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
     generatedImageSrc,
     uploadedImage,
     selectedAssetId,
+    canvasBackground,
   })
 
   const applySnapshot = (snapshot) => {
@@ -783,6 +782,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
     setGeneratedImageSrc(snapshot.generatedImageSrc)
     setUploadedImage(snapshot.uploadedImage)
     setSelectedAssetId(snapshot.selectedAssetId)
+    setCanvasBackground(snapshot.canvasBackground || '#ffffff')
   }
 
   const syncHistoryCounts = () => {
@@ -1300,9 +1300,21 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
     setGeneratedImageSrc('')
     setGeneratedImageMeta(null)
     setUploadedImage('')
-    setSelectedAssetId(imageAssets[0]?.id ?? '')
+    setSelectedAssetId('')
     setActiveTool('select')
-    setNotice('Reverted to the workspace image library.')
+    setNotice('Base image cleared. The canvas is ready for a new upload.')
+  }
+
+  const useLibraryImage = () => {
+    const firstImage = imageAssets[0]
+    if (!firstImage) {
+      setNotice('Your workspace has no image assets yet.')
+      return
+    }
+    setSelectedAssetId(firstImage.id)
+    setUploadedImage('')
+    setGeneratedImageSrc('')
+    setNotice(`Using ${firstImage.name} as the base image.`)
   }
 
   const handleUpload = async (event) => {
@@ -1337,15 +1349,25 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
   }
 
   const resetEditor = () => {
-    setPrompt(DEFAULT_PROMPT)
-    setPresetId('aurora')
+    commitHistory()
+    setPrompt('')
+    setPresetId('editorial')
     setAspectRatio('4:5')
-    setHeadline('Launch the next drop')
-    setSubcopy('Edit, stylize, and export campaign art without leaving EchoAI.')
+    setHeadline('')
+    setSubcopy('')
+    setGeneratedImageSrc('')
+    setGeneratedImageMeta(null)
+    setUploadedImage('')
+    setSelectedAssetId('')
     setFilters(DEFAULT_FILTERS)
-    setLayers(defaultLayers())
-    setActiveLayerId('headline')
-    setNotice('Canvas reset to the default concept.')
+    setCanvasBackground('#ffffff')
+    setBrushStrokes([])
+    setCropRect({ x: 0, y: 0, w: 100, h: 100 })
+    setLayers([])
+    setActiveLayerId('')
+    setCanvasZoom(100)
+    setActiveTool('select')
+    setNotice('New blank workspace ready for upload.')
   }
 
   const addLogoLayer = (logo) => {
@@ -1417,6 +1439,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
       maskShape,
       filters,
       preset,
+      backgroundColor: canvasBackground,
       layers,
       brushStrokes,
       stageMetrics,
@@ -1432,7 +1455,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
       return
     }
 
-    exportCtx.fillStyle = preset.base
+    exportCtx.fillStyle = canvasBackground || preset.base
     exportCtx.fillRect(0, 0, exportCanvasEl.width, exportCanvasEl.height)
 
     const stageImage = await loadImage(stageDataUrl)
@@ -1493,7 +1516,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
           <button type="button" className="ghost-button" onClick={() => setRightSidebarCollapsed((prev) => !prev)}>
             {rightSidebarCollapsed ? 'Show inspector' : 'Hide inspector'}
           </button>
-          <button type="button" className="ghost-button" onClick={resetEditor}>Reset canvas</button>
+          <button type="button" className="ghost-button" onClick={resetEditor}>New blank workspace</button>
           <button
             type="button"
             className="ghost-button"
@@ -1540,9 +1563,14 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
                 Upload from device
                 <input type="file" accept="image/*" onChange={handleUpload} />
               </label>
-              <button type="button" className="ghost-button full-width" onClick={clearBaseImage}>
-                Use library image
-              </button>
+              <div className="source-action-row">
+                <button type="button" className="ghost-button" onClick={clearBaseImage}>
+                  Clear canvas image
+                </button>
+                <button type="button" className="ghost-button" onClick={useLibraryImage}>
+                  Use library image
+                </button>
+              </div>
             </div>
             <div className="source-list">
               {imageAssets.length === 0 && <p className="muted">Your workspace has no image assets yet.</p>}
@@ -1677,6 +1705,12 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
               <span className="status-pill">{activeTool.toUpperCase()}</span>
               <p className="muted">{notice}</p>
             </div>
+            <div className="canvas-controls" aria-label="Canvas controls">
+              <button type="button" className="chip" onClick={() => setCanvasZoom((value) => clamp(value - 10, 50, 200))}>−</button>
+              <span>{canvasZoom}%</span>
+              <button type="button" className="chip" onClick={() => setCanvasZoom((value) => clamp(value + 10, 50, 200))}>+</button>
+              <button type="button" className="chip" onClick={() => setCanvasZoom(100)}>Fit</button>
+            </div>
           </div>
 
           <div ref={stageViewportRef} className="photo-stage-wrap">
@@ -1688,7 +1722,8 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
                 width: `${stageDisplaySize.width}px`,
                 height: `${stageDisplaySize.height}px`,
                 aspectRatio: aspect.css,
-                background: preset.background,
+                background: canvasBackground,
+                transform: `scale(${canvasZoom / 100})`,
                 cursor:
                   activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal'
                     ? 'crosshair'
@@ -1713,8 +1748,12 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
                 </div>
               )}
 
-              <div className="photo-stage-vignette" style={{ opacity: clamp(filters.vignette / 100, 0.18, 0.7) }} />
-              <div className="photo-stage-noise" style={{ opacity: clamp(filters.grain / 80, 0.05, 0.22) }} />
+              {(selectedImageSrc || layers.length || brushStrokes.length) && (
+                <>
+                  <div className="photo-stage-vignette" style={{ opacity: clamp(filters.vignette / 100, 0.18, 0.7) }} />
+                  <div className="photo-stage-noise" style={{ opacity: clamp(filters.grain / 80, 0.05, 0.22) }} />
+                </>
+              )}
               <canvas ref={paintCanvasRef} className="photo-paint-layer" aria-hidden="true" />
 
               {activeTool === 'crop' && (
@@ -1869,6 +1908,10 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
                   <option key={key} value={key}>{value.label}</option>
                 ))}
               </select>
+            </label>
+            <label>
+              Canvas background
+              <input type="color" value={canvasBackground} onChange={(event) => setCanvasBackground(event.target.value)} />
             </label>
             <label>
               Active layer
