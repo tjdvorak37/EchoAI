@@ -28,3 +28,12 @@ verify_jwt = true
 # Handles the OAuth redirect back from Google and Microsoft, which arrives
 # without a Supabase JWT. Requests are authorised inside the function.
 verify_jwt = false
+
+[functions.public-support-ticket]
+# Public support intake validates and rate-limits requests inside the function.
+verify_jwt = false
+
+[functions.social-publisher]
+# The trusted scheduler authenticates with SOCIAL_PUBLISHER_CRON_SECRET rather
+# than a Supabase user JWT.
+verify_jwt = false
