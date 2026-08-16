@@ -144,17 +144,42 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
             event.stopPropagation()
             setDragActive(false)
             
-            // Extract files synchronously - this is the critical line
-            const droppedFiles = event.dataTransfer?.files
-            console.log('💾 dataTransfer.files:', droppedFiles, 'length:', droppedFiles?.length)
+            // Log detailed drag info
+            console.log('💾 Drag details:', {
+              types: event.dataTransfer.types,
+              items: event.dataTransfer.items?.length,
+              files: event.dataTransfer.files?.length,
+            })
             
-            if (droppedFiles && droppedFiles.length > 0) {
-              console.log(`✨ Processing ${droppedFiles.length} files from drop`)
-              // Pass as array, not FileList
+            // Try items first (more reliable)
+            if (event.dataTransfer.items?.length > 0) {
+              const draggedFiles = []
+              for (let i = 0; i < event.dataTransfer.items.length; i++) {
+                if (event.dataTransfer.items[i].kind === 'file') {
+                  const file = event.dataTransfer.items[i].getAsFile()
+                  if (file) draggedFiles.push(file)
+                  console.log(`📄 Item ${i}: kind=${event.dataTransfer.items[i].kind}, type=${event.dataTransfer.items[i].type}, file=${file?.name}`)
+                } else {
+                  console.log(`📄 Item ${i}: kind=${event.dataTransfer.items[i].kind} (not a file)`)
+                }
+              }
+              
+              if (draggedFiles.length > 0) {
+                console.log(`✨ Processing ${draggedFiles.length} files from drop (via items)`)
+                addFiles(draggedFiles)
+              } else {
+                console.warn('⚠️ No files found in drag items')
+                setError('No files detected in drop. Make sure you\'re dragging files, not text or links.')
+              }
+            } else if (event.dataTransfer.files?.length > 0) {
+              // Fallback to dataTransfer.files
+              const droppedFiles = event.dataTransfer.files
+              console.log(`✨ Processing ${droppedFiles.length} files from drop (via files)`)
               addFiles(Array.from(droppedFiles))
             } else {
-              console.warn('⚠️ Drop event fired but no files detected in dataTransfer')
-              setError('No files detected in drop. Try using the browse button to select files.')
+              console.warn('⚠️ Drop event fired but no files detected in either items or files')
+              console.log('📋 dataTransfer.types:', event.dataTransfer.types)
+              setError('No files detected in drop. Drag actual files (PDF, images, etc.), not text or links.')
             }
           }}
           onClick={handleBrowseClick}
