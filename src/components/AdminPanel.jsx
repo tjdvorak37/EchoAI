@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { FinancePanel } from './FinancePanel'
 
+const USERS_PER_PAGE = 25
+const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
+const USER_STATUSES = ['active', 'pending', 'deactivated', 'approved', 'denied']
+
 const STATUS_COLORS = {
   active: '#22c55e',
   pending: '#f59e0b',
@@ -83,6 +87,11 @@ export function AdminPanel({
   const [replyDraft, setReplyDraft] = useState('')
   const [licenseNote, setLicenseNote] = useState({})
   const [userSearch, setUserSearch] = useState('')
+  const [userRoleFilter, setUserRoleFilter] = useState('all')
+  const [userStatusFilter, setUserStatusFilter] = useState('all')
+  const [userSort, setUserSort] = useState('name-asc')
+  const [userPage, setUserPage] = useState(1)
+  const [expandedUserId, setExpandedUserId] = useState(null)
   const [seatLimitDraft, setSeatLimitDraft] = useState('10')
   const [seatEmailDraft, setSeatEmailDraft] = useState('')
   const [seatError, setSeatError] = useState('')
@@ -237,10 +246,41 @@ export function AdminPanel({
     { id: 'integrations', label: '🔌 Integrations' },
   ]
 
-  const filteredUsers = teamMembers.filter((m) =>
-    !userSearch || m.fullName.toLowerCase().includes(userSearch.toLowerCase()) ||
-    m.email.toLowerCase().includes(userSearch.toLowerCase()),
-  )
+  const filteredUsers = teamMembers.filter((member) => {
+    const term = userSearch.trim().toLowerCase()
+    const matchesSearch = !term
+      || member.fullName?.toLowerCase().includes(term)
+      || member.email?.toLowerCase().includes(term)
+      || member.company?.toLowerCase().includes(term)
+    const matchesRole = userRoleFilter === 'all' || member.role === userRoleFilter
+    const matchesStatus = userStatusFilter === 'all' || member.accessStatus === userStatusFilter
+    return matchesSearch && matchesRole && matchesStatus
+  })
+
+  const sortedUsers = [...filteredUsers].sort((left, right) => {
+    switch (userSort) {
+      case 'name-desc':
+        return (right.fullName || '').localeCompare(left.fullName || '')
+      case 'email-asc':
+        return (left.email || '').localeCompare(right.email || '')
+      case 'company-asc':
+        return (left.company || '').localeCompare(right.company || '')
+      case 'quota-desc':
+        return (right.storageQuotaMb ?? 0) - (left.storageQuotaMb ?? 0)
+      default:
+        return (left.fullName || '').localeCompare(right.fullName || '')
+    }
+  })
+
+  const userPageCount = Math.max(1, Math.ceil(sortedUsers.length / USERS_PER_PAGE))
+  // Filters can shrink the list under the current page while userPage still points past the end.
+  const safeUserPage = Math.min(userPage, userPageCount)
+  const visibleUsers = sortedUsers.slice((safeUserPage - 1) * USERS_PER_PAGE, safeUserPage * USERS_PER_PAGE)
+
+  const resetUserPaging = (apply) => {
+    apply()
+    setUserPage(1)
+  }
 
   const ticketAssignees = ['Unassigned', ...new Set(tickets.map((ticket) => ticket.assignee).filter(Boolean))]
   const ticketQueues = ['all', ...new Set(tickets.map((ticket) => ticket.queue).filter(Boolean))]
@@ -818,62 +858,127 @@ export function AdminPanel({
         {itTab === 'users' && (
           <div>
             <Section title="User management">
-              <label>
-                Search
-                <input
-                  type="text"
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  placeholder="Search by name or email..."
-                />
-              </label>
+              <div className="it-user-filters">
+                <label>
+                  Search
+                  <input
+                    type="search"
+                    value={userSearch}
+                    onChange={(e) => resetUserPaging(() => setUserSearch(e.target.value))}
+                    placeholder="Name, email, or company..."
+                  />
+                </label>
+                <label>
+                  Role
+                  <select value={userRoleFilter} onChange={(e) => resetUserPaging(() => setUserRoleFilter(e.target.value))}>
+                    <option value="all">All roles</option>
+                    {USER_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Status
+                  <select value={userStatusFilter} onChange={(e) => resetUserPaging(() => setUserStatusFilter(e.target.value))}>
+                    <option value="all">All statuses</option>
+                    {USER_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Sort
+                  <select value={userSort} onChange={(e) => setUserSort(e.target.value)}>
+                    <option value="name-asc">Name A–Z</option>
+                    <option value="name-desc">Name Z–A</option>
+                    <option value="email-asc">Email A–Z</option>
+                    <option value="company-asc">Company A–Z</option>
+                    <option value="quota-desc">Largest quota</option>
+                  </select>
+                </label>
+              </div>
 
-              {filteredUsers.map((member) => (
-                <div key={member.id} className="it-row">
-                  <div>
-                    <p style={{ fontWeight: 600 }}>{member.fullName} <StatusBadge value={member.role} /></p>
-                    <span>{member.email} • {member.company || 'No company'}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <StatusBadge value={member.accessStatus} />
-                    {member.role !== 'admin' && (
-                      <>
-                        <button type="button" className="ghost-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => handleToggleUserAccess(member)} disabled={adminLoading}>
-                          {member.accessStatus === 'deactivated' ? 'Reactivate' : 'Deactivate'}
+              <p className="muted it-user-count">
+                {sortedUsers.length === teamMembers.length
+                  ? `${sortedUsers.length} user${sortedUsers.length === 1 ? '' : 's'}`
+                  : `${sortedUsers.length} of ${teamMembers.length} users match`}
+                {sortedUsers.length > USERS_PER_PAGE && ` • page ${safeUserPage} of ${userPageCount}`}
+              </p>
+
+              {sortedUsers.length === 0 && <p className="muted">No users match these filters.</p>}
+
+              {visibleUsers.map((member) => {
+                const expanded = expandedUserId === member.id
+                return (
+                  <div key={member.id} className="it-user-row">
+                    <div className="it-row">
+                      <div>
+                        <p style={{ fontWeight: 600 }}>{member.fullName} <StatusBadge value={member.role} /></p>
+                        <span>{member.email} • {member.company || 'No company'}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <StatusBadge value={member.accessStatus} />
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                          onClick={() => setExpandedUserId(expanded ? null : member.id)}
+                          aria-expanded={expanded}
+                        >
+                          {expanded ? 'Close' : 'Manage'}
                         </button>
-                        <button type="button" className="ghost-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => { setQuotaEditingUserId(member.id); setQuotaDraftMb(String(member.storageQuotaMb ?? 500)) }}>
-                          Quota: {member.storageQuotaMb ?? 500} MB
-                        </button>
-                      </>
+                      </div>
+                    </div>
+
+                    {expanded && (
+                      <div className="it-user-detail">
+                        {member.role === 'admin' ? (
+                          <p className="muted">Administrator accounts cannot be modified here.</p>
+                        ) : (
+                          <>
+                            <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Access</span>
+                              <button type="button" className="ghost-button" onClick={() => handleToggleUserAccess(member)} disabled={adminLoading}>
+                                {member.accessStatus === 'deactivated' ? 'Reactivate' : 'Deactivate'}
+                              </button>
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() => { setQuotaEditingUserId(member.id); setQuotaDraftMb(String(member.storageQuotaMb ?? 500)) }}
+                              >
+                                Quota: {member.storageQuotaMb ?? 500} MB
+                              </button>
+                            </div>
+
+                            <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Role</span>
+                              {USER_ROLES.map((role) => (
+                                <button
+                                  key={role}
+                                  type="button"
+                                  className={member.role === role ? 'primary-button' : 'ghost-button'}
+                                  onClick={() => handleUpdateUserRole(member, role)}
+                                  disabled={adminLoading || member.role === role}
+                                >
+                                  {role}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
-            </Section>
+                )
+              })}
 
-            <Section title="Role management">
-              {filteredUsers.filter((m) => m.role !== 'admin').map((member) => (
-                <div key={`role-${member.id}`} className="it-row">
-                  <div>
-                    <p>{member.fullName}</p>
-                    <span>{member.email}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    {['admin', 'manager', 'it', 'accountant', 'user'].map((role) => (
-                      <button
-                        key={role}
-                        type="button"
-                        className={member.role === role ? 'primary-button' : 'ghost-button'}
-                        style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
-                        onClick={() => handleUpdateUserRole(member, role)}
-                        disabled={adminLoading || member.role === role}
-                      >
-                        {role}
-                      </button>
-                    ))}
-                  </div>
+              {userPageCount > 1 && (
+                <div className="it-pagination">
+                  <button type="button" className="ghost-button" onClick={() => setUserPage(safeUserPage - 1)} disabled={safeUserPage <= 1}>
+                    Previous
+                  </button>
+                  <span className="muted">Page {safeUserPage} of {userPageCount}</span>
+                  <button type="button" className="ghost-button" onClick={() => setUserPage(safeUserPage + 1)} disabled={safeUserPage >= userPageCount}>
+                    Next
+                  </button>
                 </div>
-              ))}
+              )}
             </Section>
 
             <Section title="Access requests">
