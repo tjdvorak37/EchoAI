@@ -1,7 +1,17 @@
+import { useState } from 'react'
 import demoPosterImage from '../assets/demo-poster.svg'
 import echoMascot from '../assets/echo-mascot.svg'
 import { PLAN_ORDER, PLANS, getAnnualSavings } from '../data/plans'
+import { authService } from '../services/authService'
 import './LandingPage.css'
+
+const SUPPORT_CATEGORIES = [
+  'Cannot sign in',
+  'Password reset',
+  'Billing question',
+  'Account access',
+  'Something else',
+]
 
 const workflow = [
   ['01', 'Bring the source material', 'Add PowerPoint, Word, Excel, PDF, images, video, or a written brief.', 'blue'],
@@ -24,7 +34,78 @@ const Brand = () => (
   </span>
 )
 
+function SupportDialog({ onClose }) {
+  const [form, setForm] = useState({ name: '', email: '', category: SUPPORT_CATEGORIES[0], details: '' })
+  const [status, setStatus] = useState({ sending: false, error: '', sent: false })
+
+  const update = (field) => (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setStatus({ sending: true, error: '', sent: false })
+    try {
+      await authService.submitPublicSupportTicket(form)
+      setStatus({ sending: false, error: '', sent: true })
+    } catch (error) {
+      setStatus({ sending: false, error: error.message, sent: false })
+    }
+  }
+
+  return (
+    <div className="landing-support-backdrop" role="dialog" aria-modal="true" aria-labelledby="landing-support-title" onClick={onClose}>
+      <div className="landing-support-modal" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="landing-support-close" onClick={onClose} aria-label="Close">×</button>
+
+        {status.sent ? (
+          <>
+            <h2 id="landing-support-title">Request received</h2>
+            <p>
+              Our team will reply to <strong>{form.email}</strong>. If you are locked out, watch that
+              inbox — we will never ask you for your password.
+            </p>
+            <button type="button" className="landing-primary-action" onClick={onClose}>Close</button>
+          </>
+        ) : (
+          <>
+            <h2 id="landing-support-title">Contact support</h2>
+            <p className="landing-support-intro">
+              Having trouble signing in? Send us the details and we will help you recover your account.
+            </p>
+            <form onSubmit={submit} className="landing-support-form">
+              <label>
+                Your name
+                <input type="text" value={form.name} onChange={update('name')} autoComplete="name" />
+              </label>
+              <label>
+                Email address <span aria-hidden="true">*</span>
+                <input type="email" required value={form.email} onChange={update('email')} autoComplete="email" />
+              </label>
+              <label>
+                Topic
+                <select value={form.category} onChange={update('category')}>
+                  {SUPPORT_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </label>
+              <label>
+                What is happening? <span aria-hidden="true">*</span>
+                <textarea rows={5} required minLength={20} value={form.details} onChange={update('details')} placeholder="Tell us what you tried and any error message you saw." />
+              </label>
+              <p className="landing-support-note">Never include your password in this form.</p>
+              {status.error && <p className="landing-support-error">{status.error}</p>}
+              <button type="submit" className="landing-primary-action" disabled={status.sending}>
+                {status.sending ? 'Sending…' : 'Send request'}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function LandingPage({ announcementMessage, onSignIn, onPurchase, children }) {
+  const [supportOpen, setSupportOpen] = useState(false)
+
   return (
     <div className="landing-page" id="top">
       {announcementMessage && (
@@ -40,6 +121,9 @@ export function LandingPage({ announcementMessage, onSignIn, onPurchase, childre
           <a href="#pricing">Pricing</a>
         </nav>
         <div className="landing-nav-actions">
+          <button type="button" className="landing-support-link" onClick={() => setSupportOpen(true)}>
+            Need help signing in?
+          </button>
           <button type="button" className="landing-primary-action" onClick={onPurchase}>Start creating</button>
         </div>
       </header>
@@ -186,10 +270,17 @@ export function LandingPage({ announcementMessage, onSignIn, onPurchase, childre
       <footer className="landing-footer">
         <a href="#top"><Brand /></a>
         <span>AI content creation, editing, publishing, and listening in one workspace.</span>
-        <button type="button" className="landing-admin-cta" onClick={onSignIn}>
-          Admin Center
-        </button>
+        <div className="landing-footer-actions">
+          <button type="button" className="landing-support-link" onClick={() => setSupportOpen(true)}>
+            Contact support
+          </button>
+          <button type="button" className="landing-admin-cta" onClick={onSignIn}>
+            Admin Center
+          </button>
+        </div>
       </footer>
+
+      {supportOpen && <SupportDialog onClose={() => setSupportOpen(false)} />}
     </div>
   )
 }
