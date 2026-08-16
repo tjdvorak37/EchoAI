@@ -252,6 +252,22 @@ function App() {
     linkedin: 'Your profile / page',
   }))
   const [accountScopeDrafts, setAccountScopeDrafts] = useState({})
+  const [quickConnectOpen, setQuickConnectOpen] = useState(() => {
+    const status = new URLSearchParams(window.location.search).get('social')
+    return status === 'connected' || status === 'failed'
+  })
+  const [quickConnectEmail, setQuickConnectEmail] = useState(() => session?.email || '')
+  const [quickConnectName, setQuickConnectName] = useState('')
+  const [quickConnectSelected, setQuickConnectSelected] = useState(['instagram', 'facebook', 'youtube'])
+  const [quickConnectNotice, setQuickConnectNotice] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('social')
+    const platform = params.get('platform')
+    if (!status || !platform) return ''
+    return status === 'connected'
+      ? `${getPlatformMeta(platform).label} connected successfully. Choose another selected provider to continue.`
+      : `${getPlatformMeta(platform).label} connection was not completed.`
+  })
   const [integrationError, setIntegrationError] = useState('')
   const [aiInput, setAiInput] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState([])
@@ -1231,6 +1247,41 @@ function App() {
     } catch (error) {
       setIntegrationError(error.message)
     }
+  }
+
+  const openQuickConnect = () => {
+    setQuickConnectEmail(session?.email || authState.email || '')
+    setQuickConnectName(userIdentity === 'team member' ? '' : userIdentity)
+    setQuickConnectNotice('Select the providers you want to connect. Each provider will ask you to sign in and approve access.')
+    setIntegrationError('')
+    setQuickConnectOpen(true)
+  }
+
+  const startQuickConnect = async () => {
+    if (!quickConnectEmail.trim() || !quickConnectName.trim()) {
+      setQuickConnectNotice('Enter your name and email first so we can label this connection session.')
+      return
+    }
+    if (!quickConnectSelected.length) {
+      setQuickConnectNotice('Select at least one provider to connect.')
+      return
+    }
+
+    const nextPlatform = quickConnectSelected.find((platform) => {
+      const account = connectedAccounts.find((item) => item.platform.toLowerCase() === platform)
+      return account?.status !== 'healthy'
+    })
+
+    if (!nextPlatform) {
+      setQuickConnectNotice('All selected providers are already connected.')
+      return
+    }
+
+    setQuickConnectNotice(`Opening ${getPlatformMeta(nextPlatform).label}. Sign in there and approve EchoAI access.`)
+    await connectSocialAccount({
+      platform: nextPlatform,
+      requestedScopes: ['posts', 'images', 'videos', 'analytics'],
+    })
   }
 
   const loadSocialPlatformReadiness = async () => {
@@ -4282,6 +4333,72 @@ function App() {
             )}
 
             <h3 className="section-label">Social media accounts</h3>
+            <article className="quick-connect-card">
+              <div className="quick-connect-heading">
+                <div>
+                  <p className="small-title">Quick connect</p>
+                  <h3>Connect your social accounts in one guided flow</h3>
+                </div>
+                <button type="button" className="primary-button" onClick={openQuickConnect}>
+                  {quickConnectOpen ? 'Quick connect open' : 'Start quick connect'}
+                </button>
+              </div>
+              <p className="muted">
+                EchoAI cannot search private social networks by email. We use these details to label your setup, then each provider confirms the account through its own secure OAuth sign-in.
+              </p>
+              {quickConnectOpen && (
+                <div className="quick-connect-wizard">
+                  <div className="quick-connect-fields">
+                    <label className="field-label">
+                      Your name
+                      <input value={quickConnectName} onChange={(event) => setQuickConnectName(event.target.value)} placeholder="Jordan Lee" />
+                    </label>
+                    <label className="field-label">
+                      Email used for your accounts
+                      <input type="email" value={quickConnectEmail} onChange={(event) => setQuickConnectEmail(event.target.value)} placeholder="you@example.com" />
+                    </label>
+                  </div>
+                  <div>
+                    <p className="small-title">Choose providers</p>
+                    <div className="quick-connect-providers">
+                      {[
+                        { key: 'instagram', available: true },
+                        { key: 'facebook', available: true },
+                        { key: 'youtube', available: true },
+                        { key: 'tiktok', available: false },
+                        { key: 'x', available: false },
+                        { key: 'linkedin', available: false },
+                      ].map(({ key, available }) => {
+                        const meta = getPlatformMeta(key)
+                        const connected = connectedAccounts.some((account) => account.platform.toLowerCase() === key && account.status === 'healthy')
+                        const selected = quickConnectSelected.includes(key)
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className={`quick-connect-provider ${selected ? 'selected' : ''}`}
+                            disabled={!available}
+                            onClick={() => setQuickConnectSelected((prev) => selected ? prev.filter((item) => item !== key) : [...prev, key])}
+                          >
+                            <span className="quick-connect-provider-icon" style={{ color: meta.color }}>{meta.icon}</span>
+                            <span>{meta.label}</span>
+                            <small>{connected ? 'Connected' : available ? 'Available' : 'Coming soon'}</small>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div className="quick-connect-footer">
+                    <span className="muted">Selected providers connect one at a time so each account can approve its own access.</span>
+                    <div className="integration-actions">
+                      <button type="button" className="ghost-button" onClick={() => setQuickConnectOpen(false)}>Close</button>
+                      <button type="button" className="primary-button" onClick={startQuickConnect}>Connect next selected account</button>
+                    </div>
+                  </div>
+                  {quickConnectNotice && <p className="auth-message">{quickConnectNotice}</p>}
+                </div>
+              )}
+            </article>
             <div className="integration-grid">
               {[
                 { key: 'instagram', accountPlaceholder: '@youraccount', desc: 'Publish posts, stories, and reels. Read insights and story metrics.' },
