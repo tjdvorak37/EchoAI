@@ -223,10 +223,6 @@ export async function generatePhotoConcept({ prompt, style, aspectRatio, referen
       source: 'api',
     }
   } catch (error) {
-    return renderLocalConcept({ prompt: cleanedPrompt, style, aspectRatio, referenceImageSrc })
-      .then((result) => ({
-        ...result,
-        summary: `Local fallback used because the image API was unavailable: ${error.message}`,
-      }))
+    throw new Error(`Image generation is unavailable: ${error.message}`, { cause: error })
   }
 }

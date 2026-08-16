@@ -20,6 +20,9 @@ const STATUS_COLORS = {
   high: '#ef4444',
   medium: '#f59e0b',
   low: '#22c55e',
+  configured: '#22c55e',
+  'needs setup': '#f59e0b',
+  'not deployed': '#6b7280',
 }
 
 function StatusBadge({ value }) {
@@ -71,6 +74,7 @@ export function AdminPanel({
   companySeatPackage, companySeats,
   handleCreateCompanySeatPackage, handleUpdateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
   handleRespondToSupportTicket,
+  socialPlatformReadiness, socialPlatformReadinessLoading, socialPlatformReadinessError, handleRefreshSocialPlatformReadiness,
   adminLoading, adminError,
   currentUser,
 }) {
@@ -218,7 +222,8 @@ export function AdminPanel({
     ))
   }
 
-  const TABS = [
+  const isFullAdmin = currentUser?.role === 'admin'
+  const TABS = isFullAdmin ? [
     { id: 'overview', label: '📊 Overview' },
     { id: 'licenses', label: '🔑 Licenses' },
     { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}` },
@@ -226,7 +231,10 @@ export function AdminPanel({
     { id: 'finance', label: '💹 Finance' },
     { id: 'users', label: '👥 Users' },
     { id: 'storage', label: '💾 Storage' },
+    { id: 'integrations', label: '🔌 Integrations' },
     { id: 'controls', label: '⚙️ Site Controls' },
+  ] : [
+    { id: 'integrations', label: '🔌 Integrations' },
   ]
 
   const filteredUsers = teamMembers.filter((m) =>
@@ -961,6 +969,42 @@ export function AdminPanel({
             refunds={refunds} setRefunds={setRefunds}
             financialTasks={financialTasks} setFinancialTasks={setFinancialTasks}
           />
+        )}
+
+        {itTab === 'integrations' && (
+          <div>
+            <Section title="Social publishing readiness">
+              <p className="muted">Platform-level setup only. Customer handles, pages, tokens, and post content are never shown here.</p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={handleRefreshSocialPlatformReadiness}
+                  disabled={socialPlatformReadinessLoading}
+                >
+                  {socialPlatformReadinessLoading ? 'Checking...' : 'Refresh setup status'}
+                </button>
+              </div>
+              {socialPlatformReadinessError && <span className="field-error">{socialPlatformReadinessError}</span>}
+              {socialPlatformReadiness.length === 0 && !socialPlatformReadinessLoading && !socialPlatformReadinessError && (
+                <p className="muted">Select refresh to check the live provider configuration.</p>
+              )}
+              {socialPlatformReadiness.map((platform) => {
+                const status = platform.oauthImplemented
+                  ? platform.oauthConfigured ? 'configured' : 'needs setup'
+                  : 'not deployed'
+                return (
+                  <div key={platform.platform} className="it-row">
+                    <div>
+                      <p>{platform.platform}</p>
+                      <span>{platform.publishing}</span>
+                    </div>
+                    <StatusBadge value={status} />
+                  </div>
+                )
+              })}
+            </Section>
+          </div>
         )}
 
         {itTab === 'controls' && (

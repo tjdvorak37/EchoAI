@@ -24,7 +24,7 @@ const Brand = () => (
   </span>
 )
 
-export function LandingPage({ announcementMessage, onSignIn, onPurchase }) {
+export function LandingPage({ announcementMessage, onSignIn, onPurchase, children }) {
   return (
     <div className="landing-page" id="top">
       {announcementMessage && (
@@ -179,6 +179,8 @@ export function LandingPage({ announcementMessage, onSignIn, onPurchase }) {
           </div>
           <p className="landing-pricing-note">Annual billing saves 15%. Secure checkout powered by Stripe. Cancel anytime.</p>
         </section>
+
+        {children}
       </main>
 
       <footer className="landing-footer">

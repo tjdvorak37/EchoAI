@@ -41,10 +41,12 @@ cp .env.example .env
 ```env
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_IMAGE_GEN_ENDPOINT=https://your-image-service.example.com/generate
-VITE_IMAGE_GEN_API_KEY=your-image-service-key
-VITE_IMAGE_GEN_MODEL=image-1
 ```
+
+Do not add provider credentials to `VITE_*` variables. Vite publishes every
+`VITE_*` value to browsers. Configure image generation, listening connectors,
+Stripe, cloud drives, and all OAuth secrets as Supabase Edge Function secrets
+using `supabase/functions/.env.example` as the template.
 
 4. Start development server:
 
@@ -59,7 +61,8 @@ npm run dev
 - Post scheduling and AI hooks are in `src/services/platformService.js`.
 - Photo Creator image generation is in `src/services/photoAiService.js` and falls back to a local canvas concept if no endpoint is configured.
 - Supabase client bootstrap is in `src/lib/supabase.js`.
-- Without env configuration, the app runs in demo mode for UI prototyping.
+- Without Supabase configuration, the app runs in local demo mode for UI prototyping only.
+   Never deploy that configuration for a beta.
 
 ## Repost Migration Setup
 
@@ -199,8 +202,64 @@ and `STRIPE_COUPON_REFERRAL_ANNUAL` to `duration=once` coupons you create in Str
 
 ## Suggested Next Steps
 
-- Add OAuth account linking for Meta, Snapchat, TikTok, and X.
-- Add background job processing for scheduled publish events.
-- Build a Supabase Edge Function named `generate-social-copy` for live AI text/image suggestions.
-- Add a dedicated image-generation endpoint for the Photo Creator if you want real model-backed output.
-- Add role-based access (user, manager, IT-admin) and audit logs.
+## Operational Beta Checklist
+
+Complete every item before allowing external beta users into the production
+environment:
+
+1. Apply every migration in `supabase/migrations` in version order, including
+   `20260824_social_scheduler_privacy.sql`. Confirm Row Level Security is enabled
+   for `scheduled_posts`, `user_social_accounts`, and `social_oauth_credentials`.
+2. Set production function secrets from `supabase/functions/.env.example` using
+   `supabase secrets set --env-file supabase/functions/.env`, then deploy every
+   directory under `supabase/functions`. Set `APP_URL` to the canonical HTTPS
+   production URL and configure the same URL in Supabase Auth redirect settings.
+3. Configure Stripe live-mode products, prices, webhook signing secret, customer
+   portal, and webhook events as described in Automated Billing & Access Lifecycle.
+   Test checkout, cancellation, failed payment, and webhook replay using a
+   non-production customer before opening beta access.
+4. Register OAuth applications for every social network you intend to support.
+   Each provider needs its own approved scopes, callback URL, client ID, client
+   secret, token refresh implementation, and outbound publish API integration.
+   A saved account handle is a private profile record, not authorization to post.
+   Meta (Facebook Pages and Instagram Professional accounts) and YouTube have
+   the first self-service connector implementation. Set `META_CLIENT_ID`,
+   `META_CLIENT_SECRET`, `YOUTUBE_CLIENT_ID`, and `YOUTUBE_CLIENT_SECRET`, then
+   deploy it with:
+
+   ```bash
+   supabase functions deploy social-oauth
+   ```
+
+   Register `https://<project-ref>.supabase.co/functions/v1/social-oauth` as the
+   OAuth callback URL in each provider console.
+5. Deploy a server-side scheduled publisher before advertising timed posting.
+   It must claim only due rows for the authenticated owner, refresh tokens only
+   from `social_oauth_credentials`, submit media to the selected provider, and
+   record provider IDs, failures, and retry attempts. Never publish directly
+   from the browser. Deploy the worker with:
+
+   ```bash
+   supabase functions deploy social-publisher
+   ```
+
+   Invoke it every minute from a trusted scheduler with
+   `Authorization: Bearer <SOCIAL_PUBLISHER_CRON_SECRET>`. The worker currently
+   publishes Facebook Page text posts and Instagram single-image posts. Other
+   platforms remain blocked until their provider-specific publishing adapters
+   are implemented and approved.
+6. Configure the image generation and listening provider endpoints. Live mode
+   intentionally reports provider failures or zero results instead of fabricating
+   content. Verify each connector with an authenticated non-admin account.
+7. Run an isolation test with two regular accounts: create posts, social profiles,
+   media, cloud-drive connections, support tickets, and company data under each;
+   then confirm neither account can query or alter the other account's personal
+   records. Test staff views separately for their intended company-scoped access.
+8. Rotate any credential that was ever copied into chat, logs, a repository, or
+   an untrusted machine. Do not expose `SUPABASE_SERVICE_ROLE_KEY`, Stripe secret
+   keys, webhook secrets, client secrets, provider API keys, or user OAuth tokens
+   in frontend environment variables.
+
+The checked-in app is ready for authenticated, owner-scoped beta workflows after
+these deployment prerequisites are completed. Direct social-network publishing is
+blocked until the provider OAuth and server-side publisher in items 4-5 exist.
