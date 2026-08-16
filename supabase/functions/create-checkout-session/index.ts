@@ -2,7 +2,7 @@
 // never be tampered with by the browser.
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
-import { corsHeaders, getCorsHeaders, json } from '../_shared/cors.ts'
+import { getCorsHeaders, json } from '../_shared/cors.ts'
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
   apiVersion: '2025-03-31.basil',

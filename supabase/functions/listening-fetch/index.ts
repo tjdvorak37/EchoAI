@@ -4,7 +4,7 @@
 // The browser supplies only the source type and search terms; it can no longer
 // name an arbitrary URL, which also removes an SSRF path.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
-import { corsHeaders, json } from '../_shared/cors.ts'
+import { getCorsHeaders, json } from '../_shared/cors.ts'
 
 const SOURCE_TYPES = ['social', 'news', 'forums', 'blogs', 'reviews', 'web']
 
@@ -15,15 +15,15 @@ const connectorFor = (sourceType: string) => ({
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { status: 204, headers: getCorsHeaders(request) })
   }
   if (request.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, 405)
+    return json({ error: 'Method not allowed' }, 405, request)
   }
 
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    return json({ error: 'Authentication required.' }, 401)
+    return json({ error: 'Authentication required.' }, 401, request)
   }
 
   const client = createClient(
@@ -34,7 +34,7 @@ Deno.serve(async (request) => {
 
   const { data: userData } = await client.auth.getUser(authHeader.replace('Bearer ', ''))
   if (!userData?.user) {
-    return json({ error: 'Authentication required.' }, 401)
+    return json({ error: 'Authentication required.' }, 401, request)
   }
 
   try {
@@ -43,7 +43,7 @@ Deno.serve(async (request) => {
     const active = requested.filter((type) => SOURCE_TYPES.includes(type))
 
     if (!active.length) {
-      return json({ results: [], configured: [] })
+      return json({ results: [], configured: [] }, 200, request)
     }
 
     const results = await Promise.all(
@@ -84,9 +84,9 @@ Deno.serve(async (request) => {
     return json({
       results,
       configured: SOURCE_TYPES.filter((type) => Boolean(connectorFor(type).endpoint)),
-    })
+    }, 200, request)
   } catch (error) {
     console.error('listening-fetch failed', error)
-    return json({ error: 'Listening sources are unavailable right now.' }, 500)
+    return json({ error: 'Listening sources are unavailable right now.' }, 500, request)
   }
 })

@@ -2,7 +2,7 @@
 // cancel without anyone on the EchoAI side touching an account.
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
-import { corsHeaders, getCorsHeaders, json } from '../_shared/cors.ts'
+import { getCorsHeaders, json } from '../_shared/cors.ts'
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
   apiVersion: '2025-03-31.basil',
@@ -21,7 +21,7 @@ Deno.serve(async (request) => {
 
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    return json({ error: 'Authentication required.' }, 401)
+    return json({ error: 'Authentication required.' }, 401, request)
   }
 
   try {
@@ -34,7 +34,7 @@ Deno.serve(async (request) => {
     const { data: userData } = await anonClient.auth.getUser(authHeader.replace('Bearer ', ''))
     const user = userData?.user
     if (!user) {
-      return json({ error: 'Authentication required.' }, 401, request, request)
+      return json({ error: 'Authentication required.' }, 401, request)
     }
 
     const adminClient = createClient(
