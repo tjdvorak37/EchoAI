@@ -9,8 +9,6 @@ alter table public.support_tickets add column if not exists contact_name text;
 alter table public.support_tickets add column if not exists source text not null default 'app';
 alter table public.support_tickets add column if not exists attachment_paths text[] not null default '{}';
 
--- A ticket is either tied to an account or carries an email to reply to.
--- Without this, a null user_id row with no contact detail would be unanswerable.
 alter table public.support_tickets drop constraint if exists support_tickets_identity_check;
 alter table public.support_tickets add constraint support_tickets_identity_check
   check (user_id is not null or contact_email is not null);
@@ -19,12 +17,9 @@ alter table public.support_tickets drop constraint if exists support_tickets_sou
 alter table public.support_tickets add constraint support_tickets_source_check
   check (source in ('app', 'landing'));
 
--- Supports the rate-limit lookup in the public-support-ticket function.
 create index if not exists support_tickets_contact_email_idx
   on public.support_tickets (lower(contact_email), created_at desc);
 
--- Existing policy compared user_id = auth.uid(); with nullable user_id an
--- anonymous row (both sides null) would leak to every signed-out visitor.
 drop policy if exists support_tickets_select_own on public.support_tickets;
 create policy support_tickets_select_own
 on public.support_tickets
@@ -37,12 +32,6 @@ on public.support_tickets
 for insert
 with check (user_id is not null and user_id = auth.uid());
 
--- Public submissions are written by the service role in an edge function, which
--- bypasses RLS. No anonymous insert policy is granted here on purpose: an open
--- INSERT policy could not enforce per-IP limits.
-
--- Per-IP throttle counters. Stores only a SHA-256 of the address so the raw IP
--- is never retained.
 create table if not exists public.public_ticket_throttle (
   id uuid primary key default gen_random_uuid(),
   ip_hash text not null,
@@ -53,4 +42,3 @@ create index if not exists public_ticket_throttle_lookup_idx
   on public.public_ticket_throttle (ip_hash, created_at desc);
 
 alter table public.public_ticket_throttle enable row level security;
--- No policies: only the service role touches this table.

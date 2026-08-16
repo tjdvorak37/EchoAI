@@ -66,9 +66,9 @@ npm run dev
 
 ## Repost Migration Setup
 
-1. Apply the migration in `supabase/migrations/20260716_repost_multitenant.sql` to your Supabase project.
-2. Apply `supabase/migrations/20260716_repost_broadcast_rpc.sql` to enable admin broadcast queueing.
-3. Apply `supabase/migrations/20260716_support_tickets.sql` to enable support ticket submission.
+1. Apply `supabase/migrations/202607160002_repost_multitenant.sql` to your Supabase project.
+2. Apply `supabase/migrations/202607160001_repost_broadcast_rpc.sql` to enable admin broadcast queueing.
+3. Apply `supabase/migrations/202607160003_support_tickets.sql` to enable support ticket submission.
 4. Ensure each authenticated user has a `profiles.company` value set. Tenant isolation for repost tables is enforced by this field.
 5. Ensure admin users have `profiles.role = 'admin'` to manage company main posts and company social accounts.
 6. Ensure users have `profiles.access_status = 'active'` if they should receive admin broadcast notifications.
@@ -208,7 +208,10 @@ Complete every item before allowing external beta users into the production
 environment:
 
 1. Apply every migration in `supabase/migrations` in version order, including
-   `20260824_social_scheduler_privacy.sql`. Confirm Row Level Security is enabled
+   `20260824_social_scheduler_privacy.sql`, `20260825_social_oauth_publishing.sql`,
+   `20260826_ticket_attachments_bucket.sql`, `20260827_support_ticket_workflow.sql`,
+   `202608280001_admin_user_audit.sql`, and `202608280002_public_support_tickets.sql`.
+   Confirm Row Level Security is enabled
    for `scheduled_posts`, `user_social_accounts`, and `social_oauth_credentials`.
 2. Set production function secrets from `supabase/functions/.env.example` using
    `supabase secrets set --env-file supabase/functions/.env`, then deploy every

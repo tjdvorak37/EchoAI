@@ -17,8 +17,6 @@ create index if not exists admin_user_audit_target_idx
 
 alter table public.admin_user_audit enable row level security;
 
--- Read-only for admins. The absence of insert/update/delete policies means the
--- trail cannot be rewritten by anyone holding a user JWT.
 drop policy if exists "Admins read audit trail" on public.admin_user_audit;
 create policy "Admins read audit trail"
   on public.admin_user_audit
