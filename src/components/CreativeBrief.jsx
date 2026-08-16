@@ -18,28 +18,50 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
   const [error, setError] = useState('')
   const [project, setProject] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
   const inputRef = useRef(null)
 
   const addFiles = async (files) => {
     setError('')
-    const nextFiles = Array.from(files)
-    console.log('addFiles called with', nextFiles.length, 'files:', nextFiles.map(f => f.name))
-    if (!nextFiles.length) return
+    setDragActive(false)
+    const nextFiles = Array.from(files || [])
+    console.log('🔍 addFiles triggered:', { count: nextFiles.length, files: nextFiles.map(f => ({ name: f.name, type: f.type, size: f.size })) })
+    
+    if (!nextFiles.length) {
+      console.warn('⚠️ No files provided to addFiles')
+      return
+    }
+    
     setReadingFiles(true)
     try {
-      const parsed = await Promise.all(nextFiles.map(readBriefFile))
-      console.log('Parsed files:', parsed.map(p => p.name))
+      console.log('📖 Starting file parsing...')
+      const parsed = await Promise.all(nextFiles.map(async (file) => {
+        console.log(`📄 Parsing: ${file.name} (${file.type})`)
+        try {
+          const result = await readBriefFile(file)
+          console.log(`✅ Parsed: ${result.name}`)
+          return result
+        } catch (err) {
+          console.error(`❌ Error parsing ${file.name}:`, err)
+          throw err
+        }
+      }))
+      
+      console.log('✅ All files parsed. Adding to state:', parsed.map(p => p.name))
       setSources((current) => {
-        const updated = [...current, ...parsed.filter((item) => !current.some((source) => source.id === item.id))]
-        console.log('Sources state updated to:', updated.map(s => s.name))
+        const filtered = parsed.filter((item) => !current.some((source) => source.id === item.id))
+        const updated = [...current, ...filtered]
+        console.log('📊 Sources state updated. New count:', updated.length, 'Files:', updated.map(s => s.name))
         return updated
       })
     } catch (readError) {
-      console.error('Error reading files:', readError)
-      setError(readError.message)
+      console.error('❌ Error reading files:', readError)
+      setError(`Error reading files: ${readError.message}`)
     } finally {
       setReadingFiles(false)
-      if (inputRef.current) inputRef.current.value = ''
+      if (inputRef.current) {
+        inputRef.current.value = ''
+      }
     }
   }
 
@@ -95,24 +117,50 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
 
         <div
           className="brief-dropzone"
+          onDragEnter={(event) => {
+            console.log('🎯 dragenter event')
+            event.preventDefault()
+            event.stopPropagation()
+            setDragActive(true)
+          }}
           onDragOver={(event) => {
             event.preventDefault()
             event.stopPropagation()
             event.dataTransfer.dropEffect = 'copy'
           }}
           onDragLeave={(event) => {
+            console.log('🎯 dragleave event')
             event.preventDefault()
             event.stopPropagation()
+            // Only set dragActive to false if leaving the dropzone entirely
+            if (event.target === event.currentTarget) {
+              setDragActive(false)
+            }
           }}
           onDrop={(event) => {
+            console.log('🎯 drop event fired!', { dataTransfer: event.dataTransfer, files: event.dataTransfer?.files })
             event.preventDefault()
             event.stopPropagation()
-            if (event.dataTransfer?.files?.length) {
-              addFiles(event.dataTransfer.files)
+            setDragActive(false)
+            
+            const files = event.dataTransfer?.files
+            console.log('💾 Drop detected. Files:', files)
+            
+            if (files && files.length > 0) {
+              console.log(`✨ Processing ${files.length} files from drop`)
+              addFiles(files)
+            } else {
+              console.warn('⚠️ Drop event fired but no files detected')
+              setError('No files detected in drop. Try selecting files using the browse button.')
             }
           }}
           onClick={handleBrowseClick}
-          style={{ cursor: 'pointer' }}
+          style={{ 
+            cursor: 'pointer',
+            borderColor: dragActive ? 'rgb(59, 130, 246)' : undefined,
+            backgroundColor: dragActive ? 'rgba(59, 130, 246, 0.05)' : undefined,
+            transition: 'all 0.2s ease'
+          }}
         >
           <strong>Add campaign files</strong>
           <span>PowerPoint, Word, Excel, PDF, text, images, or video</span>
@@ -122,6 +170,7 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
             accept={ACCEPTED_FILES}
             multiple
             onChange={(event) => {
+              console.log('📁 File input changed:', event.target.files)
               if (event.target.files?.length) {
                 addFiles(event.target.files)
               }
@@ -167,6 +216,15 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
           <p style={{ padding: '12px', fontSize: '13px', color: '#94a3b8', textAlign: 'center', margin: '16px 0' }}>
             No files added yet. Drag files here or click to browse.
           </p>
+        )}
+
+        {error && (
+          <div style={{ padding: '12px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', borderLeft: '4px solid rgb(239, 68, 68)', marginTop: '12px' }}>
+            <p style={{ margin: 0, color: 'rgb(239, 68, 68)', fontSize: '13px' }}>❌ {error}</p>
+            <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#666' }}>
+              💡 <strong>Debug tip:</strong> Open the browser console (F12) to see detailed logs. Check that files are not already in the list above.
+            </p>
+          </div>
         )}
 
         <label>
