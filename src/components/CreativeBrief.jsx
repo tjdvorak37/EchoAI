@@ -23,12 +23,19 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
   const addFiles = async (files) => {
     setError('')
     const nextFiles = Array.from(files)
+    console.log('addFiles called with', nextFiles.length, 'files:', nextFiles.map(f => f.name))
     if (!nextFiles.length) return
     setReadingFiles(true)
     try {
       const parsed = await Promise.all(nextFiles.map(readBriefFile))
-      setSources((current) => [...current, ...parsed.filter((item) => !current.some((source) => source.id === item.id))])
+      console.log('Parsed files:', parsed.map(p => p.name))
+      setSources((current) => {
+        const updated = [...current, ...parsed.filter((item) => !current.some((source) => source.id === item.id))]
+        console.log('Sources state updated to:', updated.map(s => s.name))
+        return updated
+      })
     } catch (readError) {
+      console.error('Error reading files:', readError)
       setError(readError.message)
     } finally {
       setReadingFiles(false)
@@ -72,6 +79,12 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
     generate()
   }
 
+  const handleBrowseClick = () => {
+    if (inputRef.current) {
+      inputRef.current.click()
+    }
+  }
+
   return (
     <div className="creative-brief-layout">
       <article className="sub-panel creative-brief-builder">
@@ -80,18 +93,42 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
           <h3>Build from your documents</h3>
         </div>
 
-        <label
+        <div
           className="brief-dropzone"
-          onDragOver={(event) => event.preventDefault()}
+          onDragOver={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            event.dataTransfer.dropEffect = 'copy'
+          }}
+          onDragLeave={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
           onDrop={(event) => {
             event.preventDefault()
-            addFiles(event.dataTransfer.files)
+            event.stopPropagation()
+            if (event.dataTransfer?.files?.length) {
+              addFiles(event.dataTransfer.files)
+            }
           }}
+          onClick={handleBrowseClick}
+          style={{ cursor: 'pointer' }}
         >
           <strong>Add campaign files</strong>
           <span>PowerPoint, Word, Excel, PDF, text, images, or video</span>
-          <input ref={inputRef} type="file" accept={ACCEPTED_FILES} multiple onChange={(event) => addFiles(event.target.files)} />
-        </label>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ACCEPTED_FILES}
+            multiple
+            onChange={(event) => {
+              if (event.target.files?.length) {
+                addFiles(event.target.files)
+              }
+            }}
+            style={{ display: 'none' }}
+          />
+        </div>
 
         {readingFiles && (
           <div style={{ padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', marginBottom: '16px', borderLeft: '4px solid rgb(59, 130, 246)' }}>
