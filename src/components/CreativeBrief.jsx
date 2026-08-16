@@ -14,6 +14,7 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
   const [instruction, setInstruction] = useState('Create a polished campaign flyer based on this information.')
   const [outputType, setOutputType] = useState('flyer')
   const [busy, setBusy] = useState(false)
+  const [readingFiles, setReadingFiles] = useState(false)
   const [error, setError] = useState('')
   const [project, setProject] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -23,14 +24,14 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
     setError('')
     const nextFiles = Array.from(files)
     if (!nextFiles.length) return
-    setBusy(true)
+    setReadingFiles(true)
     try {
       const parsed = await Promise.all(nextFiles.map(readBriefFile))
       setSources((current) => [...current, ...parsed.filter((item) => !current.some((source) => source.id === item.id))])
     } catch (readError) {
       setError(readError.message)
     } finally {
-      setBusy(false)
+      setReadingFiles(false)
       if (inputRef.current) inputRef.current.value = ''
     }
   }
@@ -92,17 +93,44 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
           <input ref={inputRef} type="file" accept={ACCEPTED_FILES} multiple onChange={(event) => addFiles(event.target.files)} />
         </label>
 
-        <div className="brief-source-list">
-          {sources.map((source) => (
-            <div className="brief-source" key={source.id}>
-              <div>
-                <strong>{source.name}</strong>
-                <span>{formatSize(source.size)} · {source.text ? `${source.text.length.toLocaleString()} characters read` : 'reference attached'}</span>
-              </div>
-              <button type="button" className="text-button" title={`Remove ${source.name}`} onClick={() => setSources((current) => current.filter((item) => item.id !== source.id))}>Remove</button>
+        {readingFiles && (
+          <div style={{ padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', marginBottom: '16px', borderLeft: '4px solid rgb(59, 130, 246)' }}>
+            <p style={{ margin: 0, color: 'rgb(59, 130, 246)', fontSize: '14px', fontWeight: '500' }}>📖 Reading and parsing files...</p>
+          </div>
+        )}
+
+        {sources.length > 0 && (
+          <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '8px', borderLeft: '4px solid rgb(34, 197, 94)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <p style={{ margin: 0, color: 'rgb(34, 197, 94)', fontSize: '14px', fontWeight: '600' }}>✓ {sources.length} file{sources.length === 1 ? '' : 's'} added</p>
+              <button
+                type="button"
+                className="text-button"
+                style={{ fontSize: '12px', color: '#ef4444' }}
+                onClick={() => setSources([])}
+              >
+                Clear all
+              </button>
             </div>
-          ))}
-        </div>
+            <div className="brief-source-list">
+              {sources.map((source) => (
+                <div className="brief-source" key={source.id}>
+                  <div>
+                    <strong>{source.name}</strong>
+                    <span>{formatSize(source.size)} · {source.text ? `${source.text.length.toLocaleString()} characters read` : 'reference attached'}</span>
+                  </div>
+                  <button type="button" className="text-button" title={`Remove ${source.name}`} onClick={() => setSources((current) => current.filter((item) => item.id !== source.id))}>Remove</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!sources.length && !readingFiles && (
+          <p style={{ padding: '12px', fontSize: '13px', color: '#94a3b8', textAlign: 'center', margin: '16px 0' }}>
+            No files added yet. Drag files here or click to browse.
+          </p>
+        )}
 
         <label>
           What should EchoAI create?
