@@ -9,8 +9,14 @@ const STATUS_COLORS = {
   suspended: '#ef4444',
   confirmed: '#22c55e',
   open: '#3b82f6',
+  new: '#3b82f6',
+  triage: '#a78bfa',
+  in_progress: '#f59e0b',
+  waiting_customer: '#f97316',
+  escalated: '#ef4444',
   resolved: '#22c55e',
   closed: '#6b7280',
+  critical: '#ef4444',
   high: '#ef4444',
   medium: '#f59e0b',
   low: '#22c55e',
@@ -51,6 +57,7 @@ export function AdminPanel({
   tickets, setTickets,
   purchaseHistory, setPurchaseHistory,
   featureFlags, setFeatureFlags,
+  landingAnnouncement, setLandingAnnouncement,
   billingLive,
   promoCodes, setPromoCodes,
   expenses, setExpenses,
@@ -75,10 +82,19 @@ export function AdminPanel({
   const [seatLimitDraft, setSeatLimitDraft] = useState('10')
   const [seatEmailDraft, setSeatEmailDraft] = useState('')
   const [seatError, setSeatError] = useState('')
+  const [ticketFilter, setTicketFilter] = useState({
+    status: 'all',
+    priority: 'all',
+    queue: 'all',
+    assignee: 'all',
+    search: '',
+  })
+  const [announcementDraft, setAnnouncementDraft] = useState(landingAnnouncement)
 
   const activeLicenses = licenses.filter((l) => l.status === 'active').length
   const pendingLicenses = licenses.filter((l) => l.status === 'pending_payment').length
-  const openTickets = tickets.filter((t) => t.status === 'open').length
+  const openTicketStatuses = ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated', 'open']
+  const openTickets = tickets.filter((t) => openTicketStatuses.includes(t.status)).length
   const totalRevenue = purchaseHistory.filter((p) => p.status === 'confirmed').reduce((sum, p) => sum + p.amountUsd, 0)
   const assignedSeats = companySeats.filter((seat) => seat.status !== 'revoked').length
 
@@ -164,6 +180,8 @@ export function AdminPanel({
     }
   }
 
+  const isTicketActionable = (status) => !['resolved', 'closed'].includes(status || 'open')
+
   const closeTicket = (ticketId) => {
     setTickets((prev) => prev.map((t) =>
       t.id === ticketId ? { ...t, status: 'closed', updatedAt: new Date().toISOString() } : t,
@@ -215,6 +233,35 @@ export function AdminPanel({
     !userSearch || m.fullName.toLowerCase().includes(userSearch.toLowerCase()) ||
     m.email.toLowerCase().includes(userSearch.toLowerCase()),
   )
+
+  const ticketAssignees = ['Unassigned', ...new Set(tickets.map((ticket) => ticket.assignee).filter(Boolean))]
+  const ticketQueues = ['all', ...new Set(tickets.map((ticket) => ticket.queue).filter(Boolean))]
+  const filteredTickets = tickets.filter((ticket) => {
+    const searchTerm = ticketFilter.search.trim().toLowerCase()
+    const matchesSearch = !searchTerm || [
+      ticket.subject,
+      ticket.userFullName,
+      ticket.userEmail,
+      ticket.category,
+      ticket.queue,
+      ticket.assignee,
+      ticket.tags?.join(' '),
+    ].join(' ').toLowerCase().includes(searchTerm)
+
+    const matchesStatus = ticketFilter.status === 'all' || ticket.status === ticketFilter.status
+    const matchesPriority = ticketFilter.priority === 'all' || ticket.priority === ticketFilter.priority
+    const matchesQueue = ticketFilter.queue === 'all' || ticket.queue === ticketFilter.queue
+    const matchesAssignee = ticketFilter.assignee === 'all'
+      || (ticketFilter.assignee === 'Unassigned' ? !ticket.assignee : ticket.assignee === ticketFilter.assignee)
+
+    return matchesSearch && matchesStatus && matchesPriority && matchesQueue && matchesAssignee
+  })
+
+  const updateTicketField = (ticketId, patch) => {
+    setTickets((prev) => prev.map((ticket) =>
+      ticket.id === ticketId ? { ...ticket, ...patch, updatedAt: new Date().toISOString() } : ticket,
+    ))
+  }
 
   return (
     <div className="it-panel">
@@ -272,7 +319,7 @@ export function AdminPanel({
             </Section>
 
             <Section title="Open support tickets">
-              {tickets.filter((t) => t.status === 'open').slice(0, 3).map((t) => (
+              {tickets.filter((t) => openTicketStatuses.includes(t.status)).slice(0, 3).map((t) => (
                 <div key={t.id} className="it-row">
                   <div>
                     <p>{t.subject}</p>
@@ -290,7 +337,7 @@ export function AdminPanel({
                   </div>
                 </div>
               ))}
-              {tickets.filter((t) => t.status === 'open').length === 0 && (
+              {tickets.filter((t) => openTicketStatuses.includes(t.status)).length === 0 && (
                 <p className="muted">No open tickets.</p>
               )}
             </Section>
@@ -446,7 +493,61 @@ export function AdminPanel({
           <div className="it-tickets-layout">
             <div className="it-ticket-list">
               <Section title="Support tickets">
-                {tickets.map((t) => (
+                <div className="it-ticket-filters">
+                  <input
+                    type="text"
+                    value={ticketFilter.search}
+                    onChange={(event) => setTicketFilter((prev) => ({ ...prev, search: event.target.value }))}
+                    placeholder="Search tickets, people, tags..."
+                  />
+                  <div className="it-ticket-filter-row">
+                    <select value={ticketFilter.status} onChange={(event) => setTicketFilter((prev) => ({ ...prev, status: event.target.value }))}>
+                      <option value="all">All statuses</option>
+                      <option value="new">New</option>
+                      <option value="triage">In triage</option>
+                      <option value="in_progress">In progress</option>
+                      <option value="waiting_customer">Waiting on customer</option>
+                      <option value="escalated">Escalated</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                    <select value={ticketFilter.priority} onChange={(event) => setTicketFilter((prev) => ({ ...prev, priority: event.target.value }))}>
+                      <option value="all">All priorities</option>
+                      <option value="critical">Critical</option>
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
+                    </select>
+                    <select value={ticketFilter.queue} onChange={(event) => setTicketFilter((prev) => ({ ...prev, queue: event.target.value }))}>
+                      <option value="all">All queues</option>
+                      {ticketQueues.filter((queue) => queue !== 'all').map((queue) => (
+                        <option key={queue} value={queue}>{queue}</option>
+                      ))}
+                    </select>
+                    <select value={ticketFilter.assignee} onChange={(event) => setTicketFilter((prev) => ({ ...prev, assignee: event.target.value }))}>
+                      <option value="all">All assignees</option>
+                      {ticketAssignees.map((assignee) => (
+                        <option key={assignee} value={assignee}>{assignee}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="it-ticket-stats">
+                  {[
+                    { label: 'Open', value: tickets.filter((t) => ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated'].includes(t.status)).length },
+                    { label: 'Critical', value: tickets.filter((t) => t.priority === 'critical').length },
+                    { label: 'Waiting', value: tickets.filter((t) => t.status === 'waiting_customer').length },
+                    { label: 'Resolved', value: tickets.filter((t) => t.status === 'resolved').length },
+                  ].map((stat) => (
+                    <div key={stat.label} className="it-ticket-stat">
+                      <strong>{stat.value}</strong>
+                      <span>{stat.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {filteredTickets.map((t) => (
                   <div
                     key={t.id}
                     className={`it-row it-ticket-row ${ticketOpen?.id === t.id ? 'active' : ''}`}
@@ -455,15 +556,22 @@ export function AdminPanel({
                   >
                     <div>
                       <p style={{ fontWeight: 600 }}>{t.subject}</p>
-                      <span>{t.userFullName} • {t.category} • {new Date(t.createdAt).toLocaleDateString()}</span>
+                      <span>
+                        {t.userFullName} • {t.category} • {t.queue || 'unassigned queue'} • {new Date(t.createdAt).toLocaleDateString()}
+                      </span>
+                      {t.tags?.length > 0 && (
+                        <div className="it-ticket-tags">
+                          {t.tags.map((tag) => <span key={`${t.id}-${tag}`} className="it-tag">{tag}</span>)}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       <StatusBadge value={t.priority} />
                       <StatusBadge value={t.status} />
                     </div>
                   </div>
                 ))}
-                {tickets.length === 0 && <p className="muted">No tickets yet.</p>}
+                {filteredTickets.length === 0 && <p className="muted">No tickets match this filter.</p>}
               </Section>
             </div>
 
@@ -472,12 +580,52 @@ export function AdminPanel({
                 <div className="it-ticket-detail-header">
                   <div>
                     <h4>{ticketOpen.subject}</h4>
-                    <span>{ticketOpen.userFullName} ({ticketOpen.userEmail}) • {ticketOpen.category}</span>
+                    <span>{ticketOpen.userFullName} ({ticketOpen.userEmail}) • {ticketOpen.category} • {ticketOpen.queue || 'unassigned queue'}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <StatusBadge value={ticketOpen.priority} />
                     <StatusBadge value={ticketOpen.status} />
                   </div>
+                </div>
+
+                <div className="it-ticket-meta-grid">
+                  <div><span>Owner</span><strong>{ticketOpen.assignee || 'Unassigned'}</strong></div>
+                  <div><span>Customer</span><strong>{ticketOpen.customerTier || 'standard'}</strong></div>
+                  <div><span>Due</span><strong>{ticketOpen.dueAt ? new Date(ticketOpen.dueAt).toLocaleDateString() : 'No due date'}</strong></div>
+                  <div><span>Updated</span><strong>{new Date(ticketOpen.updatedAt || ticketOpen.createdAt).toLocaleString()}</strong></div>
+                </div>
+
+                <div className="it-ticket-actions-inline">
+                  <select
+                    value={ticketOpen.status}
+                    onChange={(event) => updateTicketField(ticketOpen.id, { status: event.target.value })}
+                  >
+                    <option value="new">New</option>
+                    <option value="triage">In triage</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="waiting_customer">Waiting on customer</option>
+                    <option value="escalated">Escalated</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                  <select
+                    value={ticketOpen.priority}
+                    onChange={(event) => updateTicketField(ticketOpen.id, { priority: event.target.value })}
+                  >
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                  <select
+                    value={ticketOpen.assignee || 'Unassigned'}
+                    onChange={(event) => updateTicketField(ticketOpen.id, { assignee: event.target.value === 'Unassigned' ? '' : event.target.value })}
+                  >
+                    <option value="Unassigned">Unassigned</option>
+                    {ticketAssignees.filter((assignee) => assignee !== 'Unassigned').map((assignee) => (
+                      <option key={assignee} value={assignee}>{assignee}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="it-ticket-messages">
@@ -492,7 +640,7 @@ export function AdminPanel({
                   ))}
                 </div>
 
-                {ticketOpen.status === 'open' && (
+                {isTicketActionable(ticketOpen.status) && (
                   <div className="it-ticket-reply">
                     <textarea
                       value={replyDraft}
@@ -514,7 +662,7 @@ export function AdminPanel({
                   </div>
                 )}
 
-                {ticketOpen.status !== 'open' && (
+                {!isTicketActionable(ticketOpen.status) && (
                   <div className="it-ticket-closed-notice">
                     This ticket is {ticketOpen.status}.
                     <button type="button" className="text-button" onClick={() => setTickets((prev) => prev.map((t) => t.id === ticketOpen.id ? { ...t, status: 'open' } : t))}>
@@ -817,6 +965,25 @@ export function AdminPanel({
 
         {itTab === 'controls' && (
           <div>
+            <Section title="Landing page announcement">
+              <p className="muted">Publish a highlighted notice that appears at the top of the public landing page before sign-in.</p>
+              <textarea
+                rows="5"
+                value={announcementDraft}
+                onChange={(event) => setAnnouncementDraft(event.target.value)}
+                style={{ width: '100%', resize: 'vertical', padding: '0.75rem', borderRadius: '0.8rem', border: '1px solid #dbeafe', font: 'inherit' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => setLandingAnnouncement(announcementDraft.trim() || 'This application is currently in Beta Testing...')}
+                >
+                  Save announcement
+                </button>
+              </div>
+            </Section>
+
             <Section title="Site feature flags">
               <p className="muted">Enable or disable platform features globally.</p>
               {featureFlags.map((flag) => (

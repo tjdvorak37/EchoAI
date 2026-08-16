@@ -1277,7 +1277,8 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
       setGeneratedImageMeta(result)
       setSelectedAssetId('')
       setUploadedImage('')
-      setNotice(`Generated ${result.source === 'api' ? 'AI' : 'local'} concept image.`)
+      setActiveTool('crop')
+      setNotice(`Generated ${result.source === 'api' ? 'AI' : 'local'} concept image. Crop and retouch the image before adding final text layers.`)
       if (result.headline) setHeadline(result.headline)
       if (result.caption) setSubcopy(result.caption)
       if (result.palette && STYLE_PRESETS[result.palette]) setPresetId(result.palette)
@@ -1300,6 +1301,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
     setGeneratedImageMeta(null)
     setUploadedImage('')
     setSelectedAssetId(imageAssets[0]?.id ?? '')
+    setActiveTool('select')
     setNotice('Reverted to the workspace image library.')
   }
 
@@ -1310,7 +1312,8 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
     const reader = new FileReader()
     reader.onload = () => {
       setUploadedImage(String(reader.result || ''))
-      setNotice(`Loaded ${file.name} into the canvas.`)
+      setActiveTool('heal')
+      setNotice(`Loaded ${file.name} into the canvas. Use Heal, Crop, or Brush to retouch the underlying image.`)
     }
     reader.readAsDataURL(file)
     event.target.value = ''
@@ -1478,7 +1481,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
       <header className="photo-creator-header">
         <div>
           <p className="small-title">Photo Creator</p>
-          <h2>Immersive editor for social images, AI concepts, and campaign art</h2>
+          <h2>Professional photo editor for social campaigns</h2>
         </div>
         <div className="photo-creator-actions">
           <button type="button" className="ghost-button" onClick={() => setCompactMode((prev) => !prev)}>
@@ -1670,7 +1673,10 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
               <p className="section-label">Canvas</p>
               <h3>{aspect.label} layout</h3>
             </div>
-            <p className="muted">{notice}</p>
+            <div className="stage-status">
+              <span className="status-pill">{activeTool.toUpperCase()}</span>
+              <p className="muted">{notice}</p>
+            </div>
           </div>
 
           <div ref={stageViewportRef} className="photo-stage-wrap">

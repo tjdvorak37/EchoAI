@@ -43,6 +43,47 @@ export const platformService = {
     }
   },
 
+  async postNow(payload) {
+    const publishedAt = new Date().toISOString()
+    const post = {
+      id: randomId(),
+      status: 'published',
+      scheduledAt: publishedAt,
+      ...payload,
+    }
+
+    if (!isSupabaseConfigured) {
+      return post
+    }
+
+    const { data, error } = await supabase
+      .from('scheduled_posts')
+      .insert({
+        campaign: payload.campaign,
+        message: payload.message,
+        image_idea: payload.imageIdea,
+        scheduled_at: publishedAt,
+        channels: payload.channels,
+        status: 'published',
+      })
+      .select('*')
+      .single()
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return {
+      id: data.id,
+      campaign: data.campaign,
+      message: data.message,
+      imageIdea: data.image_idea,
+      scheduledAt: data.scheduled_at,
+      channels: data.channels,
+      status: data.status,
+    }
+  },
+
   async generateMessageIdeas(prompt, agentConfig) {
     const cleanedPrompt = prompt.trim()
     if (!cleanedPrompt) {
