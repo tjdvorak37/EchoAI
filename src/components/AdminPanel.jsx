@@ -5,6 +5,8 @@ const USERS_PER_PAGE = 25
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
 const USER_STATUSES = ['active', 'pending', 'deactivated', 'approved', 'denied']
 
+const formatDateTime = (value) => (value ? new Date(value).toLocaleString() : 'Never')
+
 const STATUS_COLORS = {
   active: '#22c55e',
   pending: '#f59e0b',
@@ -81,6 +83,7 @@ export function AdminPanel({
   socialPlatformReadiness, socialPlatformReadinessLoading, socialPlatformReadinessError, handleRefreshSocialPlatformReadiness,
   adminLoading, adminError,
   currentUser,
+  onAdminUserAction,
 }) {
   const [itTab, setItTab] = useState('overview')
   const [ticketOpen, setTicketOpen] = useState(null)
@@ -92,6 +95,53 @@ export function AdminPanel({
   const [userSort, setUserSort] = useState('name-asc')
   const [userPage, setUserPage] = useState(1)
   const [expandedUserId, setExpandedUserId] = useState(null)
+  const [verification, setVerification] = useState({ userId: null, summary: null, loading: false, error: '' })
+  const [recoveryLink, setRecoveryLink] = useState({ userId: null, url: '', error: '', loading: false })
+  const [profileDraft, setProfileDraft] = useState({ fullName: '', company: '', saving: false, error: '' })
+
+  const openUserDetail = (member) => {
+    const nextId = expandedUserId === member.id ? null : member.id
+    setExpandedUserId(nextId)
+    setVerification({ userId: null, summary: null, loading: false, error: '' })
+    setRecoveryLink({ userId: null, url: '', error: '', loading: false })
+    setProfileDraft({ fullName: member.fullName || '', company: member.company || '', saving: false, error: '' })
+  }
+
+  const loadVerification = async (member) => {
+    setVerification({ userId: member.id, summary: null, loading: true, error: '' })
+    try {
+      const { summary } = await onAdminUserAction({ action: 'verification-summary', userId: member.id })
+      setVerification({ userId: member.id, summary, loading: false, error: '' })
+    } catch (error) {
+      setVerification({ userId: member.id, summary: null, loading: false, error: error.message })
+    }
+  }
+
+  const generateRecoveryLink = async (member) => {
+    setRecoveryLink({ userId: member.id, url: '', error: '', loading: true })
+    try {
+      const { recoveryLink: url } = await onAdminUserAction({ action: 'recovery-link', userId: member.id })
+      setRecoveryLink({ userId: member.id, url, error: '', loading: false })
+    } catch (error) {
+      setRecoveryLink({ userId: member.id, url: '', error: error.message, loading: false })
+    }
+  }
+
+  const saveProfileDraft = async (member) => {
+    setProfileDraft((prev) => ({ ...prev, saving: true, error: '' }))
+    try {
+      await onAdminUserAction({
+        action: 'update-profile',
+        userId: member.id,
+        fullName: profileDraft.fullName,
+        company: profileDraft.company,
+      })
+      setProfileDraft((prev) => ({ ...prev, saving: false, error: '' }))
+    } catch (error) {
+      setProfileDraft((prev) => ({ ...prev, saving: false, error: error.message }))
+    }
+  }
+
   const [seatLimitDraft, setSeatLimitDraft] = useState('10')
   const [seatEmailDraft, setSeatEmailDraft] = useState('')
   const [seatError, setSeatError] = useState('')
@@ -918,7 +968,7 @@ export function AdminPanel({
                           type="button"
                           className="ghost-button"
                           style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
-                          onClick={() => setExpandedUserId(expanded ? null : member.id)}
+                          onClick={() => openUserDetail(member)}
                           aria-expanded={expanded}
                         >
                           {expanded ? 'Close' : 'Manage'}
@@ -959,6 +1009,98 @@ export function AdminPanel({
                                   {role}
                                 </button>
                               ))}
+                            </div>
+
+                            <div className="it-user-detail-group it-user-detail-stack">
+                              <span className="it-user-detail-label">Identity</span>
+                              <div className="it-verify-block">
+                                <p className="muted it-verify-hint">
+                                  Confirm the caller can state these details before you reset anything.
+                                </p>
+                                <button type="button" className="ghost-button" onClick={() => loadVerification(member)} disabled={verification.loading && verification.userId === member.id}>
+                                  {verification.loading && verification.userId === member.id ? 'Loading…' : 'Show verification details'}
+                                </button>
+
+                                {verification.userId === member.id && verification.error && (
+                                  <p className="auth-message auth-error">{verification.error}</p>
+                                )}
+
+                                {verification.userId === member.id && verification.summary && (
+                                  <dl className="it-verify-facts">
+                                    <div><dt>Signed up</dt><dd>{formatDateTime(verification.summary.signedUpAt)}</dd></div>
+                                    <div><dt>Last sign-in</dt><dd>{formatDateTime(verification.summary.lastSignInAt)}</dd></div>
+                                    <div><dt>Email confirmed</dt><dd>{verification.summary.emailConfirmedAt ? formatDateTime(verification.summary.emailConfirmedAt) : 'Not confirmed'}</dd></div>
+                                    <div><dt>Company</dt><dd>{verification.summary.company || 'None on file'}</dd></div>
+                                    <div><dt>Support tickets</dt><dd>{verification.summary.ticketCount}</dd></div>
+                                    {verification.summary.recentTickets?.length > 0 && (
+                                      <div>
+                                        <dt>Recent tickets</dt>
+                                        <dd>
+                                          {verification.summary.recentTickets.map((ticket) => (
+                                            <span key={ticket.id} className="it-verify-ticket">
+                                              {ticket.category} • {ticket.status} • {formatDateTime(ticket.created_at)}
+                                            </span>
+                                          ))}
+                                        </dd>
+                                      </div>
+                                    )}
+                                  </dl>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="it-user-detail-group it-user-detail-stack">
+                              <span className="it-user-detail-label">Details</span>
+                              <div className="it-verify-block">
+                                <div className="it-profile-fields">
+                                  <label>
+                                    Full name
+                                    <input
+                                      type="text"
+                                      value={profileDraft.fullName}
+                                      onChange={(e) => setProfileDraft((prev) => ({ ...prev, fullName: e.target.value }))}
+                                    />
+                                  </label>
+                                  <label>
+                                    Company
+                                    <input
+                                      type="text"
+                                      value={profileDraft.company}
+                                      onChange={(e) => setProfileDraft((prev) => ({ ...prev, company: e.target.value }))}
+                                    />
+                                  </label>
+                                </div>
+                                <button type="button" className="ghost-button" onClick={() => saveProfileDraft(member)} disabled={profileDraft.saving}>
+                                  {profileDraft.saving ? 'Saving…' : 'Save details'}
+                                </button>
+                                {profileDraft.error && <p className="auth-message auth-error">{profileDraft.error}</p>}
+                              </div>
+                            </div>
+
+                            <div className="it-user-detail-group it-user-detail-stack">
+                              <span className="it-user-detail-label">Password</span>
+                              <div className="it-verify-block">
+                                <p className="muted it-verify-hint">
+                                  Generates a single-use link the user opens to set their own password. You never see or choose it.
+                                </p>
+                                <button type="button" className="ghost-button" onClick={() => generateRecoveryLink(member)} disabled={recoveryLink.loading && recoveryLink.userId === member.id}>
+                                  {recoveryLink.loading && recoveryLink.userId === member.id ? 'Generating…' : 'Generate password reset link'}
+                                </button>
+
+                                {recoveryLink.userId === member.id && recoveryLink.error && (
+                                  <p className="auth-message auth-error">{recoveryLink.error}</p>
+                                )}
+
+                                {recoveryLink.userId === member.id && recoveryLink.url && (
+                                  <div className="it-recovery-link">
+                                    <p className="muted">Send this to the verified user. It expires in 1 hour and works once.</p>
+                                    <textarea readOnly rows={3} value={recoveryLink.url} onFocus={(e) => e.target.select()} />
+                                    <button type="button" className="ghost-button" onClick={() => navigator.clipboard?.writeText(recoveryLink.url)}>
+                                      Copy link
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </>
                         )}

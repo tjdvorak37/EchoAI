@@ -880,7 +880,7 @@ export const authService = {
     return data
   },
 
-  async createSupportTicket({ category, details }) {
+  async createSupportTicket({ category, details, attachmentPaths = [] }) {
     if (!category || !details) {
       throw new Error('Support category and details are required.')
     }
@@ -914,12 +914,93 @@ export const authService = {
         category,
         details,
         status: 'open',
+        attachment_paths: attachmentPaths,
       })
       .select('*')
       .single()
 
     if (error) {
       throw new Error(error.message)
+    }
+
+    return data
+  },
+
+  // Screenshots go to a private bucket keyed by user id; admins read them back
+  // through short-lived signed URLs rather than public links.
+  async uploadTicketAttachment(file) {
+    if (!isSupabaseConfigured) {
+      throw new Error('File uploads require a configured Supabase project.')
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('Screenshots must be 5 MB or smaller.')
+    }
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
+      throw new Error('Attach a PNG, JPEG, WebP, or GIF image.')
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      throw new Error('Sign in to attach a screenshot.')
+    }
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+    const path = `${user.id}/${Date.now()}-${safeName}`
+
+    const { error } = await supabase.storage
+      .from('ticket-attachments')
+      .upload(path, file, { contentType: file.type, upsert: false })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return path
+  },
+
+  async getTicketAttachmentUrl(path) {
+    const { data, error } = await supabase.storage
+      .from('ticket-attachments')
+      .createSignedUrl(path, 300)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return data.signedUrl
+  },
+
+  // Unauthenticated intake for people locked out of their account. Rate limiting
+  // and all validation happen server-side.
+  async submitPublicSupportTicket({ email, name, category, details }) {
+    if (!isSupabaseConfigured) {
+      return { ok: true }
+    }
+
+    const { data, error } = await supabase.functions.invoke('public-support-ticket', {
+      body: { email, name, category, details },
+    })
+
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || 'Could not send that request.')
+    }
+
+    return data
+  },
+
+  // Privileged support actions. The caller's role is re-verified server-side.
+  async adminUserAction({ action, userId, fullName, company }) {
+    const { data, error } = await supabase.functions.invoke('admin-user-actions', {
+      body: { action, userId, fullName, company },
+    })
+
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || 'That action could not be completed.')
     }
 
     return data

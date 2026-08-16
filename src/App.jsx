@@ -1764,6 +1764,20 @@ function App() {
     setSupportTicket((prev) => ({ ...prev, [field]: value }))
   }
 
+  const handleAdminUserAction = async ({ action, userId, fullName, company }) => {
+    const result = await authService.adminUserAction({ action, userId, fullName, company })
+
+    if (action === 'update-profile' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId
+          ? { ...member, fullName: result.profile.full_name, company: result.profile.company }
+          : member
+      )))
+    }
+
+    return result
+  }
+
   const handleSubmitSupportTicket = async (event) => {
     event.preventDefault()
     setSupportError('')
@@ -4557,6 +4571,7 @@ function App() {
               handleCreateCompanySeatPackage={handleCreateCompanySeatPackage}
               handleUpdateCompanySeatPackage={handleUpdateCompanySeatPackage}
               handleRespondToSupportTicket={handleRespondToSupportTicket}
+              onAdminUserAction={handleAdminUserAction}
               handleAssignCompanySeat={handleAssignCompanySeat}
               handleRevokeCompanySeat={handleRevokeCompanySeat}
               socialPlatformReadiness={socialPlatformReadiness}
