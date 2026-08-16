@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { buildCreativeProject, readBriefFile } from '../services/documentBriefService'
+import { briefSourceFromAsset, buildCreativeProject, readBriefFile } from '../services/documentBriefService'
 
 const ACCEPTED_FILES = '.pdf,.docx,.pptx,.xlsx,.csv,.json,.txt,.md,image/*,video/*'
 
@@ -9,7 +9,7 @@ const formatSize = (bytes) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveToWorkspace }) {
+export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject, onUseDraft, onSaveToWorkspace }) {
   const [sources, setSources] = useState([])
   const [instruction, setInstruction] = useState('Create a polished campaign flyer based on this information.')
   const [outputType, setOutputType] = useState('flyer')
@@ -25,37 +25,17 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
     setError('')
     setDragActive(false)
     const nextFiles = Array.from(files || [])
-    console.log('🔍 addFiles triggered:', { count: nextFiles.length, files: nextFiles.map(f => ({ name: f.name, type: f.type, size: f.size })) })
-    
-    if (!nextFiles.length) {
-      console.warn('⚠️ No files provided to addFiles')
-      return
-    }
-    
+
+    if (!nextFiles.length) return
+
     setReadingFiles(true)
     try {
-      console.log('📖 Starting file parsing...')
-      const parsed = await Promise.all(nextFiles.map(async (file) => {
-        console.log(`📄 Parsing: ${file.name} (${file.type})`)
-        try {
-          const result = await readBriefFile(file)
-          console.log(`✅ Parsed: ${result.name}`)
-          return result
-        } catch (err) {
-          console.error(`❌ Error parsing ${file.name}:`, err)
-          throw err
-        }
-      }))
-      
-      console.log('✅ All files parsed. Adding to state:', parsed.map(p => p.name))
+      const parsed = await Promise.all(nextFiles.map((file) => readBriefFile(file)))
       setSources((current) => {
         const filtered = parsed.filter((item) => !current.some((source) => source.id === item.id))
-        const updated = [...current, ...filtered]
-        console.log('📊 Sources state updated. New count:', updated.length, 'Files:', updated.map(s => s.name))
-        return updated
+        return [...current, ...filtered]
       })
     } catch (readError) {
-      console.error('❌ Error reading files:', readError)
       setError(`Error reading files: ${readError.message}`)
     } finally {
       setReadingFiles(false)
@@ -63,6 +43,21 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
         inputRef.current.value = ''
       }
     }
+  }
+
+  const addAssets = (assetIds) => {
+    setError('')
+    const picked = assetIds
+      .map((assetId) => workspaceAssets.find((asset) => asset.id === assetId))
+      .filter(Boolean)
+      .map(briefSourceFromAsset)
+
+    if (!picked.length) return
+
+    setSources((current) => [
+      ...current,
+      ...picked.filter((item) => !current.some((source) => source.id === item.id)),
+    ])
   }
 
   const generate = async () => {
@@ -118,7 +113,6 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
         <div
           className="brief-dropzone"
           onDragEnter={(event) => {
-            console.log('🎯 dragenter event')
             event.preventDefault()
             event.stopPropagation()
             setDragActive(true)
@@ -129,7 +123,6 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
             event.dataTransfer.dropEffect = 'copy'
           }}
           onDragLeave={(event) => {
-            console.log('🎯 dragleave event')
             event.preventDefault()
             event.stopPropagation()
             // Only set dragActive to false if leaving the dropzone entirely
@@ -138,48 +131,37 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
             }
           }}
           onDrop={(event) => {
-            // CRITICAL: Must extract files SYNCHRONOUSLY before event ends
-            console.log('🎯 drop event fired!')
             event.preventDefault()
             event.stopPropagation()
             setDragActive(false)
-            
-            // Log detailed drag info
-            console.log('💾 Drag details:', {
-              types: event.dataTransfer.types,
-              items: event.dataTransfer.items?.length,
-              files: event.dataTransfer.files?.length,
-            })
-            
-            // Try items first (more reliable)
-            if (event.dataTransfer.items?.length > 0) {
+
+            // Cards in the media library drag their id, not file bytes.
+            const assetId = event.dataTransfer.getData('assetId')
+            if (assetId) {
+              addAssets([assetId])
+              return
+            }
+
+            // dataTransfer must be read synchronously; it is cleared once the event ends.
+            const items = event.dataTransfer.items
+            if (items?.length > 0) {
               const draggedFiles = []
-              for (let i = 0; i < event.dataTransfer.items.length; i++) {
-                if (event.dataTransfer.items[i].kind === 'file') {
-                  const file = event.dataTransfer.items[i].getAsFile()
+              for (let i = 0; i < items.length; i++) {
+                if (items[i].kind === 'file') {
+                  const file = items[i].getAsFile()
                   if (file) draggedFiles.push(file)
-                  console.log(`📄 Item ${i}: kind=${event.dataTransfer.items[i].kind}, type=${event.dataTransfer.items[i].type}, file=${file?.name}`)
-                } else {
-                  console.log(`📄 Item ${i}: kind=${event.dataTransfer.items[i].kind} (not a file)`)
                 }
               }
-              
+
               if (draggedFiles.length > 0) {
-                console.log(`✨ Processing ${draggedFiles.length} files from drop (via items)`)
                 addFiles(draggedFiles)
               } else {
-                console.warn('⚠️ No files found in drag items')
-                setError('No files detected in drop. Make sure you\'re dragging files, not text or links.')
+                setError('That drag did not carry a file. Drag from your file manager or the media library, or click this box to browse.')
               }
             } else if (event.dataTransfer.files?.length > 0) {
-              // Fallback to dataTransfer.files
-              const droppedFiles = event.dataTransfer.files
-              console.log(`✨ Processing ${droppedFiles.length} files from drop (via files)`)
-              addFiles(Array.from(droppedFiles))
+              addFiles(Array.from(event.dataTransfer.files))
             } else {
-              console.warn('⚠️ Drop event fired but no files detected in either items or files')
-              console.log('📋 dataTransfer.types:', event.dataTransfer.types)
-              setError('No files detected in drop. Drag actual files (PDF, images, etc.), not text or links.')
+              setError('No files detected in that drop. Click this box to browse instead.')
             }
           }}
           onClick={handleBrowseClick}
@@ -191,14 +173,13 @@ export function CreativeBrief({ agentConfig, onEditProject, onUseDraft, onSaveTo
           }}
         >
           <strong>Add campaign files</strong>
-          <span>PowerPoint, Word, Excel, PDF, text, images, or video</span>
+          <span>Drag in media library assets, or click to browse for PowerPoint, Word, Excel, PDF, text, images, or video</span>
           <input
             ref={inputRef}
             type="file"
             accept={ACCEPTED_FILES}
             multiple
             onChange={(event) => {
-              console.log('📁 File input changed:', event.target.files)
               if (event.target.files?.length) {
                 addFiles(Array.from(event.target.files))
               }

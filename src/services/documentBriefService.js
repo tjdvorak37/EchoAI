@@ -99,6 +99,21 @@ export const readBriefFile = async (file) => {
   }
 }
 
+// Workspace assets are metadata records, not File handles, so the stored summary
+// stands in for the extracted text a real upload would produce.
+export const briefSourceFromAsset = (asset) => {
+  const label = asset.type === 'video' ? 'Video' : asset.type === 'image' ? 'Image' : 'Document'
+  const text = asset.summary || `${label} reference named ${asset.name}`
+
+  return {
+    id: `asset:${asset.id}`,
+    name: asset.name,
+    type: asset.mime || `${asset.type}/*`,
+    size: asset.size || 0,
+    text: normalizeText(text).slice(0, MAX_SOURCE_CHARS),
+  }
+}
+
 const fallbackProject = ({ instruction, outputType, sources }) => {
   const sourceText = sources.map((source) => source.text).join(' ')
   const words = normalizeText(`${instruction} ${sourceText}`).split(/\s+/).filter((word) => word.length > 3)
