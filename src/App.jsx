@@ -72,6 +72,24 @@ const getPlatformMeta = (platformName) =>
   PLATFORM_META[platformName?.toLowerCase()] ??
   { label: platformName, icon: '🔗', color: '#64748b', bg: 'rgba(100,116,139,0.1)', border: 'rgba(100,116,139,0.25)' }
 
+const DEFAULT_ACCOUNT_HANDLES = {
+  instagram: '@youraccount',
+  facebook: 'Your page name',
+  tiktok: '@youraccount',
+  snapchat: 'Your Snapchat',
+  x: '@youraccount',
+  youtube: 'Your channel',
+  linkedin: 'Your profile / page',
+}
+
+const getDefaultAccountHandle = (platformName) =>
+  DEFAULT_ACCOUNT_HANDLES[String(platformName || '').toLowerCase()] || 'Your account'
+
+const isPlaceholderAccountHandle = (platformName, accountName) => {
+  const defaultValue = getDefaultAccountHandle(platformName)
+  return !String(accountName || '').trim() || String(accountName).trim().toLowerCase() === defaultValue.toLowerCase()
+}
+
 const createDefaultAiAgentConfig = () => ({
   enabled: false,
   name: 'My AI Agent',
@@ -212,6 +230,15 @@ function App() {
     scheduledAt: '',
     channels: ['instagram'],
   })
+  const [accountHandleDrafts, setAccountHandleDrafts] = useState(() => ({
+    instagram: '@youraccount',
+    facebook: 'Your page name',
+    tiktok: '@youraccount',
+    snapchat: 'Your Snapchat',
+    x: '@youraccount',
+    youtube: 'Your channel',
+    linkedin: 'Your profile / page',
+  }))
   const [aiInput, setAiInput] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState([])
   const [aiLoading, setAiLoading] = useState(false)
@@ -237,6 +264,13 @@ function App() {
   const [tickets, setTickets] = useState(supportTicketsSeed)
   const [purchaseHistory, setPurchaseHistory] = useState(purchaseHistorySeed)
   const [featureFlags, setFeatureFlags] = useState(siteFeatureFlagsSeed)
+  const [landingAnnouncement, setLandingAnnouncement] = useState(() => {
+    try {
+      return localStorage.getItem('echoai-landing-announcement') || 'This application is currently in Beta Testing, if you purchase a subscription please report all bugs and issues to the Support Team as we are actively working through the problems. Expected launch date 9/15/2026 Thanks'
+    } catch {
+      return 'This application is currently in Beta Testing, if you purchase a subscription please report all bugs and issues to the Support Team as we are actively working through the problems. Expected launch date 9/15/2026 Thanks'
+    }
+  })
   const [promoCodes, setPromoCodes] = useState(promoCodesSeed)
   const [expenses, setExpenses] = useState(expensesSeed)
   const [payroll, setPayroll] = useState(payrollSeed)
@@ -345,6 +379,14 @@ function App() {
 
   // Save all per-user data to their own namespaced localStorage key whenever any slice changes.
   // In production this is backed by Supabase with row-level security scoped to auth.uid().
+  useEffect(() => {
+    try {
+      localStorage.setItem('echoai-landing-announcement', landingAnnouncement)
+    } catch (err) {
+      console.error('Unable to save landing announcement', err)
+    }
+  }, [landingAnnouncement])
+
   useEffect(() => {
     if (!session?.id) return
     try {
@@ -1079,6 +1121,15 @@ function App() {
       return
     }
 
+    const invalidSelectedChannels = composer.channels.filter((channel) => {
+      const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
+      return !linkedAccount || isPlaceholderAccountHandle(channel, linkedAccount.accountName)
+    })
+
+    if (invalidSelectedChannels.length) {
+      return
+    }
+
     const newPost = await platformService.schedulePost({
       campaign: composer.campaign || 'Daily Campaign',
       message: composer.message,
@@ -1089,6 +1140,38 @@ function App() {
 
     setScheduledPosts((prev) => [newPost, ...prev])
     await syncPostToCalendar(newPost)
+    setComposer({
+      campaign: '',
+      message: '',
+      imageIdea: '',
+      scheduledAt: '',
+      channels: ['instagram'],
+    })
+  }
+
+  const handlePostNow = async (event) => {
+    event.preventDefault()
+    if (!composer.message.trim() || !composer.channels.length) {
+      return
+    }
+
+    const invalidSelectedChannels = composer.channels.filter((channel) => {
+      const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
+      return !linkedAccount || isPlaceholderAccountHandle(channel, linkedAccount.accountName)
+    })
+
+    if (invalidSelectedChannels.length) {
+      return
+    }
+
+    const newPost = await platformService.postNow({
+      campaign: composer.campaign || 'Instant Campaign',
+      message: composer.message,
+      imageIdea: composer.imageIdea,
+      channels: composer.channels,
+    })
+
+    setScheduledPosts((prev) => [newPost, ...prev])
     setComposer({
       campaign: '',
       message: '',
@@ -2226,6 +2309,7 @@ function App() {
       return (
         <Suspense fallback={loadingPanel}>
           <LandingPage
+            announcementMessage={landingAnnouncement}
             onSignIn={() => setAuthView('signin')}
             onCompanyPackageRequest={() => setCompanyPackageRequested(false)}
             onPurchase={(planKey) => {
@@ -3467,9 +3551,14 @@ function App() {
                 </div>
               </div>
 
-              <button className="primary-button" type="submit">
-                Queue post
-              </button>
+              <div className="composer-actions">
+                <button className="primary-button" type="button" onClick={handlePostNow}>
+                  Post now
+                </button>
+                <button className="ghost-button" type="submit">
+                  Queue post
+                </button>
+              </div>
             </form>
 
             <article className="sub-panel tone-sun">
@@ -3873,6 +3962,8 @@ function App() {
               ].map(({ key, accountPlaceholder, desc }) => {
                 const meta = getPlatformMeta(key)
                 const linked = connectedAccounts.find((a) => a.platform.toLowerCase() === key)
+                const isInvalidHandle = linked && isPlaceholderAccountHandle(key, linked.accountName)
+                const inputValue = accountHandleDrafts[key] ?? accountPlaceholder
                 return (
                   <div
                     key={key}
@@ -3886,45 +3977,73 @@ function App() {
                         {linked && <span className="integration-linked-handle">{linked.accountName}</span>}
                       </div>
                       {linked && (
-                        <span className={`integration-status-badge ${linked.status === 'healthy' ? 'good' : 'warn'}`}>
-                          {linked.status === 'healthy' ? '● Live' : '⚠ Needs refresh'}
+                        <span className={`integration-status-badge ${linked.status === 'healthy' && !isInvalidHandle ? 'good' : 'warn'}`}>
+                          {linked.status === 'healthy' && !isInvalidHandle ? '● Live' : '⚠ Needs refresh'}
                         </span>
                       )}
                     </div>
                     <div className="integration-platform-body">
                       <p>{desc}</p>
                       {linked ? (
-                        <div className="integration-actions">
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => setConnectedAccounts((prev) =>
-                              prev.map((a) => a.id === linked.id ? { ...a, status: 'token refresh due' } : a)
-                            )}
-                          >
-                            Re-authenticate
-                          </button>
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            style={{ color: '#ef4444' }}
-                            onClick={() => setConnectedAccounts((prev) => prev.filter((a) => a.id !== linked.id))}
-                          >
-                            Disconnect
-                          </button>
-                        </div>
+                        <>
+                          <label className="field-label">
+                            Handle / profile name
+                            <input
+                              type="text"
+                              value={linked.accountName}
+                              onChange={(event) => setConnectedAccounts((prev) =>
+                                prev.map((a) => a.id === linked.id ? { ...a, accountName: event.target.value, status: isPlaceholderAccountHandle(key, event.target.value) ? 'token refresh due' : 'healthy' } : a)
+                              )}
+                              placeholder={accountPlaceholder}
+                            />
+                          </label>
+                          <div className="integration-actions">
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => setConnectedAccounts((prev) =>
+                                prev.map((a) => a.id === linked.id ? { ...a, status: isPlaceholderAccountHandle(key, a.accountName) ? 'token refresh due' : 'healthy' } : a)
+                              )}
+                            >
+                              Refresh status
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              style={{ color: '#ef4444' }}
+                              onClick={() => setConnectedAccounts((prev) => prev.filter((a) => a.id !== linked.id))}
+                            >
+                              Disconnect
+                            </button>
+                          </div>
+                        </>
                       ) : (
-                        <button
-                          type="button"
-                          className="primary-button"
-                          style={{ background: meta.color, borderColor: meta.color }}
-                          onClick={() => setConnectedAccounts((prev) => [
-                            ...prev,
-                            { id: `acc_${Date.now()}`, platform: meta.label, accountName: accountPlaceholder, status: 'healthy' },
-                          ])}
-                        >
-                          Connect {meta.label}
-                        </button>
+                        <>
+                          <label className="field-label">
+                            Handle / profile name
+                            <input
+                              type="text"
+                              value={inputValue}
+                              onChange={(event) => setAccountHandleDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
+                              placeholder={accountPlaceholder}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="primary-button"
+                            style={{ background: meta.color, borderColor: meta.color }}
+                            onClick={() => {
+                              const nextHandle = (accountHandleDrafts[key] ?? '').trim() || accountPlaceholder
+                              setConnectedAccounts((prev) => [
+                                ...prev,
+                                { id: `acc_${Date.now()}`, platform: meta.label, accountName: nextHandle, status: isPlaceholderAccountHandle(key, nextHandle) ? 'token refresh due' : 'healthy' },
+                              ])
+                              setAccountHandleDrafts((prev) => ({ ...prev, [key]: nextHandle }))
+                            }}
+                          >
+                            Connect {meta.label}
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -4145,6 +4264,8 @@ function App() {
               setPurchaseHistory={setPurchaseHistory}
               featureFlags={featureFlags}
               setFeatureFlags={setFeatureFlags}
+              landingAnnouncement={landingAnnouncement}
+              setLandingAnnouncement={setLandingAnnouncement}
               billingLive={isSupabaseConfigured}
               promoCodes={promoCodes}
               setPromoCodes={setPromoCodes}

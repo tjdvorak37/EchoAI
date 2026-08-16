@@ -24,9 +24,14 @@ const Brand = () => (
   </span>
 )
 
-export function LandingPage({ onSignIn, onPurchase }) {
+export function LandingPage({ announcementMessage, onSignIn, onPurchase }) {
   return (
     <div className="landing-page" id="top">
+      {announcementMessage && (
+        <div className="landing-announcement" role="status" aria-live="polite">
+          <strong>Important:</strong> {announcementMessage}
+        </div>
+      )}
       <header className="landing-nav">
         <a href="#top" aria-label="EchoAI home"><Brand /></a>
         <nav className="landing-nav-links" aria-label="Landing page">
