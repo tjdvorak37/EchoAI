@@ -35,13 +35,14 @@ Deno.serve(async (request) => {
   const config = record?.config ?? record ?? {}
   if (config.enabled === false) return json({ error: 'This AI tool is disabled.' }, 409, request)
   if (!config.endpoint) return json({ error: 'No AI endpoint is configured. Add one in Integrations.' }, 503, request)
+  const providerApiKey = config.api_key ?? config.apiKey ?? ''
 
   try {
     const upstream = await fetch(config.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+        ...(providerApiKey ? { Authorization: `Bearer ${providerApiKey}` } : {}),
       },
       body: JSON.stringify(payload),
     })

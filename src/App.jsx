@@ -1525,7 +1525,7 @@ function App() {
     })
     if (error) {
       const detail = await error.context?.json?.().catch(() => null)
-      throw new Error(detail?.error || error.message)
+      throw new Error(detail?.error || detail?.detail?.error?.message || error.message)
     }
     if (data?.error) throw new Error(data.error)
     setAiAgentConnections((current) => current.map((item) => item.id === connection.id ? { ...item, status: 'connected', lastError: '' } : item))
@@ -1599,6 +1599,7 @@ function App() {
           contractVersion: '2.0',
           mode: 'test',
           capability: 'test',
+          ...(testConfig.connectionId ? { connectionId: testConfig.connectionId } : {}),
           model: testConfig.model || 'default',
           agentName: testConfig.name || 'My AI Agent',
           capabilities: testConfig.capabilities,
@@ -1608,7 +1609,10 @@ function App() {
 
       if (isSupabaseConfigured) {
         const { data, error } = await supabase.functions.invoke('inhouse-ai', { body: testPayload })
-        if (error) throw new Error(error.message)
+        if (error) {
+          const detail = await error.context?.json?.().catch(() => null)
+          throw new Error(detail?.error || detail?.detail?.error?.message || error.message)
+        }
         if (data?.error) throw new Error(data.error)
       } else {
         const response = await fetch(endpoint, {
