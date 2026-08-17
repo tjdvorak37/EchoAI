@@ -71,6 +71,7 @@ const TOOLS = {
   heal: 'Heal',
   brush: 'Brush',
   eraser: 'Eraser',
+  remove: 'Remove area',
   crop: 'Crop',
 }
 
@@ -383,6 +384,47 @@ const healImage = async ({ imageSrc, points, brushSize, stageMetrics }) => {
   return canvas.toDataURL('image/png')
 }
 
+const removeImageArea = async ({ imageSrc, rect, stageMetrics }) => {
+  const image = await loadImage(imageSrc)
+  const canvas = document.createElement('canvas')
+  canvas.width = image.naturalWidth || image.width
+  canvas.height = image.naturalHeight || image.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Area removal is unavailable in this browser.')
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+  const imageRatio = canvas.width / canvas.height
+  const stageRatio = stageMetrics.width / stageMetrics.height
+  let drawWidth = stageMetrics.width
+  let drawHeight = stageMetrics.height
+  let offsetX = 0
+  let offsetY = 0
+  if (imageRatio > stageRatio) {
+    drawWidth = imageRatio * drawHeight
+    offsetX = (stageMetrics.width - drawWidth) / 2
+  } else {
+    drawHeight = drawWidth / imageRatio
+    offsetY = (stageMetrics.height - drawHeight) / 2
+  }
+  const x = ((rect.x / 100) * stageMetrics.width - offsetX) / drawWidth * canvas.width
+  const y = ((rect.y / 100) * stageMetrics.height - offsetY) / drawHeight * canvas.height
+  const width = (rect.w / 100) * stageMetrics.width / drawWidth * canvas.width
+  const height = (rect.h / 100) * stageMetrics.height / drawHeight * canvas.height
+  const sample = document.createElement('canvas')
+  sample.width = canvas.width
+  sample.height = canvas.height
+  const sampleCtx = sample.getContext('2d')
+  if (!sampleCtx) throw new Error('Area removal is unavailable in this browser.')
+  sampleCtx.filter = `blur(${Math.max(8, Math.min(width, height) * 0.08)}px)`
+  sampleCtx.drawImage(canvas, 0, 0)
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(x, y, width, height)
+  ctx.clip()
+  ctx.drawImage(sample, 0, 0)
+  ctx.restore()
+  return canvas.toDataURL('image/png')
+}
+
 const drawShapeLayer = (ctx, layer, width, height) => {
   const w = (layer.width / 100) * width
   const h = (layer.height / 100) * height
@@ -688,6 +730,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
   const [brushOpacity, setBrushOpacity] = useState(0.8)
   const [brushStrokes, setBrushStrokes] = useState([])
   const [cropRect, setCropRect] = useState({ x: 0, y: 0, w: 100, h: 100 })
+  const [removeRect, setRemoveRect] = useState(null)
   const [canvasBackground, setCanvasBackground] = useState(initialProject ? '#0f172a' : '#ffffff')
   const [stageMetrics, setStageMetrics] = useState({ width: 1000, height: 1250 })
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
@@ -706,6 +749,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
   const paintCanvasRef = useRef(null)
   const dragRef = useRef(null)
   const cropDragRef = useRef(null)
+  const removeDragRef = useRef(null)
   const brushStrokeRef = useRef(null)
   const layerIdRef = useRef(0)
   const [stageViewportSize, setStageViewportSize] = useState({ width: 900, height: 720 })
@@ -1200,6 +1244,41 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
     window.addEventListener('pointercancel', finishStroke)
   }
 
+  const startRemoveArea = (event) => {
+    if (activeTool !== 'remove' || !stageRef.current || !selectedImageSrc) return
+    event.preventDefault()
+    event.stopPropagation()
+    const start = getStagePoint(event)
+    removeDragRef.current = { start }
+    const move = (moveEvent) => {
+      const end = getStagePoint(moveEvent)
+      const x = Math.min(start.x, end.x)
+      const y = Math.min(start.y, end.y)
+      const nextRect = { x, y, w: Math.abs(end.x - start.x), h: Math.abs(end.y - start.y) }
+      removeDragRef.current.rect = nextRect
+      setRemoveRect(nextRect)
+    }
+    const finish = async () => {
+      const rect = removeDragRef.current?.rect
+      removeDragRef.current = null
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      if (!rect || rect.w < 1 || rect.h < 1) return
+      commitHistory()
+      try {
+        setGeneratedImageSrc(await removeImageArea({ imageSrc: selectedImageSrc, rect, stageMetrics }))
+        setUploadedImage('')
+        setSelectedAssetId('')
+        setRemoveRect(null)
+        setNotice('Removed the selected area from the image. Use Undo if you need the original back.')
+      } catch (error) {
+        setNotice(error.message)
+      }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', finish)
+  }
+
   const updateCropRect = (nextRect) => {
     setCropRect((prev) => {
       const merged = { ...prev, ...nextRect }
@@ -1668,7 +1747,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
               ))}
             </div>
             <p className="muted">
-              Heal smooths blemishes and small distractions in the image itself. Eraser only removes paint strokes.
+              Heal smooths small distractions, Remove area cleans a selected rectangle, and Eraser removes paint strokes.
             </p>
             <label>
               Mask shape
@@ -1717,7 +1796,10 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
             <div
               ref={stageRef}
               className="photo-stage"
-              onPointerDown={startBrushStroke}
+              onPointerDown={(event) => {
+                if (activeTool === 'remove') startRemoveArea(event)
+                else startBrushStroke(event)
+              }}
               style={{
                 width: `${stageDisplaySize.width}px`,
                 height: `${stageDisplaySize.height}px`,
@@ -1727,6 +1809,8 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
                 cursor:
                   activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal'
                     ? 'crosshair'
+                    : activeTool === 'remove'
+                      ? 'crosshair'
                     : activeTool === 'crop'
                       ? 'move'
                       : 'default',
@@ -1788,6 +1872,14 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
                       height: `${cropRect.h}%`,
                     }}
                   />
+                </div>
+              )}
+              {activeTool === 'remove' && removeRect && (
+                <div
+                  className="remove-area-overlay"
+                  style={{ left: `${removeRect.x}%`, top: `${removeRect.y}%`, width: `${removeRect.w}%`, height: `${removeRect.h}%` }}
+                >
+                  Remove area
                 </div>
               )}
 

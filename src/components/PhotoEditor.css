@@ -74,6 +74,21 @@
   overflow: hidden;
 }
 
+.remove-area-overlay {
+  position: absolute;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  min-height: 32px;
+  border: 2px dashed #fbbf24;
+  background: rgba(245, 158, 11, 0.22);
+  color: #fff7ed;
+  font-size: 0.72rem;
+  font-weight: 800;
+  pointer-events: none;
+}
+
 .photo-sidebar {
   display: flex;
   flex-direction: column;

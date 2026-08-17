@@ -1444,6 +1444,8 @@ function App() {
         outputType: project.outputType,
         scenes: project.scenes,
         imageSource: project.imageSource,
+        imageSrc: project.imageSrc,
+        source: project.source,
       },
     }
 
@@ -3474,6 +3476,20 @@ function App() {
                           </small>
                         </div>
                         <div className="asset-actions">
+                          {asset.type === 'image' && (
+                            <button
+                              type="button"
+                              className="asset-action-button"
+                              onClick={() => {
+                                setCreativeProject(asset.projectMetadata
+                                  ? { ...asset.projectMetadata, imageSrc: asset.projectMetadata.imageSrc || asset.previewUrl, outputType: asset.projectMetadata.outputType || 'image' }
+                                  : { imageSrc: asset.previewUrl, outputType: 'image', headline: '', caption: '', visualPrompt: asset.summary || '' })
+                                setActiveTab('photo')
+                              }}
+                            >
+                              Edit
+                            </button>
+                          )}
                           <button type="button" className="asset-action-button" onClick={() => startRenameItem('asset', asset.id, asset.name)}>Rename</button>
                           <button type="button" className="asset-action-button" onClick={() => deleteAsset(asset.id)}>Delete</button>
                         </div>
