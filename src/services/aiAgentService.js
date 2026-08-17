@@ -100,7 +100,10 @@ export const runUserAiAgent = async ({ agentConfig, mode, payload, prompt, perso
 
   if (isSupabaseConfigured) {
     const { data, error } = await supabase.functions.invoke('inhouse-ai', { body: requestBody })
-    if (error) throw new Error(error.message)
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || detail?.detail?.error?.message || error.message)
+    }
     return {
       usedAgent: true,
       payload: data,

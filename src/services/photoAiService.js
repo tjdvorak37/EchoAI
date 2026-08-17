@@ -184,8 +184,9 @@ export async function generatePhotoConcept({ prompt, style, aspectRatio, referen
           source: 'agent',
         }
       }
+      throw new Error('The selected AI tool returned no image. Check its image capability and model access.')
     } catch (error) {
-      console.warn('User AI agent unavailable, falling back to default image generation.', error)
+      throw new Error(`The selected AI tool could not generate an image: ${error.message}`, { cause: error })
     }
   }
 
