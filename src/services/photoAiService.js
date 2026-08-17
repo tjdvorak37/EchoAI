@@ -158,7 +158,7 @@ const readResponseImage = async (payload) => {
   return null
 }
 
-export async function generatePhotoConcept({ prompt, style, aspectRatio, referenceImageSrc, agentConfig }) {
+export async function generatePhotoConcept({ prompt, style, aspectRatio, referenceImageSrc, references = [], agentConfig }) {
   const cleanedPrompt = prompt.trim()
   if (!cleanedPrompt) {
     throw new Error('A prompt is required to generate an image.')
@@ -170,7 +170,7 @@ export async function generatePhotoConcept({ prompt, style, aspectRatio, referen
         agentConfig,
         mode: 'image',
         prompt: cleanedPrompt,
-        payload: { prompt: cleanedPrompt, style, aspectRatio, referenceImageSrc: referenceImageSrc || null },
+        payload: { prompt: cleanedPrompt, style, aspectRatio, referenceImageSrc: referenceImageSrc || null, references },
       })
 
       const imageSrc = await readResponseImage(agentResult.payload)
@@ -202,6 +202,7 @@ export async function generatePhotoConcept({ prompt, style, aspectRatio, referen
         style,
         aspectRatio,
         referenceImageSrc: referenceImageSrc || null,
+        references,
       },
     })
 

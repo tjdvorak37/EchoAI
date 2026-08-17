@@ -15,6 +15,14 @@ const getUser = async (request: Request) => {
 
 const providerBaseUrl = (endpoint: string) => endpoint.replace(/\/+$/, '')
 
+const dataUrlFile = (value: unknown) => {
+  if (typeof value !== 'string' || !value.startsWith('data:')) return null
+  const match = value.match(/^data:([^;]+);base64,(.+)$/)
+  if (!match) return null
+  const binary = Uint8Array.from(atob(match[2]), (character) => character.charCodeAt(0))
+  return new File([binary], 'reference.png', { type: match[1] })
+}
+
 const openAiRequest = async (config: Record<string, unknown>, payload: Record<string, unknown>) => {
   const baseUrl = providerBaseUrl(String(config.endpoint))
   const apiKey = String(config.api_key ?? config.apiKey ?? '')
@@ -29,16 +37,29 @@ const openAiRequest = async (config: Record<string, unknown>, payload: Record<st
   if (payload.capability === 'image' || payload.mode === 'image') {
     const ratio = String((payload.output as Record<string, unknown> | undefined)?.aspectRatio ?? '1:1')
     const size = ratio === '16:9' ? '1536x1024' : ratio === '9:16' ? '1024x1536' : '1024x1024'
-    const response = await fetch(`${baseUrl}/images/generations`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: String(config.model || '').startsWith('gpt-image') ? config.model : 'gpt-image-1',
-        prompt: String(payload.prompt || '').slice(0, 4000),
-        size,
-        n: 1,
-      }),
-    })
+    const reference = (payload.references as Array<Record<string, unknown>> | undefined)?.find((item) => item.imageSrc)
+    const referenceFile = dataUrlFile(reference?.imageSrc)
+    let response: Response
+    if (referenceFile) {
+      const form = new FormData()
+      form.append('model', String(config.model || '').startsWith('gpt-image') ? String(config.model) : 'gpt-image-1')
+      form.append('prompt', String(payload.prompt || '').slice(0, 4000))
+      form.append('size', size)
+      form.append('n', '1')
+      form.append('image[]', referenceFile)
+      response = await fetch(`${baseUrl}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, body: form })
+    } else {
+      response = await fetch(`${baseUrl}/images/generations`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: String(config.model || '').startsWith('gpt-image') ? config.model : 'gpt-image-1',
+          prompt: String(payload.prompt || '').slice(0, 4000),
+          size,
+          n: 1,
+        }),
+      })
+    }
     const body = await response.text()
     return { response, body }
   }

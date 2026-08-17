@@ -74,9 +74,17 @@ const readPdf = async (file) => {
   return normalizeText(pages.join('\n'))
 }
 
+const readImageDataUrl = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result || ''))
+  reader.onerror = () => reject(new Error(`Unable to read ${file.name}.`))
+  reader.readAsDataURL(file)
+})
+
 export const readBriefFile = async (file) => {
   const extension = extensionOf(file.name)
   let text
+  let imageSrc = ''
 
   if (TEXT_EXTENSIONS.has(extension) || file.type.startsWith('text/')) {
     text = await file.text()
@@ -86,6 +94,7 @@ export const readBriefFile = async (file) => {
     text = await readOfficeDocument(file, extension)
   } else if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
     text = `${file.type.startsWith('image/') ? 'Image' : 'Video'} reference named ${file.name}`
+    if (file.type.startsWith('image/')) imageSrc = await readImageDataUrl(file)
   } else {
     throw new Error('Use PDF, DOCX, PPTX, XLSX, CSV, JSON, text, image, or video files.')
   }
@@ -96,6 +105,7 @@ export const readBriefFile = async (file) => {
     type: file.type || `application/${extension}`,
     size: file.size,
     text: normalizeText(text).slice(0, MAX_SOURCE_CHARS),
+    imageSrc,
   }
 }
 
@@ -111,6 +121,7 @@ export const briefSourceFromAsset = (asset) => {
     type: asset.mime || `${asset.type}/*`,
     size: asset.size || 0,
     text: normalizeText(text).slice(0, MAX_SOURCE_CHARS),
+    imageSrc: asset.type === 'image' ? asset.previewUrl || '' : '',
   }
 }
 
@@ -186,7 +197,8 @@ export async function buildCreativeProject({ instruction, outputType, sources, a
       prompt: project.visualPrompt,
       style: 'editorial',
       aspectRatio: outputType === 'flyer' ? '4:5' : '1:1',
-      referenceImageSrc: '',
+      referenceImageSrc: sources.find((source) => source.imageSrc)?.imageSrc || '',
+      references: sources.map(({ name, type, text, imageSrc }) => ({ name, type, text, imageSrc: imageSrc || null })),
       agentConfig,
     })
     return { ...project, imageSrc: image.imageSrc, imageSource: image.source }

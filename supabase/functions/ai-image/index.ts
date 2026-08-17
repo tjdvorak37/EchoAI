@@ -38,7 +38,7 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const { prompt, style, aspectRatio, referenceImageSrc } = await request.json()
+    const { prompt, style, aspectRatio, referenceImageSrc, references = [] } = await request.json()
 
     if (typeof prompt !== 'string' || !prompt.trim()) {
       return json({ error: 'A prompt is required.' }, 400, request)
@@ -56,6 +56,7 @@ Deno.serve(async (request) => {
         aspectRatio,
         model: MODEL,
         referenceImageSrc: referenceImageSrc || null,
+        references: Array.isArray(references) ? references.slice(0, 8) : [],
       }),
     })
 
