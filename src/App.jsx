@@ -52,6 +52,7 @@ const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((modu
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
 const InhouseAiStudio = lazy(() => import('./components/InhouseAiStudio').then((module) => ({ default: module.InhouseAiStudio })))
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
+const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
@@ -4886,4 +4887,15 @@ function App() {
     </div>
   )
 }
-export default App
+
+function AppRoot() {
+  if (window.location.pathname === '/privacy-policy') {
+    return (
+      <Suspense fallback={<div className="loading-panel">Loading privacy policy...</div>}>
+        <PrivacyPolicy />
+      </Suspense>
+    )
+  }
+  return <App />
+}
+export default AppRoot

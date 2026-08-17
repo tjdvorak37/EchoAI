@@ -104,7 +104,7 @@ function SupportDialog({ onClose }) {
 }
 
 export function LandingPage({ announcementMessage, onSignIn, onPurchase, children }) {
-  const [supportOpen, setSupportOpen] = useState(false)
+  const [supportOpen, setSupportOpen] = useState(() => new URLSearchParams(window.location.search).get('support') === 'privacy')
 
   return (
     <div className="landing-page" id="top">
@@ -274,6 +274,7 @@ export function LandingPage({ announcementMessage, onSignIn, onPurchase, childre
           <button type="button" className="landing-support-link" onClick={() => setSupportOpen(true)}>
             Contact support
           </button>
+          <a className="landing-support-link" href="/privacy-policy">Privacy policy</a>
           <button type="button" className="landing-admin-cta" onClick={onSignIn}>
             Admin Center
           </button>
