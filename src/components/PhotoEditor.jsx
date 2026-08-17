@@ -2057,19 +2057,10 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
       <header className="photo-creator-header">
         <div>
           <p className="small-title">Photo Creator</p>
-          <h2>Professional photo editor for social campaigns</h2>
+          <h2>Professional image editor</h2>
         </div>
         <div className="photo-creator-actions">
-          <button type="button" className="ghost-button" onClick={() => setCompactMode((prev) => !prev)}>
-            {compactMode ? 'Comfort tools' : 'Compact tools'}
-          </button>
-          <button type="button" className="ghost-button" onClick={() => setLeftSidebarCollapsed((prev) => !prev)}>
-            {leftSidebarCollapsed ? 'Show left tools' : 'Hide left tools'}
-          </button>
-          <button type="button" className="ghost-button" onClick={() => setRightSidebarCollapsed((prev) => !prev)}>
-            {rightSidebarCollapsed ? 'Show inspector' : 'Hide inspector'}
-          </button>
-          <button type="button" className="ghost-button" onClick={resetEditor}>New blank workspace</button>
+          {/* Quick Access - Only essential buttons */}
           <button
             type="button"
             className="ghost-button"
@@ -2096,16 +2087,162 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
 
       <div className={`photo-creator-grid ${compactMode ? 'compact' : ''} ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${rightSidebarCollapsed ? 'right-collapsed' : ''}`}>
         <aside className={`photo-sidebar photo-sidebar-left ${leftSidebarCollapsed ? 'collapsed' : ''}`}>
+          {/* Compact Menu Bar in Sidebar */}
+          <div className="sidebar-menu-bar" aria-label="Main menu">
+            {/* FILE MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="File" onClick={() => setOpenMenu(openMenu === 'File' ? null : 'File')}>
+                F
+              </button>
+              {openMenu === 'File' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={handleFileNew}>New</button>
+                  <button onClick={handleFileOpen}>Open Image</button>
+                  <button onClick={handleFileOpenProject}>Open Project</button>
+                  <button onClick={handleFileSave}>Save Project</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={() => handleExport('png')}>Export PNG</button>
+                  <button onClick={() => handleExport('jpeg')}>Export JPEG</button>
+                  <button onClick={() => handleExport('webp')}>Export WebP</button>
+                </div>
+              )}
+            </div>
+
+            {/* EDIT MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Edit" onClick={() => setOpenMenu(openMenu === 'Edit' ? null : 'Edit')}>
+                E
+              </button>
+              {openMenu === 'Edit' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={undo} disabled={historyCounts.past === 0}>Undo</button>
+                  <button onClick={redo} disabled={historyCounts.future === 0}>Redo</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleEditCut}>Cut</button>
+                  <button onClick={handleEditCopy}>Copy</button>
+                  <button onClick={handleEditPaste}>Paste</button>
+                  <button onClick={handleEditClear}>Clear</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleEditSelectAll}>Select All</button>
+                  <button onClick={handleEditFillForeground}>Fill with Brush</button>
+                  <button onClick={handleEditFillBackground}>Fill with BG</button>
+                </div>
+              )}
+            </div>
+
+            {/* VIEW MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="View" onClick={() => setOpenMenu(openMenu === 'View' ? null : 'View')}>
+                V
+              </button>
+              {openMenu === 'View' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={handleViewCanvasOnly}>Canvas Only</button>
+                  <button onClick={handleViewFullScreen}>Full Screen</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleViewZoomIn}>Zoom In</button>
+                  <button onClick={handleViewZoomOut}>Zoom Out</button>
+                  <button onClick={handleViewFit}>Fit</button>
+                  <button onClick={handleViewResetView}>Reset</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleViewToggleRulers}>{showRulers ? '✓' : ' '} Rulers</button>
+                  <button onClick={handleViewToggleGuides}>{showGuides ? '✓' : ' '} Guides</button>
+                  <button onClick={handleViewToggleGrid}>{showGrid ? '✓' : ' '} Grid</button>
+                </div>
+              )}
+            </div>
+
+            {/* IMAGE MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Image" onClick={() => setOpenMenu(openMenu === 'Image' ? null : 'Image')}>
+                I
+              </button>
+              {openMenu === 'Image' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={handleImageScale}>Scale...</button>
+                  <button onClick={handleImageResizeCanvas}>Canvas Size...</button>
+                  <button onClick={handleImageCrop}>Crop</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleImageRotate}>Rotate 90°</button>
+                  <button onClick={handleImageFlip}>Flip</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleImageFlatten}>Flatten</button>
+                </div>
+              )}
+            </div>
+
+            {/* LAYER MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Layer" onClick={() => setOpenMenu(openMenu === 'Layer' ? null : 'Layer')}>
+                L
+              </button>
+              {openMenu === 'Layer' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={handleLayerNew}>New</button>
+                  <button onClick={handleLayerRenameActive} disabled={!resolvedActiveLayerId}>Rename</button>
+                  <button onClick={handleLayerDuplicate} disabled={!resolvedActiveLayerId}>Duplicate</button>
+                  <button onClick={handleLayerDelete} disabled={layers.length <= 1}>Delete</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleLayerMergeDown}>Merge Down</button>
+                </div>
+              )}
+            </div>
+
+            {/* TOOLS MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Tools" onClick={() => setOpenMenu(openMenu === 'Tools' ? null : 'Tools')}>
+                T
+              </button>
+              {openMenu === 'Tools' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={() => handleToolSelect('select')}>Select</button>
+                  <button onClick={() => handleToolSelect('brush')}>Brush</button>
+                  <button onClick={() => handleToolSelect('eraser')}>Eraser</button>
+                  <button onClick={() => handleToolSelect('heal')}>Heal</button>
+                  <button onClick={handleToolCrop}>Crop</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleToolText}>Text</button>
+                  <button onClick={() => handleToolShape('rectangle')}>Rectangle</button>
+                  <button onClick={() => handleToolShape('ellipse')}>Ellipse</button>
+                </div>
+              )}
+            </div>
+
+            {/* FILTERS MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Filters" onClick={() => setOpenMenu(openMenu === 'Filters' ? null : 'Filters')}>
+                ◉
+              </button>
+              {openMenu === 'Filters' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={handleFilterBrightness}>Brightness +</button>
+                  <button onClick={handleFilterContrast}>Contrast +</button>
+                  <button onClick={handleFilterSaturation}>Saturation +</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleFilterBlur}>Blur</button>
+                  <button onClick={handleFilterSharpen}>Sharpen</button>
+                  <button onClick={handleFilterGrayscale}>Grayscale</button>
+                  <button onClick={handleFilterInvert}>Invert</button>
+                  <button onClick={handleFilterSepia}>Sepia</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={resetFilters}>Reset All</button>
+                </div>
+              )}
+            </div>
+
+            {/* Collapse button */}
+            <button type="button" className="menu-item-compact" title="Collapse" onClick={() => setLeftSidebarCollapsed((prev) => !prev)}>
+              ❮
+            </button>
+          </div>
+
           <div className="photo-sidebar-toolbar">
             <p className="section-label">Source & tools</p>
-            <button type="button" className="ghost-button" onClick={() => setLeftSidebarCollapsed((prev) => !prev)}>
-              {leftSidebarCollapsed ? 'Open' : 'Collapse'}
-            </button>
           </div>
 
           {leftSidebarCollapsed ? (
             <button type="button" className="photo-sidebar-collapsed-card" onClick={() => setLeftSidebarCollapsed(false)}>
-              Show source tools
+              Tools
             </button>
           ) : (
             <>
@@ -2249,224 +2386,6 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
         </aside>
 
         <div className="photo-stage-panel">
-          <div className="editor-menu-bar" aria-label="Editor menu bar">
-            {/* FILE MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'File' ? null : 'File')}>
-                File
-              </button>
-              {openMenu === 'File' && (
-                <div className="menu-dropdown">
-                  <button onClick={handleFileNew}>New</button>
-                  <button onClick={handleFileOpen}>Open Image</button>
-                  <button onClick={handleFileOpenProject}>Open Project</button>
-                  <button onClick={handleFileSave}>Save Project</button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={() => handleExport('png')}>Export as PNG</button>
-                  <button onClick={() => handleExport('jpeg')}>Export as JPEG</button>
-                  <button onClick={() => handleExport('webp')}>Export as WebP</button>
-                </div>
-              )}
-            </div>
-
-            {/* EDIT MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Edit' ? null : 'Edit')}>
-                Edit
-              </button>
-              {openMenu === 'Edit' && (
-                <div className="menu-dropdown">
-                  <button onClick={undo} disabled={historyCounts.past === 0}>Undo</button>
-                  <button onClick={redo} disabled={historyCounts.future === 0}>Redo</button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleEditCut}>Cut</button>
-                  <button onClick={handleEditCopy}>Copy</button>
-                  <button onClick={handleEditPaste}>Paste</button>
-                  <button onClick={handleEditClear}>Clear</button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleEditSelectAll}>Select All</button>
-                  <button onClick={handleEditFillForeground}>Fill with Brush Color</button>
-                  <button onClick={handleEditFillBackground}>Fill with Background Color</button>
-                </div>
-              )}
-            </div>
-
-            {/* VIEW MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'View' ? null : 'View')}>
-                View
-              </button>
-              {openMenu === 'View' && (
-                <div className="menu-dropdown">
-                  <button onClick={handleViewCanvasOnly}>Canvas Only</button>
-                  <button onClick={handleViewFullScreen}>Full Screen Mode</button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleViewZoomIn}>Zoom In</button>
-                  <button onClick={handleViewZoomOut}>Zoom Out</button>
-                  <button onClick={handleViewFit}>Fit to Window</button>
-                  <button onClick={handleViewResetView}>Reset View</button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleViewToggleRulers}>
-                    {showRulers ? '✓' : ' '} Show Rulers
-                  </button>
-                  <button onClick={handleViewToggleGuides}>
-                    {showGuides ? '✓' : ' '} Show Guides
-                  </button>
-                  <button onClick={handleViewToggleGrid}>
-                    {showGrid ? '✓' : ' '} Show Grid
-                  </button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleViewTogglePanels}>Toggle Panels</button>
-                </div>
-              )}
-            </div>
-
-            {/* IMAGE MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Image' ? null : 'Image')}>
-                Image
-              </button>
-              {openMenu === 'Image' && (
-                <div className="menu-dropdown">
-                  <button onClick={handleImageScale}>Scale Image...</button>
-                  <button onClick={handleImageResizeCanvas}>Canvas Size...</button>
-                  <button onClick={handleImageCrop}>Crop to Content</button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleImageRotate}>Rotate 90° CW</button>
-                  <button onClick={handleImageFlip}>Flip Horizontal</button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleImageFlatten}>Flatten Image</button>
-                </div>
-              )}
-            </div>
-
-            {/* LAYER MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Layer' ? null : 'Layer')}>
-                Layer
-              </button>
-              {openMenu === 'Layer' && (
-                <div className="menu-dropdown">
-                  <button onClick={handleLayerNew}>New Layer</button>
-                  <button onClick={handleLayerRenameActive} disabled={!resolvedActiveLayerId}>
-                    Rename Layer
-                  </button>
-                  <button onClick={handleLayerDuplicate} disabled={!resolvedActiveLayerId}>
-                    Duplicate
-                  </button>
-                  <button onClick={handleLayerDelete} disabled={layers.length <= 1}>
-                    Delete
-                  </button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleLayerAddMask} disabled={!resolvedActiveLayerId}>
-                    Add Mask
-                  </button>
-                  <button onClick={handleLayerRemoveMask} disabled={!resolvedActiveLayerId}>
-                    Remove Mask
-                  </button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleLayerMergeDown}>Merge Down</button>
-                </div>
-              )}
-            </div>
-
-            {/* SELECT MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Select' ? null : 'Select')}>
-                Select
-              </button>
-              {openMenu === 'Select' && (
-                <div className="menu-dropdown">
-                  <button onClick={handleSelectAll}>Select All</button>
-                  <button onClick={handleSelectDeselect}>Deselect</button>
-                  <button onClick={handleSelectInvert}>Invert</button>
-                </div>
-              )}
-            </div>
-
-            {/* TOOLS MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Tools' ? null : 'Tools')}>
-                Tools
-              </button>
-              {openMenu === 'Tools' && (
-                <div className="menu-dropdown">
-                  <button onClick={() => handleToolSelect('select')}>Selection</button>
-                  <button onClick={() => handleToolSelect('brush')}>Brush</button>
-                  <button onClick={() => handleToolSelect('eraser')}>Eraser</button>
-                  <button onClick={() => handleToolSelect('heal')}>Heal</button>
-                  <button onClick={handleToolCrop}>Crop</button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleToolText}>Text</button>
-                  <button onClick={() => handleToolShape('rectangle')}>Rectangle</button>
-                  <button onClick={() => handleToolShape('ellipse')}>Ellipse</button>
-                  <button onClick={() => handleToolShape('line')}>Line</button>
-                </div>
-              )}
-            </div>
-
-            {/* FILTERS MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Filters' ? null : 'Filters')}>
-                Filters
-              </button>
-              {openMenu === 'Filters' && (
-                <div className="menu-dropdown">
-                  <button onClick={handleFilterBrightness}>Brightness +</button>
-                  <button onClick={handleFilterContrast}>Contrast +</button>
-                  <button onClick={handleFilterSaturation}>Saturation +</button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleFilterBlur}>Blur</button>
-                  <button onClick={handleFilterSharpen}>Sharpen</button>
-                  <button onClick={handleFilterGrayscale}>Grayscale</button>
-                  <button onClick={handleFilterInvert}>Invert</button>
-                  <button onClick={handleFilterSepia}>Sepia</button>
-                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={resetFilters}>Reset All</button>
-                </div>
-              )}
-            </div>
-
-            {/* SETTINGS MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Settings' ? null : 'Settings')}>
-                Settings
-              </button>
-              {openMenu === 'Settings' && (
-                <div className="menu-dropdown">
-                  <button onClick={handleSettingsPreferences}>Preferences</button>
-                  <button onClick={() => setCompactMode((v) => !v)}>
-                    {compactMode ? 'Expand' : 'Compact'} Mode
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* WINDOW MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Window' ? null : 'Window')}>
-                Window
-              </button>
-              {openMenu === 'Window' && (
-                <div className="menu-dropdown">
-                  <button onClick={handleWindowResetLayout}>Reset Layout</button>
-                </div>
-              )}
-            </div>
-
-            {/* HELP MENU */}
-            <div className="menu-container">
-              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Help' ? null : 'Help')}>
-                Help
-              </button>
-              {openMenu === 'Help' && (
-                <div className="menu-dropdown">
-                  <button onClick={handleHelpAbout}>About</button>
-                </div>
-              )}
-            </div>
-          </div>
-
           <div className="stage-chrome">
             <div>
               <p className="section-label">Canvas</p>
