@@ -1187,6 +1187,36 @@ export const authService = {
     return normalizeContactCard(data)
   },
 
+  async deactivateMyAccount() {
+    if (!isSupabaseConfigured) return { accessStatus: 'deactivated' }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError || !userData.user) throw new Error('You must be signed in to deactivate your account.')
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ access_status: 'deactivated' })
+      .eq('id', userData.user.id)
+      .select('access_status')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  async deleteMyAccount() {
+    if (!isSupabaseConfigured) return { deleted: true }
+
+    const { data, error } = await supabase.functions.invoke('account-actions', {
+      body: { action: 'delete' },
+    })
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message || 'Unable to delete your account.')
+    }
+    return data
+  },
+
   async requestPasswordReset(email) {
     if (!email) {
       throw new Error('Email is required.')

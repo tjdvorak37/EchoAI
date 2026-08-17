@@ -103,6 +103,21 @@ button {
   background: #dfeaff;
 }
 
+.danger-button {
+  border: 1px solid #fecdd3;
+  border-radius: 999px;
+  padding: 0.62rem 1rem;
+  color: #be123c;
+  background: #fff1f2;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.danger-button:hover {
+  background: #ffe4e6;
+}
+
 .primary-button,
 button[type='submit'] {
   background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);

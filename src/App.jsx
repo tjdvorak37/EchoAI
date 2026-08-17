@@ -318,6 +318,8 @@ function App() {
   const [myEntitlement, setMyEntitlement] = useState(null)
   const [billingPortalLoading, setBillingPortalLoading] = useState(false)
   const [billingPortalError, setBillingPortalError] = useState('')
+  const [accountActionError, setAccountActionError] = useState('')
+  const [accountActionLoading, setAccountActionLoading] = useState(false)
   const [referralSummary, setReferralSummary] = useState(null)
   const [referralCopied, setReferralCopied] = useState(false)
   // Captured once on load so it survives the user navigating around before buying.
@@ -2354,6 +2356,33 @@ function App() {
     }
   }
 
+  const handleDeactivateAccount = async () => {
+    if (!window.confirm('Deactivate your account? You will be signed out and can contact support to restore access.')) return
+    setAccountActionError('')
+    setAccountActionLoading(true)
+    try {
+      await authService.deactivateMyAccount()
+      await signOut()
+    } catch (error) {
+      setAccountActionError(error.message)
+      setAccountActionLoading(false)
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('Permanently delete your account and associated data? This cannot be undone.')) return
+    setAccountActionError('')
+    setAccountActionLoading(true)
+    try {
+      await authService.deleteMyAccount()
+      setSession(null)
+      setAuthView('landing')
+    } catch (error) {
+      setAccountActionError(error.message)
+      setAccountActionLoading(false)
+    }
+  }
+
   const handleLoadReferral = async () => {
     setBillingPortalError('')
 
@@ -3110,6 +3139,7 @@ function App() {
           ['photo', 'Photo Creator'],
           ['studio', 'Video Studio'],
           ['integrations', 'Integrations'],
+          ['account', 'Manage account'],
           ['help', 'How To'],
           ...(canViewManagementBoard ? [['admin', 'IT / Management']] : []),
         ].map(([key, label]) => (
@@ -4725,6 +4755,45 @@ function App() {
           </section>
         )}
 
+        {activeTab === 'account' && (
+          <section className="panel">
+            <h2>Manage account</h2>
+            <p className="panel-note">Update your information, manage billing, or control your EchoAI account.</p>
+
+            <h3 className="section-label">Personal information</h3>
+            <div className="list-row">
+              <div>
+                <p>{contactCard?.fullName || session?.email}</p>
+                <span className="muted">{session?.email} {contactCard?.company ? `• ${contactCard.company}` : ''}</span>
+              </div>
+              <button type="button" className="ghost-button" onClick={openContactCard}>Edit information</button>
+            </div>
+
+            <h3 className="section-label">Subscription and payments</h3>
+            <div className="list-row">
+              <div>
+                <p>{myEntitlement?.plan ? `${getPlan(myEntitlement.plan).label} plan` : 'Your EchoAI subscription'}</p>
+                <span className="muted">Update payment method, upgrade, downgrade, or cancel your subscription.</span>
+              </div>
+              <button type="button" className="ghost-button" disabled={billingPortalLoading || !isSupabaseConfigured} onClick={handleOpenBillingPortal}>
+                {billingPortalLoading ? 'Opening...' : 'Manage billing'}
+              </button>
+            </div>
+            {billingPortalError && <span className="field-error">{billingPortalError}</span>}
+
+            <h3 className="section-label">Account access</h3>
+            <div className="list-row">
+              <div><p>Deactivate account</p><span className="muted">Sign out and disable access until support restores the account.</span></div>
+              <button type="button" className="ghost-button" disabled={accountActionLoading || !isSupabaseConfigured} onClick={handleDeactivateAccount}>Deactivate</button>
+            </div>
+            <div className="list-row">
+              <div><p>Delete account and data</p><span className="muted">Permanently remove your account and associated records.</span></div>
+              <button type="button" className="danger-button" disabled={accountActionLoading || !isSupabaseConfigured} onClick={handleDeleteAccount}>Delete account</button>
+            </div>
+            {accountActionError && <span className="field-error">{accountActionError}</span>}
+          </section>
+        )}
+
         {activeTab === 'admin' && ['admin', 'manager', 'it'].includes(session?.role || '') && (
           <Suspense fallback={loadingPanel}>
             <AdminPanel
@@ -4889,7 +4958,8 @@ function App() {
 }
 
 function AppRoot() {
-  if (window.location.pathname === '/privacy-policy') {
+  const normalizedPath = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (normalizedPath === '/privacy-policy') {
     return (
       <Suspense fallback={<div className="loading-panel">Loading privacy policy...</div>}>
         <PrivacyPolicy />
