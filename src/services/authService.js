@@ -68,6 +68,21 @@ const normalizeAiAgentConfig = (value) => {
   }
 }
 
+const normalizeAiAgentConnection = (record) => ({
+  id: record.id,
+  name: record.name || 'AI tool',
+  provider: record.provider || 'custom_router',
+  endpoint: record.endpoint || '',
+  model: record.model || 'default',
+  capabilities: Array.isArray(record.capabilities) ? record.capabilities : [],
+  routing: record.routing || { strategy: 'best_quality', allowFallback: true },
+  enabled: record.enabled !== false,
+  status: record.status || 'not_connected',
+  lastError: record.last_error || '',
+  lastCheckedAt: record.last_checked_at || '',
+  updatedAt: record.updated_at || '',
+})
+
 const normalizeMember = (record) => ({
   id: record.id,
   fullName: record.full_name,
@@ -808,6 +823,48 @@ export const authService = {
     }
 
     return normalizeAiAgentConfig(data?.config)
+  },
+
+  async listAiAgentConnections() {
+    if (!isSupabaseConfigured) return []
+    const { data, error } = await supabase
+      .from('ai_agent_connections')
+      .select('id, user_id, name, provider, endpoint, model, capabilities, routing, enabled, status, last_error, last_checked_at, created_at, updated_at')
+      .order('updated_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return (data || []).map(normalizeAiAgentConnection)
+  },
+
+  async saveAiAgentConnection(connection) {
+    const payload = {
+      id: connection.id || undefined,
+      user_id: connection.userId,
+      name: connection.name.trim(),
+      provider: connection.provider || 'custom_router',
+      endpoint: connection.endpoint.trim(),
+      ...(connection.apiKey !== undefined ? { api_key: connection.apiKey.trim() } : {}),
+      model: connection.model?.trim() || 'default',
+      capabilities: connection.capabilities || [],
+      routing: connection.routing || { strategy: 'best_quality', allowFallback: true },
+      enabled: connection.enabled !== false,
+      status: connection.status || 'not_connected',
+      last_error: connection.lastError || null,
+      last_checked_at: connection.lastCheckedAt || null,
+      updated_at: new Date().toISOString(),
+    }
+    if (!isSupabaseConfigured) return normalizeAiAgentConnection({ ...payload, id: connection.id || `demo-${Date.now()}` })
+    const { data, error } = await supabase
+      .from('ai_agent_connections')
+      .upsert(payload)
+      .select('id, user_id, name, provider, endpoint, model, capabilities, routing, enabled, status, last_error, last_checked_at, created_at, updated_at')
+      .single()
+    if (error) throw new Error(error.message)
+    return normalizeAiAgentConnection(data)
+  },
+
+  async deleteAiAgentConnection(connectionId) {
+    const { error } = await supabase.from('ai_agent_connections').delete().eq('id', connectionId)
+    if (error) throw new Error(error.message)
   },
 
   // --- Multi-factor authentication ----------------------------------------

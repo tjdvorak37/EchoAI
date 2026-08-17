@@ -65,7 +65,12 @@ Deno.serve(async (request) => {
       return json({ error: `Image provider failed (${upstream.status}).`, detail: detail.slice(0, 500) }, 502, request)
     }
 
-    return json(await upstream.json(), 200, request)
+    const rawBody = await upstream.text()
+    try {
+      return json(JSON.parse(rawBody), 200, request)
+    } catch {
+      return json({ error: 'Image provider returned an invalid JSON response.', detail: rawBody.slice(0, 500) }, 502, request)
+    }
   } catch (error) {
     console.error('ai-image failed', error)
     return json({ error: 'Image generation is unavailable right now.' }, 500, request)

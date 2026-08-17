@@ -39,6 +39,7 @@ import { socialIntegrationService } from './services/socialIntegrationService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import echoMascot from './assets/echo-mascot.svg'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
+import { AiToolManager } from './components/AiToolManager'
 
 const VideoEditor = lazy(() => import('./components/VideoEditor').then((module) => ({ default: module.VideoEditor })))
 const PhotoEditor = lazy(() => import('./components/PhotoEditor').then((module) => ({ default: module.PhotoEditor })))
@@ -281,6 +282,7 @@ function App() {
   const [aiAgentTesting, setAiAgentTesting] = useState(false)
   const [aiAgentFeedback, setAiAgentFeedback] = useState('')
   const [aiAgentFeedbackTone, setAiAgentFeedbackTone] = useState('info')
+  const [aiAgentConnections, setAiAgentConnections] = useState([])
   const [workspaceFolders, setWorkspaceFolders] = useState(workspaceFoldersSeed)
   const [workspaceAssets, setWorkspaceAssets] = useState(workspaceAssetsSeed)
   const [selectedFolderId, setSelectedFolderId] = useState('folder-root')
@@ -394,6 +396,13 @@ function App() {
 
       setAiAgentConfig(nextAiAgentConfig)
       setAiAgentDraft(nextAiAgentConfig)
+      const connections = await authService.listAiAgentConnections()
+      setAiAgentConnections(connections)
+      if (connections[0]) {
+        const active = { ...createDefaultAiAgentConfig(), ...connections[0], connectionId: connections[0].id, enabled: connections[0].enabled }
+        setAiAgentConfig(active)
+        setAiAgentDraft(active)
+      }
       return
     }
 
@@ -1490,6 +1499,36 @@ function App() {
     setAiAgentConfig(normalized)
     setAiAgentDraft(normalized)
     return normalized
+  }
+
+  const saveAiAgentConnection = async (connection) => {
+    const saved = await authService.saveAiAgentConnection(connection)
+    setAiAgentConnections((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+    const active = { ...createDefaultAiAgentConfig(), ...saved, connectionId: saved.id }
+    setAiAgentConfig(active)
+    setAiAgentDraft(active)
+    return saved
+  }
+
+  const deleteAiAgentConnection = async (connectionId) => {
+    await authService.deleteAiAgentConnection(connectionId)
+    setAiAgentConnections((current) => current.filter((item) => item.id !== connectionId))
+    if (aiAgentConfig.connectionId === connectionId) {
+      setAiAgentConfig(createDefaultAiAgentConfig())
+      setAiAgentDraft(createDefaultAiAgentConfig())
+    }
+  }
+
+  const resyncAiAgentConnection = async (connection) => {
+    const { data, error } = await supabase.functions.invoke('inhouse-ai', {
+      body: { connectionId: connection.id, mode: 'test', capability: 'test', contractVersion: '2.0', prompt: 'EchoAI connection test' },
+    })
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message)
+    }
+    if (data?.error) throw new Error(data.error)
+    setAiAgentConnections((current) => current.map((item) => item.id === connection.id ? { ...item, status: 'connected', lastError: '' } : item))
   }
 
   const handleInhouseAiAsset = (asset) => {
@@ -4558,6 +4597,14 @@ function App() {
               })}
             </div>
             {integrationError && <span className="field-error">{integrationError}</span>}
+
+            <AiToolManager
+              connections={aiAgentConnections}
+              userId={session.id}
+              onSave={saveAiAgentConnection}
+              onDelete={deleteAiAgentConnection}
+              onResync={resyncAiAgentConnection}
+            />
 
             <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <h3>In-house AI engine</h3>
