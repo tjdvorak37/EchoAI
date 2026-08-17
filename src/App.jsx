@@ -40,6 +40,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabase'
 import echoMascot from './assets/echo-mascot.svg'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
 import { AiToolManager } from './components/AiToolManager'
+import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 
 const VideoEditor = lazy(() => import('./components/VideoEditor').then((module) => ({ default: module.VideoEditor })))
 const PhotoEditor = lazy(() => import('./components/PhotoEditor').then((module) => ({ default: module.PhotoEditor })))
@@ -283,6 +284,7 @@ function App() {
   const [aiAgentFeedback, setAiAgentFeedback] = useState('')
   const [aiAgentFeedbackTone, setAiAgentFeedbackTone] = useState('info')
   const [aiAgentConnections, setAiAgentConnections] = useState([])
+  const [openAiGuideOpen, setOpenAiGuideOpen] = useState(false)
   const [workspaceFolders, setWorkspaceFolders] = useState(workspaceFoldersSeed)
   const [workspaceAssets, setWorkspaceAssets] = useState(workspaceAssetsSeed)
   const [selectedFolderId, setSelectedFolderId] = useState('folder-root')
@@ -4611,8 +4613,10 @@ function App() {
             />
 
             <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
-              <h3>In-house AI engine</h3>
-              <p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p>
+              <div className="inhouse-engine-heading">
+                <div><h3>In-house AI engine</h3><p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p></div>
+                <button type="button" className="openai-guide-button" onClick={() => setOpenAiGuideOpen(true)}>OpenAI connection guide <span aria-hidden="true">↗</span></button>
+              </div>
               <div className="agent-connection-note">
                 <strong>How connection works</strong>
                 <p>EchoAI connects to an API bridge, not a provider&apos;s public website. OpenArt, ChatGPT, and similar dashboard URLs cannot be pasted here because browsers block cross-site requests and those pages do not implement EchoAI&apos;s API contract.</p>
@@ -4796,6 +4800,8 @@ function App() {
                   }, null, 2)}</pre>
                 </div>
               </form>
+
+              <OpenAiSetupGuide open={openAiGuideOpen} onClose={() => setOpenAiGuideOpen(false)} />
             </article>
 
             {canViewManagementBoard && <>

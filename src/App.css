@@ -419,6 +419,235 @@ main {
   line-height: 1.4;
 }
 
+.inhouse-engine-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.inhouse-engine-heading h3 {
+  margin: 0;
+}
+
+.inhouse-engine-heading p {
+  margin: 0.35rem 0 0;
+}
+
+.openai-guide-button {
+  flex: 0 0 auto;
+  border: 1px solid #f59e0b;
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  color: #7c2d12;
+  background: linear-gradient(135deg, #fef3c7, #ffedd5);
+  box-shadow: 0 4px 0 #fbbf24;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.openai-guide-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #fbbf24;
+}
+
+.openai-guide-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.openai-guide-modal {
+  width: min(100%, 880px);
+  max-height: min(92vh, 920px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #c8d5eb;
+  border-radius: 16px;
+  background: var(--bg-surface);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3);
+}
+
+.openai-guide-toolbar,
+.openai-guide-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: #f8faff;
+  border-bottom: 1px solid var(--border);
+}
+
+.openai-guide-toolbar h2 {
+  margin: 0.15rem 0;
+  color: var(--primary-strong);
+}
+
+.openai-guide-toolbar span {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.openai-guide-close {
+  align-self: flex-start;
+  font-size: 1.4rem;
+}
+
+.openai-guide-document {
+  overflow-y: auto;
+  padding: clamp(1.2rem, 4vw, 2.5rem);
+}
+
+.openai-guide-intro {
+  margin-top: 0;
+  color: var(--text-soft);
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+
+.openai-guide-callout,
+.openai-guide-security {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border-left: 4px solid var(--warning);
+  background: #fff7ed;
+  color: #7c2d12;
+}
+
+.openai-guide-step {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 0.85rem;
+  margin: 1.6rem 0;
+}
+
+.openai-guide-step > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--primary);
+  font-weight: 800;
+}
+
+.openai-guide-step h3,
+.openai-guide-section h3,
+.openai-guide-security h3 {
+  margin: 0 0 0.45rem;
+  color: var(--text);
+}
+
+.openai-guide-step p,
+.openai-guide-section p,
+.openai-guide-section li,
+.openai-guide-security p {
+  margin: 0.4rem 0;
+  color: var(--text-soft);
+  line-height: 1.65;
+}
+
+.openai-guide-document code {
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  color: var(--primary-strong);
+  background: var(--bg-surface-alt);
+  font-family: monospace;
+}
+
+.openai-guide-section {
+  margin-top: 2rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--border);
+}
+
+.openai-capability-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.openai-capability-list span {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #cfe0fb;
+  border-radius: 8px;
+  color: var(--primary-strong);
+  background: #f5f9ff;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.openai-guide-actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .inhouse-engine-heading {
+    flex-direction: column;
+  }
+
+  .openai-guide-button {
+    width: 100%;
+  }
+
+  .openai-guide-toolbar {
+    align-items: flex-start;
+  }
+
+  .openai-guide-toolbar h2 {
+    font-size: 1.25rem;
+  }
+
+  .openai-capability-list {
+    grid-template-columns: 1fr;
+  }
+
+  .openai-guide-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media print {
+  body:has(.openai-guide-modal) > #root > *:not(.openai-guide-backdrop) {
+    display: none !important;
+  }
+
+  .openai-guide-backdrop {
+    position: static;
+    display: block;
+    padding: 0;
+    background: #fff;
+  }
+
+  .openai-guide-modal {
+    width: 100%;
+    max-height: none;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .openai-guide-document {
+    overflow: visible;
+  }
+
+  .openai-guide-actions,
+  .openai-guide-close {
+    display: none !important;
+  }
+}
+
 .brief-dropzone {
   min-height: 132px;
   border: 1px dashed #60a5fa;
