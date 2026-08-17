@@ -13,6 +13,55 @@ const getUser = async (request: Request) => {
   return data.user ?? null
 }
 
+const providerBaseUrl = (endpoint: string) => endpoint.replace(/\/+$/, '')
+
+const openAiRequest = async (config: Record<string, unknown>, payload: Record<string, unknown>) => {
+  const baseUrl = providerBaseUrl(String(config.endpoint))
+  const apiKey = String(config.api_key ?? config.apiKey ?? '')
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }
+
+  if (payload.mode === 'test') {
+    const response = await fetch(`${baseUrl}/models`, { headers: { Authorization: `Bearer ${apiKey}` } })
+    const body = await response.text()
+    return { response, body }
+  }
+
+  if (payload.capability === 'image' || payload.mode === 'image') {
+    const ratio = String((payload.output as Record<string, unknown> | undefined)?.aspectRatio ?? '1:1')
+    const size = ratio === '16:9' ? '1536x1024' : ratio === '9:16' ? '1024x1536' : '1024x1024'
+    const response = await fetch(`${baseUrl}/images/generations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: String(config.model || '').startsWith('gpt-image') ? config.model : 'gpt-image-1',
+        prompt: String(payload.prompt || '').slice(0, 4000),
+        size,
+        n: 1,
+      }),
+    })
+    const body = await response.text()
+    return { response, body }
+  }
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: config.model || 'gpt-4o-mini',
+      messages: [{ role: 'user', content: String(payload.prompt || '') }],
+    }),
+  })
+  const body = await response.text()
+  return { response, body }
+}
+
+const parseProviderBody = (rawBody: string, contentType: string) => {
+  if (contentType.includes('application/json')) {
+    try { return JSON.parse(rawBody) } catch { return { raw: rawBody.slice(0, 1000) } }
+  }
+  return { raw: rawBody.slice(0, 1000) }
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: getCorsHeaders(request) })
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, request)
@@ -38,30 +87,36 @@ Deno.serve(async (request) => {
   const providerApiKey = config.api_key ?? config.apiKey ?? ''
 
   try {
-    const upstream = await fetch(config.endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(providerApiKey ? { Authorization: `Bearer ${providerApiKey}` } : {}),
-      },
-      body: JSON.stringify(payload),
-    })
-    const contentType = upstream.headers.get('content-type') ?? ''
-    const rawBody = await upstream.text()
-    let responseBody: unknown = rawBody
-    if (contentType.includes('application/json') && rawBody) {
-      try {
-        responseBody = JSON.parse(rawBody)
-      } catch {
-        responseBody = { raw: rawBody.slice(0, 1000) }
-      }
-    }
+    const result = config.provider === 'openai'
+      ? await openAiRequest(config, payload)
+      : await (async () => {
+          const response = await fetch(config.endpoint as string, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(providerApiKey ? { Authorization: `Bearer ${providerApiKey}` } : {}) },
+            body: JSON.stringify(payload),
+          })
+          return { response, body: await response.text() }
+        })()
+    const upstream = result.response
+    const responseBody = parseProviderBody(result.body, upstream.headers.get('content-type') ?? '')
     if (!upstream.ok) {
       await admin.from('ai_agent_connections').update({ status: 'error', last_error: `Provider returned ${upstream.status}`, last_checked_at: new Date().toISOString() }).eq('id', payload.connectionId).eq('user_id', user.id)
       return json({ error: `AI provider returned ${upstream.status}.`, detail: responseBody }, 502, request)
     }
     if (payload.connectionId) {
       await admin.from('ai_agent_connections').update({ status: 'connected', last_error: null, last_checked_at: new Date().toISOString() }).eq('id', payload.connectionId).eq('user_id', user.id)
+    }
+    if (config.provider === 'openai' && payload.mode === 'test') {
+      return json({ status: 'ok', provider: 'openai', message: 'OpenAI API key verified.' }, 200, request)
+    }
+    if (config.provider === 'openai' && (payload.capability === 'image' || payload.mode === 'image')) {
+      const image = (responseBody as Record<string, unknown>)?.data?.[0] as Record<string, unknown> | undefined
+      return json({ imageUrl: image?.url, imageBase64: image?.b64_json, title: 'OpenAI generated image' }, 200, request)
+    }
+    if (config.provider === 'openai') {
+      const choice = (responseBody as Record<string, unknown>)?.choices?.[0] as Record<string, unknown> | undefined
+      const message = choice?.message as Record<string, unknown> | undefined
+      return json({ title: 'OpenAI response', text: message?.content || '' }, 200, request)
     }
     return json(responseBody, 200, request)
   } catch (error) {
