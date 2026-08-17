@@ -1783,6 +1783,12 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
         </aside>
 
         <div className="photo-stage-panel">
+          <div className="editor-menu-bar" aria-label="Editor menu bar">
+            {['File', 'Edit', 'View', 'Image', 'Layer', 'Select', 'Tools', 'Filters', 'Settings', 'Window', 'Help'].map((item) => (
+              <button key={item} type="button" className="menu-item">{item}</button>
+            ))}
+          </div>
+
           <div className="stage-chrome">
             <div>
               <p className="section-label">Canvas</p>
