@@ -29,6 +29,11 @@ verify_jwt = true
 # without a Supabase JWT. Requests are authorised inside the function.
 verify_jwt = false
 
+[functions.social-oauth]
+# OAuth providers redirect here without a Supabase JWT. The function validates
+# the stored, single-use state before completing the authenticated user's flow.
+verify_jwt = false
+
 [functions.public-support-ticket]
 # Public support intake validates and rate-limits requests inside the function.
 verify_jwt = false

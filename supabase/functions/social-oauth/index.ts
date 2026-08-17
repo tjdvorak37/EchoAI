@@ -14,13 +14,20 @@ type ProviderConfig = {
   scopes: string[]
 }
 
-const META_SCOPES = [
-  'pages_show_list',
-  'pages_read_engagement',
-  'pages_manage_posts',
-  'instagram_basic',
-  'instagram_content_publish',
-]
+const META_SCOPES_BY_PLATFORM: Record<'facebook' | 'instagram', string[]> = {
+  facebook: [
+    'pages_show_list',
+    'pages_read_engagement',
+    'pages_manage_posts',
+  ],
+  instagram: [
+    'pages_show_list',
+    'pages_read_engagement',
+    'pages_manage_posts',
+    'instagram_basic',
+    'instagram_content_publish',
+  ],
+}
 
 const PROVIDERS: Record<'meta' | 'youtube', ProviderConfig> = {
   meta: {
@@ -28,7 +35,7 @@ const PROVIDERS: Record<'meta' | 'youtube', ProviderConfig> = {
     tokenUrl: 'https://graph.facebook.com/v21.0/oauth/access_token',
     clientId: Deno.env.get('META_CLIENT_ID') ?? '',
     clientSecret: Deno.env.get('META_CLIENT_SECRET') ?? '',
-    scopes: META_SCOPES,
+    scopes: META_SCOPES_BY_PLATFORM.facebook,
   },
   youtube: {
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -49,6 +56,13 @@ const platformIsSupported = (value: string): value is Platform =>
 
 const providerForPlatform = (platform: Platform) =>
   platform === 'youtube' ? 'youtube' : 'meta'
+
+const scopesForPlatform = (platform: Platform, provider: ProviderConfig) => {
+  if (platform === 'facebook' || platform === 'instagram') {
+    return META_SCOPES_BY_PLATFORM[platform]
+  }
+  return provider.scopes
+}
 
 const admin = () =>
   createClient(
@@ -145,6 +159,7 @@ Deno.serve(async (request) => {
     await db.from('social_oauth_states').delete().eq('state', state)
     const platform = pending.platform
     const provider = PROVIDERS[providerForPlatform(platform)]
+    const oauthScopes = scopesForPlatform(platform, provider)
 
     try {
       const tokenResponse = await fetch(provider.tokenUrl, {
@@ -173,7 +188,7 @@ Deno.serve(async (request) => {
         access_token: account.publishingAccessToken,
         refresh_token: token.refresh_token ?? null,
         expires_at: expiresAt,
-        scope: token.scope ?? provider.scopes.join(' '),
+        scope: token.scope ?? oauthScopes.join(' '),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id,platform' })
       if (credentialResult.error) throw credentialResult.error
@@ -256,6 +271,7 @@ Deno.serve(async (request) => {
     }
 
     const provider = PROVIDERS[providerForPlatform(platform)]
+    const oauthScopes = scopesForPlatform(platform, provider)
     if (!provider.clientId || !provider.clientSecret) {
       return json({ error: `${platform} OAuth is not configured on this deployment.` }, 503, request)
     }
@@ -278,7 +294,7 @@ Deno.serve(async (request) => {
     authorizationUrl.searchParams.set('client_id', provider.clientId)
     authorizationUrl.searchParams.set('redirect_uri', FUNCTION_URL)
     authorizationUrl.searchParams.set('response_type', 'code')
-    authorizationUrl.searchParams.set('scope', provider.scopes.join(' '))
+    authorizationUrl.searchParams.set('scope', oauthScopes.join(' '))
     authorizationUrl.searchParams.set('state', state)
     if (platform === 'youtube') {
       authorizationUrl.searchParams.set('access_type', 'offline')
