@@ -58,6 +58,7 @@ const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((modu
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
+const AI_GENERATIONS_FOLDER_ID = 'folder-ai-generations'
 const readUserData = (userId) => {
   try { return JSON.parse(localStorage.getItem(getUserKey(userId))) } catch { return null }
 }
@@ -373,9 +374,10 @@ function App() {
     setCompanySocialAccounts(d.companySocialAccounts ?? [])
     setRepostQueue(d.repostQueue ?? [])
     setUserReposts(d.userReposts ?? [])
-    setWorkspaceFolders(
-      d.workspaceFolders ?? [{ id: 'folder-root', name: 'My workspace', parentId: null, createdAt: new Date().toISOString() }],
-    )
+    const savedFolders = d.workspaceFolders ?? [{ id: 'folder-root', name: 'My workspace', parentId: null, createdAt: new Date().toISOString() }]
+    setWorkspaceFolders(savedFolders.some((folder) => folder.id === AI_GENERATIONS_FOLDER_ID)
+      ? savedFolders
+      : [...savedFolders, { id: AI_GENERATIONS_FOLDER_ID, name: 'AI Generations', parentId: 'folder-root', createdAt: new Date().toISOString(), system: true }])
     setWorkspaceAssets(hydrateWorkspaceAssets(d.workspaceAssets ?? []))
 
     await loadContactCard(user)
@@ -1431,10 +1433,10 @@ function App() {
       type: project.imageSrc ? 'image' : 'document',
       mime: project.imageSrc ? 'image/png' : 'application/json',
       size: project.imageSrc ? Math.round((project.imageSrc.length || 0) * 0.72) : 0,
-      folderId: selectedFolderId,
+      folderId: AI_GENERATIONS_FOLDER_ID,
       createdAt: new Date().toISOString(),
       previewUrl: project.imageSrc || '',
-      summary: `AI-generated ${project.outputType}: ${project.headline || project.title}`,
+      summary: `AI-generated ${project.outputType}: ${project.headline || project.title} • Saved automatically in AI Generations`,
       // Store the full project metadata so it can be retrieved/edited later
       projectMetadata: {
         title: project.title,
@@ -1539,9 +1541,10 @@ function App() {
     setWorkspaceAssets((prev) => [{
       id: `asset_${Date.now()}`,
       size: 0,
-      folderId: selectedFolderId,
+      folderId: AI_GENERATIONS_FOLDER_ID,
       createdAt: new Date().toISOString(),
       ...asset,
+      summary: `${asset.summary || 'AI-generated media'} • Saved automatically in AI Generations`,
     }, ...prev])
   }
 
@@ -3397,8 +3400,9 @@ function App() {
               <div className="asset-list">
                 {workspaceFolders
                   .filter((folder) => folder.parentId === selectedFolderId)
+                  .sort((left, right) => Number(Boolean(right.system)) - Number(Boolean(left.system)))
                   .map((folder) => (
-                    <div key={folder.id} className="asset-card">
+                    <div key={folder.id} className={`asset-card ${folder.system ? 'ai-generations-folder' : ''}`}>
                       {editingItem?.type === 'folder' && editingItem?.id === folder.id ? (
                         <div className="asset-edit-row">
                           <input
@@ -3419,8 +3423,8 @@ function App() {
                       ) : (
                         <>
                           <button type="button" className="asset-card-main" onClick={() => setSelectedFolderId(folder.id)}>
-                            <strong>📁 {folder.name}</strong>
-                            <span>Subfolder</span>
+                            <strong>{folder.system ? '✨' : '📁'} {folder.name}</strong>
+                            <span>{folder.system ? 'Generated images and creative history' : 'Subfolder'}</span>
                           </button>
                           <div className="asset-actions">
                             <button type="button" className="asset-action-button" onClick={() => startRenameItem('folder', folder.id, folder.name)}>Rename</button>
@@ -4120,6 +4124,7 @@ function App() {
                 key={creativeProject?.imageSrc || 'photo-editor'}
                 assets={workspaceAssets}
                 onExport={handlePhotoExport}
+                  onGeneratedAsset={handleInhouseAiAsset}
                 agentConfig={aiAgentConfig}
                 brandKit={brandKit}
                 initialProject={creativeProject?.outputType !== 'video' ? creativeProject : null}

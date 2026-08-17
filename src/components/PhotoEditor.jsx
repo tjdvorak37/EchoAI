@@ -708,7 +708,7 @@ const renderComposition = async ({
   return canvas.toDataURL('image/png')
 }
 
-export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialProject }) {
+export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, brandKit, initialProject }) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [uploadedImage, setUploadedImage] = useState('')
@@ -1358,6 +1358,14 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
       setUploadedImage('')
       setActiveTool('crop')
       setNotice(`Generated ${result.source === 'api' ? 'AI' : 'local'} concept image. Crop and retouch the image before adding final text layers.`)
+      onGeneratedAsset?.({
+        name: `AI-${slugify(aiImagePrompt)}-${Date.now()}.png`,
+        type: 'image',
+        mime: 'image/png',
+        size: Math.max(300000, Math.round(result.imageSrc.length * 0.72)),
+        previewUrl: result.imageSrc,
+        summary: `AI-generated Photo Creator image • ${result.source} • Saved automatically in AI Generations`,
+      })
       if (result.headline) setHeadline(result.headline)
       if (result.caption) setSubcopy(result.caption)
       if (result.palette && STYLE_PRESETS[result.palette]) setPresetId(result.palette)

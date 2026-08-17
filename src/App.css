@@ -419,6 +419,31 @@ main {
   line-height: 1.4;
 }
 
+.creative-auto-save-note {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  color: #166534;
+  background: #f0fdf4;
+  font-weight: 700;
+}
+
+.ai-generations-folder {
+  border: 2px solid #fbbf24;
+  background: linear-gradient(135deg, #fff7ed, #fefce8);
+  box-shadow: 0 8px 18px rgba(245, 158, 11, 0.16);
+}
+
+.ai-generations-folder strong {
+  color: #92400e;
+}
+
+.ai-generations-folder span {
+  color: #b45309;
+  font-weight: 700;
+}
+
 .inhouse-engine-heading {
   display: flex;
   align-items: flex-start;

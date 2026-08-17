@@ -20,6 +20,7 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
   const [project, setProject] = useState(null)
   const [saving, setSaving] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+  const [autoSaved, setAutoSaved] = useState(false)
   const inputRef = useRef(null)
 
   const addFiles = async (files) => {
@@ -74,7 +75,7 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
     setBusy(true)
     setError('')
     try {
-      setProject(await buildCreativeProject({
+      const generatedProject = await buildCreativeProject({
         instruction,
         outputType,
         sources,
@@ -83,7 +84,10 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
           : providerChoice === 'configured'
             ? agentConfig
             : { ...agentConfig, provider: providerChoice, enabled: true },
-      }))
+          })
+          setProject(generatedProject)
+          await onSaveToWorkspace(generatedProject)
+          setAutoSaved(true)
     } catch (generationError) {
       setError(generationError.message)
     } finally {
@@ -310,6 +314,7 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
               </ol>
             )}
             {project.warning && <p className="muted">{project.warning}</p>}
+            {autoSaved && <p className="creative-auto-save-note">✓ Saved automatically to AI Generations</p>}
             <div className="brief-result-actions">
               {(project.outputType === 'flyer' || project.outputType === 'image') && (
                 <button type="button" className="primary-button" onClick={() => onEditProject(project)}>Edit visual</button>
