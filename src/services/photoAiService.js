@@ -205,7 +205,8 @@ export async function generatePhotoConcept({ prompt, style, aspectRatio, referen
     })
 
     if (error) {
-      throw new Error(error.message)
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message)
     }
 
     const imageSrc = await readResponseImage(payload)

@@ -88,6 +88,7 @@ export const runUserAiAgent = async ({ agentConfig, mode, payload, prompt, perso
     mode,
     capability: resolveCapability(mode),
     model: agentConfig.model || 'default',
+    provider: agentConfig.provider || 'custom_router',
     agentName: agentConfig.name || 'My AI Agent',
     capabilities: agentConfig.capabilities || [],
     routing: agentConfig.routing || { strategy: 'best_quality', allowFallback: true },

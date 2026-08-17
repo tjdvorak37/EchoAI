@@ -402,6 +402,23 @@ main {
   gap: 1rem;
 }
 
+.creative-provider-select {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.creative-provider-select select {
+  max-width: 100%;
+}
+
+.creative-provider-select small {
+  color: var(--text-muted);
+  font-weight: 400;
+  line-height: 1.4;
+}
+
 .brief-dropzone {
   min-height: 132px;
   border: 1px dashed #60a5fa;

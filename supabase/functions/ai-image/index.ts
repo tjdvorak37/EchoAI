@@ -60,7 +60,9 @@ Deno.serve(async (request) => {
     })
 
     if (!upstream.ok) {
-      return json({ error: `Image generation failed (${upstream.status})` }, 502, request)
+      const detail = await upstream.text().catch(() => '')
+      console.error('image provider rejected request', upstream.status, detail.slice(0, 500))
+      return json({ error: `Image provider failed (${upstream.status}).`, detail: detail.slice(0, 500) }, 502, request)
     }
 
     return json(await upstream.json(), 200, request)

@@ -97,6 +97,7 @@ const isPlaceholderAccountHandle = (platformName, accountName) => {
 const createDefaultAiAgentConfig = () => ({
   enabled: false,
   name: 'My AI Agent',
+  provider: 'custom_router',
   endpoint: '',
   apiKey: '',
   model: '',
@@ -1458,6 +1459,7 @@ function App() {
           endpoint: aiAgentDraft.endpoint.trim(),
           apiKey: aiAgentDraft.apiKey.trim(),
           model: aiAgentDraft.model.trim(),
+          provider: aiAgentDraft.provider || 'custom_router',
           status: aiAgentDraft.endpoint.trim() ? 'connected' : 'not connected',
           message: aiAgentDraft.endpoint.trim()
             ? 'Your in-house AI is ready for its enabled creative capabilities.'
@@ -4604,6 +4606,20 @@ function App() {
                     onChange={(event) => handleAiAgentDraftChange('name', event.target.value)}
                     placeholder="My AI Agent"
                   />
+                </label>
+                <label>
+                  Preferred AI tool
+                  <select
+                    value={aiAgentDraft.provider || 'custom_router'}
+                    onChange={(event) => handleAiAgentDraftChange('provider', event.target.value)}
+                  >
+                    <option value="echoai">EchoAI hosted tools</option>
+                    <option value="openai">OpenAI / ChatGPT image tools</option>
+                    <option value="openart">OpenArt</option>
+                    <option value="anthropic">Anthropic / Claude</option>
+                    <option value="custom_router">My AI router or custom bridge</option>
+                  </select>
+                  <small className="muted">This label is sent to your bridge. The endpoint must route to the selected provider server-side.</small>
                 </label>
                 <label>
                   Endpoint URL

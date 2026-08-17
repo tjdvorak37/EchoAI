@@ -51,6 +51,7 @@ const normalizeAiAgentConfig = (value) => {
   return {
     enabled: Boolean(value.enabled),
     name: value.name || 'My AI Agent',
+    provider: value.provider || 'custom_router',
     endpoint: value.endpoint || '',
     apiKey: value.apiKey || '',
     model: value.model || '',
