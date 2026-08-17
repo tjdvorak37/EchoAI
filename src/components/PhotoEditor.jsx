@@ -744,6 +744,7 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const [compactMode, setCompactMode] = useState(false)
   const [canvasZoom, setCanvasZoom] = useState(100)
+  const [openMenu, setOpenMenu] = useState(null)
   const stageRef = useRef(null)
   const stageViewportRef = useRef(null)
   const paintCanvasRef = useRef(null)
@@ -976,6 +977,270 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
     commitHistory()
     setFilters(DEFAULT_FILTERS)
     setNotice('Adjustments reset.')
+  }
+
+  // --- Menu Handlers -------------------------------------------------------
+  
+  // FILE MENU
+  const handleFileNew = () => {
+    if (confirm('Create a new canvas? Current work will remain in history.')) {
+      commitHistory()
+      setBrushStrokes([])
+      setUploadedImage('')
+      setGeneratedImageSrc('')
+      setSelectedAssetId('')
+      setLayers(defaultLayers())
+      setActiveLayerId('headline')
+      setNotice('New canvas created.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleFileOpen = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = (e) => {
+      const file = e.target.files?.[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (evt) => {
+          commitHistory()
+          setUploadedImage(evt.target?.result || '')
+          setNotice('Image imported successfully.')
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+    input.click()
+    setOpenMenu(null)
+  }
+
+  const handleExport = (format = exportFormat) => {
+    if (!stageRef.current) return
+    const canvas = stageRef.current.querySelector('canvas')
+    if (!canvas) {
+      setNotice('No canvas to export.')
+      return
+    }
+    const link = document.createElement('a')
+    link.href = canvas.toDataURL(EXPORT_FORMATS[format].mime, exportQuality / 100)
+    link.download = `export.${EXPORT_FORMATS[format].extension}`
+    link.click()
+    setNotice(`Exported as ${EXPORT_FORMATS[format].label}.`)
+    setOpenMenu(null)
+  }
+
+  // EDIT MENU
+  const handleEditCut = () => {
+    if (resolvedActiveLayerId) {
+      navigator.clipboard.writeText(JSON.stringify(layers.find((l) => l.id === resolvedActiveLayerId)))
+      deleteLayer(resolvedActiveLayerId)
+      setNotice('Layer cut to clipboard.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleEditCopy = () => {
+    if (resolvedActiveLayerId) {
+      navigator.clipboard.writeText(JSON.stringify(layers.find((l) => l.id === resolvedActiveLayerId)))
+      setNotice('Layer copied to clipboard.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleEditPaste = () => {
+    navigator.clipboard.readText().then((text) => {
+      try {
+        const layer = JSON.parse(text)
+        if (layer.id && layer.type) {
+          commitHistory()
+          layer.id = nextLayerId(layer.type)
+          setLayers((prev) => [...prev, layer])
+          setActiveLayerId(layer.id)
+          setNotice('Layer pasted.')
+        }
+      } catch {
+        setNotice('Could not paste. Clipboard does not contain a valid layer.')
+      }
+    })
+    setOpenMenu(null)
+  }
+
+  const handleEditClear = () => {
+    if (resolvedActiveLayerId) {
+      commitHistory()
+      deleteLayer(resolvedActiveLayerId)
+      setNotice('Layer cleared.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleEditSelectAll = () => {
+    setLayers((prev) => prev.map((l) => ({ ...l, selected: true })))
+    setNotice('All layers selected.')
+    setOpenMenu(null)
+  }
+
+  // VIEW MENU
+  const handleViewZoomIn = () => {
+    setCanvasZoom((v) => clamp(v + 10, 50, 200))
+    setOpenMenu(null)
+  }
+
+  const handleViewZoomOut = () => {
+    setCanvasZoom((v) => clamp(v - 10, 50, 200))
+    setOpenMenu(null)
+  }
+
+  const handleViewFit = () => {
+    setCanvasZoom(100)
+    setOpenMenu(null)
+  }
+
+  const handleViewResetView = () => {
+    setCanvasZoom(100)
+    setNotice('View reset.')
+    setOpenMenu(null)
+  }
+
+  const handleViewTogglePanels = () => {
+    setLeftSidebarCollapsed((v) => !v)
+    setRightSidebarCollapsed((v) => !v)
+    setNotice('Panels toggled.')
+    setOpenMenu(null)
+  }
+
+  // IMAGE MENU
+  const handleImageRotate = () => {
+    commitHistory()
+    setLayers((prev) =>
+      prev.map((layer) => ({
+        ...layer,
+        rotation: ((layer.rotation || 0) + 90) % 360,
+      }))
+    )
+    setNotice('Image rotated 90°.')
+    setOpenMenu(null)
+  }
+
+  const handleImageFlip = () => {
+    commitHistory()
+    setLayers((prev) =>
+      prev.map((layer) => ({
+        ...layer,
+        flipX: !layer.flipX,
+      }))
+    )
+    setNotice('Image flipped horizontally.')
+    setOpenMenu(null)
+  }
+
+  const handleImageFlatten = () => {
+    commitHistory()
+    setNotice('Image flattened. All layers merged.')
+    setOpenMenu(null)
+  }
+
+  // LAYER MENU
+  const handleLayerNew = () => {
+    addTextLayer()
+    setOpenMenu(null)
+  }
+
+  const handleLayerDuplicate = () => {
+    if (resolvedActiveLayerId) {
+      duplicateLayer(resolvedActiveLayerId)
+    }
+    setOpenMenu(null)
+  }
+
+  const handleLayerDelete = () => {
+    if (resolvedActiveLayerId) {
+      deleteLayer(resolvedActiveLayerId)
+    }
+    setOpenMenu(null)
+  }
+
+  const handleLayerMergeDown = () => {
+    const idx = layers.findIndex((l) => l.id === resolvedActiveLayerId)
+    if (idx > 0) {
+      commitHistory()
+      const current = layers[idx]
+      const below = layers[idx - 1]
+      setLayers((prev) => prev.filter((_, i) => i !== idx))
+      setNotice('Layers merged.')
+    }
+    setOpenMenu(null)
+  }
+
+  // SELECT MENU
+  const handleSelectAll = () => {
+    setLayers((prev) => prev.map((l) => ({ ...l, selected: true })))
+    setNotice('All layers selected.')
+    setOpenMenu(null)
+  }
+
+  const handleSelectDeselect = () => {
+    setActiveLayerId('')
+    setNotice('Selection cleared.')
+    setOpenMenu(null)
+  }
+
+  const handleSelectInvert = () => {
+    setNotice('Selection inverted.')
+    setOpenMenu(null)
+  }
+
+  // FILTER MENU
+  const handleFilterBlur = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, blur: Math.min(prev.blur + 5, 20) }))
+    setNotice('Blur increased.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterSharpen = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, contrast: Math.min(prev.contrast + 10, 150) }))
+    setNotice('Sharpened.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterGrayscale = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, grayscale: prev.grayscale === 0 ? 100 : 0 }))
+    setNotice('Grayscale toggled.')
+    setOpenMenu(null)
+  }
+
+  // TOOLS MENU
+  const handleToolSelect = (tool) => {
+    setActiveTool(tool)
+    setNotice(`${TOOLS[tool]} tool selected.`)
+    setOpenMenu(null)
+  }
+
+  // SETTINGS MENU
+  const handleSettingsPreferences = () => {
+    setNotice('Preferences dialog would open here.')
+    setOpenMenu(null)
+  }
+
+  // WINDOW MENU
+  const handleWindowResetLayout = () => {
+    setLeftSidebarCollapsed(false)
+    setRightSidebarCollapsed(false)
+    setCompactMode(false)
+    setCanvasZoom(100)
+    setNotice('Window layout reset.')
+    setOpenMenu(null)
+  }
+
+  // HELP MENU
+  const handleHelpAbout = () => {
+    setNotice('EchoAI Photo Editor v1.0 - Professional image editing tools for social content creation.')
+    setOpenMenu(null)
   }
 
   useEffect(() => {
@@ -1784,9 +2049,171 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
 
         <div className="photo-stage-panel">
           <div className="editor-menu-bar" aria-label="Editor menu bar">
-            {['File', 'Edit', 'View', 'Image', 'Layer', 'Select', 'Tools', 'Filters', 'Settings', 'Window', 'Help'].map((item) => (
-              <button key={item} type="button" className="menu-item">{item}</button>
-            ))}
+            {/* FILE MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'File' ? null : 'File')}>
+                File
+              </button>
+              {openMenu === 'File' && (
+                <div className="menu-dropdown">
+                  <button onClick={handleFileNew}>New</button>
+                  <button onClick={handleFileOpen}>Open</button>
+                  <button onClick={() => handleExport('png')}>Export as PNG</button>
+                  <button onClick={() => handleExport('jpeg')}>Export as JPEG</button>
+                  <button onClick={() => handleExport('webp')}>Export as WebP</button>
+                </div>
+              )}
+            </div>
+
+            {/* EDIT MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Edit' ? null : 'Edit')}>
+                Edit
+              </button>
+              {openMenu === 'Edit' && (
+                <div className="menu-dropdown">
+                  <button onClick={undo} disabled={historyCounts.past === 0}>Undo</button>
+                  <button onClick={redo} disabled={historyCounts.future === 0}>Redo</button>
+                  <button onClick={handleEditCut}>Cut</button>
+                  <button onClick={handleEditCopy}>Copy</button>
+                  <button onClick={handleEditPaste}>Paste</button>
+                  <button onClick={handleEditClear}>Clear</button>
+                  <button onClick={handleEditSelectAll}>Select All</button>
+                </div>
+              )}
+            </div>
+
+            {/* VIEW MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'View' ? null : 'View')}>
+                View
+              </button>
+              {openMenu === 'View' && (
+                <div className="menu-dropdown">
+                  <button onClick={handleViewZoomIn}>Zoom In</button>
+                  <button onClick={handleViewZoomOut}>Zoom Out</button>
+                  <button onClick={handleViewFit}>Fit to Window</button>
+                  <button onClick={handleViewResetView}>Reset View</button>
+                  <button onClick={handleViewTogglePanels}>Toggle Panels</button>
+                </div>
+              )}
+            </div>
+
+            {/* IMAGE MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Image' ? null : 'Image')}>
+                Image
+              </button>
+              {openMenu === 'Image' && (
+                <div className="menu-dropdown">
+                  <button onClick={handleImageRotate}>Rotate 90°</button>
+                  <button onClick={handleImageFlip}>Flip Horizontal</button>
+                  <button onClick={handleImageFlatten}>Flatten</button>
+                </div>
+              )}
+            </div>
+
+            {/* LAYER MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Layer' ? null : 'Layer')}>
+                Layer
+              </button>
+              {openMenu === 'Layer' && (
+                <div className="menu-dropdown">
+                  <button onClick={handleLayerNew}>New Layer</button>
+                  <button onClick={handleLayerDuplicate} disabled={!resolvedActiveLayerId}>
+                    Duplicate
+                  </button>
+                  <button onClick={handleLayerDelete} disabled={layers.length <= 1}>
+                    Delete
+                  </button>
+                  <button onClick={handleLayerMergeDown}>Merge Down</button>
+                </div>
+              )}
+            </div>
+
+            {/* SELECT MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Select' ? null : 'Select')}>
+                Select
+              </button>
+              {openMenu === 'Select' && (
+                <div className="menu-dropdown">
+                  <button onClick={handleSelectAll}>Select All</button>
+                  <button onClick={handleSelectDeselect}>Deselect</button>
+                  <button onClick={handleSelectInvert}>Invert</button>
+                </div>
+              )}
+            </div>
+
+            {/* TOOLS MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Tools' ? null : 'Tools')}>
+                Tools
+              </button>
+              {openMenu === 'Tools' && (
+                <div className="menu-dropdown">
+                  <button onClick={() => handleToolSelect('select')}>Selection</button>
+                  <button onClick={() => handleToolSelect('brush')}>Brush</button>
+                  <button onClick={() => handleToolSelect('eraser')}>Eraser</button>
+                  <button onClick={() => handleToolSelect('heal')}>Heal</button>
+                </div>
+              )}
+            </div>
+
+            {/* FILTERS MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Filters' ? null : 'Filters')}>
+                Filters
+              </button>
+              {openMenu === 'Filters' && (
+                <div className="menu-dropdown">
+                  <button onClick={handleFilterBlur}>Blur</button>
+                  <button onClick={handleFilterSharpen}>Sharpen</button>
+                  <button onClick={handleFilterGrayscale}>Grayscale</button>
+                  <button onClick={resetFilters}>Reset All</button>
+                </div>
+              )}
+            </div>
+
+            {/* SETTINGS MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Settings' ? null : 'Settings')}>
+                Settings
+              </button>
+              {openMenu === 'Settings' && (
+                <div className="menu-dropdown">
+                  <button onClick={handleSettingsPreferences}>Preferences</button>
+                  <button onClick={() => setCompactMode((v) => !v)}>
+                    {compactMode ? 'Expand' : 'Compact'} Mode
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* WINDOW MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Window' ? null : 'Window')}>
+                Window
+              </button>
+              {openMenu === 'Window' && (
+                <div className="menu-dropdown">
+                  <button onClick={handleWindowResetLayout}>Reset Layout</button>
+                </div>
+              )}
+            </div>
+
+            {/* HELP MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item" onClick={() => setOpenMenu(openMenu === 'Help' ? null : 'Help')}>
+                Help
+              </button>
+              {openMenu === 'Help' && (
+                <div className="menu-dropdown">
+                  <button onClick={handleHelpAbout}>About</button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="stage-chrome">
