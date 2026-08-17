@@ -1243,6 +1243,207 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
     setOpenMenu(null)
   }
 
+  // EXPANDED FILE MENU
+  const handleFileSave = () => {
+    const projectData = JSON.stringify({ layers, filters, preset: presetId, aspect: aspectRatio })
+    const link = document.createElement('a')
+    link.href = `data:text/json,${encodeURIComponent(projectData)}`
+    link.download = `project-${Date.now()}.echoai`
+    link.click()
+    setNotice('Project saved.')
+    setOpenMenu(null)
+  }
+
+  const handleFileOpenProject = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.echoai,application/json'
+    input.onchange = (e) => {
+      const file = e.target.files?.[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (evt) => {
+          try {
+            const project = JSON.parse(evt.target?.result || '{}')
+            if (project.layers && project.filters) {
+              commitHistory()
+              setLayers(project.layers)
+              setFilters(project.filters)
+              setPresetId(project.preset || 'aurora')
+              setAspectRatio(project.aspect || '4:5')
+              setNotice('Project loaded successfully.')
+            }
+          } catch {
+            setNotice('Failed to load project file.')
+          }
+        }
+        reader.readAsText(file)
+      }
+    }
+    input.click()
+    setOpenMenu(null)
+  }
+
+  // EXPANDED EDIT MENU
+  const handleEditFillForeground = () => {
+    if (resolvedActiveLayerId) {
+      commitHistory()
+      updateLayer(resolvedActiveLayerId, { color: brushColor })
+      setNotice('Filled with brush color.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleEditFillBackground = () => {
+    if (resolvedActiveLayerId) {
+      commitHistory()
+      updateLayer(resolvedActiveLayerId, { color: canvasBackground })
+      setNotice('Filled with background color.')
+    }
+    setOpenMenu(null)
+  }
+
+  // EXPANDED VIEW MENU
+  const [showGrid, setShowGrid] = useState(false)
+  const [showGuides, setShowGuides] = useState(false)
+  const [showRulers, setShowRulers] = useState(false)
+  const [fullScreenMode, setFullScreenMode] = useState(false)
+
+  const handleViewToggleGrid = () => {
+    setShowGrid((v) => !v)
+    setNotice(`Grid ${!showGrid ? 'shown' : 'hidden'}.`)
+    setOpenMenu(null)
+  }
+
+  const handleViewToggleGuides = () => {
+    setShowGuides((v) => !v)
+    setNotice(`Guides ${!showGuides ? 'shown' : 'hidden'}.`)
+    setOpenMenu(null)
+  }
+
+  const handleViewToggleRulers = () => {
+    setShowRulers((v) => !v)
+    setNotice(`Rulers ${!showRulers ? 'shown' : 'hidden'}.`)
+    setOpenMenu(null)
+  }
+
+  const handleViewFullScreen = () => {
+    if (document.documentElement.requestFullscreen) {
+      setFullScreenMode(true)
+      document.documentElement.requestFullscreen()
+    }
+    setOpenMenu(null)
+  }
+
+  const handleViewCanvasOnly = () => {
+    setLeftSidebarCollapsed(true)
+    setRightSidebarCollapsed(true)
+    setNotice('Canvas-only mode activated.')
+    setOpenMenu(null)
+  }
+
+  // EXPANDED IMAGE MENU
+  const handleImageScale = () => {
+    commitHistory()
+    setNotice('Scale image dialog would open (custom dimensions).')
+    setOpenMenu(null)
+  }
+
+  const handleImageCrop = () => {
+    setActiveTool('crop')
+    setNotice('Crop tool activated. Drag on canvas to define crop area.')
+    setOpenMenu(null)
+  }
+
+  const handleImageResizeCanvas = () => {
+    setNotice('Canvas size dialog would open (width × height settings).')
+    setOpenMenu(null)
+  }
+
+  // EXPANDED LAYER MENU
+  const handleLayerAddMask = () => {
+    if (resolvedActiveLayerId) {
+      commitHistory()
+      updateLayer(resolvedActiveLayerId, { hasMask: true })
+      setNotice('Layer mask added.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleLayerRemoveMask = () => {
+    if (resolvedActiveLayerId) {
+      commitHistory()
+      updateLayer(resolvedActiveLayerId, { hasMask: false })
+      setNotice('Layer mask removed.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleLayerRenameActive = () => {
+    if (resolvedActiveLayerId) {
+      const newName = prompt('Enter new layer name:')
+      if (newName) {
+        commitHistory()
+        updateLayer(resolvedActiveLayerId, { label: newName })
+        setNotice(`Layer renamed to "${newName}".`)
+      }
+    }
+    setOpenMenu(null)
+  }
+
+  // EXPANDED FILTERS MENU
+  const handleFilterInvert = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, invert: prev.invert === 0 ? 100 : 0 }))
+    setNotice('Inverted colors.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterSepia = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, sepia: prev.sepia === 0 ? 100 : 0 }))
+    setNotice('Sepia filter toggled.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterBrightness = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, brightness: Math.min(prev.brightness + 20, 150) }))
+    setNotice('Brightness increased.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterContrast = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, contrast: Math.min(prev.contrast + 20, 150) }))
+    setNotice('Contrast increased.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterSaturation = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, saturation: Math.min(prev.saturation + 20, 150) }))
+    setNotice('Saturation increased.')
+    setOpenMenu(null)
+  }
+
+  // EXPANDED TOOLS MENU
+  const handleToolCrop = () => {
+    setActiveTool('crop')
+    setNotice('Crop tool selected.')
+    setOpenMenu(null)
+  }
+
+  const handleToolText = () => {
+    addTextLayer()
+    setOpenMenu(null)
+  }
+
+  const handleToolShape = (shape) => {
+    addShapeLayer(shape)
+    setOpenMenu(null)
+  }
+
   useEffect(() => {
     if (!stageRef.current) return undefined
 
@@ -2057,7 +2258,10 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
               {openMenu === 'File' && (
                 <div className="menu-dropdown">
                   <button onClick={handleFileNew}>New</button>
-                  <button onClick={handleFileOpen}>Open</button>
+                  <button onClick={handleFileOpen}>Open Image</button>
+                  <button onClick={handleFileOpenProject}>Open Project</button>
+                  <button onClick={handleFileSave}>Save Project</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={() => handleExport('png')}>Export as PNG</button>
                   <button onClick={() => handleExport('jpeg')}>Export as JPEG</button>
                   <button onClick={() => handleExport('webp')}>Export as WebP</button>
@@ -2074,11 +2278,15 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
                 <div className="menu-dropdown">
                   <button onClick={undo} disabled={historyCounts.past === 0}>Undo</button>
                   <button onClick={redo} disabled={historyCounts.future === 0}>Redo</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={handleEditCut}>Cut</button>
                   <button onClick={handleEditCopy}>Copy</button>
                   <button onClick={handleEditPaste}>Paste</button>
                   <button onClick={handleEditClear}>Clear</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={handleEditSelectAll}>Select All</button>
+                  <button onClick={handleEditFillForeground}>Fill with Brush Color</button>
+                  <button onClick={handleEditFillBackground}>Fill with Background Color</button>
                 </div>
               )}
             </div>
@@ -2090,10 +2298,24 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
               </button>
               {openMenu === 'View' && (
                 <div className="menu-dropdown">
+                  <button onClick={handleViewCanvasOnly}>Canvas Only</button>
+                  <button onClick={handleViewFullScreen}>Full Screen Mode</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={handleViewZoomIn}>Zoom In</button>
                   <button onClick={handleViewZoomOut}>Zoom Out</button>
                   <button onClick={handleViewFit}>Fit to Window</button>
                   <button onClick={handleViewResetView}>Reset View</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleViewToggleRulers}>
+                    {showRulers ? '✓' : ' '} Show Rulers
+                  </button>
+                  <button onClick={handleViewToggleGuides}>
+                    {showGuides ? '✓' : ' '} Show Guides
+                  </button>
+                  <button onClick={handleViewToggleGrid}>
+                    {showGrid ? '✓' : ' '} Show Grid
+                  </button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={handleViewTogglePanels}>Toggle Panels</button>
                 </div>
               )}
@@ -2106,9 +2328,14 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
               </button>
               {openMenu === 'Image' && (
                 <div className="menu-dropdown">
-                  <button onClick={handleImageRotate}>Rotate 90°</button>
+                  <button onClick={handleImageScale}>Scale Image...</button>
+                  <button onClick={handleImageResizeCanvas}>Canvas Size...</button>
+                  <button onClick={handleImageCrop}>Crop to Content</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleImageRotate}>Rotate 90° CW</button>
                   <button onClick={handleImageFlip}>Flip Horizontal</button>
-                  <button onClick={handleImageFlatten}>Flatten</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleImageFlatten}>Flatten Image</button>
                 </div>
               )}
             </div>
@@ -2121,12 +2348,23 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
               {openMenu === 'Layer' && (
                 <div className="menu-dropdown">
                   <button onClick={handleLayerNew}>New Layer</button>
+                  <button onClick={handleLayerRenameActive} disabled={!resolvedActiveLayerId}>
+                    Rename Layer
+                  </button>
                   <button onClick={handleLayerDuplicate} disabled={!resolvedActiveLayerId}>
                     Duplicate
                   </button>
                   <button onClick={handleLayerDelete} disabled={layers.length <= 1}>
                     Delete
                   </button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleLayerAddMask} disabled={!resolvedActiveLayerId}>
+                    Add Mask
+                  </button>
+                  <button onClick={handleLayerRemoveMask} disabled={!resolvedActiveLayerId}>
+                    Remove Mask
+                  </button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={handleLayerMergeDown}>Merge Down</button>
                 </div>
               )}
@@ -2157,6 +2395,12 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
                   <button onClick={() => handleToolSelect('brush')}>Brush</button>
                   <button onClick={() => handleToolSelect('eraser')}>Eraser</button>
                   <button onClick={() => handleToolSelect('heal')}>Heal</button>
+                  <button onClick={handleToolCrop}>Crop</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleToolText}>Text</button>
+                  <button onClick={() => handleToolShape('rectangle')}>Rectangle</button>
+                  <button onClick={() => handleToolShape('ellipse')}>Ellipse</button>
+                  <button onClick={() => handleToolShape('line')}>Line</button>
                 </div>
               )}
             </div>
@@ -2168,9 +2412,16 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
               </button>
               {openMenu === 'Filters' && (
                 <div className="menu-dropdown">
+                  <button onClick={handleFilterBrightness}>Brightness +</button>
+                  <button onClick={handleFilterContrast}>Contrast +</button>
+                  <button onClick={handleFilterSaturation}>Saturation +</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={handleFilterBlur}>Blur</button>
                   <button onClick={handleFilterSharpen}>Sharpen</button>
                   <button onClick={handleFilterGrayscale}>Grayscale</button>
+                  <button onClick={handleFilterInvert}>Invert</button>
+                  <button onClick={handleFilterSepia}>Sepia</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={resetFilters}>Reset All</button>
                 </div>
               )}
