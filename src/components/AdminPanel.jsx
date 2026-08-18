@@ -58,6 +58,60 @@ function Section({ title, children }) {
   )
 }
 
+function NoticeEditor({ title, description, notice, onSave }) {
+  const [draft, setDraft] = useState(notice)
+  const [status, setStatus] = useState({ saving: false, message: '', error: '' })
+
+  const save = async () => {
+    setStatus({ saving: true, message: '', error: '' })
+    try {
+      const message = draft.message.trim()
+      await onSave({ ...draft, message, enabled: draft.enabled && Boolean(message) })
+      setStatus({ saving: false, message: 'Saved', error: '' })
+    } catch (error) {
+      setStatus({ saving: false, message: '', error: error.message })
+    }
+  }
+
+  return (
+    <Section title={title}>
+      <p className="muted">{description}</p>
+      <div className="notice-editor-toggles">
+        <label>
+          <input
+            type="checkbox"
+            checked={draft.enabled}
+            onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
+          />
+          Display notice
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={draft.scrolling}
+            onChange={(event) => setDraft((current) => ({ ...current, scrolling: event.target.checked }))}
+          />
+          Scroll message
+        </label>
+      </div>
+      <textarea
+        rows="5"
+        value={draft.message}
+        onChange={(event) => setDraft((current) => ({ ...current, message: event.target.value }))}
+        placeholder="Leave empty to hide this notice."
+        className="notice-editor-textarea"
+      />
+      <div className="notice-editor-actions">
+        {status.error && <span className="field-error">{status.error}</span>}
+        {status.message && <span className="muted">{status.message}</span>}
+        <button type="button" className="primary-button" onClick={save} disabled={status.saving}>
+          {status.saving ? 'Saving...' : 'Save notice'}
+        </button>
+      </div>
+    </Section>
+  )
+}
+
 export function AdminPanel({
   teamMembers,
   accessRequests, setAccessRequests,
@@ -66,7 +120,7 @@ export function AdminPanel({
   tickets, setTickets,
   purchaseHistory, setPurchaseHistory,
   featureFlags, setFeatureFlags,
-  landingAnnouncement, setLandingAnnouncement,
+  announcements, onSaveAnnouncement,
   billingLive,
   promoCodes, setPromoCodes,
   expenses, setExpenses,
@@ -86,7 +140,7 @@ export function AdminPanel({
   currentUser,
   onAdminUserAction,
 }) {
-  const [itTab, setItTab] = useState('overview')
+  const [itTab, setItTab] = useState(() => currentUser?.role === 'admin' ? 'overview' : 'integrations')
   const [ticketOpen, setTicketOpen] = useState(null)
   const [replyDraft, setReplyDraft] = useState('')
   const [licenseNote, setLicenseNote] = useState({})
@@ -154,8 +208,6 @@ export function AdminPanel({
     search: '',
   })
   const [ticketView, setTicketView] = useState('active')
-  const [announcementDraft, setAnnouncementDraft] = useState(landingAnnouncement)
-
   const activeLicenses = licenses.filter((l) => l.status === 'active').length
   const pendingLicenses = licenses.filter((l) => l.status === 'pending_payment').length
   const openTicketStatuses = ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated', 'open']
@@ -302,6 +354,7 @@ export function AdminPanel({
     { id: 'controls', label: '⚙️ Site Controls' },
   ] : [
     { id: 'integrations', label: '🔌 Integrations' },
+    { id: 'controls', label: '⚙️ Notices' },
   ]
 
   const filteredUsers = teamMembers.filter((member) => {
@@ -1299,26 +1352,23 @@ export function AdminPanel({
 
         {itTab === 'controls' && (
           <div>
-            <Section title="Landing page announcement">
-              <p className="muted">Publish a highlighted notice that appears at the top of the public landing page before sign-in.</p>
-              <textarea
-                rows="5"
-                value={announcementDraft}
-                onChange={(event) => setAnnouncementDraft(event.target.value)}
-                style={{ width: '100%', resize: 'vertical', padding: '0.75rem', borderRadius: '0.8rem', border: '1px solid #dbeafe', font: 'inherit' }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => setLandingAnnouncement(announcementDraft.trim() || 'This application is currently in Beta Testing...')}
-                >
-                  Save announcement
-                </button>
-              </div>
-            </Section>
+            <NoticeEditor
+              key={`landing-${announcements.landing.updatedAt}`}
+              title="Landing page note"
+              description="Shown publicly above the landing page. An empty message is never displayed."
+              notice={announcements.landing}
+              onSave={onSaveAnnouncement}
+            />
 
-            <Section title="Site feature flags">
+            <NoticeEditor
+              key={`application-${announcements.application.updatedAt}`}
+              title="Application note"
+              description="Shown only inside the signed-in application for account holders."
+              notice={announcements.application}
+              onSave={onSaveAnnouncement}
+            />
+
+            {isFullAdmin && <Section title="Site feature flags">
               <p className="muted">Enable or disable platform features globally.</p>
               {featureFlags.map((flag) => (
                 <div key={flag.id} className="it-row">
@@ -1336,9 +1386,9 @@ export function AdminPanel({
                   </button>
                 </div>
               ))}
-            </Section>
+            </Section>}
 
-            <Section title="Issue desk">
+            {isFullAdmin && <Section title="Issue desk">
               {alerts.map((alert) => (
                 <div key={alert.id} className="it-row">
                   <div>
@@ -1359,7 +1409,7 @@ export function AdminPanel({
                   </div>
                 </div>
               ))}
-            </Section>
+            </Section>}
           </div>
         )}
       </div>

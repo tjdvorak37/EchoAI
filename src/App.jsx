@@ -29,6 +29,7 @@ import {
   workspaceFoldersSeed,
 } from './data/demoData'
 import { authService } from './services/authService'
+import { announcementService, DEFAULT_ANNOUNCEMENTS } from './services/announcementService'
 import { billingService } from './services/billingService'
 import { brandService, createEmptyBrandKit, loadBrandFonts, MAX_LOGO_BYTES } from './services/brandService'
 import { CLOUD_PROVIDERS, cloudDriveService, toLinkedAsset } from './services/cloudDriveService'
@@ -41,6 +42,7 @@ import echoMascot from './assets/echo-mascot.svg'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
 import { AiToolManager } from './components/AiToolManager'
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
+import { AnnouncementBanner } from './components/AnnouncementBanner'
 
 const VideoEditor = lazy(() => import('./components/VideoEditor').then((module) => ({ default: module.VideoEditor })))
 const PhotoEditor = lazy(() => import('./components/PhotoEditor').then((module) => ({ default: module.PhotoEditor })))
@@ -301,13 +303,7 @@ function App() {
   const [tickets, setTickets] = useState(supportTicketsSeed)
   const [purchaseHistory, setPurchaseHistory] = useState(purchaseHistorySeed)
   const [featureFlags, setFeatureFlags] = useState(siteFeatureFlagsSeed)
-  const [landingAnnouncement, setLandingAnnouncement] = useState(() => {
-    try {
-      return localStorage.getItem('echoai-landing-announcement') || 'This application is currently in Beta Testing, if you purchase a subscription please report all bugs and issues to the Support Team as we are actively working through the problems. Expected launch date 9/15/2026 Thanks'
-    } catch {
-      return 'This application is currently in Beta Testing, if you purchase a subscription please report all bugs and issues to the Support Team as we are actively working through the problems. Expected launch date 9/15/2026 Thanks'
-    }
-  })
+  const [announcements, setAnnouncements] = useState(DEFAULT_ANNOUNCEMENTS)
   const [promoCodes, setPromoCodes] = useState(promoCodesSeed)
   const [expenses, setExpenses] = useState(expensesSeed)
   const [payroll, setPayroll] = useState(payrollSeed)
@@ -440,15 +436,30 @@ function App() {
     return { valid: true, message: `Code applied: ${found.description}`, codeObj: found }
   }
 
+  useEffect(() => {
+    let active = true
+
+    announcementService.list()
+      .then((records) => {
+        if (!active) return
+        setAnnouncements((current) => ({
+          ...current,
+          ...Object.fromEntries(records.map((notice) => [notice.id, notice])),
+        }))
+      })
+      .catch((error) => console.error('Unable to load platform announcements', error))
+
+    return () => { active = false }
+  }, [session?.id])
+
+  const handleSaveAnnouncement = async (notice) => {
+    const saved = await announcementService.save(notice)
+    setAnnouncements((current) => ({ ...current, [saved.id]: saved }))
+    return saved
+  }
+
   // Save all per-user data to their own namespaced localStorage key whenever any slice changes.
   // In production this is backed by Supabase with row-level security scoped to auth.uid().
-  useEffect(() => {
-    try {
-      localStorage.setItem('echoai-landing-announcement', landingAnnouncement)
-    } catch (err) {
-      console.error('Unable to save landing announcement', err)
-    }
-  }, [landingAnnouncement])
 
   useEffect(() => {
     if (!session?.id) return
@@ -2657,7 +2668,7 @@ function App() {
       return (
         <Suspense fallback={loadingPanel}>
           <LandingPage
-            announcementMessage={landingAnnouncement}
+            announcement={announcements.landing}
             onSignIn={() => setAuthView('signin')}
             onCompanyPackageRequest={() => setCompanyPackageRequested(false)}
             onPurchase={(planKey) => {
@@ -2900,6 +2911,12 @@ function App() {
 
   return (
     <div className="app-shell">
+      <AnnouncementBanner
+        key={announcements.application.updatedAt}
+        notice={announcements.application}
+        audience="application"
+        dismissalScope={session.id}
+      />
       <Suspense fallback={null}>
         <CalendarPopout
           open={calendarOpen}
@@ -4905,8 +4922,8 @@ function App() {
               setPurchaseHistory={setPurchaseHistory}
               featureFlags={featureFlags}
               setFeatureFlags={setFeatureFlags}
-              landingAnnouncement={landingAnnouncement}
-              setLandingAnnouncement={setLandingAnnouncement}
+              announcements={announcements}
+              onSaveAnnouncement={handleSaveAnnouncement}
               billingLive={isSupabaseConfigured}
               promoCodes={promoCodes}
               setPromoCodes={setPromoCodes}
