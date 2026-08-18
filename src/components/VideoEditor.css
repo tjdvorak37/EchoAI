@@ -51,11 +51,17 @@
 
 .toolbar-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
 
 .toolbar-btn {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
   border: 1px solid #444;
   background: #2a2a2a;
   color: #e0e0e0;
@@ -466,6 +472,13 @@
   box-shadow: 0 26px 70px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+.preview-stage-shell:fullscreen {
+  width: 100% !important;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+}
+
 .preview-stage-toolbar {
   position: absolute;
   z-index: 4;
@@ -547,6 +560,38 @@
   max-height: 100%;
 }
 
+.preview-controls {
+  position: absolute;
+  z-index: 5;
+  inset: auto 50% 0.8rem auto;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.3rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.88);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  transform: translateX(50%);
+}
+
+.preview-controls button {
+  width: 34px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: #dbe4f2;
+  background: transparent;
+}
+
+.preview-controls button:hover {
+  color: #fff;
+  background: #2b3241;
+}
+
 .timeline-container {
   flex: 1;
   display: flex;
@@ -612,6 +657,9 @@
 }
 
 .track-name {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.9rem;
   font-weight: 600;
   color: #e0e0e0;
@@ -622,6 +670,11 @@
 }
 
 .track-btn {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
   border: 1px solid #555;
   background: transparent;
   color: #a0a0a0;
@@ -777,6 +830,111 @@
   background: #1a1a1a;
   color: #666;
   cursor: not-allowed;
+}
+
+.properties-heading {
+  display: grid;
+  gap: 0.2rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #30333d;
+}
+
+.properties-heading h3,
+.properties-heading span {
+  margin: 0;
+}
+
+.properties-heading h3 {
+  color: #f3f5f9;
+  font-size: 0.98rem;
+}
+
+.properties-heading span {
+  overflow: hidden;
+  color: #8991a3;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.properties-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid #30333d;
+}
+
+.properties-tabs button {
+  min-height: 34px;
+  padding: 0.35rem 0.15rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: #8991a3;
+  background: transparent;
+  font-size: 0.72rem;
+  text-transform: capitalize;
+}
+
+.properties-tabs button:hover,
+.properties-tabs button.active {
+  color: #f9a8d4;
+}
+
+.properties-tabs button.active {
+  border-bottom-color: #ec4899;
+}
+
+.properties-stack {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.prop-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.prop-grid label,
+.prop-section label,
+.prop-section {
+  min-width: 0;
+  display: grid;
+  gap: 0.35rem;
+  color: #a9b1c0;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.editor-properties select,
+.editor-properties input:not([type='range']) {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #363b48;
+  border-radius: 5px;
+  color: #edf2f7;
+  background: #242832;
+  font: inherit;
+  padding: 0.45rem 0.5rem;
+}
+
+.editor-properties input[type='range'] {
+  width: 100%;
+  accent-color: #ec4899;
+}
+
+.property-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+}
+
+.property-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #ec4899;
 }
 
 .editor-footer {
