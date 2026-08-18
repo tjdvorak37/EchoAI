@@ -3610,6 +3610,22 @@ function App() {
             <SocialListeningPanel
               connectedAccounts={connectedAccounts}
               aiAgentConfig={aiAgentConfig}
+              onCreateResponseDraft={(mention) => {
+                const signal = mention.text.length > 180 ? `${mention.text.slice(0, 177)}...` : mention.text
+                setComposer({
+                  campaign: `Response to ${mention.keyword || mention.hashtag || mention.platform} conversation`,
+                  message: `Thanks for sharing this, ${mention.author}. ${signal}`,
+                  imageIdea: `Create a helpful social response visual addressing ${mention.keyword || 'this customer conversation'}.`,
+                  scheduledAt: '',
+                  channels: [],
+                  mediaAssetIds: [],
+                })
+                setActiveTab('scheduler')
+              }}
+              onCreateCampaignDraft={(mention) => {
+                setAiInput(`Create a sales and marketing campaign inspired by this public ${mention.sourceType} signal: "${mention.text}". Focus on the demand, audience need, trigger terms, and a useful offer. Do not copy the original post verbatim.`)
+                setActiveTab('assistant')
+              }}
             />
           </Suspense>
         )}
