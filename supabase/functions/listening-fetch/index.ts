@@ -45,11 +45,33 @@ const toRedditItems = async (query: string, sourceType: string, limit: number) =
   }).filter((item: Record<string, unknown>) => item.text)
 }
 
+const toHackerNewsDiscussionItems = async (query: string, sourceType: string, limit: number) => {
+  const payload = await fetchJson(`https://hn.algolia.com/api/v1/search_by_date?tags=story&query=${encodeURIComponent(query)}&hitsPerPage=${limit}`)
+  return (payload?.hits ?? []).map((item: Record<string, any>) => ({
+    id: `hn-${sourceType}-${item.objectID}`,
+    text: item.comment_text?.replace(/<[^>]+>/g, '') || item.title || item.story_title || '',
+    sourceName: sourceType === 'social' ? 'Hacker News public conversations' : 'Hacker News public discussions',
+    platform: 'hackernews',
+    timestamp: item.created_at || new Date().toISOString(),
+    author: item.author || 'hn-user',
+    engagement: Number(item.num_comments ?? 0),
+    reach: Math.max(120, Number(item.points ?? 0) * 50),
+    sentiment: Number(item.points ?? 0) >= 4 ? 'positive' : 'neutral',
+  })).filter((item: Record<string, unknown>) => item.text)
+}
+
 const managedItemsFor = async (sourceType: string, body: Record<string, unknown>) => {
   const query = buildQuery(body)
   const limit = Math.min(30, Math.max(1, Number(body.limit) || 20))
 
-  if (sourceType === 'social' || sourceType === 'forums') return toRedditItems(query, sourceType, limit)
+  if (sourceType === 'social' || sourceType === 'forums') {
+    try {
+      return await toRedditItems(query, sourceType, limit)
+    } catch (error) {
+      console.warn(`Reddit ${sourceType} adapter unavailable; using Hacker News fallback.`, error)
+      return toHackerNewsDiscussionItems(query, sourceType, limit)
+    }
+  }
 
   if (sourceType === 'news') {
     const payload = await fetchJson(`https://hn.algolia.com/api/v1/search_by_date?tags=story&query=${encodeURIComponent(query)}&hitsPerPage=${limit}`)
