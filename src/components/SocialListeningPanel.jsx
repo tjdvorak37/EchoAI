@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   SOURCE_TYPES_ALL,
   buildListeningSnapshot,
+  classifyListeningSignal,
   createDefaultListeningConnectors,
   fetchBuiltinMentions,
   fetchLiveMentions,
   filterMentions,
-  getEnabledConnectorCount,
   generateAgentListeningInsights,
   generateListeningMentions,
   parseTrackedValues,
@@ -55,7 +55,7 @@ const defaultConfig = {
   aiVisibilityGoal: 30,
 }
 
-export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
+export function SocialListeningPanel({ connectedAccounts, aiAgentConfig, onCreateCampaignDraft, onCreateResponseDraft }) {
   const [config, setConfig] = useState(defaultConfig)
   const [windowKey, setWindowKey] = useState('7d')
   const [search, setSearch] = useState('')
@@ -65,14 +65,14 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
   const [sourceTypeToggles, setSourceTypeToggles] = useState(() =>
     Object.fromEntries(SOURCE_TYPES_ALL.map((type) => [type, true])),
   )
-  const [connectors, setConnectors] = useState(() => createDefaultListeningConnectors())
-  const [useBuiltinAdapters, setUseBuiltinAdapters] = useState(() => !isSupabaseConfigured)
+  const [connectors] = useState(() => createDefaultListeningConnectors())
+  const [useBuiltinAdapters] = useState(() => !isSupabaseConfigured)
   const [autoRefreshMinutes, setAutoRefreshMinutes] = useState(2)
   const [scanLoading, setScanLoading] = useState(false)
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [insights, setInsights] = useState([])
   const [scanWarnings, setScanWarnings] = useState([])
-  const [scanNotice, setScanNotice] = useState('Configure your sources, then run a live scan.')
+  const [scanNotice, setScanNotice] = useState('Enter your tracking terms, choose sources, then run a live scan.')
   const [lastScanMode, setLastScanMode] = useState('not_started')
   const hasBootstrappedLiveRef = useRef(false)
 
@@ -134,24 +134,12 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
     [mentions],
   )
 
-  const enabledConnectorCount = useMemo(() => getEnabledConnectorCount(connectors), [connectors])
-
   const handleConfigChange = (field, value) => {
     setConfig((prev) => ({ ...prev, [field]: value }))
   }
 
   const handleToggleSourceType = (sourceType) => {
     setSourceTypeToggles((prev) => ({ ...prev, [sourceType]: !prev[sourceType] }))
-  }
-
-  const handleConnectorChange = (sourceType, field, value) => {
-    setConnectors((prev) => ({
-      ...prev,
-      [sourceType]: {
-        ...prev[sourceType],
-        [field]: value,
-      },
-    }))
   }
 
   const refreshMentions = useCallback(async ({ silent = false } = {}) => {
@@ -225,9 +213,9 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
         setScanNotice('No live mentions were returned. Check that the selected listening connectors are configured and authorized.')
       } else if (mode === 'simulated') {
         setScanNotice(
-          enabledConnectorCount || useBuiltinAdapters
-            ? `Live adapters returned no usable mentions, showing modeled stream (${numberFmt.format(refreshedMentions.length)} mentions).`
-            : `No live adapters enabled. Showing modeled stream (${numberFmt.format(refreshedMentions.length)} mentions).`,
+          useBuiltinAdapters
+            ? `Managed sources returned no usable mentions, showing modeled stream (${numberFmt.format(refreshedMentions.length)} mentions).`
+            : `No live mentions were returned for the selected terms. Try broader keywords or a longer window.`,
         )
       } else {
         setScanNotice(`${mode.toUpperCase()} scan complete: ${numberFmt.format(refreshedMentions.length)} mentions indexed${warningCount ? ` (${warningCount} source warning${warningCount === 1 ? '' : 's'})` : ''}.`)
@@ -256,7 +244,6 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
     competitorTerms,
     connectors,
     connectedPlatforms,
-    enabledConnectorCount,
     enabledSourceTypes,
     hashtagTerms,
     keywordTerms,
@@ -444,46 +431,12 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
             />
           </label>
 
-          <label className="toggle-row">
-            <span>Built-in open-web adapters</span>
-            <input
-              type="checkbox"
-              checked={useBuiltinAdapters}
-              onChange={(event) => setUseBuiltinAdapters(event.target.checked)}
-            />
-          </label>
-
           <div className="listening-connector-summary">
-            <p className="small-title">Live source connectors</p>
+            <p className="small-title">Managed source coverage</p>
             <p className="muted">
-              {enabledConnectorCount > 0
-                ? `${enabledConnectorCount} live connector(s) enabled. Last scan mode: ${lastScanMode}.`
-                : `No custom connectors enabled yet. Built-in adapters are ${useBuiltinAdapters ? 'on' : 'off'}. Last scan mode: ${lastScanMode}.`}
+              EchoAI searches managed public sources for every selected category. Last scan mode: {lastScanMode}.
             </p>
-            <div className="listening-connector-grid">
-              {SOURCE_TYPES_ALL.map((sourceType) => {
-                const connector = connectors[sourceType]
-                return (
-                  <div key={sourceType} className="listening-connector-card">
-                    <div className="listening-feed-head">
-                      <strong>{SOURCE_LABELS[sourceType]}</strong>
-                      <label className="toggle-row" style={{ justifyContent: 'flex-end' }}>
-                        <span>Enable</span>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(connector?.enabled)}
-                          onChange={(event) => handleConnectorChange(sourceType, 'enabled', event.target.checked)}
-                        />
-                      </label>
-                    </div>
-                    <p className="muted">
-                      Managed server-side. Endpoints and API keys are configured as edge function
-                      secrets so they are never exposed in the browser.
-                    </p>
-                  </div>
-                )
-              })}
-            </div>
+            <p className="muted">Premium provider coverage can be added by EchoAI without changing your tracking setup.</p>
           </div>
 
           <div className="action-row">
@@ -648,6 +601,18 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig }) {
                   <span className="badge info">reach {numberFmt.format(mention.reach)}</span>
                   <span className="badge info">engagement {numberFmt.format(mention.engagement)}</span>
                   {mention.aiReferenced && <span className="badge pending">AI chatbot mention</span>}
+                  {(() => {
+                    const signal = classifyListeningSignal(mention)
+                    return <span className={`badge ${signal.kind === 'sales' ? 'success' : signal.kind === 'product' ? 'risk' : 'pending'}`}>{signal.label}</span>
+                  })()}
+                </div>
+                <div className="action-row listening-feed-actions">
+                  <button type="button" className="ghost-button" onClick={() => onCreateResponseDraft?.(mention)}>
+                    Draft response
+                  </button>
+                  <button type="button" className="ghost-button" onClick={() => onCreateCampaignDraft?.(mention)}>
+                    Create campaign
+                  </button>
                 </div>
               </div>
             ))}
