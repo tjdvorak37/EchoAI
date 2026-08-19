@@ -46,9 +46,16 @@ export const socialIntegrationService = {
   async saveAccount({ platform, accountName, accountType, publishingScopes }) {
     if (!isSupabaseConfigured) return null
 
+    const { data: sessionData } = await supabase.auth.getSession()
+    const userId = sessionData?.session?.user?.id
+    if (!userId) {
+      throw new Error('Please sign in before saving a social account profile.')
+    }
+
     const { data, error } = await supabase
       .from('user_social_accounts')
       .upsert({
+        user_id: userId,
         platform,
         account_name: accountName.trim(),
         account_type: accountType,

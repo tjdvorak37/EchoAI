@@ -210,7 +210,7 @@ export function SocialListeningPanel({ connectedAccounts, aiAgentConfig, onCreat
       const nextWarnings = [...liveResult.errors, ...builtinResult.errors]
 
       if (mode === 'no_results') {
-        setScanNotice('No live mentions were returned. Check that the selected listening connectors are configured and authorized.')
+        setScanNotice('No public mentions matched this scan yet. Try a broader term, select a longer window, or run the scan again.')
       } else if (mode === 'simulated') {
         setScanNotice(
           useBuiltinAdapters
