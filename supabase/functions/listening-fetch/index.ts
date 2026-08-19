@@ -12,12 +12,19 @@ const textValues = (value: unknown) => Array.isArray(value)
   ? value.filter((item): item is string => typeof item === 'string' && item.trim()).slice(0, 5)
   : []
 
-const buildQuery = (body: Record<string, unknown>) => [
+const buildQuery = (body: Record<string, unknown>) => {
+  const candidates = [
   ...textValues(body.brandTerms),
   ...textValues(body.competitorTerms).slice(0, 2),
   ...textValues(body.keywordTerms).slice(0, 3),
   ...textValues(body.hashtagTerms).slice(0, 2),
-].join(' ').trim() || 'marketing social media'
+  ]
+    .map((term) => term.replace(/^#/, '').trim())
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length)
+
+  return candidates[0] || 'marketing social media'
+}
 
 const fetchJson = async (url: string) => {
   const response = await fetch(url, {
@@ -25,6 +32,38 @@ const fetchJson = async (url: string) => {
   })
   if (!response.ok) throw new Error(`source failed (${response.status})`)
   return response.json()
+}
+
+const fetchText = async (url: string) => {
+  const response = await fetch(url, {
+    headers: { Accept: 'application/rss+xml, application/xml, text/xml', 'User-Agent': 'EchoAI-listening/1.0' },
+  })
+  if (!response.ok) throw new Error(`source failed (${response.status})`)
+  return response.text()
+}
+
+const toGoogleNewsItems = async (query: string, sourceType: string, limit: number) => {
+  const rss = await fetchText(`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`)
+  const document = new DOMParser().parseFromString(rss, 'text/xml')
+  if (!document) throw new Error('Unable to parse Google News feed')
+
+  return [...document.querySelectorAll('item')].slice(0, limit).map((item, index) => {
+    const title = item.querySelector('title')?.textContent?.trim() ?? ''
+    const source = item.querySelector('source')?.textContent?.trim() ?? 'Google News'
+    const publishedAt = item.querySelector('pubDate')?.textContent ?? ''
+    const date = new Date(publishedAt)
+    return {
+      id: `google-news-${sourceType}-${index}-${title.slice(0, 80)}`,
+      text: title,
+      sourceName: source,
+      platform: 'web',
+      timestamp: Number.isFinite(date.getTime()) ? date.toISOString() : new Date().toISOString(),
+      author: source,
+      engagement: 0,
+      reach: 500,
+      sentiment: 'neutral',
+    }
+  }).filter((item) => item.text)
 }
 
 const toRedditItems = async (query: string, sourceType: string, limit: number) => {
@@ -68,24 +107,23 @@ const managedItemsFor = async (sourceType: string, body: Record<string, unknown>
     try {
       return await toRedditItems(query, sourceType, limit)
     } catch (error) {
-      console.warn(`Reddit ${sourceType} adapter unavailable; using Hacker News fallback.`, error)
-      return toHackerNewsDiscussionItems(query, sourceType, limit)
+      console.warn(`Reddit ${sourceType} adapter unavailable; using public news fallback.`, error)
+      try {
+        return await toGoogleNewsItems(query, sourceType, limit)
+      } catch (newsError) {
+        console.warn(`Google News ${sourceType} fallback unavailable; using Hacker News fallback.`, newsError)
+        return toHackerNewsDiscussionItems(query, sourceType, limit)
+      }
     }
   }
 
   if (sourceType === 'news') {
-    const payload = await fetchJson(`https://hn.algolia.com/api/v1/search_by_date?tags=story&query=${encodeURIComponent(query)}&hitsPerPage=${limit}`)
-    return (payload?.hits ?? []).map((item: Record<string, any>) => ({
-      id: `hn-${item.objectID}`,
-      text: item.title || item.story_title || '',
-      sourceName: 'Hacker News public index',
-      platform: 'web',
-      timestamp: item.created_at || new Date().toISOString(),
-      author: item.author || 'hn-user',
-      engagement: Number(item.num_comments ?? 0),
-      reach: Math.max(200, Number(item.points ?? 0) * 60),
-      sentiment: Number(item.points ?? 0) >= 4 ? 'positive' : 'neutral',
-    })).filter((item: Record<string, unknown>) => item.text)
+    try {
+      return await toGoogleNewsItems(query, sourceType, limit)
+    } catch (error) {
+      console.warn('Google News adapter unavailable; using Hacker News news fallback.', error)
+      return toHackerNewsDiscussionItems(query, sourceType, limit)
+    }
   }
 
   if (sourceType === 'blogs') {
