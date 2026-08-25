@@ -261,7 +261,7 @@ function App() {
   const [accountScopeDrafts, setAccountScopeDrafts] = useState({})
   const [quickConnectOpen, setQuickConnectOpen] = useState(() => {
     const status = new URLSearchParams(window.location.search).get('social')
-    return status === 'connected' || status === 'failed'
+    return status === 'connected' || status === 'failed' || status === 'provider_error'
   })
   const [quickConnectEmail, setQuickConnectEmail] = useState(() => session?.email || '')
   const [quickConnectName, setQuickConnectName] = useState('')
