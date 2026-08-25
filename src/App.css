@@ -1324,6 +1324,40 @@ main {
   color: #fff;
 }
 
+.attached-media-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.attached-media-item {
+  align-items: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1e3a5f;
+  display: flex;
+  font-weight: 600;
+  gap: 0.7rem;
+  justify-content: space-between;
+  padding: 0.45rem 0.5rem 0.45rem 0.7rem;
+}
+
+.attached-media-remove {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #b91c1c;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  padding: 0;
+  width: 2rem;
+}
+
+.attached-media-remove:hover {
+  background: #fef2f2;
+}
+
 .composer {
   margin-top: 1rem;
   display: grid;

@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import './App.css'
 import './components/VideoEditor.css'
 import './components/PhotoEditor.css'
@@ -3965,6 +3966,29 @@ function App() {
                     <span className="muted">No media available yet.</span>
                   )}
                 </div>
+                {composer.mediaAssetIds.length > 0 && (
+                  <div className="attached-media-list" aria-label="Media attached to this post">
+                    {workspaceAssets
+                      .filter((asset) => composer.mediaAssetIds.includes(asset.id))
+                      .map((asset) => (
+                        <div key={asset.id} className="attached-media-item">
+                          <span>{asset.type === 'video' ? 'Video' : 'Image'}: {asset.name}</span>
+                          <button
+                            type="button"
+                            className="attached-media-remove"
+                            aria-label={`Remove ${asset.name} from this post`}
+                            title="Remove from this post"
+                            onClick={() => setComposer((prev) => ({
+                              ...prev,
+                              mediaAssetIds: prev.mediaAssetIds.filter((id) => id !== asset.id),
+                            }))}
+                          >
+                            <X size={16} aria-hidden="true" />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
 
               <label>
