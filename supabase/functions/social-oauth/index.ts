@@ -64,6 +64,11 @@ const scopesForPlatform = (platform: Platform, provider: ProviderConfig) => {
   return provider.scopes
 }
 
+const scopeParamForPlatform = (platform: Platform, scopes: string[]) =>
+  (platform === 'facebook' || platform === 'instagram')
+    ? scopes.join(',')
+    : scopes.join(' ')
+
 const admin = () =>
   createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
@@ -133,8 +138,15 @@ const queryProviderAccounts = async (platform: Platform, accessToken: string) =>
   }
 }
 
-const redirect = (status: string, platform: string) =>
-  Response.redirect(`${APP_URL}/?social=${encodeURIComponent(status)}&platform=${encodeURIComponent(platform)}`, 302)
+const redirect = (status: string, platform: string, reason = '') => {
+  const destination = new URL(APP_URL)
+  destination.searchParams.set('social', status)
+  destination.searchParams.set('platform', platform)
+  if (reason.trim()) {
+    destination.searchParams.set('reason', reason.trim().slice(0, 180))
+  }
+  return Response.redirect(destination.toString(), 302)
+}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -142,6 +154,31 @@ Deno.serve(async (request) => {
   }
 
   const url = new URL(request.url)
+  if (request.method === 'GET' && url.searchParams.has('error')) {
+    const state = url.searchParams.get('state') ?? ''
+    const providerError = url.searchParams.get('error_description')
+      ?? url.searchParams.get('error')
+      ?? 'Provider denied authorization.'
+
+    let platform = 'unknown'
+    if (state) {
+      const db = admin()
+      const { data: pending } = await db
+        .from('social_oauth_states')
+        .select('platform')
+        .eq('state', state)
+        .maybeSingle()
+
+      if (pending && platformIsSupported(pending.platform)) {
+        platform = pending.platform
+      }
+
+      await db.from('social_oauth_states').delete().eq('state', state)
+    }
+
+    return redirect('provider_error', platform, providerError)
+  }
+
   if (request.method === 'GET' && url.searchParams.has('code')) {
     const code = url.searchParams.get('code') ?? ''
     const state = url.searchParams.get('state') ?? ''
@@ -209,8 +246,9 @@ Deno.serve(async (request) => {
 
       return redirect('connected', platform)
     } catch (error) {
-      console.error('social OAuth callback failed', platform, error instanceof Error ? error.message : 'unknown error')
-      return redirect('failed', platform)
+      const message = error instanceof Error ? error.message : 'OAuth callback failed.'
+      console.error('social OAuth callback failed', platform, message)
+      return redirect('failed', platform, message)
     }
   }
 
@@ -294,7 +332,7 @@ Deno.serve(async (request) => {
     authorizationUrl.searchParams.set('client_id', provider.clientId)
     authorizationUrl.searchParams.set('redirect_uri', FUNCTION_URL)
     authorizationUrl.searchParams.set('response_type', 'code')
-    authorizationUrl.searchParams.set('scope', oauthScopes.join(' '))
+    authorizationUrl.searchParams.set('scope', scopeParamForPlatform(platform, oauthScopes))
     authorizationUrl.searchParams.set('state', state)
     if (platform === 'youtube') {
       authorizationUrl.searchParams.set('access_type', 'offline')

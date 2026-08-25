@@ -270,10 +270,11 @@ function App() {
     const params = new URLSearchParams(window.location.search)
     const status = params.get('social')
     const platform = params.get('platform')
+    const reason = params.get('reason')
     if (!status || !platform) return ''
     return status === 'connected'
       ? `${getPlatformMeta(platform).label} connected successfully. Choose another selected provider to continue.`
-      : `${getPlatformMeta(platform).label} connection was not completed.`
+      : `${getPlatformMeta(platform).label} connection was not completed.${reason ? ` ${decodeURIComponent(reason)}` : ''}`
   })
   const [integrationError, setIntegrationError] = useState('')
   const [aiInput, setAiInput] = useState('')
@@ -1227,8 +1228,8 @@ function App() {
     const normalizedPlatform = platform.toLowerCase()
     const normalizedName = accountName.trim()
 
-    if (!normalizedName || isPlaceholderAccountHandle(normalizedPlatform, normalizedName)) {
-      setIntegrationError(`Enter the real ${getPlatformMeta(normalizedPlatform).label} account name before saving.`)
+    if (!normalizedName) {
+      setIntegrationError(`Enter a ${getPlatformMeta(normalizedPlatform).label} account label before saving.`)
       return
     }
 
@@ -1334,11 +1335,11 @@ function App() {
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
-      return !linkedAccount || linkedAccount.status !== 'healthy' || isPlaceholderAccountHandle(channel, linkedAccount.accountName)
+      return !linkedAccount || linkedAccount.status !== 'healthy'
     })
 
     if (invalidSelectedChannels.length) {
-      setSchedulerError(`Connect a real ${invalidSelectedChannels.join(', ')} account before queuing this post.`)
+      setSchedulerError(`Complete OAuth for ${invalidSelectedChannels.join(', ')} before queuing this post.`)
       return
     }
 
@@ -1377,11 +1378,11 @@ function App() {
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
-      return !linkedAccount || linkedAccount.status !== 'healthy' || isPlaceholderAccountHandle(channel, linkedAccount.accountName)
+      return !linkedAccount || linkedAccount.status !== 'healthy'
     })
 
     if (invalidSelectedChannels.length) {
-      setSchedulerError(`Connect a real ${invalidSelectedChannels.join(', ')} account before posting.`)
+      setSchedulerError(`Complete OAuth for ${invalidSelectedChannels.join(', ')} before posting.`)
       return
     }
 
@@ -4543,7 +4544,6 @@ function App() {
               ].map(({ key, accountPlaceholder, desc }) => {
                 const meta = getPlatformMeta(key)
                 const linked = connectedAccounts.find((a) => a.platform.toLowerCase() === key)
-                const isInvalidHandle = linked && isPlaceholderAccountHandle(key, linked.accountName)
                 const inputValue = accountHandleDrafts[key] ?? linked?.accountName ?? accountPlaceholder
                 const selectedScopes = accountScopeDrafts[key] ?? linked?.publishingScopes ?? ['posts']
                 return (
@@ -4559,8 +4559,8 @@ function App() {
                         {linked && <span className="integration-linked-handle">{linked.accountName}</span>}
                       </div>
                       {linked && (
-                        <span className={`integration-status-badge ${linked.status === 'healthy' && !isInvalidHandle ? 'good' : 'warn'}`}>
-                          {linked.status === 'healthy' && !isInvalidHandle ? '● OAuth connected' : 'OAuth access required'}
+                        <span className={`integration-status-badge ${linked.status === 'healthy' ? 'good' : 'warn'}`}>
+                          {linked.status === 'healthy' ? '● OAuth connected' : 'OAuth access required'}
                         </span>
                       )}
                     </div>
