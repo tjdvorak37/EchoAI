@@ -1329,8 +1329,8 @@ function App() {
   const handleSchedulePost = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    if (!composer.message.trim() || !composer.scheduledAt || !composer.channels.length) {
-      setSchedulerError('Add a message, at least one channel, and a deployment date and time.')
+    if ((!composer.message.trim() && !composer.mediaAssetIds.length) || !composer.scheduledAt || !composer.channels.length) {
+      setSchedulerError('Add a message or media, at least one channel, and a deployment date and time.')
       return
     }
 
@@ -1372,8 +1372,8 @@ function App() {
   const handlePostNow = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    if (!composer.message.trim() || !composer.channels.length) {
-      setSchedulerError('Add a message and at least one channel before posting.')
+    if ((!composer.message.trim() && !composer.mediaAssetIds.length) || !composer.channels.length) {
+      setSchedulerError('Add a message or media and at least one channel before posting.')
       return
     }
 
