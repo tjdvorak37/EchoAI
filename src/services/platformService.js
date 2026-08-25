@@ -81,7 +81,7 @@ export const platformService = {
     const publishedAt = new Date().toISOString()
     const post = {
       id: randomId(),
-      status: 'published',
+      status: 'scheduled',
       scheduledAt: publishedAt,
       ...payload,
     }
@@ -102,13 +102,29 @@ export const platformService = {
         scheduled_at: publishedAt,
         channels: payload.channels,
         media: payload.media ?? [],
-        status: 'published',
+        status: 'scheduled',
       })
       .select('*')
       .single()
 
     if (error) {
       throw new Error(error.message)
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData?.session?.access_token
+    if (!accessToken) throw new Error('Sign in before publishing a post.')
+
+    const { data: publishResult, error: publishError } = await supabase.functions.invoke('social-publisher', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: { action: 'publish_now', postId: data.id },
+    })
+    if (publishError) {
+      const detail = await publishError.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || publishError.message || 'Unable to publish this post.')
+    }
+    if (publishResult?.status !== 'published') {
+      throw new Error(publishResult?.error || 'The social provider did not confirm publication.')
     }
 
     return {
@@ -119,7 +135,7 @@ export const platformService = {
       scheduledAt: data.scheduled_at,
       channels: data.channels,
       media: data.media ?? [],
-      status: data.status,
+      status: publishResult.status,
     }
   },
 

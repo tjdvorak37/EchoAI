@@ -26,6 +26,19 @@ const admin = () =>
     { auth: { persistSession: false } },
   )
 
+const userFromRequest = async (request: Request) => {
+  const authorization = request.headers.get('Authorization')
+  if (!authorization?.startsWith('Bearer ')) return null
+
+  const client = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    { auth: { persistSession: false } },
+  )
+  const { data } = await client.auth.getUser(authorization.slice('Bearer '.length))
+  return data.user ?? null
+}
+
 const isAuthorizedWorker = (request: Request) => {
   const secret = Deno.env.get('SOCIAL_PUBLISHER_CRON_SECRET') ?? ''
   const authorization = request.headers.get('Authorization') ?? ''
@@ -168,18 +181,45 @@ Deno.serve(async (request) => {
     return new Response(null, { status: 204, headers: getCorsHeaders(request) })
   }
   if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405, request)
-  if (!isAuthorizedWorker(request)) return json({ error: 'Worker authorization required.' }, 401, request)
 
   const body = await request.json().catch(() => ({}))
-  const limit = Math.max(1, Math.min(Number(body.limit) || 25, 100))
-  const db = admin()
-  const { data: duePosts, error } = await db.rpc('claim_due_scheduled_posts', { p_limit: limit })
-  if (error) return json({ error: error.message }, 500, request)
+  if (isAuthorizedWorker(request)) {
+    const limit = Math.max(1, Math.min(Number(body.limit) || 25, 100))
+    const db = admin()
+    const { data: duePosts, error } = await db.rpc('claim_due_scheduled_posts', { p_limit: limit })
+    if (error) return json({ error: error.message }, 500, request)
 
-  const results = []
-  for (const post of (duePosts ?? []) as ScheduledPost[]) {
-    results.push(await publishPost(post))
+    const results = []
+    for (const post of (duePosts ?? []) as ScheduledPost[]) {
+      results.push(await publishPost(post))
+    }
+
+    return json({ processed: results.length, results }, 200, request)
   }
 
-  return json({ processed: results.length, results }, 200, request)
+  const user = await userFromRequest(request)
+  if (!user || body.action !== 'publish_now' || typeof body.postId !== 'string') {
+    return json({ error: 'Authentication and a post ID are required.' }, 401, request)
+  }
+
+  const db = admin()
+  const { data: post, error } = await db
+    .from('scheduled_posts')
+    .update({
+      status: 'publishing',
+      publishing_started_at: new Date().toISOString(),
+      publish_attempts: 1,
+    })
+    .eq('id', body.postId)
+    .eq('user_id', user.id)
+    .eq('status', 'scheduled')
+    .select('*')
+    .maybeSingle<ScheduledPost>()
+
+  if (error) return json({ error: error.message }, 500, request)
+  if (!post) return json({ error: 'Post is unavailable or is already being published.' }, 409, request)
+
+  const result = await publishPost(post)
+  if (result.status !== 'published') return json(result, 422, request)
+  return json(result, 200, request)
 })

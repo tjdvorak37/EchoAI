@@ -1386,27 +1386,31 @@ function App() {
       return
     }
 
-    const newPost = await platformService.postNow({
-      campaign: composer.campaign || 'Instant Campaign',
-      message: composer.message,
-      imageIdea: composer.imageIdea,
-      channels: composer.channels,
-      media: workspaceAssets
-        .filter((asset) => composer.mediaAssetIds.includes(asset.id))
-        .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl }) => ({
-          id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl,
-        })),
-    })
+    try {
+      const newPost = await platformService.postNow({
+        campaign: composer.campaign || 'Instant Campaign',
+        message: composer.message,
+        imageIdea: composer.imageIdea,
+        channels: composer.channels,
+        media: workspaceAssets
+          .filter((asset) => composer.mediaAssetIds.includes(asset.id))
+          .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl }) => ({
+            id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl,
+          })),
+      })
 
-    setScheduledPosts((prev) => [newPost, ...prev])
-    setComposer({
-      campaign: '',
-      message: '',
-      imageIdea: '',
-      scheduledAt: '',
-      channels: [],
-      mediaAssetIds: [],
-    })
+      setScheduledPosts((prev) => [newPost, ...prev])
+      setComposer({
+        campaign: '',
+        message: '',
+        imageIdea: '',
+        scheduledAt: '',
+        channels: [],
+        mediaAssetIds: [],
+      })
+    } catch (error) {
+      setSchedulerError(error.message)
+    }
   }
 
   const handleGenerateAi = async () => {
