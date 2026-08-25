@@ -6,7 +6,7 @@ type ScheduledPost = {
   user_id: string
   message: string
   channels: string[]
-  media: Array<{ type?: string; webUrl?: string }>
+  media: Array<{ type?: string; mime?: string; name?: string; storagePath?: string; webUrl?: string }>
 }
 
 type Credential = {
@@ -50,7 +50,34 @@ const providerError = async (response: Response, fallback: string) => {
   return payload?.error?.message || fallback
 }
 
-const publishFacebookPost = async (credential: Credential, message: string) => {
+const publishFacebookPost = async (credential: Credential, message: string, media: ScheduledPost['media']) => {
+  const attachment = media.find((item) => item.type === 'image' || item.type === 'video')
+  if (attachment?.type === 'video') {
+    throw new Error('Facebook video publishing is not available yet. Remove the video or publish an image instead.')
+  }
+
+  if (attachment?.type === 'image' && !attachment.storagePath) {
+    throw new Error('Re-upload the selected image before publishing so EchoAI can send it to Facebook.')
+  }
+
+  if (attachment?.type === 'image' && attachment.storagePath) {
+    const { data: file, error } = await admin().storage.from('social-media').download(attachment.storagePath)
+    if (error || !file) throw new Error('Unable to retrieve the selected image for Facebook publishing.')
+
+    const form = new FormData()
+    form.set('message', message)
+    form.set('access_token', credential.access_token)
+    form.set('source', file, attachment.name ?? 'image')
+    const response = await fetch(`${GRAPH_URL}/${credential.external_account_id}/photos`, {
+      method: 'POST',
+      body: form,
+    })
+    if (!response.ok) throw new Error(await providerError(response, 'Facebook image publishing failed.'))
+    const payload = await response.json()
+    if (!payload.post_id && !payload.id) throw new Error('Facebook did not return a post ID.')
+    return String(payload.post_id ?? payload.id)
+  }
+
   const response = await fetch(`${GRAPH_URL}/${credential.external_account_id}/feed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -89,7 +116,7 @@ const publishInstagramImage = async (credential: Credential, message: string, me
 }
 
 const publishChannel = async (post: ScheduledPost, channel: string, credential: Credential) => {
-  if (channel === 'facebook') return publishFacebookPost(credential, post.message)
+  if (channel === 'facebook') return publishFacebookPost(credential, post.message, post.media ?? [])
   if (channel === 'instagram') return publishInstagramImage(credential, post.message, post.media ?? [])
   throw new Error(`${channel} publishing is not deployed yet.`)
 }

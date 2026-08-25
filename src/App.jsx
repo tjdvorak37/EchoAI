@@ -1352,8 +1352,8 @@ function App() {
       channels: composer.channels,
       media: workspaceAssets
         .filter((asset) => composer.mediaAssetIds.includes(asset.id))
-        .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl }) => ({
-          id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl,
+        .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl }) => ({
+          id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl,
         })),
     })
 
@@ -1395,8 +1395,8 @@ function App() {
         channels: composer.channels,
         media: workspaceAssets
           .filter((asset) => composer.mediaAssetIds.includes(asset.id))
-          .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl }) => ({
-            id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl,
+          .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl }) => ({
+            id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl,
           })),
       })
 
@@ -1719,6 +1719,18 @@ function App() {
       reader.readAsDataURL(file)
     })
 
+    let storagePath = ''
+    if (isSupabaseConfigured && ['image', 'video'].includes(assetType)) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Sign in before uploading media.')
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+      storagePath = `${user.id}/${Date.now()}-${safeName}`
+      const { error } = await supabase.storage
+        .from('social-media')
+        .upload(storagePath, file, { contentType: file.type, upsert: false })
+      if (error) throw new Error(error.message)
+    }
+
     const asset = {
       id: `asset_${Date.now()}`,
       name: file.name,
@@ -1728,6 +1740,7 @@ function App() {
       folderId: selectedFolderId,
       createdAt: new Date().toISOString(),
       previewUrl,
+      storagePath,
       summary: 'Uploaded from your device',
     }
 
@@ -1767,6 +1780,17 @@ function App() {
       reader.onerror = () => reject(new Error('Unable to read file'))
       reader.readAsDataURL(file)
     })
+    let storagePath = ''
+    if (isSupabaseConfigured && ['image', 'video'].includes(assetType)) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Sign in before uploading media.')
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+      storagePath = `${user.id}/${Date.now()}-${safeName}`
+      const { error } = await supabase.storage
+        .from('social-media')
+        .upload(storagePath, file, { contentType: file.type, upsert: false })
+      if (error) throw new Error(error.message)
+    }
     setWorkspaceAssets((prev) => [{
       id: `asset_${Date.now()}`,
       name: file.name,
@@ -1776,6 +1800,7 @@ function App() {
       folderId: selectedFolderId,
       createdAt: new Date().toISOString(),
       previewUrl,
+      storagePath,
       summary: 'Dropped into workspace',
     }, ...prev])
   }
