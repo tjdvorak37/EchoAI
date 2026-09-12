@@ -4154,14 +4154,15 @@ function App() {
                     <span className={getStatusBadgeClass(post.status === 'scheduled' ? 'pending' : post.status)}>
                       {post.status}
                     </span>
-                    {post.status === 'scheduled' && (
+                    {String(post.status || '').toLowerCase() === 'scheduled' && (
                       <button
                         type="button"
-                        className="text-button"
+                        className="danger-button"
                         onClick={() => handleDeleteScheduledPost(post)}
                         aria-label={`Delete scheduled post ${post.campaign}`}
+                        title="Remove this queued post"
                       >
-                        Delete
+                        Delete queued post
                       </button>
                     )}
                   </div>
