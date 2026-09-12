@@ -579,7 +579,7 @@ function App() {
         return
       }
 
-      if (user?.isBoardMember || user?.role === 'board_member') {
+      if (user?.role !== 'admin' && (user?.isBoardMember || user?.role === 'board_member')) {
         return
       }
 
