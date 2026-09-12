@@ -116,7 +116,7 @@ function NoticeEditor({ title, description, notice, onSave }) {
 
 export function AdminPanel({
   teamMembers,
-  accessRequests, setAccessRequests,
+  accessRequests,
   alerts, setAlerts,
   licenses, setLicenses,
   tickets, setTickets,
@@ -132,7 +132,7 @@ export function AdminPanel({
   financialTasks, setFinancialTasks,
   quotaEditingUserId, setQuotaEditingUserId,
   quotaDraftMb, setQuotaDraftMb,
-  handleQuotaUpdate, handleToggleUserAccess, handleUpdateUserRole,
+  handleQuotaUpdate, handleToggleUserAccess, handleUpdateUserRole, handleReviewAccessRequest,
   companySeatPackage, companySeats,
   handleCreateCompanySeatPackage, handleUpdateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
   handleRespondToSupportTicket,
@@ -367,7 +367,8 @@ export function AdminPanel({
     { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}` },
     { id: 'billing', label: '💳 Billing' },
     { id: 'finance', label: '💹 Finance' },
-    { id: 'users', label: '👥 Users' },
+    { id: 'employees', label: '🧑‍💼 Employees' },
+    { id: 'users', label: '👥 Customer users' },
     { id: 'storage', label: '💾 Storage' },
     { id: 'trademark', label: '⚖️ Trademark & Legal' },
     { id: 'developer-apps', label: '🔐 Developer Apps' },
@@ -384,7 +385,11 @@ export function AdminPanel({
     { id: 'controls', label: '⚙️ Notices' },
   ]
 
-  const filteredUsers = teamMembers.filter((member) => {
+  const employeeRoles = ['admin', 'manager', 'it', 'accountant']
+  const filteredDirectoryMembers = itTab === 'employees'
+    ? teamMembers.filter((member) => employeeRoles.includes(member.role))
+    : teamMembers.filter((member) => !employeeRoles.includes(member.role))
+  const filteredUsers = filteredDirectoryMembers.filter((member) => {
     const term = userSearch.trim().toLowerCase()
     const matchesSearch = !term
       || member.fullName?.toLowerCase().includes(term)
@@ -1028,9 +1033,9 @@ export function AdminPanel({
           </div>
         )}
 
-        {itTab === 'users' && (
+        {(itTab === 'users' || itTab === 'employees') && (
           <div>
-            {isFullAdmin && (
+            {isFullAdmin && itTab === 'employees' && (
               <Section title="Add staff account">
                 <p className="muted">Invite staff directly without a subscription. They will set their password and MFA from the landing page.</p>
                 <form className="auth-form" onSubmit={createUser}>
@@ -1082,9 +1087,9 @@ export function AdminPanel({
               </div>
 
               <p className="muted it-user-count">
-                {sortedUsers.length === teamMembers.length
+                {sortedUsers.length === filteredDirectoryMembers.length
                   ? `${sortedUsers.length} user${sortedUsers.length === 1 ? '' : 's'}`
-                  : `${sortedUsers.length} of ${teamMembers.length} users match`}
+                  : `${sortedUsers.length} of ${filteredDirectoryMembers.length} users match`}
                 {sortedUsers.length > USERS_PER_PAGE && ` • page ${safeUserPage} of ${userPageCount}`}
               </p>
 
@@ -1149,6 +1154,24 @@ export function AdminPanel({
                                 {member.trademarkEditAccess ? 'Editing granted' : 'Grant editing access'}
                               </button>
                               <small className="muted">Only grant this to a trained trademark/legal specialist.</small>
+                            </div>}
+
+                            {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Developer Apps specialist</span>
+                              <button
+                                type="button"
+                                className={member.developerAppEditAccess ? 'primary-button' : 'ghost-button'}
+                                onClick={async () => {
+                                  try {
+                                    await onAdminUserAction({ action: 'set-developer-app-edit-access', userId: member.id, enabled: !member.developerAppEditAccess })
+                                  } catch (error) {
+                                    setNewUserStatus({ saving: false, message: '', error: error.message })
+                                  }
+                                }}
+                              >
+                                {member.developerAppEditAccess ? 'Editing granted' : 'Grant editing access'}
+                              </button>
+                              <small className="muted">Only grant this to a trusted provider-credentials specialist.</small>
                             </div>}
 
                             {isFullAdmin && <div className="it-user-detail-group">
@@ -1278,7 +1301,7 @@ export function AdminPanel({
               )}
             </Section>
 
-            <Section title="Access requests">
+            {itTab === 'users' && <Section title="Access requests">
               {accessRequests.length === 0 && <p className="muted">No pending access requests.</p>}
               {accessRequests.map((req) => (
                 <div key={req.id} className="it-row">
@@ -1290,10 +1313,10 @@ export function AdminPanel({
                     <StatusBadge value={req.status} />
                     {req.status === 'pending' && (
                       <>
-                        <button type="button" className="primary-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => setAccessRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, status: 'approved', reviewedAt: new Date().toISOString() } : r))}>
+                        <button type="button" className="primary-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} disabled={adminLoading} onClick={() => handleReviewAccessRequest(req, 'approved')}>
                           Approve
                         </button>
-                        <button type="button" className="ghost-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => setAccessRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, status: 'denied', reviewedAt: new Date().toISOString() } : r))}>
+                        <button type="button" className="ghost-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} disabled={adminLoading} onClick={() => handleReviewAccessRequest(req, 'denied')}>
                           Deny
                         </button>
                       </>
@@ -1301,7 +1324,7 @@ export function AdminPanel({
                   </div>
                 </div>
               ))}
-            </Section>
+            </Section>}
 
             {quotaEditingUserId && (
               <Section title="Edit storage quota">

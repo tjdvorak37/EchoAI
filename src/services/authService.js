@@ -91,6 +91,7 @@ const normalizeMember = (record) => ({
   role: record.role,
   accessStatus: record.access_status,
   trademarkEditAccess: record.trademark_edit_access === true,
+  developerAppEditAccess: record.developer_app_edit_access === true,
   storageQuotaMb: record.storage_quota_mb ?? record.storageQuotaMb ?? 2048,
   aiAgentConfig: normalizeAiAgentConfig(record.ai_agent_config ?? record.aiAgentConfig),
 })

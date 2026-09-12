@@ -64,27 +64,31 @@ Deno.serve(async (request) => {
         data: { full_name: newFullName, company: newCompany },
         redirectTo: `${Deno.env.get('APP_URL') ?? ''}/`,
       })
-      if (createError || !created.user) {
+      let invitedUser = created?.user ?? null
+      if (!invitedUser && createError) {
+        const { data: users } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 })
+        invitedUser = users?.users?.find((user) => user.email?.toLowerCase() === email) ?? null
+      }
+      if (!invitedUser) {
         return json({ error: createError?.message || 'Could not create that user.' }, 409, request)
       }
 
       const { data: profile, error: profileError } = await adminClient
         .from('profiles')
-        .update({ full_name: newFullName, company: newCompany, role, access_status: 'active' })
-        .eq('id', created.user.id)
-        .select('id, full_name, email, company, role, access_status, storage_quota_mb, trademark_edit_access')
+        .upsert({ id: invitedUser.id, email, full_name: newFullName, company: newCompany, role, access_status: 'active' }, { onConflict: 'id' })
+        .select('id, full_name, email, company, role, access_status, storage_quota_mb, trademark_edit_access, developer_app_edit_access')
         .single()
       if (profileError) return json({ error: 'User was invited but the profile could not be configured.' }, 500, request)
 
       await adminClient
         .from('access_requests')
         .update({ status: 'approved', reviewed_at: new Date().toISOString() })
-        .eq('user_id', created.user.id)
+        .eq('user_id', invitedUser.id)
         .eq('status', 'pending')
 
       await adminClient.from('admin_user_audit').insert({
         actor_id: caller.user.id,
-        target_user_id: created.user.id,
+        target_user_id: invitedUser.id,
         action: 'updated_profile',
         detail: { action: 'created-user', role },
       })
@@ -93,7 +97,7 @@ Deno.serve(async (request) => {
 
     const { data: target } = await adminClient
       .from('profiles')
-      .select('id, full_name, email, company, role, access_status, trademark_edit_access, created_at')
+      .select('id, full_name, email, company, role, access_status, trademark_edit_access, developer_app_edit_access, created_at')
       .eq('id', userId)
       .maybeSingle()
 
@@ -211,6 +215,22 @@ Deno.serve(async (request) => {
         .single()
       if (updateError) return json({ error: 'Could not update trademark editing access.' }, 500, request)
       await recordAudit('updated_profile', { trademark_edit_access: enabled })
+      return json({ profile: updated }, 200, request)
+    }
+
+    if (action === 'set-developer-app-edit-access') {
+      if (callerProfile.role !== 'admin') {
+        return json({ error: 'Super Admin access is required to grant Developer Apps editing.' }, 403, request)
+      }
+      const enabled = body.enabled === true
+      const { data: updated, error: updateError } = await adminClient
+        .from('profiles')
+        .update({ developer_app_edit_access: enabled })
+        .eq('id', userId)
+        .select('id, developer_app_edit_access')
+        .single()
+      if (updateError) return json({ error: 'Could not update Developer Apps editing access.' }, 500, request)
+      await recordAudit('updated_profile', { developer_app_edit_access: enabled })
       return json({ profile: updated }, 200, request)
     }
 
