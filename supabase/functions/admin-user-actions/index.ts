@@ -101,7 +101,7 @@ Deno.serve(async (request) => {
 
     const { data: targetById } = await adminClient
       .from('profiles')
-      .select('id, full_name, email, company, role, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, created_at')
+      .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, created_at')
       .eq('id', userId)
       .maybeSingle()
 
@@ -109,7 +109,7 @@ Deno.serve(async (request) => {
     if (!target && typeof targetEmail === 'string' && targetEmail.trim()) {
       const { data: targetByEmail } = await adminClient
         .from('profiles')
-        .select('id, full_name, email, company, role, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, created_at')
+        .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, created_at')
         .ilike('email', targetEmail.trim())
         .maybeSingle()
       target = targetByEmail
@@ -284,7 +284,7 @@ Deno.serve(async (request) => {
       if (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 10) {
         return json({ error: 'Profit share must be between 1% and 10%.' }, 400, request)
       }
-      if (target.role !== 'board_member') {
+      if (!target.is_board_member && target.role !== 'board_member') {
         return json({ error: 'The selected user is not a Board Member.' }, 400, request)
       }
       const { data: updated, error: updateError } = await adminClient
@@ -295,6 +295,17 @@ Deno.serve(async (request) => {
         .single()
       if (updateError) return json({ error: 'Could not update Board Member profit share.' }, 500, request)
       await recordAudit('updated_profile', { profit_share_percent: profitSharePercent })
+      return json({ profile: updated }, 200, request)
+    }
+
+    if (action === 'set-board-membership') {
+      if (callerProfile.role !== 'admin') return json({ error: 'Super Admin access is required to edit Board Membership.' }, 403, request)
+      const enabled = body.enabled === true
+      const share = Number(body.profitSharePercent || 0)
+      if (enabled && (!Number.isFinite(share) || share < 1 || share > 10)) return json({ error: 'Board Member profit share must be between 1% and 10%.' }, 400, request)
+      const { data: updated, error: updateError } = await adminClient.from('profiles').update({ is_board_member: enabled, profit_share_percent: enabled ? share : 0 }).eq('id', target.id).select('id, is_board_member, profit_share_percent').single()
+      if (updateError) return json({ error: 'Could not update Board Membership.' }, 500, request)
+      await recordAudit('updated_profile', { is_board_member: enabled, profit_share_percent: enabled ? share : 0 })
       return json({ profile: updated }, 200, request)
     }
 
