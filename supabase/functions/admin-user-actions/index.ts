@@ -42,7 +42,7 @@ Deno.serve(async (request) => {
     }
 
     const body = await request.json()
-    const { action, userId, fullName, company } = body
+    const { action, userId, fullName, company, email: targetEmail } = body
     if (!action || (action !== 'create-user' && !userId)) {
       return json({ error: 'An action and userId are required.' }, 400, request)
     }
@@ -95,14 +95,48 @@ Deno.serve(async (request) => {
       return json({ profile }, 201, request)
     }
 
-    const { data: target } = await adminClient
+    const { data: targetById } = await adminClient
       .from('profiles')
       .select('id, full_name, email, company, role, access_status, trademark_edit_access, developer_app_edit_access, created_at')
       .eq('id', userId)
       .maybeSingle()
 
+    let target = targetById
+    if (!target && typeof targetEmail === 'string' && targetEmail.trim()) {
+      const { data: targetByEmail } = await adminClient
+        .from('profiles')
+        .select('id, full_name, email, company, role, access_status, trademark_edit_access, developer_app_edit_access, created_at')
+        .ilike('email', targetEmail.trim())
+        .maybeSingle()
+      target = targetByEmail
+    }
+
+    if (!target && ['set-trademark-edit-access', 'set-developer-app-edit-access'].includes(action)) {
+      let authTarget = userId ? (await adminClient.auth.admin.getUserById(userId)).data.user : null
+      if (!authTarget && typeof targetEmail === 'string' && targetEmail.trim()) {
+        const { data: users } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 })
+        authTarget = users?.users?.find((user) => user.email?.toLowerCase() === targetEmail.trim().toLowerCase()) ?? null
+      }
+      if (authTarget) {
+        const metadata = authTarget.user_metadata ?? {}
+        const { data: repairedProfile } = await adminClient
+          .from('profiles')
+          .upsert({
+            id: authTarget.id,
+            email: authTarget.email?.toLowerCase() ?? targetEmail.trim().toLowerCase(),
+            full_name: metadata.full_name || authTarget.email?.split('@')[0] || 'Staff member',
+            company: metadata.company || '',
+            role: 'it',
+            access_status: 'active',
+          }, { onConflict: 'id' })
+          .select('id, full_name, email, company, role, access_status, trademark_edit_access, developer_app_edit_access, created_at')
+          .single()
+        target = repairedProfile
+      }
+    }
+
     if (!target) {
-      return json({ error: 'User not found.' }, 404, request)
+      return json({ error: `User not found for id '${userId || 'none'}' or email '${targetEmail || 'none'}'.` }, 404, request)
     }
 
     // Admins are excluded from these actions so one compromised admin account
@@ -189,7 +223,7 @@ Deno.serve(async (request) => {
       const { data: updated, error: updateError } = await adminClient
         .from('profiles')
         .update(patch)
-        .eq('id', userId)
+        .eq('id', target.id)
         .select('id, full_name, email, company, role, access_status')
         .maybeSingle()
 
@@ -210,7 +244,7 @@ Deno.serve(async (request) => {
       const { data: updated, error: updateError } = await adminClient
         .from('profiles')
         .update({ trademark_edit_access: enabled })
-        .eq('id', userId)
+        .eq('id', target.id)
         .select('id, trademark_edit_access')
         .single()
       if (updateError) return json({ error: 'Could not update trademark editing access.' }, 500, request)
@@ -226,7 +260,7 @@ Deno.serve(async (request) => {
       const { data: updated, error: updateError } = await adminClient
         .from('profiles')
         .update({ developer_app_edit_access: enabled })
-        .eq('id', userId)
+        .eq('id', target.id)
         .select('id, developer_app_edit_access')
         .single()
       if (updateError) return json({ error: 'Could not update Developer Apps editing access.' }, 500, request)

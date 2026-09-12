@@ -1163,7 +1163,7 @@ export function AdminPanel({
                                 className={member.developerAppEditAccess ? 'primary-button' : 'ghost-button'}
                                 onClick={async () => {
                                   try {
-                                    await onAdminUserAction({ action: 'set-developer-app-edit-access', userId: member.id, enabled: !member.developerAppEditAccess })
+                                    await onAdminUserAction({ action: 'set-developer-app-edit-access', userId: member.id, email: member.email, enabled: !member.developerAppEditAccess })
                                   } catch (error) {
                                     setNewUserStatus({ saving: false, message: '', error: error.message })
                                   }
