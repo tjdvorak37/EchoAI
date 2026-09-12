@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { FinancePanel } from './FinancePanel'
+import { TrademarkPanel } from './TrademarkPanel'
 
 const USERS_PER_PAGE = 25
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
@@ -153,6 +154,8 @@ export function AdminPanel({
   const [verification, setVerification] = useState({ userId: null, summary: null, loading: false, error: '' })
   const [recoveryLink, setRecoveryLink] = useState({ userId: null, url: '', error: '', loading: false })
   const [profileDraft, setProfileDraft] = useState({ fullName: '', company: '', saving: false, error: '' })
+  const [newUserDraft, setNewUserDraft] = useState({ fullName: '', email: '', company: '', role: 'it' })
+  const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
 
   const openUserDetail = (member) => {
     const nextId = expandedUserId === member.id ? null : member.id
@@ -194,6 +197,18 @@ export function AdminPanel({
       setProfileDraft((prev) => ({ ...prev, saving: false, error: '' }))
     } catch (error) {
       setProfileDraft((prev) => ({ ...prev, saving: false, error: error.message }))
+    }
+  }
+
+  const createUser = async (event) => {
+    event.preventDefault()
+    setNewUserStatus({ saving: true, message: '', error: '' })
+    try {
+      await onAdminUserAction({ action: 'create-user', ...newUserDraft })
+      setNewUserDraft({ fullName: '', email: '', company: '', role: 'it' })
+      setNewUserStatus({ saving: false, message: 'Invitation sent. The new staff member can finish setup and MFA from the landing page.', error: '' })
+    } catch (error) {
+      setNewUserStatus({ saving: false, message: '', error: error.message })
     }
   }
 
@@ -350,9 +365,15 @@ export function AdminPanel({
     { id: 'finance', label: '💹 Finance' },
     { id: 'users', label: '👥 Users' },
     { id: 'storage', label: '💾 Storage' },
+    { id: 'trademark', label: '⚖️ Trademark & Legal' },
     { id: 'integrations', label: '🔌 Integrations' },
     { id: 'controls', label: '⚙️ Site Controls' },
   ] : [
+    { id: 'overview', label: '📊 Service overview' },
+    { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}` },
+    { id: 'users', label: '👥 User directory' },
+    { id: 'storage', label: '💾 Storage' },
+    { id: 'trademark', label: '⚖️ Trademark & Legal' },
     { id: 'integrations', label: '🔌 Integrations' },
     { id: 'controls', label: '⚙️ Notices' },
   ]
@@ -430,7 +451,7 @@ export function AdminPanel({
       <div className="it-header">
         <div>
           <h2>IT / Admin Backend</h2>
-          <p className="it-header-sub">Restricted to administrators only</p>
+          <p className="it-header-sub">Restricted staff workspace • {currentUser?.role === 'admin' ? 'Super Admin' : 'Technician'}</p>
         </div>
       </div>
 
@@ -1003,6 +1024,20 @@ export function AdminPanel({
 
         {itTab === 'users' && (
           <div>
+            {isFullAdmin && (
+              <Section title="Add staff account">
+                <p className="muted">Invite staff directly without a subscription. They will set their password and MFA from the landing page.</p>
+                <form className="auth-form" onSubmit={createUser}>
+                  <label>Full name<input required value={newUserDraft.fullName} onChange={(event) => setNewUserDraft((current) => ({ ...current, fullName: event.target.value }))} /></label>
+                  <label>Email<input required type="email" value={newUserDraft.email} onChange={(event) => setNewUserDraft((current) => ({ ...current, email: event.target.value }))} /></label>
+                  <label>Company<input required value={newUserDraft.company} onChange={(event) => setNewUserDraft((current) => ({ ...current, company: event.target.value }))} /></label>
+                  <label>Role<select value={newUserDraft.role} onChange={(event) => setNewUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="it">Technician</option><option value="accountant">Accounting</option><option value="manager">Manager</option><option value="user">Standard user</option></select></label>
+                  <div className="action-row"><button type="submit" className="primary-button" disabled={newUserStatus.saving}>{newUserStatus.saving ? 'Sending invitation...' : 'Create and invite user'}</button></div>
+                  {newUserStatus.message && <p className="auth-message">{newUserStatus.message}</p>}
+                  {newUserStatus.error && <p className="auth-message auth-error">{newUserStatus.error}</p>}
+                </form>
+              </Section>
+            )}
             <Section title="User management">
               <div className="it-user-filters">
                 <label>
@@ -1078,7 +1113,7 @@ export function AdminPanel({
                           <p className="muted">Administrator accounts cannot be modified here.</p>
                         ) : (
                           <>
-                            <div className="it-user-detail-group">
+                            {isFullAdmin && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Access</span>
                               <button type="button" className="ghost-button" onClick={() => handleToggleUserAccess(member)} disabled={adminLoading}>
                                 {member.accessStatus === 'deactivated' ? 'Reactivate' : 'Deactivate'}
@@ -1090,9 +1125,27 @@ export function AdminPanel({
                               >
                                 Quota: {member.storageQuotaMb ?? 500} MB
                               </button>
-                            </div>
+                            </div>}
 
-                            <div className="it-user-detail-group">
+                            {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Trademark specialist</span>
+                              <button
+                                type="button"
+                                className={member.trademarkEditAccess ? 'primary-button' : 'ghost-button'}
+                                onClick={async () => {
+                                  try {
+                                    await onAdminUserAction({ action: 'set-trademark-edit-access', userId: member.id, enabled: !member.trademarkEditAccess })
+                                  } catch (error) {
+                                    setNewUserStatus({ saving: false, message: '', error: error.message })
+                                  }
+                                }}
+                              >
+                                {member.trademarkEditAccess ? 'Editing granted' : 'Grant editing access'}
+                              </button>
+                              <small className="muted">Only grant this to a trained trademark/legal specialist.</small>
+                            </div>}
+
+                            {isFullAdmin && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Role</span>
                               {USER_ROLES.map((role) => (
                                 <button
@@ -1105,7 +1158,7 @@ export function AdminPanel({
                                   {role}
                                 </button>
                               ))}
-                            </div>
+                            </div>}
 
                             <div className="it-user-detail-group it-user-detail-stack">
                               <span className="it-user-detail-label">Identity</span>
@@ -1313,6 +1366,8 @@ export function AdminPanel({
             financialTasks={financialTasks} setFinancialTasks={setFinancialTasks}
           />
         )}
+
+        {itTab === 'trademark' && <TrademarkPanel currentUser={currentUser} />}
 
         {itTab === 'integrations' && (
           <div>
