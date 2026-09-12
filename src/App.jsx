@@ -3,32 +3,6 @@ import { X } from 'lucide-react'
 import './App.css'
 import './components/VideoEditor.css'
 import './components/PhotoEditor.css'
-import {
-  accessRequestsSeed,
-  adminAlerts,
-  aiPromptIdeas,
-  companyMainPostsSeed,
-  companySocialAccountsSeed,
-  connectedAccountsSeed,
-  expensesSeed,
-  financialTasksSeed,
-  licensesSeed,
-  payrollSeed,
-  postTypeChips,
-  promoCodesSeed,
-  purchaseHistorySeed,
-  refundsSeed,
-  repostQueueSeed,
-  scheduledPostsSeed,
-  siteFeatureFlagsSeed,
-  starterStats,
-  supportTicketsSeed,
-  taxRecordsSeed,
-  teamMembersSeed,
-  userRepostsSeed,
-  workspaceAssetsSeed,
-  workspaceFoldersSeed,
-} from './data/demoData'
 import { authService } from './services/authService'
 import { announcementService, DEFAULT_ANNOUNCEMENTS } from './services/announcementService'
 import { billingService } from './services/billingService'
@@ -45,6 +19,13 @@ import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAge
 import { AiToolManager } from './components/AiToolManager'
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
+
+const AI_PROMPT_IDEAS = [
+  'Create 3 Instagram captions for a weekend sale with urgency and energy.',
+  'Write a Facebook reminder for a flash sale ending tonight at midnight.',
+  'Draft Snapchat copy for a behind-the-scenes product reveal.',
+]
+const POST_TYPE_CHIPS = ['Product launch', 'Event promotion', 'Educational post', 'Customer story']
 
 const VideoEditor = lazy(() => import('./components/VideoEditor').then((module) => ({ default: module.VideoEditor })))
 const PhotoEditor = lazy(() => import('./components/PhotoEditor').then((module) => ({ default: module.PhotoEditor })))
@@ -107,12 +88,7 @@ const hydrateWorkspaceAssets = (assets) =>
       return asset
     }
 
-    const seededAsset = workspaceAssetsSeed.find((item) => item.id === asset.id)
-    if (!seededAsset?.previewUrl) {
-      return asset
-    }
-
-    return { ...asset, previewUrl: seededAsset.previewUrl }
+    return asset
   })
 
 const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
@@ -182,15 +158,15 @@ function App() {
   )
 
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [connectedAccounts, setConnectedAccounts] = useState(connectedAccountsSeed)
+  const [connectedAccounts, setConnectedAccounts] = useState([])
   const [socialPlatformReadiness, setSocialPlatformReadiness] = useState([])
   const [socialPlatformReadinessLoading, setSocialPlatformReadinessLoading] = useState(false)
   const [socialPlatformReadinessError, setSocialPlatformReadinessError] = useState('')
-  const [scheduledPosts, setScheduledPosts] = useState(scheduledPostsSeed)
-  const [companyMainPosts, setCompanyMainPosts] = useState(companyMainPostsSeed)
-  const [companySocialAccounts, setCompanySocialAccounts] = useState(companySocialAccountsSeed)
-  const [repostQueue, setRepostQueue] = useState(repostQueueSeed)
-  const [userReposts, setUserReposts] = useState(userRepostsSeed)
+  const [scheduledPosts, setScheduledPosts] = useState([])
+  const [companyMainPosts, setCompanyMainPosts] = useState([])
+  const [companySocialAccounts, setCompanySocialAccounts] = useState([])
+  const [repostQueue, setRepostQueue] = useState([])
+  const [userReposts, setUserReposts] = useState([])
   const [autoApproveCompanyPosts, setAutoApproveCompanyPosts] = useState(false)
   const [repostNotice, setRepostNotice] = useState('')
   const [repostError, setRepostError] = useState('')
@@ -207,9 +183,9 @@ function App() {
     accountName: '',
   })
   const localIdRef = useRef(3000)
-  const [alerts, setAlerts] = useState(adminAlerts)
-  const [accessRequests, setAccessRequests] = useState(accessRequestsSeed)
-  const [teamMembers, setTeamMembers] = useState(teamMembersSeed)
+  const [alerts, setAlerts] = useState([])
+  const [accessRequests, setAccessRequests] = useState([])
+  const [teamMembers, setTeamMembers] = useState([])
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminError, setAdminError] = useState('')
   const [companySeatPackage, setCompanySeatPackage] = useState(null)
@@ -275,8 +251,8 @@ function App() {
   const [aiAgentFeedbackTone, setAiAgentFeedbackTone] = useState('info')
   const [aiAgentConnections, setAiAgentConnections] = useState([])
   const [openAiGuideOpen, setOpenAiGuideOpen] = useState(false)
-  const [workspaceFolders, setWorkspaceFolders] = useState(workspaceFoldersSeed)
-  const [workspaceAssets, setWorkspaceAssets] = useState(workspaceAssetsSeed)
+  const [workspaceFolders, setWorkspaceFolders] = useState([{ id: 'folder-root', name: 'My workspace', parentId: null, createdAt: new Date().toISOString() }])
+  const [workspaceAssets, setWorkspaceAssets] = useState([])
   const [selectedFolderId, setSelectedFolderId] = useState('folder-root')
   const [assetSearch, setAssetSearch] = useState('')
   const [newFolderName, setNewFolderName] = useState('')
@@ -286,17 +262,17 @@ function App() {
   const [drawerDragActive, setDrawerDragActive] = useState(false)
   const [quotaEditingUserId, setQuotaEditingUserId] = useState('')
   const [quotaDraftMb, setQuotaDraftMb] = useState('2048')
-  const [licenses, setLicenses] = useState(licensesSeed)
-  const [tickets, setTickets] = useState(supportTicketsSeed)
-  const [purchaseHistory, setPurchaseHistory] = useState(purchaseHistorySeed)
-  const [featureFlags, setFeatureFlags] = useState(siteFeatureFlagsSeed)
+  const [licenses, setLicenses] = useState([])
+  const [tickets, setTickets] = useState([])
+  const [purchaseHistory, setPurchaseHistory] = useState([])
+  const [featureFlags, setFeatureFlags] = useState([])
   const [announcements, setAnnouncements] = useState(DEFAULT_ANNOUNCEMENTS)
-  const [promoCodes, setPromoCodes] = useState(promoCodesSeed)
-  const [expenses, setExpenses] = useState(expensesSeed)
-  const [payroll, setPayroll] = useState(payrollSeed)
-  const [taxRecords, setTaxRecords] = useState(taxRecordsSeed)
-  const [refunds, setRefunds] = useState(refundsSeed)
-  const [financialTasks, setFinancialTasks] = useState(financialTasksSeed)
+  const [promoCodes, setPromoCodes] = useState([])
+  const [expenses, setExpenses] = useState([])
+  const [payroll, setPayroll] = useState([])
+  const [taxRecords, setTaxRecords] = useState([])
+  const [refunds, setRefunds] = useState([])
+  const [financialTasks, setFinancialTasks] = useState([])
   const [showPurchase, setShowPurchase] = useState(false)
   const [companyPackageRequested, setCompanyPackageRequested] = useState(false)
   const [purchasePlan, setPurchasePlan] = useState('storage_pro')
@@ -333,24 +309,10 @@ function App() {
     }
   }
 
-  // Loads and applies this user's persisted data after login.
-  // Demo users fall back to seed data on first login; all others start clean.
+  // Loads and applies this user's persisted live data after login.
   const applyUserData = async (user) => {
     const stored = readUserData(user.id)
-    const isDemo = user.id?.startsWith('demo-')
-    const defaults = isDemo
-      ? {
-          scheduledPosts: scheduledPostsSeed,
-          connectedAccounts: connectedAccountsSeed,
-          companyMainPosts: companyMainPostsSeed,
-          companySocialAccounts: companySocialAccountsSeed,
-          repostQueue: repostQueueSeed,
-          userReposts: userRepostsSeed,
-          workspaceFolders: workspaceFoldersSeed,
-          workspaceAssets: workspaceAssetsSeed,
-        }
-      : {}
-    const d = stored ?? defaults
+    const d = stored ?? {}
     setScheduledPosts(d.scheduledPosts ?? [])
     setConnectedAccounts(d.connectedAccounts ?? [])
     setCompanyMainPosts(d.companyMainPosts ?? [])
@@ -494,10 +456,10 @@ function App() {
 
   const stats = useMemo(
     () => [
-      starterStats[0],
+      { label: 'Engagement growth', value: '—' },
       { label: 'Queued posts', value: `${upcomingPostCount}` },
       { label: 'Connected channels', value: `${connectedAccounts.length}` },
-      starterStats[3],
+      { label: 'Delivery success', value: '—' },
     ],
     [connectedAccounts.length, upcomingPostCount],
   )
@@ -2867,7 +2829,7 @@ function App() {
           </p>
 
           <div className="chip-row">
-            {postTypeChips.map((chip) => (
+            {POST_TYPE_CHIPS.map((chip) => (
               <span key={chip} className="chip">
                 {chip}
               </span>
@@ -4240,7 +4202,7 @@ function App() {
                 />
 
                 <div className="chip-row">
-                  {aiPromptIdeas.map((idea) => (
+                  {AI_PROMPT_IDEAS.map((idea) => (
                     <button
                       key={idea}
                       type="button"
