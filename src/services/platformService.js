@@ -114,7 +114,7 @@ export const platformService = {
       .maybeSingle()
 
     if (error) throw new Error(error.message)
-    if (!data) throw new Error('Only your future queued posts can be deleted.')
+    if (!data) throw new Error('Only your queued posts can be deleted.')
     return { id: data.id, deleted: true }
   },
 
