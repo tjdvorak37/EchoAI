@@ -276,6 +276,28 @@ Deno.serve(async (request) => {
       return json({ profile: updated }, 200, request)
     }
 
+    if (action === 'set-board-member-profit-share') {
+      if (callerProfile.role !== 'admin') {
+        return json({ error: 'Super Admin access is required to edit Board Member profit share.' }, 403, request)
+      }
+      const profitSharePercent = Number(body.profitSharePercent)
+      if (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 10) {
+        return json({ error: 'Profit share must be between 1% and 10%.' }, 400, request)
+      }
+      if (target.role !== 'board_member') {
+        return json({ error: 'The selected user is not a Board Member.' }, 400, request)
+      }
+      const { data: updated, error: updateError } = await adminClient
+        .from('profiles')
+        .update({ profit_share_percent: profitSharePercent })
+        .eq('id', target.id)
+        .select('id, profit_share_percent')
+        .single()
+      if (updateError) return json({ error: 'Could not update Board Member profit share.' }, 500, request)
+      await recordAudit('updated_profile', { profit_share_percent: profitSharePercent })
+      return json({ profile: updated }, 200, request)
+    }
+
     return json({ error: 'Unknown action.' }, 400, request)
   } catch {
     return json({ error: 'Unexpected error.' }, 500, request)
