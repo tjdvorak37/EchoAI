@@ -1,10 +1,21 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const RECORD_TYPES = ['expense', 'payroll', 'tax', 'refund', 'task']
+const DEMO_KEY = 'echoai-finance-records-v1'
+
+const demoKey = (companyKey) => `${DEMO_KEY}-${companyKey.trim().toLowerCase()}`
 
 export const financeService = {
   async listRecords(companyKey) {
-    if (!isSupabaseConfigured || !companyKey) return {}
+    if (!companyKey) return {}
+    if (!isSupabaseConfigured) {
+      try {
+        const stored = JSON.parse(localStorage.getItem(demoKey(companyKey)))
+        return stored || {}
+      } catch {
+        return {}
+      }
+    }
     const { data, error } = await supabase
       .from('finance_records')
       .select('id, record_type, record')
@@ -19,9 +30,16 @@ export const financeService = {
   },
 
   async replaceRecords({ companyKey, userId, type, records }) {
-    if (!isSupabaseConfigured || !companyKey) return
+    if (!companyKey) return
     if (!RECORD_TYPES.includes(type)) throw new Error('Unsupported finance record type.')
     const key = companyKey.trim().toLowerCase()
+    if (!isSupabaseConfigured) {
+      let stored
+      try { stored = JSON.parse(localStorage.getItem(demoKey(key))) || {} } catch { stored = {} }
+      stored[type] = records
+      localStorage.setItem(demoKey(key), JSON.stringify(stored))
+      return
+    }
     const { error: deleteError } = await supabase
       .from('finance_records')
       .delete()

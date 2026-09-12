@@ -624,6 +624,13 @@ function App() {
         if (finance.refund) setRefunds(finance.refund)
         if (finance.task) setFinancialTasks(finance.task)
       }
+
+      const finance = await financeService.listRecords(user?.company)
+      if (finance.expense) setExpenses(finance.expense)
+      if (finance.payroll) setPayroll(finance.payroll)
+      if (finance.tax) setTaxRecords(finance.tax)
+      if (finance.refund) setRefunds(finance.refund)
+      if (finance.task) setFinancialTasks(finance.task)
     } catch (error) {
       setAdminError(error.message)
     } finally {
@@ -2038,6 +2045,12 @@ function App() {
     if (action === 'set-developer-app-edit-access' && result?.profile) {
       setTeamMembers((prev) => prev.map((member) => (
         member.id === userId ? { ...member, developerAppEditAccess: result.profile.developer_app_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-board-member-profit-share' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, profitSharePercent: Number(result.profile.profit_share_percent || 0) } : member
       )))
     }
 

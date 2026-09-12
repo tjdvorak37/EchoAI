@@ -157,6 +157,7 @@ export function AdminPanel({
   const [profileDraft, setProfileDraft] = useState({ fullName: '', company: '', saving: false, error: '' })
   const [newUserDraft, setNewUserDraft] = useState({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
   const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
+  const [profitShareDraft, setProfitShareDraft] = useState({ userId: '', value: '', saving: false, error: '' })
 
   const openUserDetail = (member) => {
     const nextId = expandedUserId === member.id ? null : member.id
@@ -164,6 +165,7 @@ export function AdminPanel({
     setVerification({ userId: null, summary: null, loading: false, error: '' })
     setRecoveryLink({ userId: null, url: '', error: '', loading: false })
     setProfileDraft({ fullName: member.fullName || '', company: member.company || '', saving: false, error: '' })
+    setProfitShareDraft({ userId: member.id, value: String(member.profitSharePercent || ''), saving: false, error: '' })
   }
 
   const loadVerification = async (member) => {
@@ -1155,6 +1157,40 @@ export function AdminPanel({
                                 {member.trademarkEditAccess ? 'Editing granted' : 'Grant editing access'}
                               </button>
                               <small className="muted">Only grant this to a trained trademark/legal specialist.</small>
+                            </div>}
+
+                            {isFullAdmin && member.role === 'board_member' && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Quarterly profit share</span>
+                              <input
+                                type="number"
+                                min="1"
+                                max="10"
+                                step="0.01"
+                                value={profitShareDraft.userId === member.id ? profitShareDraft.value : String(member.profitSharePercent || '')}
+                                onChange={(event) => setProfitShareDraft({ userId: member.id, value: event.target.value, saving: false, error: '' })}
+                              />
+                              <button
+                                type="button"
+                                className="primary-button"
+                                disabled={profitShareDraft.saving}
+                                onClick={async () => {
+                                  const value = Number(profitShareDraft.value)
+                                  if (!Number.isFinite(value) || value < 1 || value > 10) {
+                                    setProfitShareDraft((current) => ({ ...current, error: 'Enter a percentage from 1 to 10.' }))
+                                    return
+                                  }
+                                  setProfitShareDraft((current) => ({ ...current, saving: true, error: '' }))
+                                  try {
+                                    await onAdminUserAction({ action: 'set-board-member-profit-share', userId: member.id, email: member.email, profitSharePercent: value })
+                                    setProfitShareDraft((current) => ({ ...current, saving: false }))
+                                  } catch (error) {
+                                    setProfitShareDraft((current) => ({ ...current, saving: false, error: error.message }))
+                                  }
+                                }}
+                              >
+                                {profitShareDraft.saving ? 'Saving...' : 'Save percentage'}
+                              </button>
+                              {profitShareDraft.error && <small className="field-error">{profitShareDraft.error}</small>}
                             </div>}
 
                             {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">

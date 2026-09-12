@@ -3785,6 +3785,78 @@ main {
 .fin-task-check { border:1px solid rgba(148,163,184,.35); background:transparent; color:#8ec5ff; width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:0.85rem; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all 150ms; }
 .fin-task-check:hover { background:rgba(142,197,255,.08); }
 
+/* Finance uses the same light admin surface as the surrounding management panels. */
+.fin-panel {
+  background: var(--bg-page);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+.fin-panel-header,
+.fin-tabs {
+  border-color: var(--border);
+}
+.fin-tabs {
+  background: rgba(255, 255, 255, 0.72);
+}
+.fin-tab-btn { color: var(--text-soft); }
+.fin-tab-btn:hover { color: var(--text); }
+.fin-tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  background: rgba(35, 87, 214, 0.06);
+}
+.fin-panel-header h2,
+.fin-section-header h3,
+.fin-stat-label,
+.fin-bar-val,
+.fin-cat-val,
+.fin-row > div p,
+.fin-table-row,
+.fin-total-row strong {
+  color: var(--text);
+}
+.fin-panel-sub,
+.fin-stat-sub,
+.fin-bar-label,
+.fin-cat-name,
+.fin-row > div span,
+.fin-muted,
+.fin-table-head,
+.fin-total-row,
+.fin-form label {
+  color: var(--text-soft);
+}
+.fin-section,
+.fin-stat,
+.fin-form,
+.fin-cat-card {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+.fin-section-header,
+.fin-row,
+.fin-table-head,
+.fin-table-row,
+.fin-total-row,
+.fin-task-row {
+  border-color: var(--border);
+}
+.fin-bar-track { background: #e5eaf3; }
+.fin-form input,
+.fin-form select {
+  border-color: var(--border);
+  background: #ffffff;
+  color: var(--text);
+}
+.fin-form input::placeholder { color: #64748b; opacity: 1; }
+.fin-task-check {
+  border-color: #b8c4d6;
+  background: #ffffff;
+  color: var(--primary);
+}
+
 /* Drag-drop drawer overlay */
 .asset-drawer { position: relative; }
 .asset-drawer.drag-active { outline: 2px dashed #3b82f6; outline-offset: -4px; }
