@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FinancePanel } from './FinancePanel'
 import { TrademarkPanel } from './TrademarkPanel'
+import { DeveloperAppsPanel } from './DeveloperAppsPanel'
 
 const USERS_PER_PAGE = 25
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
@@ -366,6 +367,7 @@ export function AdminPanel({
     { id: 'users', label: '👥 Users' },
     { id: 'storage', label: '💾 Storage' },
     { id: 'trademark', label: '⚖️ Trademark & Legal' },
+    { id: 'developer-apps', label: '🔐 Developer Apps' },
     { id: 'integrations', label: '🔌 Integrations' },
     { id: 'controls', label: '⚙️ Site Controls' },
   ] : [
@@ -374,6 +376,7 @@ export function AdminPanel({
     { id: 'users', label: '👥 User directory' },
     { id: 'storage', label: '💾 Storage' },
     { id: 'trademark', label: '⚖️ Trademark & Legal' },
+    { id: 'developer-apps', label: '🔐 Developer Apps' },
     { id: 'integrations', label: '🔌 Integrations' },
     { id: 'controls', label: '⚙️ Notices' },
   ]
@@ -1368,6 +1371,8 @@ export function AdminPanel({
         )}
 
         {itTab === 'trademark' && <TrademarkPanel currentUser={currentUser} />}
+
+        {itTab === 'developer-apps' && <DeveloperAppsPanel currentUser={currentUser} />}
 
         {itTab === 'integrations' && (
           <div>

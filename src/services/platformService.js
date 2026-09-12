@@ -95,6 +95,29 @@ export const platformService = {
     }
   },
 
+  async deleteScheduledPost(postId) {
+    if (!postId) throw new Error('Post ID is required.')
+
+    if (!isSupabaseConfigured) {
+      return { id: postId, deleted: true }
+    }
+
+    const userId = await getCurrentUserId()
+    const { data, error } = await supabase
+      .from('scheduled_posts')
+      .delete()
+      .eq('id', postId)
+      .eq('user_id', userId)
+      .eq('status', 'scheduled')
+      .gt('scheduled_at', new Date().toISOString())
+      .select('id')
+      .maybeSingle()
+
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('Only your future queued posts can be deleted.')
+    return { id: data.id, deleted: true }
+  },
+
   async postNow(payload) {
     const publishedAt = new Date().toISOString()
     const post = {

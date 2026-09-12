@@ -13,10 +13,12 @@ type Credential = {
   platform: string
   external_account_id: string
   access_token: string
+  refresh_token: string | null
   expires_at: string | null
 }
 
 const GRAPH_URL = 'https://graph.facebook.com/v21.0'
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const maxAttempts = 3
 
 const admin = () =>
@@ -115,9 +117,75 @@ const publishInstagramImage = async (credential: Credential, message: string, me
   return String(published.id)
 }
 
+const publishYouTubeVideo = async (credential: Credential, post: ScheduledPost) => {
+  const video = post.media.find((item) => item.type === 'video' && item.storagePath)
+  if (!video?.storagePath) {
+    throw new Error('YouTube publishing requires an uploaded video attached to the post.')
+  }
+
+  const { data: file, error: downloadError } = await admin().storage.from('social-media').download(video.storagePath)
+  if (downloadError || !file) throw new Error('Unable to retrieve the selected video for YouTube publishing.')
+
+  const metadataResponse = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${credential.access_token}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': video.mime || 'video/mp4',
+      'X-Upload-Content-Length': String(file.size),
+    },
+    body: JSON.stringify({
+      snippet: {
+        title: (post.campaign || 'EchoAI video').slice(0, 100),
+        description: post.message.slice(0, 5000),
+      },
+      status: { privacyStatus: 'private', selfDeclaredMadeForKids: false },
+    }),
+  })
+  if (!metadataResponse.ok) throw new Error(await providerError(metadataResponse, 'YouTube upload session could not be created.'))
+
+  const uploadUrl = metadataResponse.headers.get('location')
+  if (!uploadUrl) throw new Error('YouTube did not return an upload URL.')
+
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${credential.access_token}`,
+      'Content-Type': video.mime || 'video/mp4',
+      'Content-Length': String(file.size),
+    },
+    body: file,
+  })
+  if (!uploadResponse.ok) throw new Error(await providerError(uploadResponse, 'YouTube video upload failed.'))
+  const uploaded = await uploadResponse.json()
+  if (!uploaded.id) throw new Error('YouTube did not return a video ID.')
+  return String(uploaded.id)
+}
+
+const refreshYouTubeCredential = async (credential: Credential, userId: string) => {
+  if (credential.platform !== 'youtube' || !credential.refresh_token || !credential.expires_at) return credential
+  if (new Date(credential.expires_at).getTime() > Date.now() + 60_000) return credential
+
+  const clientId = Deno.env.get('YOUTUBE_CLIENT_ID') ?? Deno.env.get('youtube_client_id') ?? ''
+  const clientSecret = Deno.env.get('YOUTUBE_CLIENT_SECRET') ?? Deno.env.get('youtube_client_secret') ?? ''
+  if (!clientId || !clientSecret) throw new Error('YouTube token refresh is not configured.')
+
+  const response = await fetch(GOOGLE_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: credential.refresh_token, grant_type: 'refresh_token' }),
+  })
+  if (!response.ok) throw new Error(await providerError(response, 'YouTube authorization could not be refreshed.'))
+  const token = await response.json()
+  const refreshed = { ...credential, access_token: token.access_token, expires_at: new Date(Date.now() + Number(token.expires_in || 3600) * 1000).toISOString() }
+  await admin().from('social_oauth_credentials').update({ access_token: refreshed.access_token, expires_at: refreshed.expires_at, updated_at: new Date().toISOString() }).eq('user_id', userId).eq('platform', 'youtube')
+  return refreshed
+}
+
 const publishChannel = async (post: ScheduledPost, channel: string, credential: Credential) => {
   if (channel === 'facebook') return publishFacebookPost(credential, post.message, post.media ?? [])
   if (channel === 'instagram') return publishInstagramImage(credential, post.message, post.media ?? [])
+  if (channel === 'youtube') return publishYouTubeVideo(credential, post)
   throw new Error(`${channel} publishing is not deployed yet.`)
 }
 
@@ -142,7 +210,7 @@ const publishPost = async (post: ScheduledPost) => {
 
     const { data: credential } = await db
       .from('social_oauth_credentials')
-      .select('platform, external_account_id, access_token, expires_at')
+      .select('platform, external_account_id, access_token, refresh_token, expires_at')
       .eq('user_id', post.user_id)
       .eq('platform', channel)
       .maybeSingle<Credential>()
@@ -151,7 +219,14 @@ const publishPost = async (post: ScheduledPost) => {
       failures.push(`${channel}: credential is missing`)
       continue
     }
-    if (credential.expires_at && new Date(credential.expires_at) <= new Date()) {
+    let activeCredential: Credential
+    try {
+      activeCredential = await refreshYouTubeCredential(credential, post.user_id)
+    } catch (error) {
+      failures.push(`${channel}: ${error instanceof Error ? error.message : 'authorization refresh failed'}`)
+      continue
+    }
+    if (activeCredential.expires_at && new Date(activeCredential.expires_at) <= new Date()) {
       await db
         .from('user_social_accounts')
         .update({ connection_status: 'reauth_required', updated_at: new Date().toISOString() })
@@ -162,7 +237,7 @@ const publishPost = async (post: ScheduledPost) => {
     }
 
     try {
-      providerPostIds[channel] = await publishChannel(post, channel, credential)
+      providerPostIds[channel] = await publishChannel(post, channel, activeCredential)
     } catch (error) {
       failures.push(`${channel}: ${error instanceof Error ? error.message : 'publishing failed'}`)
     }
