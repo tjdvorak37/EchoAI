@@ -102,7 +102,7 @@ Deno.serve(async (request) => {
     const { data: targetById } = await adminClient
       .from('profiles')
       .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, created_at')
-      .eq('id', userId)
+        .eq('id', userId)
       .maybeSingle()
 
     let target = targetById
@@ -119,7 +119,7 @@ Deno.serve(async (request) => {
       let authTarget = userId ? (await adminClient.auth.admin.getUserById(userId)).data.user : null
       if (!authTarget && typeof targetEmail === 'string' && targetEmail.trim()) {
         const { data: users } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 })
-        authTarget = users?.users?.find((user) => user.email?.toLowerCase() === targetEmail.trim().toLowerCase()) ?? null
+      if (target.role === 'admin' && caller.user.id !== target.id) {
       }
       if (authTarget) {
         const metadata = authTarget.user_metadata ?? {}
@@ -144,7 +144,7 @@ Deno.serve(async (request) => {
     }
 
     // Admins are excluded from these actions so one compromised admin account
-    // cannot be used to take over another.
+        if (!target.is_board_member && target.role !== 'board_member') {
     if (target.role === 'admin' && caller.user.id !== target.id) {
       return json({ error: 'Administrator accounts cannot be managed here.' }, 403, request)
     }
