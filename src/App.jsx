@@ -80,25 +80,7 @@ const getPlatformMeta = (platformName) =>
   PLATFORM_META[platformName?.toLowerCase()] ??
   { label: platformName, icon: '🔗', color: '#64748b', bg: 'rgba(100,116,139,0.1)', border: 'rgba(100,116,139,0.25)' }
 
-const DEFAULT_ACCOUNT_HANDLES = {
-  instagram: '@youraccount',
-  facebook: 'Your page name',
-  tiktok: '@youraccount',
-  snapchat: 'Your Snapchat',
-  x: '@youraccount',
-  youtube: 'Your channel',
-  linkedin: 'Your profile / page',
-}
-
 const SOCIAL_PUBLISHING_SCOPES = ['posts', 'images', 'videos', 'comments', 'analytics']
-
-const getDefaultAccountHandle = (platformName) =>
-  DEFAULT_ACCOUNT_HANDLES[String(platformName || '').toLowerCase()] || 'Your account'
-
-const isPlaceholderAccountHandle = (platformName, accountName) => {
-  const defaultValue = getDefaultAccountHandle(platformName)
-  return !String(accountName || '').trim() || String(accountName).trim().toLowerCase() === defaultValue.toLowerCase()
-}
 
 const createDefaultAiAgentConfig = () => ({
   enabled: false,
@@ -280,6 +262,7 @@ function App() {
   const [integrationError, setIntegrationError] = useState('')
   const [aiInput, setAiInput] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState([])
+  const [aiSuggestionError, setAiSuggestionError] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [creativeProject, setCreativeProject] = useState(null)
   const [aiAgentConfig, setAiAgentConfig] = useState(() => createDefaultAiAgentConfig())
@@ -1420,9 +1403,12 @@ function App() {
     }
 
     setAiLoading(true)
+    setAiSuggestionError('')
     try {
       const suggestions = await platformService.generateMessageIdeas(aiInput, aiAgentConfig)
       setAiSuggestions(suggestions)
+    } catch (error) {
+      setAiSuggestionError(error.message)
     } finally {
       setAiLoading(false)
     }
@@ -1431,15 +1417,6 @@ function App() {
   const handleEditCreativeProject = (project) => {
     setCreativeProject(project)
     setActiveTab(project.outputType === 'video' ? 'studio' : 'photo')
-  }
-
-  const handleUseCreativeDraft = (project) => {
-    setComposer((prev) => ({
-      ...prev,
-      campaign: project.title || prev.campaign,
-      message: project.caption || prev.message,
-      imageIdea: project.visualPrompt || prev.imageIdea,
-    }))
   }
 
   const handleSaveCreativeProjectToWorkspace = async (project) => {
@@ -4101,7 +4078,6 @@ function App() {
                 agentConfig={aiAgentConfig}
                 workspaceAssets={workspaceAssets}
                 onEditProject={handleEditCreativeProject}
-                onUseDraft={handleUseCreativeDraft}
                 onSaveToWorkspace={handleSaveCreativeProjectToWorkspace}
               />
             </Suspense>
@@ -4129,7 +4105,7 @@ function App() {
                   ))}
                 </div>
 
-                <button type="button" className="primary-button" onClick={handleGenerateAi}>
+                <button type="button" className="primary-button" disabled={aiLoading} onClick={handleGenerateAi}>
                   {aiLoading ? 'Generating...' : 'Generate suggestions'}
                 </button>
               </article>
@@ -4139,6 +4115,7 @@ function App() {
                 {aiSuggestions.length === 0 && (
                   <p className="muted">Generate content to see campaign-ready ideas here.</p>
                 )}
+                {aiSuggestionError && <p className="field-error">{aiSuggestionError}</p>}
 
                 {aiSuggestions.map((suggestion, index) => (
                   <div key={`${suggestion.title}-${index}`} className="suggestion">

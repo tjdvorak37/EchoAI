@@ -37,8 +37,8 @@ const openAiRequest = async (config: Record<string, unknown>, payload: Record<st
   if (payload.capability === 'image' || payload.mode === 'image') {
     const ratio = String((payload.output as Record<string, unknown> | undefined)?.aspectRatio ?? '1:1')
     const size = ratio === '16:9' ? '1536x1024' : ratio === '9:16' ? '1024x1536' : '1024x1024'
-    const reference = (payload.references as Array<Record<string, unknown>> | undefined)?.find((item) => item.imageSrc)
-    const referenceFile = dataUrlFile(reference?.imageSrc)
+    const reference = (payload.references as Array<Record<string, unknown>> | undefined)?.find((item) => item.imageSrc || item.url)
+    const referenceFile = dataUrlFile(reference?.imageSrc || reference?.url)
     let response: Response
     if (referenceFile) {
       const form = new FormData()

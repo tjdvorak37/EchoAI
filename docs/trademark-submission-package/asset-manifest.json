@@ -1,0 +1,61 @@
+{
+  "package": "EchoAI trademark pre-filing evidence",
+  "generatedFrom": "EchoAI workspace",
+  "status": "review-required",
+  "applicant": {
+    "legalName": "Timothy Jason Dvorak",
+    "entityType": "individual",
+    "address": {
+      "street": "314 Arthur Neu Dr.",
+      "city": "Carroll",
+      "state": "Iowa",
+      "postalCode": "51401",
+      "country": "United States of America"
+    },
+    "phone": "712-790-7445",
+    "email": "tdvorak37@gmail.com",
+    "filingJurisdiction": "United States of America",
+    "canonicalUrl": "https://www.echoaipro.com",
+    "availability": "Private beta testing; not live for general public use",
+    "firstUseAnywhere": "Private beta testing only; date to confirm",
+    "firstUseInCommerce": "Not yet confirmed; site is not generally available"
+  },
+  "candidateMarks": [
+    { "text": "EchoAI", "type": "word-mark" },
+    { "text": "EchoAI + Echo mascot", "type": "composite-mark" },
+    { "text": "AI Studio", "type": "product-label" },
+    { "text": "In-house AI", "type": "product-label" },
+    { "text": "Photo + video", "type": "product-label" },
+    { "text": "Publish", "type": "product-label" },
+    { "text": "Listen", "type": "product-label" },
+    { "text": "Workspace", "type": "product-label" }
+  ],
+  "visualAssets": [
+    { "path": "src/assets/echo-mascot.svg", "role": "primary-logo-or-mascot", "include": true, "review": "Confirm ownership and final version" },
+    { "path": "public/favicon.svg", "role": "site-icon", "include": true, "review": "Supporting evidence only" },
+    { "path": "src/assets/demo-poster.svg", "role": "service-specimen", "include": true, "review": "Use only if displayed to customers" },
+    { "path": "src/assets/hero.png", "role": "website-visual", "include": true, "review": "Confirm source and license" },
+    { "path": "public/icons.svg", "role": "ui-sprite", "include": false },
+    { "path": "src/assets/react.svg", "role": "third-party-framework-asset", "include": false },
+    { "path": "src/assets/vite.svg", "role": "third-party-build-asset", "include": false }
+  ],
+  "sensitiveDataExcluded": [
+    "customer records",
+    "personal information",
+    "workspace uploads",
+    "OAuth tokens",
+    "API keys",
+    "recovery codes",
+    "database exports",
+    "production logs"
+  ],
+  "applicantFieldsRequired": [
+    "legal owner name",
+    "entity type and formation jurisdiction",
+    "owner address",
+    "filing jurisdiction",
+    "canonical HTTPS URL",
+    "first-use dates",
+    "goods and services classes"
+  ]
+}
