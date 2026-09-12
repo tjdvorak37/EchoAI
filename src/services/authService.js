@@ -93,6 +93,7 @@ const normalizeMember = (record) => ({
   trademarkEditAccess: record.trademark_edit_access === true,
   developerAppEditAccess: record.developer_app_edit_access === true,
   profitSharePercent: Number(record.profit_share_percent ?? record.profitSharePercent ?? 0),
+  isBoardMember: record.is_board_member === true || record.role === 'board_member',
   storageQuotaMb: record.storage_quota_mb ?? record.storageQuotaMb ?? 2048,
   aiAgentConfig: normalizeAiAgentConfig(record.ai_agent_config ?? record.aiAgentConfig),
 })
@@ -195,6 +196,8 @@ export const authService = {
       role: profile.role ?? session.user.user_metadata?.role ?? 'user',
       accessStatus: profile.access_status ?? 'active',
       company: profile.company ?? '',
+      isBoardMember: profile.is_board_member === true || profile.role === 'board_member',
+      profitSharePercent: Number(profile.profit_share_percent || 0),
     }
   },
 
@@ -255,6 +258,9 @@ export const authService = {
           ...data.user,
           role: profile?.role ?? 'user',
           accessStatus: profile?.access_status ?? 'active',
+          company: profile?.company ?? '',
+          isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
+          profitSharePercent: Number(profile?.profit_share_percent || 0),
         },
       }
     }

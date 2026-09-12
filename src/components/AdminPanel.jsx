@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FinancePanel } from './FinancePanel'
 import { TrademarkPanel } from './TrademarkPanel'
 import { DeveloperAppsPanel } from './DeveloperAppsPanel'
+import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
 
 const USERS_PER_PAGE = 25
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'board_member', 'user']
@@ -369,6 +370,7 @@ export function AdminPanel({
     { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}` },
     { id: 'billing', label: '💳 Billing' },
     { id: 'finance', label: '💹 Finance' },
+    ...(currentUser?.isBoardMember ? [{ id: 'board-summary', label: '📈 My Board Summary' }] : []),
     { id: 'employees', label: '🧑‍💼 Employees' },
     { id: 'users', label: '👥 Customer users' },
     { id: 'storage', label: '💾 Storage' },
@@ -1159,7 +1161,7 @@ export function AdminPanel({
                               <small className="muted">Only grant this to a trained trademark/legal specialist.</small>
                             </div>}
 
-                            {isFullAdmin && member.role === 'board_member' && <div className="it-user-detail-group">
+                            {isFullAdmin && (member.isBoardMember || member.role === 'board_member') && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Quarterly profit share</span>
                               <input
                                 type="number"
@@ -1191,6 +1193,26 @@ export function AdminPanel({
                                 {profitShareDraft.saving ? 'Saving...' : 'Save percentage'}
                               </button>
                               {profitShareDraft.error && <small className="field-error">{profitShareDraft.error}</small>}
+                            </div>}
+
+                            {isFullAdmin && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Board Membership</span>
+                              <button
+                                type="button"
+                                className={member.isBoardMember || member.role === 'board_member' ? 'primary-button' : 'ghost-button'}
+                                onClick={async () => {
+                                  const enabled = !(member.isBoardMember || member.role === 'board_member')
+                                  const share = Number(member.profitSharePercent || 1)
+                                  try {
+                                    await onAdminUserAction({ action: 'set-board-membership', userId: member.id, email: member.email, enabled, profitSharePercent: share })
+                                  } catch (error) {
+                                    setNewUserStatus({ saving: false, message: '', error: error.message })
+                                  }
+                                }}
+                              >
+                                {member.isBoardMember || member.role === 'board_member' ? 'Board Member enabled' : 'Add Board Member role'}
+                              </button>
+                              <small className="muted">Board Membership can coexist with Admin and payroll. Set the percentage above after enabling.</small>
                             </div>}
 
                             {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">
@@ -1434,6 +1456,10 @@ export function AdminPanel({
             company={currentUser?.company}
             currentUser={currentUser}
           />
+        )}
+
+        {itTab === 'board-summary' && currentUser?.isBoardMember && (
+          <BoardMemberFinancePanel company={currentUser.company} />
         )}
 
         {itTab === 'trademark' && <TrademarkPanel currentUser={currentUser} />}

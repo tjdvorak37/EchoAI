@@ -548,7 +548,7 @@ function App() {
   }
 
   const isAdminUser = session?.role === 'admin'
-  const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant', 'board_member'].includes(session?.role || '')
+  const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant', 'board_member'].includes(session?.role || '') || session?.isBoardMember === true
   const canManageBrandKit = ['admin', 'manager'].includes(session?.role || '')
 
   async function loadAdminData(user = session) {
@@ -579,7 +579,7 @@ function App() {
         return
       }
 
-      if (user?.role === 'board_member') {
+      if (user?.isBoardMember || user?.role === 'board_member') {
         return
       }
 
@@ -2031,6 +2031,7 @@ function App() {
           trademarkEditAccess: result.profile.trademark_edit_access === true,
           developerAppEditAccess: result.profile.developer_app_edit_access === true,
           profitSharePercent: Number(result.profile.profit_share_percent || 0),
+          isBoardMember: result.profile.is_board_member === true || result.profile.role === 'board_member',
         },
         ...prev,
       ])
@@ -2052,6 +2053,10 @@ function App() {
       setTeamMembers((prev) => prev.map((member) => (
         member.id === userId ? { ...member, profitSharePercent: Number(result.profile.profit_share_percent || 0) } : member
       )))
+    }
+
+    if (action === 'set-board-membership' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => member.id === userId ? { ...member, isBoardMember: result.profile.is_board_member === true, profitSharePercent: Number(result.profile.profit_share_percent || 0) } : member))
     }
 
     if (action === 'update-profile' && result?.profile) {
@@ -5172,7 +5177,7 @@ function App() {
           </Suspense>
         )}
 
-        {activeTab === 'admin' && session?.role === 'board_member' && (
+        {activeTab === 'admin' && (session?.role === 'board_member' || session?.isBoardMember) && session?.role !== 'admin' && (
           <Suspense fallback={loadingPanel}>
             <BoardMemberFinancePanel company={session.company} />
           </Suspense>
