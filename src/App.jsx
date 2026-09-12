@@ -1980,6 +1980,7 @@ function App() {
           accessStatus: result.profile.access_status,
           storageQuotaMb: result.profile.storage_quota_mb,
           trademarkEditAccess: result.profile.trademark_edit_access === true,
+          developerAppEditAccess: result.profile.developer_app_edit_access === true,
         },
         ...prev,
       ])
@@ -1988,6 +1989,12 @@ function App() {
     if (action === 'set-trademark-edit-access' && result?.profile) {
       setTeamMembers((prev) => prev.map((member) => (
         member.id === userId ? { ...member, trademarkEditAccess: result.profile.trademark_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-developer-app-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, developerAppEditAccess: result.profile.developer_app_edit_access === true } : member
       )))
     }
 
@@ -2457,6 +2464,22 @@ function App() {
       if (session?.id === updatedMember.id && nextStatus === 'deactivated') {
         await authService.signOut()
         setSession(null)
+      }
+    } catch (error) {
+      setAdminError(error.message)
+    } finally {
+      setAdminLoading(false)
+    }
+  }
+
+  const handleReviewAccessRequest = async (request, decision) => {
+    setAdminError('')
+    setAdminLoading(true)
+    try {
+      const result = await authService.reviewAccessRequest({ requestId: request.id, decision })
+      setAccessRequests((prev) => prev.map((item) => item.id === request.id ? result.request : item))
+      if (result.member) {
+        setTeamMembers((prev) => prev.map((member) => member.id === result.member.id ? { ...member, ...result.member } : member))
       }
     } catch (error) {
       setAdminError(error.message)
@@ -5053,6 +5076,7 @@ function App() {
               handleQuotaUpdate={handleQuotaUpdate}
               handleToggleUserAccess={handleToggleUserAccess}
               handleUpdateUserRole={handleUpdateUserRole}
+              handleReviewAccessRequest={handleReviewAccessRequest}
               companySeatPackage={companySeatPackage}
               companySeats={companySeats}
               handleCreateCompanySeatPackage={handleCreateCompanySeatPackage}
