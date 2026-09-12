@@ -209,7 +209,10 @@ export function AdminPanel({
       setNewUserDraft({ fullName: '', email: '', company: '', role: 'it' })
       setNewUserStatus({ saving: false, message: 'Invitation sent. The new staff member can finish setup and MFA from the landing page.', error: '' })
     } catch (error) {
-      setNewUserStatus({ saving: false, message: '', error: error.message })
+      const message = error.message?.includes('userId')
+        ? 'The live admin service is out of date. Deploy the updated admin-user-actions function, then try again. A new technician does not need a user ID.'
+        : error.message
+      setNewUserStatus({ saving: false, message: '', error: message })
     }
   }
 

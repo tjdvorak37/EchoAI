@@ -3579,6 +3579,20 @@ main {
   font-size: 0.9rem;
 }
 
+.it-section .auth-form input,
+.it-section .auth-form select,
+.it-section .auth-form textarea {
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+}
+
+.it-section .auth-form input::placeholder,
+.it-section .auth-form textarea::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+
 .it-section input:focus {
   outline: 2px solid #3b82f6;
 }
