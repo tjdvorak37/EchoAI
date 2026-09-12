@@ -109,7 +109,6 @@ export const platformService = {
       .eq('id', postId)
       .eq('user_id', userId)
       .eq('status', 'scheduled')
-      .gt('scheduled_at', new Date().toISOString())
       .select('id')
       .maybeSingle()
 
