@@ -27,7 +27,7 @@ export function BoardMemberFinancePanel({ company }) {
       {summary && (
         <div className="stats-grid">
           <article className="stat-card"><p>Revenue</p><h3>{money(summary.revenue)}</h3></article>
-          <article className="stat-card"><p>Operating costs</p><h3>{money(summary.expenses + summary.payrollCost + summary.refunds)}</h3></article>
+          <article className="stat-card"><p>Operating costs</p><h3>{money(summary.expenses + summary.refunds)}</h3></article>
           <article className="stat-card"><p>Profit after expenses</p><h3>{money(summary.profitAfterExpenses)}</h3></article>
           <article className="stat-card"><p>Active subscriptions</p><h3>{summary.activeSubscriptions}</h3></article>
           <article className="stat-card"><p>Your share</p><h3>{summary.sharePercent}%</h3></article>

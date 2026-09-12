@@ -12,24 +12,21 @@ export const boardPayoutService = {
 
   async create(payload) {
     if (!isSupabaseConfigured) return payload
-    const { data: userData } = await supabase.auth.getUser()
-    const { data, error } = await supabase.from('board_profit_payouts').insert({
-      company_key: payload.companyKey.trim().toLowerCase(),
-      board_member_id: payload.boardMemberId,
-      quarter_start: payload.quarterStart,
-      quarter_end: payload.quarterEnd,
-      profit_after_expenses: Number(payload.profitAfterExpenses),
-      active_subscription_count: Number(payload.activeSubscriptionCount),
-      share_percent: Number(payload.sharePercent),
-      payout_amount: Number(payload.payoutAmount),
-      created_by: userData.user?.id,
-    }).select('*').single()
+    const { data, error } = await supabase.rpc('create_board_profit_payout', {
+      p_company_key: payload.companyKey,
+      p_board_member_id: payload.boardMemberId,
+      p_quarter_start: payload.quarterStart,
+      p_quarter_end: payload.quarterEnd,
+      p_profit_after_expenses: Number(payload.profitAfterExpenses),
+      p_active_subscription_count: Number(payload.activeSubscriptionCount),
+      p_notes: payload.notes || '',
+    })
     if (error) throw new Error(error.message)
     return data
   },
 
   async markPaid(id) {
-    const { data, error } = await supabase.from('board_profit_payouts').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', id).select('*').single()
+    const { data, error } = await supabase.rpc('mark_board_profit_payout_paid', { p_payout_id: id })
     if (error) throw new Error(error.message)
     return data
   },

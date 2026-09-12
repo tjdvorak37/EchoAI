@@ -27,7 +27,7 @@ export function BoardPayoutsPanel({ company, boardMembers = [], currentUser, adm
     event.preventDefault()
     setStatus({ error: '', message: '' })
     try {
-      await boardPayoutService.create({ companyKey: company, boardMemberId: form.boardMemberId, quarterStart: form.quarterStart, quarterEnd: form.quarterEnd, profitAfterExpenses: form.profitAfterExpenses, activeSubscriptionCount: form.activeSubscriptionCount, sharePercent, payoutAmount })
+      await boardPayoutService.create({ companyKey: company, boardMemberId: form.boardMemberId, quarterStart: form.quarterStart, quarterEnd: form.quarterEnd, profitAfterExpenses: form.profitAfterExpenses, activeSubscriptionCount: form.activeSubscriptionCount })
       setForm({ boardMemberId: '', quarterStart: '', quarterEnd: '', profitAfterExpenses: '', activeSubscriptionCount: '' })
       setStatus({ error: '', message: 'Quarterly payout created.' })
       setPayouts(await boardPayoutService.list(company, false))

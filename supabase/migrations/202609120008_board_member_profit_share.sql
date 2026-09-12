@@ -39,13 +39,13 @@ create index if not exists board_profit_payouts_member_idx
 alter table public.board_profit_payouts enable row level security;
 
 create policy board_profit_payouts_admin_accounting
-  on public.board_profit_payouts for all
+  on public.board_profit_payouts for select
   using (company_key = app.current_company_key() and app.current_role() in ('admin', 'accountant'))
-  with check (company_key = app.current_company_key() and app.current_role() in ('admin', 'accountant'));
+;
 
 create policy board_profit_payouts_member_read
   on public.board_profit_payouts for select
-  using (board_member_id = auth.uid() and app.current_role() = 'board_member');
+  using (board_member_id = auth.uid() and company_key = app.current_company_key() and app.current_role() = 'board_member');
 
 create or replace function public.board_member_financial_summary(p_company_key text)
 returns json
@@ -64,7 +64,7 @@ declare
   v_subscriptions integer;
   v_profit numeric(12, 2);
 begin
-  if v_role <> 'board_member' then
+  if v_role <> 'board_member' or lower(trim(p_company_key)) <> app.current_company_key() then
     raise exception 'Board Member access is required';
   end if;
 
@@ -95,7 +95,6 @@ begin
   return json_build_object(
     'revenue', v_revenue,
     'expenses', v_expenses,
-    'payrollCost', v_payroll,
     'refunds', v_refunds,
     'profitAfterExpenses', v_profit,
     'activeSubscriptions', v_subscriptions,
@@ -106,6 +105,93 @@ end;
 $$;
 
 grant execute on function public.board_member_financial_summary(text) to authenticated;
+
+create or replace function public.create_board_profit_payout(
+  p_company_key text,
+  p_board_member_id uuid,
+  p_quarter_start date,
+  p_quarter_end date,
+  p_profit_after_expenses numeric,
+  p_active_subscription_count integer,
+  p_notes text default ''
+)
+returns public.board_profit_payouts
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_share numeric(4, 2);
+  v_payout public.board_profit_payouts;
+begin
+  if app.current_role() not in ('admin', 'accountant') then
+    raise exception 'Super Admin or Accounting access is required';
+  end if;
+  if lower(trim(p_company_key)) <> app.current_company_key() then
+    raise exception 'Company scope mismatch';
+  end if;
+  if p_quarter_end < p_quarter_start or p_active_subscription_count < 0 then
+    raise exception 'Invalid quarterly payout values';
+  end if;
+  select profit_share_percent into v_share
+    from public.profiles
+   where id = p_board_member_id
+     and role = 'board_member'
+     and lower(trim(company)) = app.current_company_key();
+  if v_share is null or v_share < 1 or v_share > 10 then
+    raise exception 'Board Member share percentage is not configured';
+  end if;
+  select coalesce(sum(bp.amount_usd), 0)
+    into p_profit_after_expenses
+    from public.billing_payments bp
+    join public.profiles payment_profile on payment_profile.id = bp.user_id
+   where lower(trim(payment_profile.company)) = app.current_company_key()
+     and bp.status = 'confirmed'
+     and bp.paid_at::date between p_quarter_start and p_quarter_end;
+
+  select p_profit_after_expenses
+    - coalesce(sum(case when fr.record_type = 'expense' then coalesce((fr.record->>'amountUsd')::numeric, 0) else 0 end), 0)
+    - coalesce(sum(case when fr.record_type = 'refund' and fr.record->>'status' in ('approved', 'processed') then coalesce((fr.record->>'amountUsd')::numeric, 0) else 0 end), 0)
+    - coalesce(sum(case when fr.record_type = 'payroll' then coalesce((fr.record->>'grossPayUsd')::numeric, 0) else 0 end), 0)
+    into p_profit_after_expenses
+    from public.finance_records fr
+   where fr.company_key = app.current_company_key()
+    and coalesce(nullif(fr.record->>'date', '')::date, nullif(fr.record->>'dueDate', '')::date, nullif(fr.record->>'lastPaidDate', '')::date, p_quarter_start) between p_quarter_start and p_quarter_end;
+
+  p_profit_after_expenses := greatest(p_profit_after_expenses, 0);
+
+  insert into public.board_profit_payouts (
+    company_key, board_member_id, quarter_start, quarter_end,
+    profit_after_expenses, active_subscription_count, share_percent,
+    payout_amount, notes, created_by
+  ) values (
+    app.current_company_key(), p_board_member_id, p_quarter_start, p_quarter_end,
+    p_profit_after_expenses, p_active_subscription_count, v_share,
+    greatest(p_profit_after_expenses, 0) * v_share / 100, coalesce(p_notes, ''), auth.uid()
+  ) returning * into v_payout;
+  return v_payout;
+end;
+$$;
+
+grant execute on function public.create_board_profit_payout(text, uuid, date, date, numeric, integer, text) to authenticated;
+
+create or replace function public.mark_board_profit_payout_paid(p_payout_id uuid)
+returns public.board_profit_payouts
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_payout public.board_profit_payouts;
+begin
+  if app.current_role() not in ('admin', 'accountant') then raise exception 'Super Admin or Accounting access is required'; end if;
+  update public.board_profit_payouts set status = 'paid', paid_at = now()
+   where id = p_payout_id and company_key = app.current_company_key()
+   returning * into v_payout;
+  if v_payout.id is null then raise exception 'Payout not found'; end if;
+  return v_payout;
+end;
+$$;
+grant execute on function public.mark_board_profit_payout_paid(uuid) to authenticated;
 
 create or replace function public.my_entitlement()
 returns json

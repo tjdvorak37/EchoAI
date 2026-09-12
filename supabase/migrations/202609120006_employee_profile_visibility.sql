@@ -4,7 +4,13 @@
 drop policy if exists echoai_profiles_select_staff on public.profiles;
 create policy echoai_profiles_select_staff
   on public.profiles for select
-  using (app.current_role() in ('admin', 'accountant'));
+  using (
+    app.current_role() = 'admin'
+    or (
+      app.current_role() = 'accountant'
+      and lower(trim(coalesce(company, ''))) = app.current_company_key()
+    )
+  );
 
 drop policy if exists echoai_profiles_select_company on public.profiles;
 create policy echoai_profiles_select_company

@@ -688,12 +688,12 @@ export const authService = {
     return normalizeMember(data)
   },
 
-  async updateUserRole({ userId, role }) {
+  async updateUserRole({ userId, role, profitSharePercent }) {
     if (!userId || !role) {
       throw new Error('User ID and role are required.')
     }
 
-    if (!['user', 'manager', 'it', 'accountant', 'admin'].includes(role)) {
+    if (!['user', 'manager', 'it', 'accountant', 'board_member', 'admin'].includes(role)) {
       throw new Error('Role must be user, manager, it, accountant, or admin.')
     }
 
@@ -717,7 +717,7 @@ export const authService = {
 
     const { data, error } = await supabase
       .from('profiles')
-      .update({ role })
+      .update({ role, ...(role === 'board_member' ? { profit_share_percent: Number(profitSharePercent) || 0 } : {}) })
       .eq('id', userId)
       .select('*')
       .single()

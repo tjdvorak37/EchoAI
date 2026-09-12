@@ -20,7 +20,3 @@ create policy finance_records_admin_accounting
   on public.finance_records for all
   using (company_key = app.current_company_key() and app.current_role() in ('admin', 'accountant'))
   with check (company_key = app.current_company_key() and app.current_role() in ('admin', 'accountant'));
-
-create policy finance_records_board_summary_read
-  on public.finance_records for select
-  using (company_key = app.current_company_key() and app.current_role() = 'board_member' and record_type in ('expense', 'refund', 'task'));

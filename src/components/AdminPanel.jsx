@@ -1394,6 +1394,9 @@ export function AdminPanel({
             taxRecords={taxRecords} setTaxRecords={setTaxRecords}
             refunds={refunds} setRefunds={setRefunds}
             financialTasks={financialTasks} setFinancialTasks={setFinancialTasks}
+            boardMembers={teamMembers.filter((member) => member.role === 'board_member')}
+            company={currentUser?.company}
+            currentUser={currentUser}
           />
         )}
 

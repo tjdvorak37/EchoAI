@@ -1965,6 +1965,7 @@ function App() {
       const updatedMember = await authService.updateUserRole({
         userId: member.id,
         role: nextRole,
+        profitSharePercent: nextRole === 'board_member' ? (member.profitSharePercent || 1) : 0,
       })
 
       setTeamMembers((prev) =>
