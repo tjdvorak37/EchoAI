@@ -1125,11 +1125,11 @@ export function AdminPanel({
 
                     {expanded && (
                       <div className="it-user-detail">
-                        {member.role === 'admin' ? (
+                        {member.role === 'admin' && member.id !== currentUser?.id ? (
                           <p className="muted">Administrator accounts cannot be modified here.</p>
                         ) : (
                           <>
-                            {isFullAdmin && <div className="it-user-detail-group">
+                            {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Access</span>
                               <button type="button" className="ghost-button" onClick={() => handleToggleUserAccess(member)} disabled={adminLoading}>
                                 {member.accessStatus === 'deactivated' ? 'Reactivate' : 'Deactivate'}
@@ -1195,7 +1195,7 @@ export function AdminPanel({
                               {profitShareDraft.error && <small className="field-error">{profitShareDraft.error}</small>}
                             </div>}
 
-                            {isFullAdmin && <div className="it-user-detail-group">
+                            {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Board Membership</span>
                               <button
                                 type="button"
