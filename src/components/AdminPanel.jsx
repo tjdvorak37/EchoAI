@@ -195,6 +195,7 @@ export function AdminPanel({
       await onAdminUserAction({
         action: 'update-profile',
         userId: member.id,
+        email: member.email,
         fullName: profileDraft.fullName,
         company: profileDraft.company,
       })

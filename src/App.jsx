@@ -2027,6 +2027,9 @@ function App() {
           ? { ...member, fullName: result.profile.full_name, company: result.profile.company }
           : member
       )))
+      if (session?.id === userId) {
+        setSession((current) => ({ ...current, fullName: result.profile.full_name, company: result.profile.company }))
+      }
     }
 
     return result
