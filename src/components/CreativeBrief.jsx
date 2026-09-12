@@ -9,7 +9,7 @@ const formatSize = (bytes) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject, onUseDraft, onSaveToWorkspace }) {
+export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject, onSaveToWorkspace }) {
   const [sources, setSources] = useState([])
   const [instruction, setInstruction] = useState('Create a polished campaign flyer based on this information.')
   const [outputType, setOutputType] = useState('flyer')
