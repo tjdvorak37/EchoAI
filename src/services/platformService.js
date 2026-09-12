@@ -102,19 +102,14 @@ export const platformService = {
       return { id: postId, deleted: true }
     }
 
-    const userId = await getCurrentUserId()
-    const { data, error } = await supabase
-      .from('scheduled_posts')
-      .delete()
-      .eq('id', postId)
-      .eq('user_id', userId)
-      .eq('status', 'scheduled')
-      .select('id')
-      .maybeSingle()
-
-    if (error) throw new Error(error.message)
-    if (!data) throw new Error('Only your queued posts can be deleted.')
-    return { id: data.id, deleted: true }
+    const { data, error } = await supabase.functions.invoke('social-publisher', {
+      body: { action: 'cancel_scheduled', postId },
+    })
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message)
+    }
+    return data
   },
 
   async postNow(payload) {
