@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BoardPayoutsPanel } from './BoardPayoutsPanel'
 
 const fmt = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString() : '—'
@@ -60,6 +61,7 @@ export function FinancePanel({
   taxRecords, setTaxRecords,
   refunds, setRefunds,
   financialTasks, setFinancialTasks,
+  boardMembers = [], company, currentUser,
 }) {
   const [tab, setTab] = useState('dashboard')
   const [expForm, setExpForm] = useState({ category: 'Hosting', vendor: '', description: '', amountUsd: '', date: '', recurring: false, recurringPeriod: 'monthly', status: 'pending' })
@@ -494,6 +496,7 @@ export function FinancePanel({
         )}
 
       </div>
+      <BoardPayoutsPanel company={company} boardMembers={boardMembers} currentUser={currentUser} adminMode />
     </div>
   )
 }

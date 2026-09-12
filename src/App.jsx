@@ -38,6 +38,7 @@ import { getPlan, getStorageMb } from './data/plans'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
 import { socialIntegrationService } from './services/socialIntegrationService'
+import { financeService } from './services/financeService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import echoMascot from './assets/echo-mascot.svg'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
@@ -53,6 +54,7 @@ const CompanyPackageRequest = lazy(() => import('./components/CompanyPackageRequ
 const PurchasePage = lazy(() => import('./components/PurchasePage').then((module) => ({ default: module.PurchasePage })))
 const AdminPanel = lazy(() => import('./components/AdminPanel').then((module) => ({ default: module.AdminPanel })))
 const FinancePanel = lazy(() => import('./components/FinancePanel').then((module) => ({ default: module.FinancePanel })))
+const BoardMemberFinancePanel = lazy(() => import('./components/BoardMemberFinancePanel').then((module) => ({ default: module.BoardMemberFinancePanel })))
 const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((module) => ({ default: module.CreativeBrief })))
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
 const InhouseAiStudio = lazy(() => import('./components/InhouseAiStudio').then((module) => ({ default: module.InhouseAiStudio })))
@@ -116,7 +118,7 @@ const hydrateWorkspaceAssets = (assets) =>
 const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 
 // Staff accounts run the platform, so they get the top plan without paying for it.
-const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it', 'accountant']
+const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it', 'accountant', 'board_member']
 const STAFF_PLAN = 'creator'
 const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCase())
 
@@ -546,7 +548,7 @@ function App() {
   }
 
   const isAdminUser = session?.role === 'admin'
-  const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant'].includes(session?.role || '')
+  const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant', 'board_member'].includes(session?.role || '')
   const canManageBrandKit = ['admin', 'manager'].includes(session?.role || '')
 
   async function loadAdminData(user = session) {
@@ -568,6 +570,16 @@ function App() {
         }))
         setLicenses(withNames(subscriptions))
         setPurchaseHistory(withNames(payments))
+        const finance = await financeService.listRecords(user?.company)
+        if (finance.expense) setExpenses(finance.expense)
+        if (finance.payroll) setPayroll(finance.payroll)
+        if (finance.tax) setTaxRecords(finance.tax)
+        if (finance.refund) setRefunds(finance.refund)
+        if (finance.task) setFinancialTasks(finance.task)
+        return
+      }
+
+      if (user?.role === 'board_member') {
         return
       }
 
@@ -605,12 +617,41 @@ function App() {
 
         setLicenses(withNames(subscriptions))
         setPurchaseHistory(withNames(payments))
+        const finance = await financeService.listRecords(user?.company)
+        if (finance.expense) setExpenses(finance.expense)
+        if (finance.payroll) setPayroll(finance.payroll)
+        if (finance.tax) setTaxRecords(finance.tax)
+        if (finance.refund) setRefunds(finance.refund)
+        if (finance.task) setFinancialTasks(finance.task)
       }
     } catch (error) {
       setAdminError(error.message)
     } finally {
       setAdminLoading(false)
     }
+  }
+
+  const financeSetter = (type, setter) => (update) => {
+    setter((previous) => {
+      const next = typeof update === 'function' ? update(previous) : update
+      if (isSupabaseConfigured && session?.company && ['admin', 'accountant'].includes(session.role)) {
+        financeService.replaceRecords({
+          companyKey: session.company,
+          userId: session.id,
+          type,
+          records: next,
+        }).catch((error) => setAdminError(error.message))
+      }
+      return next
+    })
+  }
+
+  const persistedFinanceSetters = {
+    expenses: financeSetter('expense', setExpenses),
+    payroll: financeSetter('payroll', setPayroll),
+    taxRecords: financeSetter('tax', setTaxRecords),
+    refunds: financeSetter('refund', setRefunds),
+    financialTasks: financeSetter('task', setFinancialTasks),
   }
 
   const handleCreateCompanySeatPackage = async (seatLimit) => {
@@ -648,7 +689,7 @@ function App() {
 
       setSession(restoredUser)
       await applyUserData(restoredUser)
-      if (['admin', 'manager', 'it', 'accountant'].includes(restoredUser.role)) {
+      if (['admin', 'manager', 'it', 'accountant', 'board_member'].includes(restoredUser.role)) {
         await loadAdminData(restoredUser)
       }
     } catch {
@@ -1196,7 +1237,7 @@ function App() {
       await loadRepostWorkspace()
       await loadBrandKit()
       await loadCloudConnections()
-      if (['admin', 'manager', 'it', 'accountant'].includes(result.user?.role)) {
+      if (['admin', 'manager', 'it', 'accountant', 'board_member'].includes(result.user?.role)) {
         await loadAdminData(result.user)
       }
       setMfaPending(false)
@@ -1966,8 +2007,8 @@ function App() {
     setSupportTicket((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleAdminUserAction = async ({ action, userId, fullName, company, email, role, enabled }) => {
-    const result = await authService.adminUserAction({ action, userId, fullName, company, email, role, enabled })
+  const handleAdminUserAction = async ({ action, userId, fullName, company, email, role, enabled, profitSharePercent }) => {
+    const result = await authService.adminUserAction({ action, userId, fullName, company, email, role, enabled, profitSharePercent })
 
     if (action === 'create-user' && result?.profile) {
       setTeamMembers((prev) => [
@@ -1981,6 +2022,7 @@ function App() {
           storageQuotaMb: result.profile.storage_quota_mb,
           trademarkEditAccess: result.profile.trademark_edit_access === true,
           developerAppEditAccess: result.profile.developer_app_edit_access === true,
+          profitSharePercent: Number(result.profile.profit_share_percent || 0),
         },
         ...prev,
       ])
@@ -5060,15 +5102,18 @@ function App() {
               promoCodes={promoCodes}
               setPromoCodes={setPromoCodes}
               expenses={expenses}
-              setExpenses={setExpenses}
+              setExpenses={persistedFinanceSetters.expenses}
               payroll={payroll}
-              setPayroll={setPayroll}
+              setPayroll={persistedFinanceSetters.payroll}
               taxRecords={taxRecords}
-              setTaxRecords={setTaxRecords}
+              setTaxRecords={persistedFinanceSetters.taxRecords}
               refunds={refunds}
-              setRefunds={setRefunds}
+              setRefunds={persistedFinanceSetters.refunds}
               financialTasks={financialTasks}
-              setFinancialTasks={setFinancialTasks}
+              setFinancialTasks={persistedFinanceSetters.financialTasks}
+              boardMembers={teamMembers.filter((member) => member.role === 'board_member')}
+              company={session.company}
+              currentUser={session}
               quotaEditingUserId={quotaEditingUserId}
               setQuotaEditingUserId={setQuotaEditingUserId}
               quotaDraftMb={quotaDraftMb}
@@ -5101,12 +5146,21 @@ function App() {
           <Suspense fallback={loadingPanel}>
             <FinancePanel
               purchaseHistory={purchaseHistory}
-              expenses={expenses} setExpenses={setExpenses}
-              payroll={payroll} setPayroll={setPayroll}
-              taxRecords={taxRecords} setTaxRecords={setTaxRecords}
-              refunds={refunds} setRefunds={setRefunds}
-              financialTasks={financialTasks} setFinancialTasks={setFinancialTasks}
+              expenses={expenses} setExpenses={persistedFinanceSetters.expenses}
+              payroll={payroll} setPayroll={persistedFinanceSetters.payroll}
+              taxRecords={taxRecords} setTaxRecords={persistedFinanceSetters.taxRecords}
+              refunds={refunds} setRefunds={persistedFinanceSetters.refunds}
+              financialTasks={financialTasks} setFinancialTasks={persistedFinanceSetters.financialTasks}
+              boardMembers={teamMembers.filter((member) => member.role === 'board_member')}
+              company={session.company}
+              currentUser={session}
             />
+          </Suspense>
+        )}
+
+        {activeTab === 'admin' && session?.role === 'board_member' && (
+          <Suspense fallback={loadingPanel}>
+            <BoardMemberFinancePanel company={session.company} />
           </Suspense>
         )}
       </main>

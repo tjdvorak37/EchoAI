@@ -56,8 +56,12 @@ Deno.serve(async (request) => {
       const newFullName = typeof body.fullName === 'string' ? body.fullName.trim().slice(0, 120) : ''
       const newCompany = typeof body.company === 'string' ? body.company.trim().slice(0, 120) : ''
       const role = typeof body.role === 'string' ? body.role : 'it'
-      if (!email || !newFullName || !newCompany || !['it', 'accountant', 'manager', 'user'].includes(role)) {
+      const profitSharePercent = Number(body.profitSharePercent || 0)
+      if (!email || !newFullName || !newCompany || !['it', 'accountant', 'board_member', 'manager', 'user'].includes(role)) {
         return json({ error: 'Name, email, company, and a valid staff role are required.' }, 400, request)
+      }
+      if (role === 'board_member' && (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 10)) {
+        return json({ error: 'Board Member profit share must be between 1% and 10%.' }, 400, request)
       }
 
       const { data: created, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, {
@@ -75,8 +79,8 @@ Deno.serve(async (request) => {
 
       const { data: profile, error: profileError } = await adminClient
         .from('profiles')
-        .upsert({ id: invitedUser.id, email, full_name: newFullName, company: newCompany, role, access_status: 'active' }, { onConflict: 'id' })
-        .select('id, full_name, email, company, role, access_status, storage_quota_mb, trademark_edit_access, developer_app_edit_access')
+        .upsert({ id: invitedUser.id, email, full_name: newFullName, company: newCompany, role, profit_share_percent: role === 'board_member' ? profitSharePercent : 0, access_status: 'active' }, { onConflict: 'id' })
+        .select('id, full_name, email, company, role, profit_share_percent, access_status, storage_quota_mb, trademark_edit_access, developer_app_edit_access')
         .single()
       if (profileError) return json({ error: 'User was invited but the profile could not be configured.' }, 500, request)
 
@@ -97,7 +101,7 @@ Deno.serve(async (request) => {
 
     const { data: targetById } = await adminClient
       .from('profiles')
-      .select('id, full_name, email, company, role, access_status, trademark_edit_access, developer_app_edit_access, created_at')
+      .select('id, full_name, email, company, role, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, created_at')
       .eq('id', userId)
       .maybeSingle()
 
@@ -105,7 +109,7 @@ Deno.serve(async (request) => {
     if (!target && typeof targetEmail === 'string' && targetEmail.trim()) {
       const { data: targetByEmail } = await adminClient
         .from('profiles')
-        .select('id, full_name, email, company, role, access_status, trademark_edit_access, developer_app_edit_access, created_at')
+        .select('id, full_name, email, company, role, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, created_at')
         .ilike('email', targetEmail.trim())
         .maybeSingle()
       target = targetByEmail
@@ -143,6 +147,10 @@ Deno.serve(async (request) => {
     // cannot be used to take over another.
     if (target.role === 'admin' && caller.user.id !== target.id) {
       return json({ error: 'Administrator accounts cannot be managed here.' }, 403, request)
+    }
+
+    if (['admin', 'manager', 'it', 'accountant'].includes(target.role) && callerProfile.role !== 'admin') {
+      return json({ error: 'Only Super Admins can view or manage employee accounts.' }, 403, request)
     }
 
     const recordAudit = async (auditAction: string, detail: Record<string, unknown> = {}) => {

@@ -92,6 +92,7 @@ const normalizeMember = (record) => ({
   accessStatus: record.access_status,
   trademarkEditAccess: record.trademark_edit_access === true,
   developerAppEditAccess: record.developer_app_edit_access === true,
+  profitSharePercent: Number(record.profit_share_percent ?? record.profitSharePercent ?? 0),
   storageQuotaMb: record.storage_quota_mb ?? record.storageQuotaMb ?? 2048,
   aiAgentConfig: normalizeAiAgentConfig(record.ai_agent_config ?? record.aiAgentConfig),
 })
@@ -1083,9 +1084,9 @@ export const authService = {
   },
 
   // Privileged support actions. The caller's role is re-verified server-side.
-  async adminUserAction({ action, userId, fullName, company, email, role, enabled }) {
+  async adminUserAction({ action, userId, fullName, company, email, role, enabled, profitSharePercent }) {
     const { data, error } = await supabase.functions.invoke('admin-user-actions', {
-      body: { action, userId, fullName, company, email, role, enabled },
+      body: { action, userId, fullName, company, email, role, enabled, profitSharePercent },
     })
 
     if (error) {

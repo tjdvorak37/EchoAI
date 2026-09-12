@@ -4,7 +4,7 @@ import { TrademarkPanel } from './TrademarkPanel'
 import { DeveloperAppsPanel } from './DeveloperAppsPanel'
 
 const USERS_PER_PAGE = 25
-const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
+const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'board_member', 'user']
 const USER_STATUSES = ['active', 'pending', 'deactivated', 'approved', 'denied']
 
 const formatDateTime = (value) => (value ? new Date(value).toLocaleString() : 'Never')
@@ -155,7 +155,7 @@ export function AdminPanel({
   const [verification, setVerification] = useState({ userId: null, summary: null, loading: false, error: '' })
   const [recoveryLink, setRecoveryLink] = useState({ userId: null, url: '', error: '', loading: false })
   const [profileDraft, setProfileDraft] = useState({ fullName: '', company: '', saving: false, error: '' })
-  const [newUserDraft, setNewUserDraft] = useState({ fullName: '', email: '', company: '', role: 'it' })
+  const [newUserDraft, setNewUserDraft] = useState({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
   const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
 
   const openUserDetail = (member) => {
@@ -206,7 +206,7 @@ export function AdminPanel({
     setNewUserStatus({ saving: true, message: '', error: '' })
     try {
       await onAdminUserAction({ action: 'create-user', ...newUserDraft })
-      setNewUserDraft({ fullName: '', email: '', company: '', role: 'it' })
+      setNewUserDraft({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
       setNewUserStatus({ saving: false, message: 'Invitation sent. The new staff member can finish setup and MFA from the landing page.', error: '' })
     } catch (error) {
       const message = error.message?.includes('userId')
@@ -385,7 +385,7 @@ export function AdminPanel({
     { id: 'controls', label: '⚙️ Notices' },
   ]
 
-  const employeeRoles = ['admin', 'manager', 'it', 'accountant']
+  const employeeRoles = ['admin', 'manager', 'it', 'accountant', 'board_member']
   const filteredDirectoryMembers = itTab === 'employees'
     ? teamMembers.filter((member) => employeeRoles.includes(member.role))
     : teamMembers.filter((member) => !employeeRoles.includes(member.role))
@@ -1042,7 +1042,8 @@ export function AdminPanel({
                   <label>Full name<input required value={newUserDraft.fullName} onChange={(event) => setNewUserDraft((current) => ({ ...current, fullName: event.target.value }))} /></label>
                   <label>Email<input required type="email" value={newUserDraft.email} onChange={(event) => setNewUserDraft((current) => ({ ...current, email: event.target.value }))} /></label>
                   <label>Company<input required value={newUserDraft.company} onChange={(event) => setNewUserDraft((current) => ({ ...current, company: event.target.value }))} /></label>
-                  <label>Role<select value={newUserDraft.role} onChange={(event) => setNewUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="it">Technician</option><option value="accountant">Accounting</option><option value="manager">Manager</option><option value="user">Standard user</option></select></label>
+                  <label>Role<select value={newUserDraft.role} onChange={(event) => setNewUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="it">Technician</option><option value="accountant">Accounting</option><option value="board_member">Board Member</option><option value="manager">Manager</option><option value="user">Standard user</option></select></label>
+                  {newUserDraft.role === 'board_member' && <label>Profit share percentage (1-10%)<input required type="number" min="1" max="10" step="0.01" value={newUserDraft.profitSharePercent || ''} onChange={(event) => setNewUserDraft((current) => ({ ...current, profitSharePercent: event.target.value }))} /></label>}
                   <div className="action-row"><button type="submit" className="primary-button" disabled={newUserStatus.saving}>{newUserStatus.saving ? 'Sending invitation...' : 'Create and invite user'}</button></div>
                   {newUserStatus.message && <p className="auth-message">{newUserStatus.message}</p>}
                   {newUserStatus.error && <p className="auth-message auth-error">{newUserStatus.error}</p>}
@@ -1145,7 +1146,7 @@ export function AdminPanel({
                                 className={member.trademarkEditAccess ? 'primary-button' : 'ghost-button'}
                                 onClick={async () => {
                                   try {
-                                    await onAdminUserAction({ action: 'set-trademark-edit-access', userId: member.id, enabled: !member.trademarkEditAccess })
+                                    await onAdminUserAction({ action: 'set-trademark-edit-access', userId: member.id, email: member.email, enabled: !member.trademarkEditAccess })
                                   } catch (error) {
                                     setNewUserStatus({ saving: false, message: '', error: error.message })
                                   }
