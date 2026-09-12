@@ -1431,6 +1431,17 @@ function App() {
     }
   }
 
+  const handleDeleteScheduledPost = async (post) => {
+    if (post.status !== 'scheduled' || new Date(post.scheduledAt) <= new Date()) return
+    setSchedulerError('')
+    try {
+      await platformService.deleteScheduledPost(post.id)
+      setScheduledPosts((prev) => prev.filter((item) => item.id !== post.id))
+    } catch (error) {
+      setSchedulerError(error.message)
+    }
+  }
+
   const handleEditCreativeProject = (project) => {
     setCreativeProject(project)
     setActiveTab(project.outputType === 'video' ? 'studio' : 'photo')
@@ -4091,6 +4102,16 @@ function App() {
                     <span className={getStatusBadgeClass(post.status === 'scheduled' ? 'pending' : post.status)}>
                       {post.status}
                     </span>
+                    {post.status === 'scheduled' && new Date(post.scheduledAt) > new Date() && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => handleDeleteScheduledPost(post)}
+                        aria-label={`Delete scheduled post ${post.campaign}`}
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

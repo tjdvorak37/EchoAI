@@ -218,12 +218,19 @@ Deno.serve(async (request) => {
         ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString()
         : null
 
+      const { data: existingCredential } = await db
+        .from('social_oauth_credentials')
+        .select('refresh_token')
+        .eq('user_id', pending.user_id)
+        .eq('platform', platform)
+        .maybeSingle()
+
       const credentialResult = await db.from('social_oauth_credentials').upsert({
         user_id: pending.user_id,
         platform,
         external_account_id: account.id,
         access_token: account.publishingAccessToken,
-        refresh_token: token.refresh_token ?? null,
+        refresh_token: token.refresh_token ?? existingCredential?.refresh_token ?? null,
         expires_at: expiresAt,
         scope: token.scope ?? oauthScopes.join(' '),
         updated_at: new Date().toISOString(),
@@ -291,7 +298,7 @@ Deno.serve(async (request) => {
             platform: 'youtube',
             oauthConfigured: Boolean(PROVIDERS.youtube.clientId && PROVIDERS.youtube.clientSecret),
             oauthImplemented: true,
-            publishing: 'Authorization ready; video publishing pending',
+            publishing: 'YouTube video uploads',
           },
           ...['tiktok', 'x', 'linkedin', 'snapchat'].map((platform) => ({
             platform,
