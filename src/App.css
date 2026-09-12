@@ -3593,6 +3593,20 @@ main {
   opacity: 1;
 }
 
+.it-section input,
+.it-section select,
+.it-section textarea {
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+}
+
+.it-section input::placeholder,
+.it-section textarea::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+
 .it-section input:focus {
   outline: 2px solid #3b82f6;
 }
