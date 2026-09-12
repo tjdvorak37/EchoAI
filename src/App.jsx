@@ -1442,7 +1442,7 @@ function App() {
   }
 
   const handleDeleteScheduledPost = async (post) => {
-    if (post.status !== 'scheduled' || new Date(post.scheduledAt) <= new Date()) return
+    if (post.status !== 'scheduled') return
     setSchedulerError('')
     try {
       await platformService.deleteScheduledPost(post.id)
@@ -4154,7 +4154,7 @@ function App() {
                     <span className={getStatusBadgeClass(post.status === 'scheduled' ? 'pending' : post.status)}>
                       {post.status}
                     </span>
-                    {post.status === 'scheduled' && new Date(post.scheduledAt) > new Date() && (
+                    {post.status === 'scheduled' && (
                       <button
                         type="button"
                         className="text-button"

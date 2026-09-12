@@ -109,12 +109,11 @@ export const platformService = {
       .eq('id', postId)
       .eq('user_id', userId)
       .eq('status', 'scheduled')
-      .gt('scheduled_at', new Date().toISOString())
       .select('id')
       .maybeSingle()
 
     if (error) throw new Error(error.message)
-    if (!data) throw new Error('Only your future queued posts can be deleted.')
+    if (!data) throw new Error('Only your queued posts can be deleted.')
     return { id: data.id, deleted: true }
   },
 
