@@ -116,7 +116,7 @@ const hydrateWorkspaceAssets = (assets) =>
 const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 
 // Staff accounts run the platform, so they get the top plan without paying for it.
-const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it']
+const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it', 'accountant']
 const STAFF_PLAN = 'creator'
 const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCase())
 
@@ -549,17 +549,34 @@ function App() {
   const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant'].includes(session?.role || '')
   const canManageBrandKit = ['admin', 'manager'].includes(session?.role || '')
 
-  async function loadAdminData() {
+  async function loadAdminData(user = session) {
     setAdminError('')
     setAdminLoading(true)
 
     try {
+      if (user?.role === 'accountant') {
+        const [members, subscriptions, payments] = await Promise.all([
+          authService.getManagedUsers(),
+          billingService.listSubscriptions(),
+          billingService.listPayments(),
+        ])
+        if (members.length) setTeamMembers(members)
+        const nameByEmail = new Map(members.map((member) => [String(member.email || '').toLowerCase(), member.fullName]))
+        const withNames = (rows) => rows.map((row) => ({
+          ...row,
+          userFullName: nameByEmail.get(String(row.userEmail || '').toLowerCase()) || row.userEmail,
+        }))
+        setLicenses(withNames(subscriptions))
+        setPurchaseHistory(withNames(payments))
+        return
+      }
+
       const [requests, members, subscriptions, payments, seatData, supportTickets] = await Promise.all([
         authService.getAccessRequests(),
         authService.getManagedUsers(),
         billingService.listSubscriptions(),
         billingService.listPayments(),
-        authService.getCompanySeatData({ companyKey: session?.company }),
+        authService.getCompanySeatData({ companyKey: user?.company }),
         authService.getSupportTickets(),
       ])
 
@@ -631,8 +648,8 @@ function App() {
 
       setSession(restoredUser)
       await applyUserData(restoredUser)
-      if (['admin', 'manager', 'it'].includes(restoredUser.role)) {
-        await loadAdminData()
+      if (['admin', 'manager', 'it', 'accountant'].includes(restoredUser.role)) {
+        await loadAdminData(restoredUser)
       }
     } catch {
       // An expired or insufficient-assurance session should fall through to sign-in.
@@ -1179,8 +1196,8 @@ function App() {
       await loadRepostWorkspace()
       await loadBrandKit()
       await loadCloudConnections()
-      if (result.user?.role === 'admin') {
-        await loadAdminData()
+      if (['admin', 'manager', 'it', 'accountant'].includes(result.user?.role)) {
+        await loadAdminData(result.user)
       }
       setMfaPending(false)
       setMfaChallenge({ factorId: '', challengeId: '' })
@@ -1938,8 +1955,30 @@ function App() {
     setSupportTicket((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleAdminUserAction = async ({ action, userId, fullName, company }) => {
-    const result = await authService.adminUserAction({ action, userId, fullName, company })
+  const handleAdminUserAction = async ({ action, userId, fullName, company, email, role, enabled }) => {
+    const result = await authService.adminUserAction({ action, userId, fullName, company, email, role, enabled })
+
+    if (action === 'create-user' && result?.profile) {
+      setTeamMembers((prev) => [
+        {
+          id: result.profile.id,
+          fullName: result.profile.full_name,
+          email: result.profile.email,
+          company: result.profile.company,
+          role: result.profile.role,
+          accessStatus: result.profile.access_status,
+          storageQuotaMb: result.profile.storage_quota_mb,
+          trademarkEditAccess: result.profile.trademark_edit_access === true,
+        },
+        ...prev,
+      ])
+    }
+
+    if (action === 'set-trademark-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, trademarkEditAccess: result.profile.trademark_edit_access === true } : member
+      )))
+    }
 
     if (action === 'update-profile' && result?.profile) {
       setTeamMembers((prev) => prev.map((member) => (
@@ -2486,7 +2525,10 @@ function App() {
 
     const enforceEntitlement = async () => {
       // Staff run the site itself and are never billed, so entitlement never gates them.
-      if (isStaffRole(session?.role)) return
+      if (isStaffRole(session?.role)) {
+        setMyEntitlement({ entitled: true, status: 'employee', plan: STAFF_PLAN, provider: 'internal', role: session.role })
+        return
+      }
 
       let entitlement
       try {
