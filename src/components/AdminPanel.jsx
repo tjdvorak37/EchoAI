@@ -5,7 +5,7 @@ import { DeveloperAppsPanel } from './DeveloperAppsPanel'
 import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
 
 const USERS_PER_PAGE = 25
-const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'board_member', 'user']
+const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
 const USER_STATUSES = ['active', 'pending', 'deactivated', 'approved', 'denied']
 
 const formatDateTime = (value) => (value ? new Date(value).toLocaleString() : 'Never')
