@@ -300,11 +300,25 @@ Deno.serve(async (request) => {
   }
 
   const user = await userFromRequest(request)
-  if (!user || body.action !== 'publish_now' || typeof body.postId !== 'string') {
+  if (!user || !['publish_now', 'cancel_scheduled'].includes(body.action) || typeof body.postId !== 'string') {
     return json({ error: 'Authentication and a post ID are required.' }, 401, request)
   }
 
   const db = admin()
+  if (body.action === 'cancel_scheduled') {
+    const { data: cancelled, error: cancelError } = await db
+      .from('scheduled_posts')
+      .delete()
+      .eq('id', body.postId)
+      .eq('user_id', user.id)
+      .eq('status', 'scheduled')
+      .select('id')
+      .maybeSingle()
+    if (cancelError) return json({ error: cancelError.message }, 500, request)
+    if (!cancelled) return json({ error: 'This post is not owned by the signed-in user or is no longer queued.' }, 409, request)
+    return json({ id: cancelled.id, deleted: true }, 200, request)
+  }
+
   const { data: post, error } = await db
     .from('scheduled_posts')
     .update({
