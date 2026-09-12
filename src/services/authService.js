@@ -92,6 +92,7 @@ const normalizeMember = (record) => ({
   accessStatus: record.access_status,
   trademarkEditAccess: record.trademark_edit_access === true,
   developerAppEditAccess: record.developer_app_edit_access === true,
+  profitSharePercent: Number(record.profit_share_percent ?? record.profitSharePercent ?? 0),
   storageQuotaMb: record.storage_quota_mb ?? record.storageQuotaMb ?? 2048,
   aiAgentConfig: normalizeAiAgentConfig(record.ai_agent_config ?? record.aiAgentConfig),
 })
@@ -687,12 +688,12 @@ export const authService = {
     return normalizeMember(data)
   },
 
-  async updateUserRole({ userId, role }) {
+  async updateUserRole({ userId, role, profitSharePercent }) {
     if (!userId || !role) {
       throw new Error('User ID and role are required.')
     }
 
-    if (!['user', 'manager', 'it', 'accountant', 'admin'].includes(role)) {
+    if (!['user', 'manager', 'it', 'accountant', 'board_member', 'admin'].includes(role)) {
       throw new Error('Role must be user, manager, it, accountant, or admin.')
     }
 
@@ -716,7 +717,7 @@ export const authService = {
 
     const { data, error } = await supabase
       .from('profiles')
-      .update({ role })
+      .update({ role, ...(role === 'board_member' ? { profit_share_percent: Number(profitSharePercent) || 0 } : {}) })
       .eq('id', userId)
       .select('*')
       .single()
@@ -1083,9 +1084,9 @@ export const authService = {
   },
 
   // Privileged support actions. The caller's role is re-verified server-side.
-  async adminUserAction({ action, userId, fullName, company, email, role, enabled }) {
+  async adminUserAction({ action, userId, fullName, company, email, role, enabled, profitSharePercent }) {
     const { data, error } = await supabase.functions.invoke('admin-user-actions', {
-      body: { action, userId, fullName, company, email, role, enabled },
+      body: { action, userId, fullName, company, email, role, enabled, profitSharePercent },
     })
 
     if (error) {
