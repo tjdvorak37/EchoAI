@@ -99,10 +99,16 @@ Deno.serve(async (request) => {
       return json({ profile }, 201, request)
     }
 
+    const callerEmail = caller.user.email?.toLowerCase() ?? ''
+    const selfAction = callerProfile.role === 'admin'
+      && ((typeof targetEmail === 'string' && targetEmail.trim().toLowerCase() === callerEmail)
+        || userId === caller.user.id)
+    const lookupUserId = selfAction ? caller.user.id : userId
+
     const { data: targetById } = await adminClient
       .from('profiles')
       .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, created_at')
-        .eq('id', userId)
+        .eq('id', lookupUserId)
       .maybeSingle()
 
     let target = targetById

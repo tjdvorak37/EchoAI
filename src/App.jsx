@@ -2023,10 +2023,16 @@ function App() {
 
     if (action === 'update-profile' && result?.profile) {
       setTeamMembers((prev) => prev.map((member) => (
-        member.id === userId
+        member.id === result.profile.id
           ? { ...member, fullName: result.profile.full_name, company: result.profile.company }
           : member
       )))
+      if (session?.id === result.profile.id) {
+        setSession((prev) => ({ ...prev, fullName: result.profile.full_name, company: result.profile.company }))
+      }
+      if (session?.id === userId) {
+        setSession((current) => ({ ...current, fullName: result.profile.full_name, company: result.profile.company }))
+      }
     }
 
     return result
