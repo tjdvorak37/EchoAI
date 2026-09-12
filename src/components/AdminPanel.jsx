@@ -1161,7 +1161,7 @@ export function AdminPanel({
                               <small className="muted">Only grant this to a trained trademark/legal specialist.</small>
                             </div>}
 
-                            {isFullAdmin && (member.isBoardMember || member.role === 'board_member') && <div className="it-user-detail-group">
+                            {isFullAdmin && (member.isBoardMember || member.role === 'board_member' || member.id === currentUser?.id) && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Quarterly profit share</span>
                               <input
                                 type="number"
@@ -1195,7 +1195,7 @@ export function AdminPanel({
                               {profitShareDraft.error && <small className="field-error">{profitShareDraft.error}</small>}
                             </div>}
 
-                            {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group">
+                            {isFullAdmin && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Board Membership</span>
                               <button
                                 type="button"
