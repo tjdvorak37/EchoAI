@@ -90,6 +90,15 @@ const routeModel = (config: Record<string, unknown>, payload: Record<string, unk
   return String(models[routeKey] || config.model || 'default')
 }
 
+const loadRoute = async (admin: ReturnType<typeof createClient>, payload: Record<string, unknown>) => {
+  const capability = String(payload.capability || 'message')
+  const mode = String(payload.creatorMode || 'standard')
+  const { data } = await admin.from('echo_ai_route_overrides')
+    .select('pricing:echo_ai_pricing(id, provider_key, model, bot_name, bot_description, echo_credit_cost, credit_cost, provider_cost_per_unit)')
+    .eq('capability', capability).eq('mode', mode).eq('enabled', true).maybeSingle()
+  return data?.pricing || null
+}
+
 const reserveCreatorJob = async (admin: ReturnType<typeof createClient>, payload: Record<string, unknown>) => {
   if (!payload.echoCreator) return null
   const cost = Number.isInteger(payload.creditCost) ? Number(payload.creditCost) : 0
@@ -104,11 +113,17 @@ const reserveCreatorJob = async (admin: ReturnType<typeof createClient>, payload
   return data
 }
 
-const estimateProviderCost = (payload: Record<string, unknown>) => {
+const estimateProviderCost = (payload: Record<string, unknown>, route: Record<string, unknown> | null, responseBody: Record<string, unknown> = {}) => {
   if (!payload.echoCreator) return 0
+  const usage = responseBody.usage as Record<string, unknown> | undefined
+  if (payload.capability === 'message' && usage) {
+    const input = Number(usage.prompt_tokens || usage.input_tokens || 0)
+    const output = Number(usage.completion_tokens || usage.output_tokens || 0)
+    return input * Number(route?.provider_cost_input || 0) / 1_000_000 + output * Number(route?.provider_cost_output || 0) / 1_000_000
+  }
   if (payload.capability === 'video') return payload.creatorMode === 'premium' ? 1.2 : 0.5
-  if (payload.capability === 'image' || payload.capability === 'image_edit') return payload.creatorMode === 'premium' ? 0.12 : 0.04
-  return payload.creatorMode === 'premium' ? 0.03 : 0.01
+  if (payload.capability === 'image' || payload.capability === 'image_edit') return Number(route?.provider_cost_per_unit || (payload.creatorMode === 'premium' ? 0.12 : 0.04))
+  return Number(route?.provider_cost_per_unit || (payload.creatorMode === 'premium' ? 0.03 : 0.01))
 }
 
 const finishCreatorJob = async (admin: ReturnType<typeof createClient>, jobId: unknown, result: Record<string, unknown>, status = 'completed', error = null, providerCostUsd = 0) => {
@@ -141,20 +156,24 @@ Deno.serve(async (request) => {
     model: Deno.env.get('OPENAI_TEXT_MODEL') ?? 'gpt-4o-mini',
     routing: { models: { standard: Deno.env.get('OPENAI_TEXT_MODEL') ?? 'gpt-4o-mini' } },
   }
+  const route = await loadRoute(admin, payload)
+  const routeProvider = route?.provider_key || 'openai'
+  const routeEndpoint = Deno.env.get(`${routeProvider.toUpperCase()}_API_BASE_URL`) || config.endpoint
+  const routeKey = Deno.env.get(`${routeProvider.toUpperCase()}_API_KEY`) || config.api_key
+  const routedConfig = { ...config, provider: routeProvider, endpoint: routeEndpoint, api_key: routeKey, model: route?.model || routeModel(config, payload) }
   if (config.enabled === false) return json({ error: 'This AI tool is disabled.' }, 409, request)
   if (!config.endpoint) return json({ error: 'No AI endpoint is configured. Add one in Integrations.' }, 503, request)
-  const providerApiKey = config.api_key ?? config.apiKey ?? ''
   const routedModel = routeModel(config, payload)
   let creatorJob: Record<string, unknown> | null = null
 
   try {
     creatorJob = await reserveCreatorJob(admin, payload)
-    const result = config.provider === 'openai'
-      ? await openAiRequest({ ...config, model: routedModel }, payload)
+    const result = routedConfig.provider === 'openai'
+      ? await openAiRequest({ ...routedConfig, model: routedConfig.model || routedModel(config, payload) }, payload)
       : await (async () => {
-          const response = await fetch(config.endpoint as string, {
+          const response = await fetch(routedConfig.endpoint as string, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(providerApiKey ? { Authorization: `Bearer ${providerApiKey}` } : {}) },
+            headers: { 'Content-Type': 'application/json', ...(routedConfig.api_key ? { Authorization: `Bearer ${routedConfig.api_key}` } : {}) },
             body: JSON.stringify(payload),
           })
           return { response, body: await response.text() }
@@ -163,29 +182,25 @@ Deno.serve(async (request) => {
     const responseBody = parseProviderBody(result.body, upstream.headers.get('content-type') ?? '')
     if (!upstream.ok) {
       await finishCreatorJob(admin, creatorJob?.jobId, {}, 'failed', `Provider returned ${upstream.status}`)
-      await admin.from('ai_agent_connections').update({ status: 'error', last_error: `Provider returned ${upstream.status}`, last_checked_at: new Date().toISOString() }).eq('id', payload.connectionId).eq('user_id', user.id)
       return json({ error: `AI provider returned ${upstream.status}.`, detail: responseBody }, 502, request)
     }
-    if (payload.connectionId) {
-      await admin.from('ai_agent_connections').update({ status: 'connected', last_error: null, last_checked_at: new Date().toISOString() }).eq('id', payload.connectionId).eq('user_id', user.id)
+    if (routedConfig.provider === 'openai' && payload.mode === 'test') {
+      return json({ status: 'ok', provider: routedConfig.provider, botName: route?.bot_name || '', message: 'AI provider key verified.' }, 200, request)
     }
-    if (config.provider === 'openai' && payload.mode === 'test') {
-      return json({ status: 'ok', provider: 'openai', message: 'OpenAI API key verified.' }, 200, request)
-    }
-    if (config.provider === 'openai' && (payload.capability === 'image' || payload.mode === 'image')) {
+    if (routedConfig.provider === 'openai' && (payload.capability === 'image' || payload.mode === 'image')) {
       const image = (responseBody as Record<string, unknown>)?.data?.[0] as Record<string, unknown> | undefined
       const output = { imageUrl: image?.url, imageBase64: image?.b64_json, title: 'OpenAI generated image', jobId: creatorJob?.jobId, creditsRemaining: creatorJob?.creditsRemaining }
-      await finishCreatorJob(admin, creatorJob?.jobId, output, 'completed', null, estimateProviderCost(payload))
+      await finishCreatorJob(admin, creatorJob?.jobId, output, 'completed', null, estimateProviderCost(payload, route, responseBody as Record<string, unknown>))
       return json(output, 200, request)
     }
-    if (config.provider === 'openai') {
+    if (routedConfig.provider === 'openai') {
       const choice = (responseBody as Record<string, unknown>)?.choices?.[0] as Record<string, unknown> | undefined
       const message = choice?.message as Record<string, unknown> | undefined
       const output = { title: 'OpenAI response', text: message?.content || '', jobId: creatorJob?.jobId, creditsRemaining: creatorJob?.creditsRemaining }
-      await finishCreatorJob(admin, creatorJob?.jobId, output, 'completed', null, estimateProviderCost(payload))
+      await finishCreatorJob(admin, creatorJob?.jobId, output, 'completed', null, estimateProviderCost(payload, route, responseBody as Record<string, unknown>))
       return json(output, 200, request)
     }
-    await finishCreatorJob(admin, creatorJob?.jobId, responseBody as Record<string, unknown>, 'completed', null, estimateProviderCost(payload))
+    await finishCreatorJob(admin, creatorJob?.jobId, responseBody as Record<string, unknown>, 'completed', null, estimateProviderCost(payload, route, responseBody as Record<string, unknown>))
     return json(responseBody, 200, request)
   } catch (error) {
     await finishCreatorJob(admin, creatorJob?.jobId, {}, 'failed', error instanceof Error ? error.message : 'Provider request failed')
