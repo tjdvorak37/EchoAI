@@ -3,6 +3,13 @@ import { briefSourceFromAsset, buildCreativeProject, readBriefFile } from '../se
 
 const ACCEPTED_FILES = '.pdf,.docx,.pptx,.xlsx,.csv,.json,.txt,.md,image/*,video/*'
 
+const OUTPUT_TYPES = [
+  ['flyer', 'Flyer', 'A single polished graphic with headline, offer, and design — ready to post or print.'],
+  ['image', 'Social image', 'A square or vertical image sized for Instagram, Facebook, or TikTok.'],
+  ['video', 'Video plan', 'A scene-by-scene storyboard you can open and build out in the Video Studio.'],
+  ['post', 'Post package', 'A caption, headline, and image bundled together, ready to send to the Scheduler.'],
+]
+
 const formatSize = (bytes) => {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
@@ -111,12 +118,24 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
     }
   }
 
+  const hasSources = sources.length > 0
+  const hasInstruction = instruction.trim().length > 0
+  const isReady = hasSources && hasInstruction
+  const selectedOutput = OUTPUT_TYPES.find(([value]) => value === outputType)
+
   return (
     <div className="creative-brief-layout">
       <article className="sub-panel creative-brief-builder">
+        <ol className="creative-brief-steps">
+          <li className={hasSources ? 'done' : 'current'}><span>1</span> Add your files</li>
+          <li className={!hasSources ? 'pending' : hasInstruction ? 'done' : 'current'}><span>2</span> Describe what to make</li>
+          <li className={!isReady ? 'pending' : 'current'}><span>3</span> Pick a format &amp; generate</li>
+        </ol>
+
         <div>
-          <p className="section-label">Source material</p>
+          <p className="section-label">Step 1 · Source material</p>
           <h3>Build from your documents</h3>
+          <p className="panel-note">Add anything relevant — a flyer draft, a price list, product photos, or notes. EchoAI reads them and grounds the result in your real details.</p>
         </div>
 
         <div className="creative-provider-status">
@@ -252,25 +271,36 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
         )}
 
         <label>
-          What should EchoAI create?
-          <textarea rows="4" value={instruction} onChange={(event) => setInstruction(event.target.value)} />
+          <p className="section-label">Step 2 · What should EchoAI create?</p>
+          Describe the goal in plain language — the more detail, the better the result.
+          <textarea rows="4" value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Example: Create a flyer for our weekend sale, 20% off all shoes, casual and upbeat tone." />
         </label>
 
         <div>
-          <p className="small-title">Output</p>
+          <p className="section-label">Step 3 · Choose an output format</p>
           <div className="brief-output-picker">
-            {[
-              ['flyer', 'Flyer'],
-              ['image', 'Social image'],
-              ['video', 'Video plan'],
-              ['post', 'Post package'],
-            ].map(([value, label]) => (
-              <button key={value} type="button" className={outputType === value ? 'chip active' : 'chip'} onClick={() => setOutputType(value)}>{label}</button>
+            {OUTPUT_TYPES.map(([value, label, description]) => (
+              <button
+                key={value}
+                type="button"
+                className={outputType === value ? 'chip active' : 'chip'}
+                title={description}
+                onClick={() => setOutputType(value)}
+              >
+                {label}
+              </button>
             ))}
           </div>
+          {selectedOutput && <p className="muted creative-output-hint">{selectedOutput[2]}</p>}
         </div>
 
-        {error && <p className="auth-message auth-error">{error}</p>}
+        {!isReady && (
+          <ul className="creative-brief-checklist">
+            <li className={hasSources ? 'done' : ''}>{hasSources ? '✓' : '○'} Add at least one file</li>
+            <li className={hasInstruction ? 'done' : ''}>{hasInstruction ? '✓' : '○'} Describe what to create</li>
+          </ul>
+        )}
+
         <button type="button" className="primary-button" disabled={busy} onClick={generate}>
           {busy ? 'Reading and building...' : 'Create project'}
         </button>
@@ -278,10 +308,10 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
 
       <article className="sub-panel creative-brief-result">
         <div>
-          <p className="section-label">Generated project</p>
+          <p className="section-label">Step 4 · Your result</p>
           <h3>{project?.title || 'Your creative will appear here'}</h3>
         </div>
-        {!project && <p className="muted">Combine several files into one grounded brief, then create an editable visual, video plan, or post package.</p>}
+        {!project && <p className="muted">Once you add files and describe what to create, your generated flyer, image, video plan, or post package will appear here — ready to edit, save, or send to the Scheduler.</p>}
         {project?.imageSrc && <img src={project.imageSrc} alt={project.headline} className="brief-result-image" />}
         {project && (
           <>

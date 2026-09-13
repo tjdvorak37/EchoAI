@@ -3994,7 +3994,8 @@ function App() {
                 <p className="small-title">Create</p>
                 <h2>Turn an idea into a finished campaign</h2>
                 <p className="panel-note">
-                  Start with a brief, files, or a prompt. Generate, edit, and send the result to Scheduler.
+                  Add your files below, describe what you need, and EchoAI builds a flyer, image, video plan, or post —
+                  ready to edit and send to the Scheduler. No prior experience needed.
                 </p>
               </div>
               <div className="create-hub-actions">
@@ -4012,6 +4013,14 @@ function App() {
                 onSaveToWorkspace={handleSaveCreativeProjectToWorkspace}
               />
             </Suspense>
+
+            <div className="create-hub-advanced-heading">
+              <div>
+                <p className="section-label">Optional · no files needed</p>
+                <h3>Quick text ideas</h3>
+              </div>
+              <span>Just need caption or copy ideas? Type a prompt below instead of uploading files.</span>
+            </div>
 
             <div className="split assistant-quick-copy">
               <article className="sub-panel tone-indigo">
@@ -4042,7 +4051,7 @@ function App() {
               </article>
 
               <article className="sub-panel tone-mint">
-                <h3>AI output</h3>
+                <h3>Generated ideas</h3>
                 {aiSuggestions.length === 0 && (
                   <p className="muted">Generate content to see campaign-ready ideas here.</p>
                 )}
