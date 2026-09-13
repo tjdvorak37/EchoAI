@@ -735,6 +735,91 @@ const getTopTokens = (mentions, { hashtagsOnly = false, limit = 8 } = {}) => {
     .map(([token, count]) => ({ token, count }))
 }
 
+const buildTimelineSeries = (mentions, windowKey) => {
+  const windowMs = ALERT_WINDOWS[windowKey] || ALERT_WINDOWS['7d']
+  const now = Date.now()
+  const bucketCount = windowKey === '24h' ? 6 : windowKey === '30d' ? 6 : 7
+  const bucketDuration = windowMs / bucketCount
+
+  const buckets = Array.from({ length: bucketCount }, (_, i) => {
+    const bucketStart = now - (bucketCount - i) * bucketDuration
+    const bucketEnd = bucketStart + bucketDuration
+    let label
+
+    if (windowKey === '24h') {
+      const date = new Date(bucketStart)
+      label = date.toLocaleTimeString([], { hour: 'numeric' })
+    } else if (windowKey === '30d') {
+      const d1 = new Date(bucketStart)
+      const d2 = new Date(bucketEnd)
+      label = `${d1.getMonth() + 1}/${d1.getDate()}-${d2.getDate()}`
+    } else {
+      const date = new Date(bucketStart)
+      label = date.toLocaleDateString([], { weekday: 'short' })
+    }
+
+    return {
+      label,
+      start: bucketStart,
+      end: bucketEnd,
+      total: 0,
+      positive: 0,
+      neutral: 0,
+      negative: 0,
+      reach: 0,
+    }
+  })
+
+  mentions.forEach((mention) => {
+    const ts = new Date(mention.timestamp).getTime()
+    if (!Number.isFinite(ts)) return
+    const bucket = buckets.find((b) => ts >= b.start && ts < b.end)
+    if (bucket) {
+      bucket.total += 1
+      if (mention.sentiment === 'positive') bucket.positive += 1
+      else if (mention.sentiment === 'negative') bucket.negative += 1
+      else bucket.neutral += 1
+      bucket.reach += Number(mention.reach || 0)
+    }
+  })
+
+  return buckets
+}
+
+const buildProductFeatureThemes = (mentions) => {
+  const THEME_DEFINITIONS = [
+    { key: 'features', label: 'Feature Requests & UX', terms: ['feature', 'wish', 'request', 'ux', 'ui', 'interface', 'missing', 'editor', 'timeline', 'tool'] },
+    { key: 'pricing', label: 'Pricing & Value', terms: ['price', 'pricing', 'cost', 'expensive', 'cheap', 'worth', 'discount', 'free', 'tier', 'plan', 'tokens'] },
+    { key: 'support', label: 'Customer Support & Reliability', terms: ['support', 'help', 'bug', 'issue', 'broken', 'error', 'slow', 'down', 'response', 'ticket'] },
+    { key: 'performance', label: 'Campaign Results & Analytics', terms: ['campaign', 'result', 'growth', 'analytics', 'engagement', 'reach', 'viral', 'conversions', 'metrics', 'roas'] },
+    { key: 'competition', label: 'Competitor Comparisons', terms: ['better than', 'switch', 'versus', 'vs', 'compared', 'alternative', 'hootsuite', 'sprout', 'buffer'] },
+    { key: 'onboarding', label: 'Onboarding & Workflows', terms: ['easy', 'hard', 'learning', 'setup', 'connect', 'integration', 'sync', 'quick', 'workflow'] },
+  ]
+
+  return THEME_DEFINITIONS.map((def) => {
+    const matched = mentions.filter((m) => {
+      const text = `${m.text} ${m.keyword} ${m.hashtag}`.toLowerCase()
+      return def.terms.some((t) => text.includes(t))
+    })
+
+    const count = matched.length
+    const pos = matched.filter((m) => m.sentiment === 'positive').length
+    const neg = matched.filter((m) => m.sentiment === 'negative').length
+    const netSentiment = count > 0 ? Math.round(((pos - neg) / count) * 100) : 0
+
+    return {
+      key: def.key,
+      label: def.label,
+      count,
+      positiveCount: pos,
+      negativeCount: neg,
+      neutralCount: count - pos - neg,
+      netSentiment,
+      sample: matched[0]?.text || `General ${def.label.toLowerCase()} conversation.`,
+    }
+  }).sort((a, b) => b.count - a.count)
+}
+
 export const buildListeningSnapshot = ({ mentions, brandTerms, competitorTerms, windowKey }) => {
   const total = mentions.length
   const sentimentCounts = tally(mentions, (mention) => mention.sentiment)
@@ -763,6 +848,38 @@ export const buildListeningSnapshot = ({ mentions, brandTerms, competitorTerms, 
   const trend = getTrendBuckets(mentions, windowKey)
   const aiVisibilityCount = mentions.filter((mention) => mention.aiReferenced).length
   const crisisCount = mentions.filter((mention) => mention.crisis || (mention.sentiment === 'negative' && mention.reach > 18000)).length
+
+  const netSentimentScore = total > 0
+    ? Math.round((((sentimentCounts.positive || 0) - (sentimentCounts.negative || 0)) / total) * 100)
+    : 0
+
+  const timelineSeries = buildTimelineSeries(mentions, windowKey)
+  const productThemes = buildProductFeatureThemes(mentions)
+
+  const competitorMatrix = voicePool.map((v) => {
+    const isBrand = v.name === (brandTerms[0] || 'Brand')
+    const pool = mentions.filter((m) =>
+      isBrand
+        ? brandTerms.some((b) => m.text.toLowerCase().includes(b.toLowerCase()))
+        : m.text.toLowerCase().includes(v.name.toLowerCase())
+    )
+    const pCount = pool.length
+    const pos = pool.filter((m) => m.sentiment === 'positive').length
+    const neg = pool.filter((m) => m.sentiment === 'negative').length
+    const avgEngage = pCount > 0 ? Math.round(pool.reduce((s, m) => s + m.engagement, 0) / pCount) : 0
+    const netScore = pCount > 0 ? Math.round(((pos - neg) / pCount) * 100) : 0
+
+    return {
+      name: v.name,
+      isBrand,
+      mentions: v.mentions,
+      sharePct: percentage(v.mentions, totalVoice),
+      positivePct: percentage(pos, pCount),
+      negativePct: percentage(neg, pCount),
+      avgEngagement: avgEngage,
+      netScore,
+    }
+  })
 
   const influencers = [...mentions]
     .sort((a, b) => b.influenceScore - a.influenceScore)
@@ -824,6 +941,10 @@ export const buildListeningSnapshot = ({ mentions, brandTerms, competitorTerms, 
     aiVisibilityCount,
     aiVisibilityPct: percentage(aiVisibilityCount, total),
     crisisCount,
+    netSentimentScore,
+    timelineSeries,
+    productThemes,
+    competitorMatrix,
     influencers,
     alerts,
     topKeywords,
@@ -895,5 +1016,48 @@ export const generateAgentListeningInsights = async ({ agentConfig, snapshot, br
 
   return summarizeListeningInsights(snapshot)
 }
+
+export const INDUSTRY_PRESETS = [
+  {
+    key: 'saas',
+    label: '🚀 SaaS & AI Software',
+    brandTerms: 'EchoAI, Echo AI',
+    keywords: 'social listening, campaign analytics, AI scheduler, creator studio, customer support',
+    competitors: 'Hootsuite, Sprout Social, Buffer, Later, Brandwatch',
+    hashtags: '#socialmedia, #marketingtech, #aiagents, #contentcreator',
+  },
+  {
+    key: 'ecommerce',
+    label: '🛍️ E-Commerce & Retail',
+    brandTerms: 'ShopPulse, TrendStore',
+    keywords: 'shipping delay, product quality, discount code, return policy, customer review, out of stock',
+    competitors: 'Amazon, Shopify Brands, Target, Zara',
+    hashtags: '#onlineshopping, #unboxing, #haul, #deals, #trending',
+  },
+  {
+    key: 'agency',
+    label: '🎨 Agency & Creator Studio',
+    brandTerms: 'Apex Media, Apex Creative',
+    keywords: 'video editing, client approval, social media strategy, viral reels, brand partnership',
+    competitors: 'VaynerMedia, Ogilvy, InfluencerHub, SocialChain',
+    hashtags: '#creatorops, #agencylife, #videoproduction, #marketingtips',
+  },
+  {
+    key: 'fitness',
+    label: '💪 Fitness & Wellness',
+    brandTerms: 'FitPulse, ProActive',
+    keywords: 'workout app, subscription price, gym equipment, supplement taste, customer service',
+    competitors: 'Peloton, Whoop, MyFitnessPal, Gymshark',
+    hashtags: '#fitnesstok, #workoutmotivation, #wellness, #gymlife',
+  },
+  {
+    key: 'food',
+    label: '☕ Food & Beverage',
+    brandTerms: 'BrewCraft, FreshBite',
+    keywords: 'menu flavor, delivery speed, store cleanliness, loyalty rewards, organic ingredients',
+    competitors: 'Starbucks, Chipotle, Sweetgreen, Blue Bottle',
+    hashtags: '#foodie, #coffeelover, #tastetest, #localfood',
+  },
+]
 
 export const SOURCE_TYPES_ALL = SOURCE_TYPES
