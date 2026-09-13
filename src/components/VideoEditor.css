@@ -563,7 +563,8 @@
 .preview-controls {
   position: absolute;
   z-index: 5;
-  inset: auto 50% 0.8rem auto;
+  top: 0.7rem;
+  right: 50%;
   display: flex;
   align-items: center;
   gap: 0.2rem;
