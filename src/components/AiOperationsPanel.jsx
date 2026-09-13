@@ -78,6 +78,7 @@ export function AiOperationsPanel() {
       </Section>}
 
       {data.pricing.length > 0 && <Section title="AI generation pricing">
+        <p className="ai-operations-scroll-hint">Scroll horizontally to review and edit all pricing fields.</p>
         <div className="ai-operations-scroll" role="region" aria-label="AI generation pricing controls" tabIndex="0">
         {data.pricing.map((price) => <div className="it-row ai-pricing-row" key={price.id}>
           <div><strong>{price.capability} / {price.mode}</strong><span>{price.unit} • route controller</span></div>
