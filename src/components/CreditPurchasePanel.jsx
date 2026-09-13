@@ -7,11 +7,13 @@ export function CreditPurchasePanel({
   onClose,
   aiDashboard,
   onRefreshBalance,
+  initialSelectedKey = '',
 }) {
   const [products, setProducts] = useState([])
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [purchasingKey, setPurchasingKey] = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  const [selectedKey, setSelectedKey] = useState(initialSelectedKey)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
@@ -111,13 +113,15 @@ export function CreditPurchasePanel({
         <div className="credit-packs-grid">
           {products.map((pack) => {
             const isBuying = purchasingKey === pack.product_key
+            const isSelected = selectedKey === pack.product_key
             const isPopular = pack.popular || pack.credits === 2500
             const isBestValue = pack.bestValue || pack.credits === 5000
 
             return (
               <div
                 key={pack.product_key || pack.id}
-                className={`credit-pack-card ${isPopular ? 'popular' : ''} ${isBestValue ? 'best-value' : ''}`}
+                className={`credit-pack-card ${isPopular ? 'popular' : ''} ${isBestValue ? 'best-value' : ''} ${isSelected ? 'selected' : ''}`}
+                onClick={() => setSelectedKey(pack.product_key)}
               >
                 {pack.badge && (
                   <span className={`pack-badge ${isBestValue ? 'best-value' : 'popular'}`}>
@@ -155,7 +159,10 @@ export function CreditPurchasePanel({
                 <button
                   type="button"
                   className="pack-buy-btn"
-                  onClick={() => handleBuyPack(pack.product_key)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleBuyPack(pack.product_key)
+                  }}
                   disabled={Boolean(purchasingKey)}
                 >
                   {isBuying ? 'Redirecting to Stripe...' : `⚡ Purchase ${pack.credits.toLocaleString()} Tokens`}

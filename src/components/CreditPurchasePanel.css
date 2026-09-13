@@ -113,6 +113,11 @@
   box-shadow: 0 8px 24px rgba(16, 185, 129, 0.14);
 }
 
+.credit-pack-card.selected {
+  outline: 3px solid #3b82f6;
+  outline-offset: 2px;
+}
+
 .pack-badge {
   position: absolute;
   top: 0.85rem;

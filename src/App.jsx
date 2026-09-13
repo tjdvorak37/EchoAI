@@ -281,6 +281,7 @@ function App() {
   const [myEntitlement, setMyEntitlement] = useState(null)
   const [aiDashboard, setAiDashboard] = useState(null)
   const [creditPurchaseModalOpen, setCreditPurchaseModalOpen] = useState(false)
+  const [selectedCreditPackKey, setSelectedCreditPackKey] = useState('')
   const [creditsCheckoutNotice, setCreditsCheckoutNotice] = useState(() => {
     const status = new URLSearchParams(window.location.search).get('credits')
     const tokens = new URLSearchParams(window.location.search).get('tokens')
@@ -3767,7 +3768,10 @@ function App() {
                       key={pkg.key}
                       type="button"
                       className={`dashboard-token-quick-card ${pkg.popular ? 'popular' : ''} ${pkg.bestValue ? 'best-value' : ''}`}
-                      onClick={() => setCreditPurchaseModalOpen(true)}
+                      onClick={() => {
+                        setSelectedCreditPackKey(pkg.key)
+                        setCreditPurchaseModalOpen(true)
+                      }}
                     >
                       {pkg.popular && <span className="quick-badge popular">Popular</span>}
                       {pkg.bestValue && <span className="quick-badge best-value">Best Value</span>}
@@ -5373,7 +5377,11 @@ function App() {
         <Suspense fallback={null}>
           <CreditPurchasePanel
             isModal={true}
-            onClose={() => setCreditPurchaseModalOpen(false)}
+            initialSelectedKey={selectedCreditPackKey}
+            onClose={() => {
+              setCreditPurchaseModalOpen(false)
+              setSelectedCreditPackKey('')
+            }}
             aiDashboard={aiDashboard}
             onRefreshBalance={refreshAiBalance}
           />
