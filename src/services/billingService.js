@@ -214,6 +214,8 @@ export const billingService = {
     if (!isSupabaseConfigured) {
       return {
         balance: 500,
+        monthlyBalance: 500,
+        purchasedBalance: 0,
         monthlyAllowance: 500,
         periodEnd: null,
         pricing: [
@@ -226,16 +228,24 @@ export const billingService = {
     }
 
     const [account, pricing, jobs] = await Promise.all([
-      supabase.from('echo_credit_accounts').select('balance, monthly_allowance, period_end').maybeSingle(),
+      supabase.from('echo_credit_accounts').select('balance, monthly_balance, purchased_balance, monthly_allowance, period_start, period_end').maybeSingle(),
       supabase.from('echo_ai_pricing').select('capability, mode, bot_name, bot_description, echo_credit_cost, credit_cost, unit').eq('enabled', true).order('capability'),
       supabase.from('echo_ai_jobs').select('id, capability, mode, credits_reserved, status, created_at').order('created_at', { ascending: false }).limit(6),
     ])
     const failed = [account, pricing, jobs].find((result) => result.error)
     if (failed) throw new Error(failed.error.message)
+    const acc = account.data
+    const totalBalance = acc?.balance ?? 0
+    const monthlyAllowance = acc?.monthly_allowance ?? 500
+    const monthlyBalance = acc?.monthly_balance !== undefined ? acc.monthly_balance : Math.min(totalBalance, monthlyAllowance)
+    const purchasedBalance = acc?.purchased_balance !== undefined ? acc.purchased_balance : Math.max(0, totalBalance - monthlyBalance)
+
     return {
-      balance: account.data?.balance ?? 0,
-      monthlyAllowance: account.data?.monthly_allowance ?? 0,
-      periodEnd: account.data?.period_end ?? null,
+      balance: totalBalance,
+      monthlyBalance,
+      purchasedBalance,
+      monthlyAllowance,
+      periodEnd: acc?.period_end ?? null,
       pricing: (pricing.data ?? []).map((item) => ({
         capability: item.capability,
         mode: item.mode,
