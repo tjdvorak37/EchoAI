@@ -97,6 +97,7 @@ const normalizeMember = (record) => ({
   developerAppEditAccess: record.developer_app_edit_access === true,
   profitSharePercent: Number(record.profit_share_percent ?? record.profitSharePercent ?? 0),
   isBoardMember: record.is_board_member === true || record.role === 'board_member',
+  seatManager: record.seat_manager === true,
   storageQuotaMb: record.storage_quota_mb ?? record.storageQuotaMb ?? 2048,
   aiAgentConfig: normalizeAiAgentConfig(record.ai_agent_config ?? record.aiAgentConfig),
 })
@@ -201,6 +202,7 @@ export const authService = {
       company: profile.company ?? '',
       isBoardMember: profile.is_board_member === true || profile.role === 'board_member',
       profitSharePercent: Number(profile.profit_share_percent || 0),
+      seatManager: profile.seat_manager === true,
     }
   },
 
@@ -264,6 +266,7 @@ export const authService = {
           company: profile?.company ?? '',
           isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
           profitSharePercent: Number(profile?.profit_share_percent || 0),
+          seatManager: profile?.seat_manager === true,
         },
       }
     }
@@ -324,6 +327,9 @@ export const authService = {
         ...data.user,
         role: profile?.role ?? data.user?.user_metadata?.role ?? 'user',
         accessStatus: profile?.access_status ?? 'active',
+        company: profile?.company ?? '',
+        isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
+        seatManager: profile?.seat_manager === true,
       },
     }
   },
@@ -497,7 +503,7 @@ export const authService = {
 
     return {
       package: packages
-        ? { id: packages.id, companyKey: packages.company_key, seatLimit: packages.seat_limit, status: packages.status }
+        ? { id: packages.id, companyKey: packages.company_key, seatLimit: packages.seat_limit, status: packages.status, pricePerSeatYear: packages.price_per_seat_year, billingPeriod: packages.billing_period, quoteNotes: packages.quote_notes }
         : null,
       seats: (seats ?? []).map((seat) => ({
         id: seat.id,
@@ -565,6 +571,32 @@ export const authService = {
 
     if (error) throw new Error(error.message)
     return { id: data.id, status: data.status }
+  },
+
+  // Staff-only: provisions or resizes a seat package for a customer's
+  // company after a quote is approved, and optionally flags the requester as
+  // that company's seat manager so they can self-serve future assignments.
+  async provisionCompanySeatsForCustomer({ companyKey, seatLimit, pricePerSeatYear, notes, managerEmail }) {
+    const normalizedCompany = companyKey?.trim().toLowerCase()
+    const parsedLimit = Number(seatLimit)
+    if (!normalizedCompany || !Number.isInteger(parsedLimit) || parsedLimit < 1) {
+      throw new Error('A company and a positive whole-number seat limit are required.')
+    }
+
+    if (!isSupabaseConfigured) {
+      return { id: 'demo-seat-package', companyKey: normalizedCompany, seatLimit: parsedLimit, status: 'active', pricePerSeatYear: pricePerSeatYear ?? null, billingPeriod: 'annual', quoteNotes: notes ?? '' }
+    }
+
+    const { data, error } = await supabase.rpc('staff_provision_company_seats', {
+      p_company_key: normalizedCompany,
+      p_seat_limit: parsedLimit,
+      p_price_per_seat_year: pricePerSeatYear ? Number(pricePerSeatYear) : null,
+      p_notes: notes || null,
+      p_manager_email: managerEmail || null,
+    })
+
+    if (error) throw new Error(error.message)
+    return { id: data.id, companyKey: data.company_key, seatLimit: data.seat_limit, status: data.status, pricePerSeatYear: data.price_per_seat_year, billingPeriod: data.billing_period, quoteNotes: data.quote_notes }
   },
 
   async reviewAccessRequest({ requestId, decision }) {
@@ -1147,6 +1179,8 @@ export const authService = {
       details: ticket.details,
       userFullName: ticket.requester_name || ticket.contact_name || (ticket.user_id ? 'Authenticated user' : 'Signed-out visitor'),
       userEmail: ticket.requester_email || ticket.contact_email || '',
+      requesterEmail: ticket.requester_email || ticket.contact_email || '',
+      companyName: ticket.company_name || '',
       source: ticket.source || 'app',
       attachmentPaths: ticket.attachment_paths || [],
       status: ticket.status,

@@ -5,6 +5,7 @@ import { DeveloperAppsPanel } from './DeveloperAppsPanel'
 import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
 import { AiOperationsPanel } from './AiOperationsPanel'
 import { PricingProfitabilityPanel } from './PricingProfitabilityPanel'
+import { SEAT_TIERS, SEAT_COGS_PER_SEAT_YEAR, getSeatQuote, getTierMarginPct, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
 const USERS_PER_PAGE = 25
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
@@ -138,6 +139,7 @@ export function AdminPanel({
   handleQuotaUpdate, handleToggleUserAccess, handleUpdateUserRole, handleReviewAccessRequest,
   companySeatPackage, companySeats,
   handleCreateCompanySeatPackage, handleUpdateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
+  handleProvisionCompanySeatsForCustomer,
   handleRespondToSupportTicket,
   handleUpdateSupportTicketStatus,
   socialPlatformReadiness, socialPlatformReadinessLoading, socialPlatformReadinessError, handleRefreshSocialPlatformReadiness,
@@ -151,6 +153,15 @@ export function AdminPanel({
   const [ticketOpen, setTicketOpen] = useState(null)
   const [replyDraft, setReplyDraft] = useState('')
   const [licenseNote, setLicenseNote] = useState({})
+  const [quoteTicketId, setQuoteTicketId] = useState('')
+  const [quoteCompanyName, setQuoteCompanyName] = useState('')
+  const [quoteCompanyKey, setQuoteCompanyKey] = useState('')
+  const [quoteManagerEmail, setQuoteManagerEmail] = useState('')
+  const [quoteSeatCount, setQuoteSeatCount] = useState(10)
+  const [quotePriceOverride, setQuotePriceOverride] = useState('')
+  const [quoteBusy, setQuoteBusy] = useState(false)
+  const [quoteError, setQuoteError] = useState('')
+  const [quoteMessage, setQuoteMessage] = useState('')
   const [userSearch, setUserSearch] = useState('')
   const [userRoleFilter, setUserRoleFilter] = useState('all')
   const [userStatusFilter, setUserStatusFilter] = useState('all')
@@ -527,6 +538,59 @@ export function AdminPanel({
   const activeGroup = TAB_GROUPS.find((section) => section.tabs.some((tab) => tab.id === itTab))
   const activeTabMeta = activeGroup?.tabs.find((tab) => tab.id === itTab)
 
+  const companyPackageTickets = tickets.filter((t) => t.category === 'Company package' && isTicketActionable(t.status))
+  const currentQuote = getSeatQuote(quoteSeatCount, quotePriceOverride)
+
+  const loadTicketIntoQuote = (ticket) => {
+    setQuoteTicketId(ticket.id)
+    setQuoteCompanyName(ticket.companyName || '')
+    setQuoteCompanyKey((ticket.companyName || '').trim().toLowerCase())
+    setQuoteManagerEmail(ticket.requesterEmail || ticket.userEmail || '')
+    const parsedSeats = parseRequestedSeatsFromDetails(ticket.details)
+    setQuoteSeatCount(parsedSeats || 10)
+    setQuotePriceOverride('')
+    setQuoteMessage('')
+    setQuoteError('')
+  }
+
+  const sendQuoteToTicket = () => {
+    const ticket = tickets.find((t) => t.id === quoteTicketId)
+    const message = buildQuoteMessage({ companyName: quoteCompanyName, quote: currentQuote })
+    if (ticket) {
+      setTicketOpen(ticket)
+      setItTab('tickets')
+      setReplyDraft(message)
+    } else {
+      setQuoteMessage(message)
+    }
+  }
+
+  const approveAndProvisionSeats = async () => {
+    setQuoteError('')
+    if (!quoteCompanyKey.trim()) {
+      setQuoteError('Enter the customer\u2019s company key (matches their account company field).')
+      return
+    }
+    setQuoteBusy(true)
+    try {
+      await handleProvisionCompanySeatsForCustomer({
+        companyKey: quoteCompanyKey,
+        seatLimit: currentQuote.count,
+        pricePerSeatYear: currentQuote.pricePerSeatYear,
+        notes: `Quoted from ticket ${quoteTicketId || 'manual'} at ${formatUsd(currentQuote.totalAnnualPrice)}/year.`,
+        managerEmail: quoteManagerEmail,
+      })
+      if (quoteTicketId) {
+        await updateTicketStatus(quoteTicketId, 'resolved')
+      }
+      setQuoteMessage(`Seats provisioned for ${quoteCompanyName || quoteCompanyKey}. ${quoteManagerEmail ? `${quoteManagerEmail} can now manage their own team.` : ''}`)
+    } catch (provisionError) {
+      setQuoteError(provisionError.message)
+    } finally {
+      setQuoteBusy(false)
+    }
+  }
+
   return (
     <div className="it-panel">
       <div className="it-header">
@@ -645,6 +709,72 @@ export function AdminPanel({
 
         {itTab === 'licenses' && (
           <div>
+            <Section title="Seat package pricing & quotes">
+              <p className="panel-note">
+                Seat packages are sold by the year only. Use this to price a quote and make sure no one undersells our margin.
+              </p>
+              <div className="seat-pricing-chart">
+                {SEAT_TIERS.map((tier) => {
+                  const margin = getTierMarginPct(tier.pricePerSeatYear)
+                  return (
+                    <div key={tier.id} className="seat-pricing-bar-row">
+                      <span className="seat-pricing-bar-label">{tier.label}</span>
+                      <div className="seat-pricing-bar-track">
+                        <div className="seat-pricing-bar-cogs" style={{ width: `${Math.min(100, (SEAT_COGS_PER_SEAT_YEAR / tier.pricePerSeatYear) * 100)}%` }} />
+                      </div>
+                      <span className="seat-pricing-bar-value">
+                        {formatUsd(tier.pricePerSeatYear)}/seat
+                        <small className={margin < MINIMUM_HEALTHY_MARGIN_PCT ? 'seat-margin-warn' : 'seat-margin-ok'}> {margin.toFixed(0)}% margin</small>
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="muted">
+                Shaded portion of each bar is our cost of goods per seat/year ({formatUsd(SEAT_COGS_PER_SEAT_YEAR)}). Do not quote below {MINIMUM_HEALTHY_MARGIN_PCT}% margin without manager approval.
+              </p>
+
+              <h4 className="section-label">Prepare a quote</h4>
+              {companyPackageTickets.length > 0 && (
+                <div className="chip-row">
+                  {companyPackageTickets.map((ticket) => (
+                    <button
+                      key={ticket.id}
+                      type="button"
+                      className={quoteTicketId === ticket.id ? 'chip active' : 'chip'}
+                      onClick={() => loadTicketIntoQuote(ticket)}
+                    >
+                      {ticket.companyName || ticket.userFullName} ({parseRequestedSeatsFromDetails(ticket.details) || '?'} seats)
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="fin-form-grid" style={{ marginTop: '0.6rem' }}>
+                <label>Company name<input type="text" value={quoteCompanyName} onChange={(e) => setQuoteCompanyName(e.target.value)} placeholder="Acme Co" /></label>
+                <label>Company key (must match their account)<input type="text" value={quoteCompanyKey} onChange={(e) => setQuoteCompanyKey(e.target.value)} placeholder="acme co" /></label>
+                <label>Seat manager email<input type="email" value={quoteManagerEmail} onChange={(e) => setQuoteManagerEmail(e.target.value)} placeholder="owner@acme.com" /></label>
+                <label>Seat count<input type="number" min="1" value={quoteSeatCount} onChange={(e) => setQuoteSeatCount(e.target.value)} /></label>
+                <label>Price override ($/seat/year, optional)<input type="number" min="0" value={quotePriceOverride} onChange={(e) => setQuotePriceOverride(e.target.value)} placeholder={`Tier default: $${currentQuote.tier.pricePerSeatYear}`} /></label>
+              </div>
+
+              <div className="asset-usage-banner" style={currentQuote.belowFloor ? { borderColor: '#ef4444' } : undefined}>
+                <strong>{currentQuote.count} seats × {formatUsd(currentQuote.pricePerSeatYear)}/year = {formatUsd(currentQuote.totalAnnualPrice)}/year</strong>
+                <span>
+                  Cost of goods: {formatUsd(currentQuote.totalCogs)}/year • Margin: {currentQuote.marginPct.toFixed(1)}%
+                  {currentQuote.belowFloor ? ' — below floor, get manager approval before sending' : ''}
+                </span>
+              </div>
+
+              <div className="action-row">
+                <button type="button" className="ghost-button" onClick={sendQuoteToTicket}>Prepare quote reply</button>
+                <button type="button" className="primary-button" disabled={quoteBusy} onClick={approveAndProvisionSeats}>
+                  {quoteBusy ? 'Provisioning...' : 'Approve & push out seats'}
+                </button>
+              </div>
+              {quoteMessage && <p className="auth-message">{quoteMessage}</p>}
+              {quoteError && <p className="auth-message auth-error">{quoteError}</p>}
+            </Section>
+
             <Section title="Company email seats">
               <p className="panel-note">
                 Assign individual seats to employee email addresses. Employees claim access when they sign up with the assigned email.
