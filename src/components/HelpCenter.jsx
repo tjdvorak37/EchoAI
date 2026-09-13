@@ -3,12 +3,13 @@ import { HELP_ARTICLES, HELP_CATEGORIES } from '../data/helpArticles'
 import './HelpCenter.css'
 
 const COMMON_QUESTIONS = [
-  ['How do I connect an AI tool?', 'multiple AI tools'],
-  ['How do I use the In-house AI Lab?', 'in-house AI lab'],
-  ['How do I use my brand kit?', 'brand kit'],
-  ['How do I schedule a post?', 'schedule a post'],
-  ['How do I sync Google Calendar?', 'Google Calendar sync'],
-  ['How do I link cloud files?', 'link cloud files'],
+  ['How do token balances & rollovers work?', 'rollover'],
+  ['How do I purchase additional tokens?', 'buy tokens'],
+  ['How do I use Social Listening intelligence?', 'social listening'],
+  ['What are the subscription plans & pricing?', 'subscription tiers'],
+  ['How do I schedule a multi-channel post?', 'schedule a post'],
+  ['How do I clean up photos with Pixel Healing?', 'heal'],
+  ['How do I connect AI provider API keys?', 'api key'],
 ]
 
 const searchableText = (article) => [
