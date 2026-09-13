@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FinancePanel } from './FinancePanel'
 import { TrademarkPanel } from './TrademarkPanel'
 import { DeveloperAppsPanel } from './DeveloperAppsPanel'
@@ -146,6 +146,8 @@ export function AdminPanel({
   onAdminUserAction,
 }) {
   const [itTab, setItTab] = useState(() => currentUser?.role === 'admin' ? 'overview' : 'integrations')
+  const [openTabGroup, setOpenTabGroup] = useState(null)
+  const tabNavRef = useRef(null)
   const [ticketOpen, setTicketOpen] = useState(null)
   const [replyDraft, setReplyDraft] = useState('')
   const [licenseNote, setLicenseNote] = useState({})
@@ -511,6 +513,20 @@ export function AdminPanel({
     ))
   }
 
+  useEffect(() => {
+    if (!openTabGroup) return undefined
+    const handleClickOutside = (event) => {
+      if (tabNavRef.current && !tabNavRef.current.contains(event.target)) {
+        setOpenTabGroup(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [openTabGroup])
+
+  const activeGroup = TAB_GROUPS.find((section) => section.tabs.some((tab) => tab.id === itTab))
+  const activeTabMeta = activeGroup?.tabs.find((tab) => tab.id === itTab)
+
   return (
     <div className="it-panel">
       <div className="it-header">
@@ -520,25 +536,40 @@ export function AdminPanel({
         </div>
       </div>
 
-      <nav className="it-tabs">
-        {TAB_GROUPS.map((section) => (
-          <div key={section.group} className="it-tab-group">
-            <span className="it-tab-group-label">{section.group}</span>
-            <div className="it-tab-group-buttons">
-              {section.tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={`it-tab-btn ${itTab === tab.id ? 'active' : ''}`}
-                  title={tab.hint}
-                  onClick={() => setItTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
+      <nav className="it-tabs" ref={tabNavRef}>
+        {TAB_GROUPS.map((section) => {
+          const isActiveGroup = section.tabs.some((tab) => tab.id === itTab)
+          const isOpen = openTabGroup === section.group
+          return (
+            <div key={section.group} className="it-tab-dropdown">
+              <button
+                type="button"
+                className={`it-tab-group-btn ${isActiveGroup ? 'active' : ''}`}
+                onClick={() => setOpenTabGroup(isOpen ? null : section.group)}
+                aria-expanded={isOpen}
+              >
+                {section.group}
+                {isActiveGroup && <span className="it-tab-group-current">{activeTabMeta?.label}</span>}
+                <span className="it-tab-group-caret" aria-hidden="true">{isOpen ? '▲' : '▼'}</span>
+              </button>
+              {isOpen && (
+                <div className="it-tab-dropdown-menu">
+                  {section.tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      className={`it-tab-btn ${itTab === tab.id ? 'active' : ''}`}
+                      title={tab.hint}
+                      onClick={() => { setItTab(tab.id); setOpenTabGroup(null) }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </nav>
 
       {adminError && <p className="auth-message auth-error">{adminError}</p>}
