@@ -83,11 +83,27 @@ export function CreditPurchasePanel({
 
         <div className="credit-balance-badge">
           <div className="credit-balance-info">
-            <span className="credit-balance-label">Current Balance</span>
+            <span className="credit-balance-label">Total Tokens</span>
             <span className="credit-balance-num">
-              {aiDashboard?.balance !== undefined ? aiDashboard.balance.toLocaleString() : '—'} <small style={{ fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6' }}>Tokens</small>
+              {aiDashboard?.balance !== undefined ? aiDashboard.balance.toLocaleString() : '—'}
             </span>
           </div>
+
+          {aiDashboard && (
+            <div className="credit-balance-buckets">
+              <div className="credit-bucket-pill monthly" title="Monthly package allowance (used first, resets on renewal)">
+                <span>Plan (Monthly):</span>
+                <strong>{Number(aiDashboard.monthlyBalance ?? 0).toLocaleString()}</strong>
+                <span>/ {Number(aiDashboard.monthlyAllowance || 500).toLocaleString()}</span>
+              </div>
+              <div className="credit-bucket-pill purchased" title="Never-expiring purchased tokens (rolls over month-to-month)">
+                <span>Purchased (Rollover):</span>
+                <strong>{Number(aiDashboard.purchasedBalance ?? 0).toLocaleString()}</strong>
+                <span>tokens</span>
+              </div>
+            </div>
+          )}
+
           {onRefreshBalance && (
             <button
               type="button"
@@ -99,6 +115,19 @@ export function CreditPurchasePanel({
               {refreshing ? '🔄 Syncing...' : '🔄 Refresh'}
             </button>
           )}
+        </div>
+      </div>
+
+      <div className="credit-rollover-explainer">
+        <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>🛡️</span>
+        <div>
+          <strong>How Your Token Balances Work:</strong>
+          <div>
+            • <strong>Monthly Plan Allowance:</strong> Your subscription tokens are used first every month. Unused plan tokens reset on your monthly billing cycle.
+          </div>
+          <div>
+            • <strong>Purchased Add-On Tokens:</strong> Top-up tokens purchased here <em>never expire</em> and carry over month-to-month until fully spent!
+          </div>
         </div>
       </div>
 

@@ -307,7 +307,20 @@ function App() {
   const refreshAiBalance = async (addedAmount = null) => {
     try {
       if (!isSupabaseConfigured && addedAmount) {
-        setAiDashboard((prev) => (prev ? { ...prev, balance: (prev.balance || 0) + addedAmount } : { balance: 500 + addedAmount, monthlyAllowance: 500, pricing: [], recentJobs: [] }))
+        setAiDashboard((prev) => {
+          const currentMonthly = prev?.monthlyBalance ?? 500
+          const currentPurchased = (prev?.purchasedBalance ?? 0) + addedAmount
+          const total = currentMonthly + currentPurchased
+          return {
+            ...prev,
+            balance: total,
+            monthlyBalance: currentMonthly,
+            purchasedBalance: currentPurchased,
+            monthlyAllowance: prev?.monthlyAllowance ?? 500,
+            pricing: prev?.pricing ?? [],
+            recentJobs: prev?.recentJobs ?? [],
+          }
+        })
         return
       }
       const data = await billingService.getAiDashboard()
@@ -3721,16 +3734,42 @@ function App() {
               </div>
               <div className="dashboard-ai-summary">
                 <div className="dashboard-ai-balance">
-                  <span>Echo Credits remaining</span>
+                  <span style={{ fontWeight: 700, color: '#475569' }}>Total Available Tokens</span>
                   <strong>{aiDashboard ? aiDashboard.balance.toLocaleString() : '—'}</strong>
-                  <small>{aiDashboard?.monthlyAllowance ? `${aiDashboard.monthlyAllowance.toLocaleString()} included this month` : 'Loading account balance'}</small>
+
+                  {aiDashboard && (
+                    <div className="dashboard-ai-balance-breakdown">
+                      <div className="dashboard-ai-balance-chip monthly" title="Monthly package allowance. Resets each renewal period. Used first.">
+                        <div>
+                          <strong>{Number(aiDashboard.monthlyBalance ?? 0).toLocaleString()}</strong>
+                          <span> / {Number(aiDashboard.monthlyAllowance || 500).toLocaleString()}</span>
+                        </div>
+                        <span style={{ color: '#2563eb', fontWeight: 600 }}>Plan (Monthly)</span>
+                      </div>
+
+                      <div className="dashboard-ai-balance-chip purchased" title="Additional purchased tokens. Never expire, rolls over month-to-month.">
+                        <div>
+                          <strong>{Number(aiDashboard.purchasedBalance ?? 0).toLocaleString()}</strong>
+                          <span> tokens</span>
+                        </div>
+                        <span style={{ color: '#059669', fontWeight: 600 }}>Purchased (Rollover)</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <small style={{ color: '#64748b', fontSize: '0.74rem' }}>
+                    {aiDashboard?.periodEnd
+                      ? `Monthly allowance resets on ${new Date(aiDashboard.periodEnd).toLocaleDateString()}`
+                      : 'Monthly allowance resets on subscription renewal'}
+                  </small>
+
                   <button
                     type="button"
                     className="primary-button"
-                    style={{ marginTop: '0.55rem', fontSize: '0.84rem', padding: '0.48rem 0.85rem' }}
+                    style={{ marginTop: '0.45rem', fontSize: '0.84rem', padding: '0.48rem 0.85rem' }}
                     onClick={() => setCreditPurchaseModalOpen(true)}
                   >
-                    + Add Tokens (500–5,000)
+                    + Add Rollover Tokens
                   </button>
                 </div>
                 <div className="dashboard-ai-costs">
