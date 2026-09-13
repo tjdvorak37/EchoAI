@@ -820,6 +820,7 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
   const brushStrokeRef = useRef(null)
   const canvasPanRef = useRef(null)
   const layerIdRef = useRef(0)
+  const uploadInputRef = useRef(null)
   const [stageViewportSize, setStageViewportSize] = useState({ width: 900, height: 720 })
 
   const selectedAsset = imageAssets.find((asset) => asset.id === selectedAssetId) ?? null
@@ -2123,6 +2124,7 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
         <div>
           <p className="small-title">Photo Creator</p>
           <h2>Professional image editor</h2>
+          <p className="panel-note">Upload a photo or generate one with AI, add text/graphics from the left toolbar, then export.</p>
         </div>
         <div className="photo-creator-actions">
           {/* Quick Access - Only essential buttons */}
@@ -2425,7 +2427,7 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
                 <label className="photo-upload-chip compact-upload">
                   <Upload size={17} aria-hidden="true" />
                   <span>Upload</span>
-                  <input type="file" accept="image/*" onChange={handleUpload} />
+                  <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleUpload} />
                 </label>
                 <button type="button" className="dock-action-button" onClick={handleGenerateImage} disabled={aiImageLoading} title="Generate image from the current prompt">
                   <Sparkles size={17} aria-hidden="true" />
@@ -2497,8 +2499,19 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
                   }}
                 />
               ) : layers.length === 0 && brushStrokes.length === 0 ? (
-                <div className="photo-stage-empty">
-                  <span>Drop in a photo or generate a concept to start</span>
+                <div className="photo-stage-empty photo-stage-onboarding">
+                  <p className="small-title">Let's make something</p>
+                  <ol>
+                    <li><strong>Add a photo</strong> — upload your own or generate one with AI below.</li>
+                    <li><strong>Add text, stickers, or shapes</strong> — use the toolbar on the left.</li>
+                    <li><strong>Export</strong> when it looks right, using the button in the top right.</li>
+                  </ol>
+                  <div className="photo-stage-onboarding-actions">
+                    <button type="button" className="primary-button" onClick={() => uploadInputRef.current?.click()}>Upload a photo</button>
+                    <button type="button" className="ghost-button" onClick={handleGenerateImage} disabled={aiImageLoading}>
+                      {aiImageLoading ? 'Generating...' : 'Generate with AI'}
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
