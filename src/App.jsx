@@ -190,6 +190,8 @@ function App() {
   const [adminError, setAdminError] = useState('')
   const [companySeatPackage, setCompanySeatPackage] = useState(null)
   const [companySeats, setCompanySeats] = useState([])
+  const [teamSeatEmailDraft, setTeamSeatEmailDraft] = useState('')
+  const [teamSeatError, setTeamSeatError] = useState('')
   const [supportModalOpen, setSupportModalOpen] = useState(false)
   const [supportLoading, setSupportLoading] = useState(false)
   const [supportAttachments, setSupportAttachments] = useState([])
@@ -696,6 +698,12 @@ function App() {
     })
     setCompanySeatPackage((prev) => ({ ...prev, ...updated }))
     return updated
+  }
+
+  // Staff-only: provisions an approved quote for a customer's company, and
+  // optionally designates the ticket requester as that company's seat manager.
+  const handleProvisionCompanySeatsForCustomer = async ({ companyKey, seatLimit, pricePerSeatYear, notes, managerEmail }) => {
+    return authService.provisionCompanySeatsForCustomer({ companyKey, seatLimit, pricePerSeatYear, notes, managerEmail })
   }
 
   const handleRespondToSupportTicket = async ({ ticketId, response }) => {
@@ -4149,6 +4157,7 @@ function App() {
               <a href="#integrations-security" className="chip">Security</a>
               <a href="#integrations-billing" className="chip">Billing</a>
               <a href="#integrations-referral" className="chip">Refer &amp; earn</a>
+              {session?.seatManager && companySeatPackage && <a href="#integrations-team" className="chip">Team seats</a>}
               <a href="#integrations-social" className="chip">Social accounts</a>
               <a href="#integrations-ai" className="chip">AI providers &amp; keys</a>
               {canViewManagementBoard && <a href="#integrations-tools" className="chip">Third-party tools</a>}
@@ -4436,6 +4445,67 @@ function App() {
                   {referralCopied ? 'Copied' : 'Copy link'}
                 </button>
               </div>
+            )}
+
+            {session?.seatManager && companySeatPackage && (
+              <>
+                <h3 className="section-label" id="integrations-team">Your team seats</h3>
+                <p className="panel-note">
+                  Add or remove people on your company&apos;s seat package. Changing how many seats your
+                  package holds requires a new quote from support.
+                </p>
+                <div className="list-row">
+                  <div>
+                    <p>{companySeatPackage.seatLimit} seat package</p>
+                    <span className="muted">
+                      {companySeats.filter((seat) => seat.status !== 'revoked').length} of {companySeatPackage.seatLimit} seats assigned
+                      {companySeatPackage.pricePerSeatYear ? ` • $${companySeatPackage.pricePerSeatYear}/seat/year` : ''}
+                    </span>
+                  </div>
+                </div>
+                <form
+                  className="composer"
+                  onSubmit={async (event) => {
+                    event.preventDefault()
+                    setTeamSeatError('')
+                    const activeSeats = companySeats.filter((seat) => seat.status !== 'revoked').length
+                    if (activeSeats >= companySeatPackage.seatLimit) {
+                      setTeamSeatError('All seats are assigned. Contact support for a new quote to add more.')
+                      return
+                    }
+                    try {
+                      await handleAssignCompanySeat(teamSeatEmailDraft)
+                      setTeamSeatEmailDraft('')
+                    } catch (assignError) {
+                      setTeamSeatError(assignError.message)
+                    }
+                  }}
+                >
+                  <label>
+                    Employee email
+                    <input
+                      type="email"
+                      required
+                      value={teamSeatEmailDraft}
+                      onChange={(event) => setTeamSeatEmailDraft(event.target.value)}
+                      placeholder="employee@yourcompany.com"
+                    />
+                  </label>
+                  <button type="submit" className="primary-button">Add to team</button>
+                </form>
+                {teamSeatError && <p className="field-error">{teamSeatError}</p>}
+                {companySeats.map((seat) => (
+                  <div key={seat.id} className="list-row">
+                    <div>
+                      <p>{seat.employeeEmail}</p>
+                      <span className="muted">{seat.claimedAt ? 'Claimed' : seat.status === 'revoked' ? 'Removed' : 'Awaiting signup'}</span>
+                    </div>
+                    {seat.status !== 'revoked' && (
+                      <button type="button" className="ghost-button" onClick={() => handleRevokeCompanySeat(seat.id)}>Remove</button>
+                    )}
+                  </div>
+                ))}
+              </>
             )}
 
             <h3 className="section-label" id="integrations-social">Social media accounts</h3>
@@ -4944,6 +5014,7 @@ function App() {
               companySeats={companySeats}
               handleCreateCompanySeatPackage={handleCreateCompanySeatPackage}
               handleUpdateCompanySeatPackage={handleUpdateCompanySeatPackage}
+              handleProvisionCompanySeatsForCustomer={handleProvisionCompanySeatsForCustomer}
               handleRespondToSupportTicket={handleRespondToSupportTicket}
               handleUpdateSupportTicketStatus={handleUpdateSupportTicketStatus}
               onAdminUserAction={handleAdminUserAction}
