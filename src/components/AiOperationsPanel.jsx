@@ -57,7 +57,7 @@ export function AiOperationsPanel() {
   }
 
   return (
-    <div>
+    <div className="ai-operations-panel">
       <Section title="Echo AI operations">
         <p className="muted">Provider accounts and API secrets stay in Supabase Edge Function secrets. This panel manages routing, customer pricing, usage costs, and safety caps.</p>
         <div className="action-row">
@@ -78,7 +78,8 @@ export function AiOperationsPanel() {
       </Section>}
 
       {data.pricing.length > 0 && <Section title="AI generation pricing">
-        {data.pricing.map((price) => <div className="it-row" key={price.id}>
+        <div className="ai-operations-scroll" role="region" aria-label="AI generation pricing controls" tabIndex="0">
+        {data.pricing.map((price) => <div className="it-row ai-pricing-row" key={price.id}>
           <div><strong>{price.capability} / {price.mode}</strong><span>{price.unit} • route controller</span></div>
           <label>Bot name<input value={price.bot_name || ''} onChange={(event) => updateRow('pricing', price.id, 'bot_name', event.target.value)} /></label>
           <label>Description<input value={price.bot_description || ''} onChange={(event) => updateRow('pricing', price.id, 'bot_description', event.target.value)} /></label>
@@ -89,16 +90,19 @@ export function AiOperationsPanel() {
           <label>Provider<input value={price.provider_key} onChange={(event) => updateRow('pricing', price.id, 'provider_key', event.target.value)} /></label>
           <label><input type="checkbox" checked={price.enabled} onChange={(event) => updateRow('pricing', price.id, 'enabled', event.target.checked)} /> Enabled</label>
         </div>)}
+        </div>
       </Section>}
 
       {data.providers.length > 0 && <Section title="Provider accounts and caps">
-        {data.providers.map((provider) => <div className="it-row" key={provider.id}>
+        <div className="ai-operations-scroll" role="region" aria-label="Provider account controls" tabIndex="0">
+        {data.providers.map((provider) => <div className="it-row ai-provider-row" key={provider.id}>
           <div><strong>{provider.label}</strong><span>{provider.provider_key} • secret: {provider.secret_name}</span></div>
           <label>Endpoint<input value={provider.endpoint || ''} onChange={(event) => updateRow('providers', provider.id, 'endpoint', event.target.value)} /></label>
           <label>Replacement for<input value={provider.replacement_for || ''} onChange={(event) => updateRow('providers', provider.id, 'replacement_for', event.target.value)} placeholder="openai" /></label>
           <label>Monthly cap USD<input type="number" min="0" step="0.01" value={provider.monthly_cap_usd} onChange={(event) => updateRow('providers', provider.id, 'monthly_cap_usd', event.target.value)} /></label>
           <label><input type="checkbox" checked={provider.enabled} onChange={(event) => updateRow('providers', provider.id, 'enabled', event.target.checked)} /> Enabled</label>
         </div>)}
+        </div>
       </Section>}
 
       {data.financials && <Section title="AI financials">
