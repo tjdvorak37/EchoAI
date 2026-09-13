@@ -42,35 +42,47 @@ Deno.serve(async (request) => {
       stripe_price_id: dbProduct?.stripe_price_id || Deno.env.get(`STRIPE_PRICE_${productKey.toUpperCase()}`) || canonical.stripe_price_id || '',
     }
 
-    const lineItem = product.stripe_price_id
-      ? { price: product.stripe_price_id, quantity: 1 }
-      : {
-          price_data: {
-            currency: 'usd',
-            unit_amount: Math.round(product.price_usd * 100),
-            product_data: {
-              name: product.label || `${product.credits.toLocaleString()} Echo AI Tokens`,
-              description: `${product.credits.toLocaleString()} Echo AI Tokens / Credits for Image, Video, and Copy generation`,
-            },
-          },
-          quantity: 1,
-        }
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [lineItem],
-      customer_email: auth.user.email,
-      client_reference_id: auth.user.id,
-      metadata: {
-        type: 'echo_credit_pack',
-        product_id: product.id,
-        product_key: product.product_key,
-        credits: String(product.credits),
-        supabase_user_id: auth.user.id,
+    const dynamicLineItem = {
+      price_data: {
+        currency: 'usd',
+        unit_amount: Math.round(product.price_usd * 100),
+        product_data: {
+          name: product.label || `${product.credits.toLocaleString()} Echo AI Tokens`,
+          description: `${product.credits.toLocaleString()} Echo AI Tokens / Credits for Image, Video, and Copy generation`,
+        },
       },
-      success_url: `${APP_URL}/?credits=success&tokens=${product.credits}`,
-      cancel_url: `${APP_URL}/?credits=cancelled`,
-    })
+      quantity: 1,
+    }
+
+    const createCreditSession = async (lineItem: Record<string, unknown>) => {
+      return await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [lineItem],
+        customer_email: auth.user.email,
+        client_reference_id: auth.user.id,
+        metadata: {
+          type: 'echo_credit_pack',
+          product_id: product.id,
+          product_key: product.product_key,
+          credits: String(product.credits),
+          supabase_user_id: auth.user.id,
+        },
+        success_url: `${APP_URL}/?credits=success&tokens=${product.credits}`,
+        cancel_url: `${APP_URL}/?credits=cancelled`,
+      })
+    }
+
+    let session: Stripe.Checkout.Session
+    if (product.stripe_price_id) {
+      try {
+        session = await createCreditSession({ price: product.stripe_price_id, quantity: 1 })
+      } catch (priceError) {
+        console.warn(`Credit Price ID ${product.stripe_price_id} rejected by Stripe. Falling back to direct price_data:`, priceError)
+        session = await createCreditSession(dynamicLineItem)
+      }
+    } else {
+      session = await createCreditSession(dynamicLineItem)
+    }
     return json({ url: session.url }, 200, request)
   } catch (error) {
     console.error('create-credit-checkout failed', error)
