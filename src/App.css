@@ -3181,16 +3181,43 @@ main {
 
 .it-tabs {
   display: flex;
-  gap: 0;
+  align-items: flex-start;
+  gap: 1rem;
   overflow-x: auto;
-  padding: 0 2rem;
+  padding: 0.6rem 2rem;
   background: rgba(255, 255, 255, 0.82);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
+.it-tab-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-right: 1rem;
+  border-right: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.it-tab-group:last-child {
+  border-right: 0;
+}
+
+.it-tab-group-label {
+  color: var(--text-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.it-tab-group-buttons {
+  display: flex;
+  gap: 0.1rem;
+}
+
 .it-tab-btn {
-  padding: 0.75rem 1.1rem;
+  padding: 0.5rem 0.8rem;
   border: 0;
   background: transparent;
   color: var(--text-soft);

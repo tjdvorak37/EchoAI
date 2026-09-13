@@ -370,33 +370,73 @@ export function AdminPanel({
 
   const isFullAdmin = currentUser?.role === 'admin'
   const canManageAiAccess = ['admin', 'manager', 'it'].includes(currentUser?.role)
-  const TABS = isFullAdmin ? [
-    { id: 'overview', label: '📊 Overview' },
-    { id: 'licenses', label: '🔑 Licenses' },
-    { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}` },
-    { id: 'billing', label: '💳 Billing' },
-    { id: 'finance', label: '💹 Finance' },
-    { id: 'profitability', label: '📈 Pricing & Profit Model' },
-    ...(currentUser?.isBoardMember ? [{ id: 'board-summary', label: '📈 My Board Summary' }] : []),
-    { id: 'employees', label: '🧑‍💼 Employees' },
-    { id: 'users', label: '👥 Customer users' },
-    { id: 'storage', label: '💾 Storage' },
-    { id: 'trademark', label: '⚖️ Trademark & Legal' },
-    { id: 'developer-apps', label: '🔐 Developer Apps' },
-    { id: 'integrations', label: '🔌 Integrations' },
-    { id: 'ai-operations', label: '🤖 Echo AI operations' },
-    { id: 'controls', label: '⚙️ Site Controls' },
+  const TAB_GROUPS = isFullAdmin ? [
+    {
+      group: 'Support',
+      tabs: [
+        { id: 'overview', label: '📊 Overview', hint: 'Snapshot of open tickets, plan mix, and system health' },
+        { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}`, hint: 'Respond to and manage customer support tickets' },
+      ],
+    },
+    {
+      group: 'People',
+      tabs: [
+        { id: 'employees', label: '🧑‍💼 Employees', hint: 'Manage staff accounts, roles, and access' },
+        { id: 'users', label: '👥 Customer users', hint: 'View and manage customer accounts' },
+        { id: 'storage', label: '💾 Storage', hint: 'Review and adjust per-user storage quotas' },
+      ],
+    },
+    {
+      group: 'Finance',
+      tabs: [
+        { id: 'billing', label: '💳 Billing', hint: 'Subscriptions, invoices, and payment issues' },
+        { id: 'finance', label: '💹 Finance', hint: 'Revenue, payouts, and financial reporting' },
+        { id: 'profitability', label: '📈 Pricing & Profit Model', hint: 'Plan pricing, margins, and cost projections' },
+        ...(currentUser?.isBoardMember ? [{ id: 'board-summary', label: '📈 My Board Summary', hint: 'Your board member payout summary' }] : []),
+      ],
+    },
+    {
+      group: 'Platform',
+      tabs: [
+        { id: 'licenses', label: '🔑 Licenses', hint: 'Manage company seat licenses' },
+        { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents' },
+        { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration' },
+        { id: 'integrations', label: '🔌 Integrations', hint: 'Third-party and platform integrations' },
+        { id: 'ai-operations', label: '🤖 Echo AI operations', hint: 'AI provider routing, usage, and cost controls' },
+        { id: 'controls', label: '⚙️ Site Controls', hint: 'Feature flags and site-wide notices' },
+      ],
+    },
   ] : [
-    { id: 'overview', label: '📊 Service overview' },
-    { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}` },
-    { id: 'profitability', label: '📈 Pricing & Profit Model' },
-    { id: 'users', label: '👥 User directory' },
-    { id: 'storage', label: '💾 Storage' },
-    { id: 'trademark', label: '⚖️ Trademark & Legal' },
-    { id: 'developer-apps', label: '🔐 Developer Apps' },
-    { id: 'integrations', label: '🔌 Integrations' },
-    { id: 'ai-operations', label: '🤖 Echo AI operations' },
-    { id: 'controls', label: '⚙️ Notices' },
+    {
+      group: 'Support',
+      tabs: [
+        { id: 'overview', label: '📊 Service overview', hint: 'Snapshot of open tickets and account health' },
+        { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}`, hint: 'Respond to and manage customer support tickets' },
+      ],
+    },
+    {
+      group: 'Finance',
+      tabs: [
+        { id: 'profitability', label: '📈 Pricing & Profit Model', hint: 'Plan pricing, margins, and cost projections' },
+      ],
+    },
+    {
+      group: 'People',
+      tabs: [
+        { id: 'users', label: '👥 User directory', hint: 'View customer accounts' },
+        { id: 'storage', label: '💾 Storage', hint: 'Review per-user storage quotas' },
+      ],
+    },
+    {
+      group: 'Platform',
+      tabs: [
+        { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents' },
+        { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration' },
+        { id: 'integrations', label: '🔌 Integrations', hint: 'Third-party and platform integrations' },
+        { id: 'ai-operations', label: '🤖 Echo AI operations', hint: 'AI provider routing, usage, and cost controls' },
+        { id: 'controls', label: '⚙️ Notices', hint: 'Site-wide notices and announcements' },
+      ],
+    },
   ]
 
   const employeeRoles = ['admin', 'manager', 'it', 'accountant', 'board_member']
@@ -481,15 +521,23 @@ export function AdminPanel({
       </div>
 
       <nav className="it-tabs">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`it-tab-btn ${itTab === tab.id ? 'active' : ''}`}
-            onClick={() => setItTab(tab.id)}
-          >
-            {tab.label}
-          </button>
+        {TAB_GROUPS.map((section) => (
+          <div key={section.group} className="it-tab-group">
+            <span className="it-tab-group-label">{section.group}</span>
+            <div className="it-tab-group-buttons">
+              {section.tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`it-tab-btn ${itTab === tab.id ? 'active' : ''}`}
+                  title={tab.hint}
+                  onClick={() => setItTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
