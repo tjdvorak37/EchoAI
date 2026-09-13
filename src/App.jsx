@@ -4144,7 +4144,17 @@ function App() {
               becomes available in the Scheduler and AI Studio.
             </p>
 
-            <h3 className="section-label">Your company brand kit</h3>
+            <nav className="integrations-quick-nav" aria-label="Jump to a section">
+              <a href="#integrations-brand" className="chip">Brand kit</a>
+              <a href="#integrations-security" className="chip">Security</a>
+              <a href="#integrations-billing" className="chip">Billing</a>
+              <a href="#integrations-referral" className="chip">Refer &amp; earn</a>
+              <a href="#integrations-social" className="chip">Social accounts</a>
+              <a href="#integrations-ai" className="chip">AI providers &amp; keys</a>
+              {canViewManagementBoard && <a href="#integrations-tools" className="chip">Third-party tools</a>}
+            </nav>
+
+            <h3 className="section-label" id="integrations-brand">Your company brand kit</h3>
             <p className="panel-note">
               Use your company&apos;s approved colours, fonts, and logos in creative work. This does not change EchoAI&apos;s application styling.
             </p>
@@ -4340,7 +4350,7 @@ function App() {
             </button>
             </>}
 
-            <h3 className="section-label">Security</h3>
+            <h3 className="section-label" id="integrations-security">Security</h3>
             <div className="list-row">
               <div>
                 <p>Two-factor authentication</p>
@@ -4364,7 +4374,7 @@ function App() {
               </button>
             </div>
 
-            <h3 className="section-label">Subscription &amp; billing</h3>
+            <h3 className="section-label" id="integrations-billing">Subscription &amp; billing</h3>
             <div className="list-row">
               <div>
                 <p>
@@ -4397,7 +4407,7 @@ function App() {
             </div>
             {billingPortalError && <span className="field-error">{billingPortalError}</span>}
 
-            <h3 className="section-label">Refer &amp; earn</h3>
+            <h3 className="section-label" id="integrations-referral">Refer &amp; earn</h3>
             <div className="list-row">
               <div>
                 <p>Share your link — earn a free month</p>
@@ -4428,7 +4438,7 @@ function App() {
               </div>
             )}
 
-            <h3 className="section-label">Social media accounts</h3>
+            <h3 className="section-label" id="integrations-social">Social media accounts</h3>
             <article className="quick-connect-card">
               <div className="quick-connect-heading">
                 <div>
@@ -4621,6 +4631,7 @@ function App() {
             </div>
             {integrationError && <span className="field-error">{integrationError}</span>}
 
+            <h3 className="section-label" id="integrations-ai">AI providers &amp; API keys</h3>
             <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <div className="inhouse-engine-heading">
                 <div><h3>EchoAI hosted AI</h3><p className="muted">EchoAI Pro provides the AI accounts and keeps provider credentials on the backend. Your team uses Echo Credits instead of connecting personal AI accounts.</p></div>
@@ -4825,7 +4836,7 @@ function App() {
               </article>}
 
             {canViewManagementBoard && <>
-            <h3 className="section-label" style={{ marginTop: '2rem' }}>Third-party tools</h3>
+            <h3 className="section-label" id="integrations-tools" style={{ marginTop: '2rem' }}>Third-party tools</h3>
             <div className="cards">
               {[
                 { name: 'Slack + Teams', icon: '💬', color: '#4A154B', desc: 'Send deployment alerts and campaign summaries to your ops channel.' },
