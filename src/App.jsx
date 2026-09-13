@@ -1,5 +1,4 @@
 import { Suspense, lazy, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
-import { X } from 'lucide-react'
 import './App.css'
 import './components/VideoEditor.css'
 import './components/PhotoEditor.css'
@@ -41,6 +40,7 @@ const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((mo
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
 const CreditPurchasePanel = lazy(() => import('./components/CreditPurchasePanel').then((module) => ({ default: module.CreditPurchasePanel })))
 const RepostHubPanel = lazy(() => import('./components/RepostHubPanel').then((module) => ({ default: module.RepostHubPanel })))
+const PostSchedulerPanel = lazy(() => import('./components/PostSchedulerPanel').then((module) => ({ default: module.PostSchedulerPanel })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
@@ -1275,18 +1275,6 @@ function App() {
     } finally {
       setAuthLoading(false)
     }
-  }
-
-  const toggleChannel = (channelId) => {
-    setComposer((prev) => {
-      const hasChannel = prev.channels.includes(channelId)
-      return {
-        ...prev,
-        channels: hasChannel
-          ? prev.channels.filter((channel) => channel !== channelId)
-          : [...prev.channels, channelId],
-      }
-    })
   }
 
   const handleComposerChange = (field, value) => {
@@ -3974,175 +3962,23 @@ function App() {
         )}
 
         {activeTab === 'scheduler' && (
-          <section className="panel panel-scheduler">
-            <h2>Post Scheduler</h2>
-            <p className="panel-note">
-              Draft once and publish to every selected channel on your target date and time.
-            </p>
-
-            <form className="composer" onSubmit={handleSchedulePost}>
-              <label>
-                Campaign name
-                <input
-                  type="text"
-                  value={composer.campaign}
-                  onChange={(event) => handleComposerChange('campaign', event.target.value)}
-                  placeholder="Summer sale highlights"
-                />
-              </label>
-
-              <label>
-                Message
-                <textarea
-                  rows="4"
-                  value={composer.message}
-                  onChange={(event) => handleComposerChange('message', event.target.value)}
-                  placeholder="Tell followers what is launching and why it matters..."
-                />
-              </label>
-
-              <label>
-                Image brief
-                <input
-                  type="text"
-                  value={composer.imageIdea}
-                  onChange={(event) => handleComposerChange('imageIdea', event.target.value)}
-                  placeholder="Product flat-lay with warm tones"
-                />
-              </label>
-
-              <div>
-                <p className="small-title">Photos and videos</p>
-                <p className="muted">Attach media from your private workspace. Upload more from the Media library.</p>
-                <div style={{ marginTop: '12px' }}>
-                  <label className="field-label" htmlFor="scheduler-media-upload">Upload media</label>
-                  <input
-                    id="scheduler-media-upload"
-                    type="file"
-                    accept="image/*,video/*"
-                    onChange={handleUploadAsset}
-                  />
-                </div>
-                <div className="chip-row">
-                  {workspaceAssets.filter((asset) => ['image', 'video'].includes(asset.type)).map((asset) => {
-                    const selected = composer.mediaAssetIds.includes(asset.id)
-                    return (
-                      <button
-                        key={asset.id}
-                        type="button"
-                        className={selected ? 'chip active' : 'chip'}
-                        onClick={() => setComposer((prev) => ({
-                          ...prev,
-                          mediaAssetIds: selected
-                            ? prev.mediaAssetIds.filter((id) => id !== asset.id)
-                            : [...prev.mediaAssetIds, asset.id],
-                        }))}
-                      >
-                        {asset.type === 'video' ? 'Video' : 'Image'}: {asset.name}
-                      </button>
-                    )
-                  })}
-                  {workspaceAssets.every((asset) => !['image', 'video'].includes(asset.type)) && (
-                    <span className="muted">No media available yet.</span>
-                  )}
-                </div>
-                {composer.mediaAssetIds.length > 0 && (
-                  <div className="attached-media-list" aria-label="Media attached to this post">
-                    {workspaceAssets
-                      .filter((asset) => composer.mediaAssetIds.includes(asset.id))
-                      .map((asset) => (
-                        <div key={asset.id} className="attached-media-item">
-                          <span>{asset.type === 'video' ? 'Video' : 'Image'}: {asset.name}</span>
-                          <button
-                            type="button"
-                            className="attached-media-remove"
-                            aria-label={`Remove ${asset.name} from this post`}
-                            title="Remove from this post"
-                            onClick={() => setComposer((prev) => ({
-                              ...prev,
-                              mediaAssetIds: prev.mediaAssetIds.filter((id) => id !== asset.id),
-                            }))}
-                          >
-                            <X size={16} aria-hidden="true" />
-                          </button>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-
-              <label>
-                Deployment date/time
-                <input
-                  type="datetime-local"
-                  value={composer.scheduledAt}
-                  onChange={(event) => handleComposerChange('scheduledAt', event.target.value)}
-                />
-              </label>
-
-              <div>
-                <p className="small-title">Publish channels</p>
-                <div className="chip-row">
-                  {connectedAccounts.map((account) => {
-                    const meta = getPlatformMeta(account.platform)
-                    const key = account.platform.toLowerCase()
-                    const active = composer.channels.includes(key)
-                    return (
-                      <button
-                        key={account.id}
-                        type="button"
-                        className={active ? 'chip active' : 'chip'}
-                        style={active ? { borderColor: meta.color, color: meta.color, background: meta.bg } : {}}
-                        onClick={() => toggleChannel(key)}
-                      >
-                        <span>{meta.icon}</span> {meta.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="composer-actions">
-                <button className="primary-button" type="button" onClick={handlePostNow}>
-                  Post now
-                </button>
-                <button className="ghost-button" type="submit">
-                  Queue post
-                </button>
-              </div>
-              {schedulerError && <span className="field-error">{schedulerError}</span>}
-            </form>
-
-            <article className="sub-panel tone-sun">
-              <h3>Scheduled queue</h3>
-              {scheduledPosts.map((post) => (
-                <div key={post.id} className="list-row">
-                  <div>
-                    <p>{post.campaign}</p>
-                    <span>{post.message}</span>
-                    {post.media?.length > 0 && <small>{post.media.length} media attachment{post.media.length === 1 ? '' : 's'}</small>}
-                  </div>
-                  <div className="queue-meta">
-                    <span>{new Date(post.scheduledAt).toLocaleString()}</span>
-                    <span className={getStatusBadgeClass(post.status === 'scheduled' ? 'pending' : post.status)}>
-                      {post.status}
-                    </span>
-                    {String(post.status || '').toLowerCase() === 'scheduled' && (
-                      <button
-                        type="button"
-                        className="danger-button"
-                        onClick={() => handleDeleteScheduledPost(post)}
-                        aria-label={`Delete scheduled post ${post.campaign}`}
-                        title="Remove this queued post"
-                      >
-                        Delete queued post
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </article>
-          </section>
+          <Suspense fallback={loadingPanel}>
+            <PostSchedulerPanel
+              composer={composer}
+              setComposer={setComposer}
+              handleComposerChange={handleComposerChange}
+              handleSchedulePost={handleSchedulePost}
+              handlePostNow={handlePostNow}
+              handleDeleteScheduledPost={handleDeleteScheduledPost}
+              scheduledPosts={scheduledPosts}
+              connectedAccounts={connectedAccounts}
+              workspaceAssets={workspaceAssets}
+              handleUploadAsset={handleUploadAsset}
+              getPlatformMeta={getPlatformMeta}
+              getStatusBadgeClass={getStatusBadgeClass}
+              schedulerError={schedulerError}
+            />
+          </Suspense>
         )}
 
         {activeTab === 'assistant' && (
