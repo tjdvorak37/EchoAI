@@ -62,6 +62,7 @@ export function PostSchedulerPanel({
 }) {
   const [activeTab, setActiveTab] = useState('composer') // 'composer' | 'queue' | 'templates'
   const [previewPlatform, setPreviewPlatform] = useState('instagram')
+  const [showPreflightModal, setShowPreflightModal] = useState(false)
   const [queueSearch, setQueueSearch] = useState('')
   const [queueStatusFilter, setQueueStatusFilter] = useState('all')
   const [queuePlatformFilter, setQueuePlatformFilter] = useState('all')
@@ -271,28 +272,28 @@ export function PostSchedulerPanel({
 
               {/* Campaign Title */}
               <label>
-                Campaign / Project Title
+                Campaign / Reference Title <small style={{ color: '#64748b', fontWeight: 500 }}>(Optional)</small>
                 <input
                   type="text"
                   value={composer.campaign}
                   onChange={(e) => handleComposerChange('campaign', e.target.value)}
-                  placeholder="e.g. Summer Sale Highlights"
+                  placeholder="e.g. Summer Flyer Promotion"
                 />
               </label>
 
               {/* Caption & Character Count */}
               <label>
                 <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Post Caption / Message</span>
+                  <span>Post Caption <small style={{ color: '#64748b', fontWeight: 500 }}>(Optional if Flyer/Video attached)</small></span>
                   <span style={{ fontSize: '0.76rem', color: isOverCharLimit ? '#dc2626' : '#64748b', fontWeight: isOverCharLimit ? 800 : 600 }}>
                     {charCount} / {charLimit} chars ({previewPlatform})
                   </span>
                 </span>
                 <textarea
-                  rows="5"
+                  rows="4"
                   value={composer.message}
                   onChange={(e) => handleComposerChange('message', e.target.value)}
-                  placeholder="Tell followers what is launching and why it matters..."
+                  placeholder="Type post caption or hashtags (or leave blank if your flyer image already contains all text)..."
                   style={{ borderColor: isOverCharLimit ? '#fca5a5' : undefined }}
                 />
               </label>
@@ -319,12 +320,12 @@ export function PostSchedulerPanel({
 
               {/* Visual Prompt / Image Brief */}
               <label>
-                Visual Brief / Image Idea
+                Flyer Brief / Visual Direction <small style={{ color: '#64748b', fontWeight: 500 }}>(Optional)</small>
                 <input
                   type="text"
                   value={composer.imageIdea}
                   onChange={(e) => handleComposerChange('imageIdea', e.target.value)}
-                  placeholder="e.g. Product flat-lay with warm sunset lighting"
+                  placeholder="e.g. Product flyer with bold typography and warm sunset tones"
                 />
               </label>
 
@@ -471,6 +472,14 @@ export function PostSchedulerPanel({
               <div className="composer-actions" style={{ marginTop: '0.85rem' }}>
                 <button
                   type="button"
+                  className="ghost-button"
+                  onClick={() => setShowPreflightModal(true)}
+                  style={{ padding: '0.65rem 1rem', fontSize: '0.9rem' }}
+                >
+                  👁️ Full Post Inspection
+                </button>
+                <button
+                  type="button"
                   className="primary-button"
                   onClick={handlePostNow}
                   style={{ padding: '0.65rem 1.25rem', fontSize: '0.92rem' }}
@@ -494,7 +503,7 @@ export function PostSchedulerPanel({
                 <span className="section-label">Live Platform Mockup</span>
                 <h3 style={{ margin: '0.2rem 0', fontSize: '1.1rem' }}>Real-Time Social Preview</h3>
                 <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
-                  Switch channels to preview how your caption, hashtags, and media render.
+                  Switch channels to preview how your caption, hashtags, and flyer media render.
                 </p>
               </div>
 
@@ -545,7 +554,13 @@ export function PostSchedulerPanel({
 
                 {/* Caption Text */}
                 <div className="mockup-caption-box">
-                  {composer.message || <em style={{ color: '#94a3b8' }}>Your post caption will appear here as you type...</em>}
+                  {composer.message ? (
+                    composer.message
+                  ) : attachedAssets.length > 0 ? (
+                    <em style={{ color: '#64748b', fontStyle: 'italic' }}>🖼️ Image Flyer Post (No caption text attached — flyer contains all info)</em>
+                  ) : (
+                    <em style={{ color: '#94a3b8' }}>Your post caption will appear here as you type...</em>
+                  )}
                 </div>
 
                 <div className="mockup-footer-actions">
@@ -555,6 +570,15 @@ export function PostSchedulerPanel({
                   <span>✈️ Share</span>
                 </div>
               </div>
+
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setShowPreflightModal(true)}
+                style={{ width: '100%', fontSize: '0.85rem' }}
+              >
+                🔍 Inspect Pre-Queue Details
+              </button>
             </div>
           </div>
         )}
@@ -735,6 +759,137 @@ export function PostSchedulerPanel({
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── MODAL: PRE-QUEUE FULL POST INSPECTION ── */}
+        {showPreflightModal && (
+          <div
+            className="modal-overlay"
+            role="presentation"
+            onClick={() => setShowPreflightModal(false)}
+          >
+            <div
+              className="repost-customizer-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Pre-Queue Post Inspection"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span className="section-label">Pre-Deployment Verification</span>
+                  <h3 style={{ margin: '0.2rem 0', fontSize: '1.25rem', color: '#0f172a' }}>
+                    👁️ Full Post Pre-Queue Inspection
+                  </h3>
+                  <p className="muted" style={{ margin: 0, fontSize: '0.84rem' }}>
+                    Review how your flyer, caption, target accounts, and timing look before confirming.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="credit-modal-close"
+                  onClick={() => setShowPreflightModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Pre-Flight Inspection Details */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.15rem' }}>
+                {/* Media & Caption Preview */}
+                <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase' }}>Flyer / Media Attachment</h4>
+                  {attachedAssets.length > 0 ? (
+                    <div style={{ width: '100%', maxHeight: 200, borderRadius: 8, overflow: 'hidden', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {attachedAssets[0].type === 'video' ? (
+                        <video src={attachedAssets[0].previewUrl} controls style={{ maxHeight: 200 }} />
+                      ) : (
+                        <img src={attachedAssets[0].previewUrl} alt="Attached Flyer" style={{ maxHeight: 200, objectFit: 'contain' }} />
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', borderRadius: 8, padding: '1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+                      No media attached. Post will deploy as text-only.
+                    </div>
+                  )}
+
+                  <h4 style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase' }}>Post Caption / Copy</h4>
+                  <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 8, padding: '0.75rem 0.85rem', fontSize: '0.88rem', color: '#0f172a', whiteSpace: 'pre-wrap', minHeight: 80 }}>
+                    {composer.message ? composer.message : <em style={{ color: '#64748b' }}>🖼️ Image Flyer Post (No caption text attached — flyer contains all info)</em>}
+                  </div>
+                </div>
+
+                {/* Target Channels & Timing */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '1rem' }}>
+                    <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase' }}>Target Social Accounts ({composer.channels.length})</h4>
+                    {composer.channels.length === 0 ? (
+                      <span className="badge risk">⚠️ No publishing channels selected!</span>
+                    ) : (
+                      <div className="chip-row">
+                        {composer.channels.map((ch) => (
+                          <span key={ch} className="badge info" style={{ padding: '0.3rem 0.6rem', fontSize: '0.82rem' }}>
+                            {getPlatformMeta(ch)?.icon} {getPlatformMeta(ch)?.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '1rem' }}>
+                    <h4 style={{ margin: '0 0 0.35rem', fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase' }}>Deployment Schedule</h4>
+                    {composer.scheduledAt ? (
+                      <div>
+                        <strong style={{ fontSize: '1.05rem', color: '#ea580c', display: 'block' }}>
+                          📅 {new Date(composer.scheduledAt).toLocaleString()}
+                        </strong>
+                        <small style={{ color: '#64748b' }}>Local browser time zone</small>
+                      </div>
+                    ) : (
+                      <div>
+                        <strong style={{ fontSize: '1.05rem', color: '#2563eb', display: 'block' }}>
+                          ⚡ Instant Post Now
+                        </strong>
+                        <small style={{ color: '#64748b' }}>Will dispatch immediately upon confirmation</small>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '0.85rem 1rem', fontSize: '0.82rem', color: '#1e40af' }}>
+                    <strong>✅ Ready to Confirm?</strong>
+                    <div>Once confirmed, your campaign post will enter your active publishing queue.</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Confirmation Actions */}
+              <div className="action-row" style={{ marginTop: '0.5rem', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setShowPreflightModal(false)}
+                >
+                  Back to Editing
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={(e) => {
+                    setShowPreflightModal(false)
+                    if (composer.scheduledAt) {
+                      handleSchedulePost(e)
+                    } else {
+                      handlePostNow(e)
+                    }
+                  }}
+                  disabled={!composer.channels.length}
+                  style={{ padding: '0.65rem 1.35rem', fontSize: '0.92rem', background: composer.scheduledAt ? '#ea580c' : '#2563eb' }}
+                >
+                  {composer.scheduledAt ? '📅 Confirm & Queue Post' : '⚡ Confirm & Post Now'}
+                </button>
+              </div>
             </div>
           </div>
         )}
