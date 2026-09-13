@@ -120,6 +120,7 @@ Deno.serve(async (request) => {
         product_data: {
           name: `EchoAI ${planMeta.label} (${interval === 'annual' ? 'Annual' : 'Monthly'})`,
           description: `EchoAI ${planMeta.label} Plan — ${planMeta.storageGb} GB Storage & ${planMeta.tokens.toLocaleString()} Monthly Tokens`,
+          tax_code: 'txcd_10103001',
         },
       },
       quantity: 1,

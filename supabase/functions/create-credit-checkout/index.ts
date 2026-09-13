@@ -49,6 +49,7 @@ Deno.serve(async (request) => {
         product_data: {
           name: product.label || `${product.credits.toLocaleString()} Echo AI Tokens`,
           description: `${product.credits.toLocaleString()} Echo AI Tokens / Credits for Image, Video, and Copy generation`,
+          tax_code: 'txcd_10103001',
         },
       },
       quantity: 1,
