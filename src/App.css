@@ -939,6 +939,33 @@ main {
   background: linear-gradient(180deg, #f4fbf8, #ffffff);
 }
 
+.integrations-quick-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.8rem 0 1.2rem;
+  padding: 0.7rem 0.2rem;
+  background: linear-gradient(180deg, #f4fbf8 70%, rgba(244, 251, 248, 0));
+}
+
+.integrations-quick-nav a.chip {
+  text-decoration: none;
+  color: inherit;
+}
+
+#integrations-brand,
+#integrations-security,
+#integrations-billing,
+#integrations-referral,
+#integrations-social,
+#integrations-ai,
+#integrations-tools {
+  scroll-margin-top: 4.5rem;
+}
+
 .panel-admin {
   background: linear-gradient(180deg, #fff9f4, #ffffff);
 }
