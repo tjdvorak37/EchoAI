@@ -669,6 +669,41 @@
   background: #ffffff;
 }
 
+.photo-stage-onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 360px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.photo-stage-onboarding .small-title {
+  text-align: center;
+}
+
+.photo-stage-onboarding ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.photo-stage-onboarding ol strong {
+  color: #1e293b;
+}
+
+.photo-stage-onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
 .photo-stage-vignette {
   pointer-events: none;
   background: radial-gradient(circle at center, transparent 38%, rgba(2, 6, 23, 0.62) 100%);
