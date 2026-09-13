@@ -37,7 +37,6 @@ const FinancePanel = lazy(() => import('./components/FinancePanel').then((module
 const BoardMemberFinancePanel = lazy(() => import('./components/BoardMemberFinancePanel').then((module) => ({ default: module.BoardMemberFinancePanel })))
 const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((module) => ({ default: module.CreativeBrief })))
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
-const InhouseAiStudio = lazy(() => import('./components/InhouseAiStudio').then((module) => ({ default: module.InhouseAiStudio })))
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
 
@@ -279,6 +278,7 @@ function App() {
     () => new URLSearchParams(window.location.search).get('checkout') || '',
   )
   const [myEntitlement, setMyEntitlement] = useState(null)
+  const [aiDashboard, setAiDashboard] = useState(null)
   const [billingPortalLoading, setBillingPortalLoading] = useState(false)
   const [billingPortalError, setBillingPortalError] = useState('')
   const [accountActionError, setAccountActionError] = useState('')
@@ -322,6 +322,13 @@ function App() {
       ? savedFolders
       : [...savedFolders, { id: AI_GENERATIONS_FOLDER_ID, name: 'AI Generations', parentId: 'folder-root', createdAt: new Date().toISOString(), system: true }])
     setWorkspaceAssets(hydrateWorkspaceAssets(d.workspaceAssets ?? []))
+
+    try {
+      setAiDashboard(await billingService.getAiDashboard())
+    } catch (error) {
+      console.warn('Unable to load AI dashboard data', error)
+      setAiDashboard(null)
+    }
 
     await loadContactCard(user)
 
@@ -1509,17 +1516,6 @@ function App() {
     }
   }
 
-  const saveInhouseAiConfig = async (nextConfig) => {
-    const savedConfig = await authService.updateUserAiAgentConfig({
-      userId: session.id,
-      aiAgentConfig: nextConfig,
-    })
-    const normalized = { ...createDefaultAiAgentConfig(), ...savedConfig }
-    setAiAgentConfig(normalized)
-    setAiAgentDraft(normalized)
-    return normalized
-  }
-
   const handleInhouseAiAsset = (asset) => {
     setWorkspaceAssets((prev) => [{
       id: `asset_${Date.now()}`,
@@ -2591,6 +2587,7 @@ function App() {
     setUserReposts([])
     setWorkspaceFolders([])
     setWorkspaceAssets([])
+    setAiDashboard(null)
     setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: [], mediaAssetIds: [] })
     setAiSuggestions([])
     setAiAgentConfig(createDefaultAiAgentConfig())
@@ -3612,6 +3609,47 @@ function App() {
               </article>
             </div>
 
+            <article className="sub-panel dashboard-ai-hub">
+              <div className="dashboard-section-heading">
+                <div>
+                  <p className="section-label">Echo AI</p>
+                  <h3>Your AI balance and activity</h3>
+                  <p className="muted">Use this hub to see what is available, what each action costs, and your latest generations.</p>
+                </div>
+                <button type="button" className="ghost-button" onClick={() => setActiveTab('assistant')}>Create with AI</button>
+              </div>
+              <div className="dashboard-ai-summary">
+                <div className="dashboard-ai-balance">
+                  <span>Echo Credits remaining</span>
+                  <strong>{aiDashboard ? aiDashboard.balance.toLocaleString() : '—'}</strong>
+                  <small>{aiDashboard?.monthlyAllowance ? `${aiDashboard.monthlyAllowance.toLocaleString()} included this month` : 'Loading account balance'}</small>
+                </div>
+                <div className="dashboard-ai-costs">
+                  <strong>What actions cost</strong>
+                  <div className="dashboard-ai-cost-grid">
+                    {(aiDashboard?.pricing || []).slice(0, 6).map((item) => (
+                      <div key={`${item.capability}-${item.mode}`} className="dashboard-ai-cost-item">
+                        <div><strong>{item.botName}</strong><small>{item.description}</small></div>
+                        <span>{Number(item.creditCost).toLocaleString()} / {item.unit}</span>
+                      </div>
+                    ))}
+                    {!aiDashboard?.pricing?.length && <p className="muted">AI pricing will appear here when the account is connected.</p>}
+                  </div>
+                </div>
+              </div>
+              {aiDashboard?.recentJobs?.length > 0 && (
+                <div className="dashboard-ai-recent">
+                  <strong>Recent AI activity</strong>
+                  {aiDashboard.recentJobs.slice(0, 4).map((job) => (
+                    <div key={job.id} className="dashboard-ai-job">
+                      <span>{job.capability} · {job.mode}</span>
+                      <small>{job.credits_reserved} credits · {job.status}</small>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+
             <div className="split">
               <article className="sub-panel tone-ocean">
                 <h3>Connected channels</h3>
@@ -4196,24 +4234,6 @@ function App() {
                   </div>
                 ))}
               </article>
-            </div>
-            <div className="create-hub-advanced">
-              <div className="create-hub-advanced-heading">
-                <div>
-                  <p className="section-label">Advanced creation</p>
-                  <h3>Use your in-house AI engine</h3>
-                </div>
-                <span>For characters, image editing, video, audio, vision, and specialist models</span>
-              </div>
-              <Suspense fallback={loadingPanel}>
-                <InhouseAiStudio
-                  agentConfig={aiAgentConfig}
-                  assets={workspaceAssets}
-                  onSaveConfig={saveInhouseAiConfig}
-                  onAddAsset={handleInhouseAiAsset}
-                  onBuyCredits={(productKey) => billingService.buyCreditPack(productKey)}
-                />
-              </Suspense>
             </div>
           </section>
         )}
