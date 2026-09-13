@@ -15,6 +15,81 @@ const invokeFunction = async (name, body) => {
   return data
 }
 
+export const STANDARD_CREDIT_PRODUCTS = [
+  {
+    id: 'credit_500',
+    product_key: 'credit_500',
+    label: '500 AI Tokens',
+    credits: 500,
+    price_usd: 9.99,
+    tag: 'Starter Add-on',
+    badge: null,
+    popular: false,
+    bestValue: false,
+    features: [
+      '500 Echo Credits / Tokens',
+      '~500 Copywriter prompts',
+      '~100 Image Studio designs',
+      '~8 Video seconds',
+      'Never expires • Instant activation',
+    ],
+  },
+  {
+    id: 'credit_1000',
+    product_key: 'credit_1000',
+    label: '1,000 AI Tokens',
+    credits: 1000,
+    price_usd: 18.99,
+    tag: 'Creator Pack',
+    badge: 'Save 5%',
+    popular: false,
+    bestValue: false,
+    features: [
+      '1,000 Echo Credits / Tokens',
+      '~1,000 Copywriter prompts',
+      '~200 Image Studio designs',
+      '~16 Video seconds',
+      'Never expires • Instant activation',
+    ],
+  },
+  {
+    id: 'credit_2500',
+    product_key: 'credit_2500',
+    label: '2,500 AI Tokens',
+    credits: 2500,
+    price_usd: 39.99,
+    tag: 'Most Popular',
+    badge: 'Popular Choice',
+    popular: true,
+    bestValue: false,
+    features: [
+      '2,500 Echo Credits / Tokens',
+      '~2,500 Copywriter prompts',
+      '~500 Image Studio designs',
+      '~40 Video seconds',
+      'Never expires • Priority processing',
+    ],
+  },
+  {
+    id: 'credit_5000',
+    product_key: 'credit_5000',
+    label: '5,000 AI Tokens',
+    credits: 5000,
+    price_usd: 74.99,
+    tag: 'Best Value',
+    badge: 'Best Value (Save 25%)',
+    popular: false,
+    bestValue: true,
+    features: [
+      '5,000 Echo Credits / Tokens',
+      '~5,000 Copywriter prompts',
+      '~1,000 Image Studio designs',
+      '~80 Video seconds',
+      'Never expires • Maximum token savings',
+    ],
+  },
+]
+
 export const billingService = {
   // True when billing runs against Stripe + Supabase rather than local demo state.
   isLive: isSupabaseConfigured,
@@ -58,115 +133,38 @@ export const billingService = {
   },
 
   async listCreditProducts() {
-    const defaultProducts = [
-      {
-        id: 'credit_500',
-        product_key: 'credit_500',
-        label: '500 AI Tokens',
-        credits: 500,
-        price_usd: 9.99,
-        tag: 'Starter Add-on',
-        badge: null,
-        popular: false,
-        bestValue: false,
-        features: [
-          '500 Echo Credits / Tokens',
-          '~500 Copywriter prompts',
-          '~100 Image Studio designs',
-          '~8 Video seconds',
-          'Never expires • Instant activation',
-        ],
-      },
-      {
-        id: 'credit_1000',
-        product_key: 'credit_1000',
-        label: '1,000 AI Tokens',
-        credits: 1000,
-        price_usd: 18.99,
-        tag: 'Creator Pack',
-        badge: 'Save 5%',
-        popular: false,
-        bestValue: false,
-        features: [
-          '1,000 Echo Credits / Tokens',
-          '~1,000 Copywriter prompts',
-          '~200 Image Studio designs',
-          '~16 Video seconds',
-          'Never expires • Instant activation',
-        ],
-      },
-      {
-        id: 'credit_2500',
-        product_key: 'credit_2500',
-        label: '2,500 AI Tokens',
-        credits: 2500,
-        price_usd: 39.99,
-        tag: 'Most Popular',
-        badge: 'Popular Choice',
-        popular: true,
-        bestValue: false,
-        features: [
-          '2,500 Echo Credits / Tokens',
-          '~2,500 Copywriter prompts',
-          '~500 Image Studio designs',
-          '~40 Video seconds',
-          'Never expires • Priority processing',
-        ],
-      },
-      {
-        id: 'credit_5000',
-        product_key: 'credit_5000',
-        label: '5,000 AI Tokens',
-        credits: 5000,
-        price_usd: 74.99,
-        tag: 'Best Value',
-        badge: 'Best Value (Save 25%)',
-        popular: false,
-        bestValue: true,
-        features: [
-          '5,000 Echo Credits / Tokens',
-          '~5,000 Copywriter prompts',
-          '~1,000 Image Studio designs',
-          '~80 Video seconds',
-          'Never expires • Maximum token savings',
-        ],
-      },
-    ]
+    if (!isSupabaseConfigured) return STANDARD_CREDIT_PRODUCTS
 
-    if (!isSupabaseConfigured) return defaultProducts
+    try {
+      const { data, error } = await supabase
+        .from('echo_credit_products')
+        .select('*')
+        .eq('enabled', true)
+        .order('sort_order')
 
-    const { data, error } = await supabase
-      .from('echo_credit_products')
-      .select('*')
-      .eq('enabled', true)
-      .order('sort_order')
+      if (error || !data || data.length === 0) return STANDARD_CREDIT_PRODUCTS
 
-    if (error || !data || data.length === 0) return defaultProducts
+      const dbMap = new Map(
+        data
+          .filter((row) => !['credit_1500', 'credit_4000'].includes(row.product_key))
+          .map((row) => [row.product_key, row]),
+      )
 
-    return data.map((item) => {
-      const is5000 = item.credits >= 5000
-      const is2500 = item.credits === 2500
-      const is1000 = item.credits === 1000
-      return {
-        id: item.id,
-        product_key: item.product_key,
-        label: item.label,
-        credits: item.credits,
-        price_usd: Number(item.price_usd),
-        stripe_price_id: item.stripe_price_id,
-        tag: is5000 ? 'Best Value' : is2500 ? 'Most Popular' : is1000 ? 'Creator Pack' : 'Starter Add-on',
-        badge: is5000 ? 'Best Value (Save 25%)' : is2500 ? 'Popular Choice' : is1000 ? 'Save 5%' : null,
-        popular: is2500,
-        bestValue: is5000,
-        features: [
-          `${item.credits.toLocaleString()} Echo Credits / Tokens`,
-          `~${item.credits.toLocaleString()} Copywriter prompts`,
-          `~${Math.floor(item.credits / 5).toLocaleString()} Image Studio designs`,
-          `~${Math.floor(item.credits / 60)} Video seconds`,
-          'Never expires • Instant activation',
-        ],
-      }
-    })
+      return STANDARD_CREDIT_PRODUCTS.map((std) => {
+        const row = dbMap.get(std.product_key)
+        if (!row) return std
+        return {
+          ...std,
+          id: row.id || std.id,
+          label: row.label || std.label,
+          credits: Number(row.credits) || std.credits,
+          price_usd: Number(row.price_usd) || std.price_usd,
+          stripe_price_id: row.stripe_price_id || '',
+        }
+      })
+    } catch {
+      return STANDARD_CREDIT_PRODUCTS
+    }
   },
 
   async listCreditTransactions() {

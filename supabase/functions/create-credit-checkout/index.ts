@@ -16,37 +16,38 @@ Deno.serve(async (request) => {
   if (!auth?.user) return json({ error: 'Authentication required.' }, 401, request)
   try {
     const { productKey } = await request.json()
-    let { data: product, error } = await admin().from('echo_credit_products').select('id, product_key, label, credits, price_usd, stripe_price_id').eq('product_key', productKey).eq('enabled', true).maybeSingle()
-    
-    // Fallback defaults if database row is not yet provisioned
-    if (!product) {
-      const defaults: Record<string, { label: string; credits: number; price_usd: number }> = {
-        credit_500: { label: '500 AI Tokens', credits: 500, price_usd: 9.99 },
-        credit_1000: { label: '1,000 AI Tokens', credits: 1000, price_usd: 18.99 },
-        credit_2500: { label: '2,500 AI Tokens', credits: 2500, price_usd: 39.99 },
-        credit_5000: { label: '5,000 AI Tokens', credits: 5000, price_usd: 74.99 },
-      }
-      const matched = defaults[productKey]
-      if (matched) {
-        product = {
-          id: productKey,
-          product_key: productKey,
-          label: matched.label,
-          credits: matched.credits,
-          price_usd: matched.price_usd,
-          stripe_price_id: Deno.env.get(`STRIPE_PRICE_${productKey.toUpperCase()}`) ?? '',
-        }
-      }
+    const CANONICAL_PACKS: Record<string, { label: string; credits: number; price_usd: number }> = {
+      credit_500: { label: '500 AI Tokens', credits: 500, price_usd: 9.99 },
+      credit_1000: { label: '1,000 AI Tokens', credits: 1000, price_usd: 18.99 },
+      credit_2500: { label: '2,500 AI Tokens', credits: 2500, price_usd: 39.99 },
+      credit_5000: { label: '5,000 AI Tokens', credits: 5000, price_usd: 74.99 },
     }
 
-    if (!product) return json({ error: 'Credit pack is unavailable.' }, 400, request)
+    const canonical = CANONICAL_PACKS[productKey]
+    if (!canonical) return json({ error: 'Credit pack is unavailable.' }, 400, request)
+
+    const { data: dbProduct } = await admin()
+      .from('echo_credit_products')
+      .select('id, product_key, label, credits, price_usd, stripe_price_id')
+      .eq('product_key', productKey)
+      .eq('enabled', true)
+      .maybeSingle()
+
+    const product = {
+      id: dbProduct?.id || productKey,
+      product_key: productKey,
+      label: dbProduct?.label || canonical.label,
+      credits: Number(dbProduct?.credits) || canonical.credits,
+      price_usd: Number(dbProduct?.price_usd) || canonical.price_usd,
+      stripe_price_id: dbProduct?.stripe_price_id || Deno.env.get(`STRIPE_PRICE_${productKey.toUpperCase()}`) || '',
+    }
 
     const lineItem = product.stripe_price_id
       ? { price: product.stripe_price_id, quantity: 1 }
       : {
           price_data: {
             currency: 'usd',
-            unit_amount: Math.round(Number(product.price_usd || 10) * 100),
+            unit_amount: Math.round(product.price_usd * 100),
             product_data: {
               name: product.label || `${product.credits.toLocaleString()} Echo AI Tokens`,
               description: `${product.credits.toLocaleString()} Echo AI Tokens / Credits for Image, Video, and Copy generation`,
@@ -62,7 +63,7 @@ Deno.serve(async (request) => {
       client_reference_id: auth.user.id,
       metadata: {
         type: 'echo_credit_pack',
-        product_id: product.id || product.product_key,
+        product_id: product.id,
         product_key: product.product_key,
         credits: String(product.credits),
         supabase_user_id: auth.user.id,

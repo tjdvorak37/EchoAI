@@ -1,4 +1,7 @@
--- Update / ensure standard Echo AI Token & Credit purchase packages (500, 1000, 2500, 5000)
+-- Remove legacy / mismatched credit pack entries and enforce exact 500 / 1000 / 2500 / 5000 token options
+
+delete from public.echo_credit_products
+where product_key in ('credit_1500', 'credit_4000');
 
 insert into public.echo_credit_products (product_key, label, credits, price_usd, sort_order, enabled)
 values
@@ -13,3 +16,4 @@ set label = excluded.label,
     sort_order = excluded.sort_order,
     enabled = excluded.enabled,
     updated_at = now();
+
