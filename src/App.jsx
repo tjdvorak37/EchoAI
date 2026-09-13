@@ -39,6 +39,7 @@ const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((modu
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
+const CreditPurchasePanel = lazy(() => import('./components/CreditPurchasePanel').then((module) => ({ default: module.CreditPurchasePanel })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
@@ -279,6 +280,18 @@ function App() {
   )
   const [myEntitlement, setMyEntitlement] = useState(null)
   const [aiDashboard, setAiDashboard] = useState(null)
+  const [creditPurchaseModalOpen, setCreditPurchaseModalOpen] = useState(false)
+  const [creditsCheckoutNotice, setCreditsCheckoutNotice] = useState(() => {
+    const status = new URLSearchParams(window.location.search).get('credits')
+    const tokens = new URLSearchParams(window.location.search).get('tokens')
+    if (status === 'success') {
+      return `🎉 Payment approved! ${tokens ? `${Number(tokens).toLocaleString()} ` : ''}Tokens have been added to your Echo AI balance.`
+    }
+    if (status === 'cancelled') {
+      return 'Token purchase was cancelled. No charges were made.'
+    }
+    return ''
+  })
   const [billingPortalLoading, setBillingPortalLoading] = useState(false)
   const [billingPortalError, setBillingPortalError] = useState('')
   const [accountActionError, setAccountActionError] = useState('')
@@ -289,6 +302,19 @@ function App() {
   const [incomingReferralCode] = useState(
     () => new URLSearchParams(window.location.search).get('ref') || '',
   )
+
+  const refreshAiBalance = async (addedAmount = null) => {
+    try {
+      if (!isSupabaseConfigured && addedAmount) {
+        setAiDashboard((prev) => (prev ? { ...prev, balance: (prev.balance || 0) + addedAmount } : { balance: 500 + addedAmount, monthlyAllowance: 500, pricing: [], recentJobs: [] }))
+        return
+      }
+      const data = await billingService.getAiDashboard()
+      setAiDashboard(data)
+    } catch (err) {
+      console.warn('Unable to refresh AI balance', err)
+    }
+  }
 
   const loadingPanel = (
     <section className="panel">
@@ -388,6 +414,36 @@ function App() {
 
     return () => { active = false }
   }, [session?.id])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const creditsParam = params.get('credits')
+    if (!creditsParam) return undefined
+
+    params.delete('credits')
+    params.delete('tokens')
+    const newQuery = params.toString() ? `?${params.toString()}` : ''
+    window.history.replaceState({}, document.title, `${window.location.pathname}${newQuery}`)
+
+    if (creditsParam === 'success') {
+      billingService.getAiDashboard()
+        .then((data) => setAiDashboard(data))
+        .catch((err) => console.warn('Could not refresh AI balance', err))
+
+      if (isSupabaseConfigured) {
+        const t1 = setTimeout(() => {
+          billingService.getAiDashboard().then((data) => setAiDashboard(data)).catch(() => {})
+        }, 2500)
+        const t2 = setTimeout(() => {
+          billingService.getAiDashboard().then((data) => setAiDashboard(data)).catch(() => {})
+        }, 5000)
+        return () => {
+          clearTimeout(t1)
+          clearTimeout(t2)
+        }
+      }
+    }
+  }, [])
 
   const handleSaveAnnouncement = async (notice) => {
     const saved = await announcementService.save(notice)
@@ -3272,6 +3328,7 @@ function App() {
           ['assistant', 'Create'],
           ['photo', 'Photo Creator'],
           ['studio', 'Video Studio'],
+          ['credits', 'Buy Tokens'],
           ['integrations', 'Integrations'],
           ['account', 'Manage account'],
           ['help', 'How To'],
@@ -3591,6 +3648,40 @@ function App() {
 
         {activeTab === 'dashboard' && (
           <section className="panel panel-dashboard">
+            {creditsCheckoutNotice && (
+              <div
+                className="auth-message tone-positive"
+                style={{
+                  background: '#ecfdf5',
+                  color: '#065f46',
+                  border: '1px solid #a7f3d0',
+                  padding: '0.85rem 1.15rem',
+                  borderRadius: '0.85rem',
+                  marginBottom: '1.25rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <span>{creditsCheckoutNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setCreditsCheckoutNotice('')}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#065f46',
+                    cursor: 'pointer',
+                    fontWeight: 800,
+                    fontSize: '1rem',
+                  }}
+                  aria-label="Dismiss notice"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             <h2>Overview</h2>
             <p className="panel-note">
               Build morning campaigns once, then deploy automatically throughout the day.
@@ -3616,13 +3707,30 @@ function App() {
                   <h3>Your AI balance and activity</h3>
                   <p className="muted">Use this hub to see what is available, what each action costs, and your latest generations.</p>
                 </div>
-                <button type="button" className="ghost-button" onClick={() => setActiveTab('assistant')}>Create with AI</button>
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => setCreditPurchaseModalOpen(true)}
+                  >
+                    ⚡ Purchase additional tokens
+                  </button>
+                  <button type="button" className="ghost-button" onClick={() => setActiveTab('assistant')}>Create with AI</button>
+                </div>
               </div>
               <div className="dashboard-ai-summary">
                 <div className="dashboard-ai-balance">
                   <span>Echo Credits remaining</span>
                   <strong>{aiDashboard ? aiDashboard.balance.toLocaleString() : '—'}</strong>
                   <small>{aiDashboard?.monthlyAllowance ? `${aiDashboard.monthlyAllowance.toLocaleString()} included this month` : 'Loading account balance'}</small>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    style={{ marginTop: '0.55rem', fontSize: '0.84rem', padding: '0.48rem 0.85rem' }}
+                    onClick={() => setCreditPurchaseModalOpen(true)}
+                  >
+                    + Add Tokens (500–5,000)
+                  </button>
                 </div>
                 <div className="dashboard-ai-costs">
                   <strong>What actions cost</strong>
@@ -3637,6 +3745,39 @@ function App() {
                   </div>
                 </div>
               </div>
+
+              <div className="dashboard-token-addons-banner">
+                <div className="dashboard-token-addons-header">
+                  <div>
+                    <strong>Need more tokens? Choose an instant add-on:</strong>
+                    <small style={{ color: '#64748b', display: 'block' }}>Instant deposit to your account • Powered by Stripe</small>
+                  </div>
+                  <button type="button" className="text-button" onClick={() => setActiveTab('credits')}>
+                    View Token Store →
+                  </button>
+                </div>
+                <div className="dashboard-token-quick-grid">
+                  {[
+                    { key: 'credit_500', tokens: '500', price: '$9.99' },
+                    { key: 'credit_1000', tokens: '1,000', price: '$18.99' },
+                    { key: 'credit_2500', tokens: '2,500', price: '$39.99', popular: true },
+                    { key: 'credit_5000', tokens: '5,000', price: '$74.99', bestValue: true },
+                  ].map((pkg) => (
+                    <button
+                      key={pkg.key}
+                      type="button"
+                      className={`dashboard-token-quick-card ${pkg.popular ? 'popular' : ''} ${pkg.bestValue ? 'best-value' : ''}`}
+                      onClick={() => setCreditPurchaseModalOpen(true)}
+                    >
+                      {pkg.popular && <span className="quick-badge popular">Popular</span>}
+                      {pkg.bestValue && <span className="quick-badge best-value">Best Value</span>}
+                      <strong>{pkg.tokens} Tokens</strong>
+                      <span>{pkg.price}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {aiDashboard?.recentJobs?.length > 0 && (
                 <div className="dashboard-ai-recent">
                   <strong>Recent AI activity</strong>
@@ -4289,6 +4430,16 @@ function App() {
           </Suspense>
         )}
 
+        {activeTab === 'credits' && (
+          <Suspense fallback={loadingPanel}>
+            <CreditPurchasePanel
+              isModal={false}
+              aiDashboard={aiDashboard}
+              onRefreshBalance={refreshAiBalance}
+            />
+          </Suspense>
+        )}
+
         {activeTab === 'help' && (
           <Suspense fallback={loadingPanel}>
             <HelpCenter onContactSupport={openSupportModal} />
@@ -4783,7 +4934,7 @@ function App() {
             <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <div className="inhouse-engine-heading">
                 <div><h3>EchoAI hosted AI</h3><p className="muted">EchoAI Pro provides the AI accounts and keeps provider credentials on the backend. Your team uses Echo Credits instead of connecting personal AI accounts.</p></div>
-                <button type="button" className="primary-button" onClick={() => billingService.buyCreditPack('credit_500')}>Buy 500 credits</button>
+                <button type="button" className="primary-button" onClick={() => setCreditPurchaseModalOpen(true)}>⚡ Purchase Tokens (500–5,000)</button>
               </div>
               <div className="agent-connection-note">
                 <strong>Account status</strong>
@@ -5216,6 +5367,17 @@ function App() {
             </form>
           </section>
         </div>
+      )}
+
+      {creditPurchaseModalOpen && (
+        <Suspense fallback={null}>
+          <CreditPurchasePanel
+            isModal={true}
+            onClose={() => setCreditPurchaseModalOpen(false)}
+            aiDashboard={aiDashboard}
+            onRefreshBalance={refreshAiBalance}
+          />
+        </Suspense>
       )}
     </div>
   )
