@@ -40,6 +40,7 @@ const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) =>
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
 const CreditPurchasePanel = lazy(() => import('./components/CreditPurchasePanel').then((module) => ({ default: module.CreditPurchasePanel })))
+const RepostHubPanel = lazy(() => import('./components/RepostHubPanel').then((module) => ({ default: module.RepostHubPanel })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
@@ -2128,18 +2129,6 @@ function App() {
   const getCompanyPostById = (companyPostId) =>
     companyMainPosts.find((item) => item.id === companyPostId)
 
-  const toggleDraftChannel = (channelId) => {
-    setCompanyPostDraft((prev) => {
-      const hasChannel = prev.channels.includes(channelId)
-      return {
-        ...prev,
-        channels: hasChannel
-          ? prev.channels.filter((channel) => channel !== channelId)
-          : [...prev.channels, channelId],
-      }
-    })
-  }
-
   const nextLocalId = (prefix) => {
     localIdRef.current += 1
     return `${prefix}_${localIdRef.current}`
@@ -2157,17 +2146,6 @@ function App() {
     const repost = createBrandedRepost(companyPost)
     setUserReposts((prev) => [repost, ...prev])
     return repost
-  }
-
-  const handleCopyCompanyPost = async (post) => {
-    setRepostNotice('')
-
-    try {
-      await navigator.clipboard.writeText(post.content)
-      setRepostNotice(`Copied post content from ${post.companyName}.`)
-    } catch {
-      setRepostNotice('Copy failed in this browser. You can still approve and repost directly.')
-    }
   }
 
   const handleSendToApprovalBoard = async (companyPost) => {
@@ -2316,6 +2294,57 @@ function App() {
       }
 
       setRepostNotice('Company post was declined and will not be published to your accounts.')
+    } catch (error) {
+      setRepostError(error.message)
+    }
+  }
+
+  const handleDirectPublishRepost = async ({ companyPostId, caption, channels }) => {
+    setRepostNotice('')
+    setRepostError('')
+    const companyPost = getCompanyPostById(companyPostId)
+    if (!companyPost) return
+
+    const postedAt = new Date().toISOString()
+    const chosenChannels = channels?.length ? channels : companyPost.channels || ['instagram']
+
+    try {
+      if (isSupabaseConfigured) {
+        // Enqueue and approve with the customized caption
+        const queueItem = await repostService.enqueueCompanyPost({
+          companyPostId: companyPost.id,
+          companyKey: tenantCompanyKey,
+        })
+        const persisted = await repostService.approveAndCreateRepost({
+          queueId: queueItem.id,
+          companyPostId: companyPost.id,
+          companyKey: tenantCompanyKey,
+          caption,
+        })
+        setRepostQueue((prev) => [persisted.queue, ...prev.filter((i) => i.id !== queueItem.id)])
+        setUserReposts((prev) => [persisted.repost, ...prev])
+      } else {
+        const newRepost = {
+          id: nextLocalId(`repost_${companyPost.id}`),
+          companyPostId: companyPost.id,
+          status: 'posted',
+          caption,
+          postedAt,
+        }
+        setUserReposts((existing) => [newRepost, ...existing])
+        setRepostQueue((existing) => [
+          {
+            id: nextLocalId(`queue_${companyPost.id}`),
+            companyPostId: companyPost.id,
+            status: 'posted',
+            queuedAt: postedAt,
+            decisionAt: postedAt,
+          },
+          ...existing,
+        ])
+      }
+
+      setRepostNotice(`🎉 Rebranded post published successfully to ${chosenChannels.join(', ')}!`)
     } catch (error) {
       setRepostError(error.message)
     }
@@ -3921,260 +3950,27 @@ function App() {
         )}
 
         {activeTab === 'repost' && (
-          <section className="panel panel-repost">
-            <h2>Company Repost Center</h2>
-            <p className="panel-note">
-              Review company posts, approve or decline syndication, and auto-repost for non-technical users.
-            </p>
-
-            <article className="sub-panel tone-indigo">
-              <div className="toggle-row">
-                <div>
-                  <h3>Auto approval for company posts</h3>
-                  <p className="muted">
-                    When enabled, new company posts are automatically rebranded and reposted.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className={autoApproveCompanyPosts ? 'primary-button' : 'ghost-button'}
-                  onClick={handleToggleAutoApproval}
-                >
-                  {autoApproveCompanyPosts ? 'Auto approval: On' : 'Auto approval: Off'}
-                </button>
-              </div>
-            </article>
-
-            {isAdminUser && (
-              <div className="split">
-                <article className="sub-panel tone-sunrise">
-                  <h3>Publish Company Main Post</h3>
-                  <form className="composer" onSubmit={handlePublishCompanyPost}>
-                    <label>
-                      Post title
-                      <input
-                        type="text"
-                        value={companyPostDraft.title}
-                        onChange={(event) =>
-                          setCompanyPostDraft((prev) => ({ ...prev, title: event.target.value }))
-                        }
-                        placeholder="Back-to-school flyer"
-                      />
-                    </label>
-
-                    <label>
-                      Post content
-                      <textarea
-                        rows="3"
-                        value={companyPostDraft.content}
-                        onChange={(event) =>
-                          setCompanyPostDraft((prev) => ({ ...prev, content: event.target.value }))
-                        }
-                        placeholder="New sale information for all team members to repost."
-                      />
-                    </label>
-
-                    <div>
-                      <p className="small-title">Default channels</p>
-                      <div className="chip-row">
-                        {['instagram', 'facebook', 'tiktok', 'linkedin'].map((channel) => (
-                          <button
-                            key={channel}
-                            type="button"
-                            className={
-                              companyPostDraft.channels.includes(channel) ? 'chip active' : 'chip'
-                            }
-                            onClick={() => toggleDraftChannel(channel)}
-                          >
-                            {channel}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <button type="submit" className="primary-button" disabled={publishLoading}>
-                      {publishLoading ? 'Publishing...' : 'Publish company post'}
-                    </button>
-                  </form>
-                </article>
-
-                <article className="sub-panel tone-ocean">
-                  <h3>Add Company Social Account</h3>
-                  <form className="composer" onSubmit={handleAddCompanySocialAccount}>
-                    <label>
-                      Platform
-                      <input
-                        type="text"
-                        value={companyAccountDraft.platform}
-                        onChange={(event) =>
-                          setCompanyAccountDraft((prev) => ({
-                            ...prev,
-                            platform: event.target.value,
-                          }))
-                        }
-                        placeholder="Instagram"
-                      />
-                    </label>
-
-                    <label>
-                      Account name
-                      <input
-                        type="text"
-                        value={companyAccountDraft.accountName}
-                        onChange={(event) =>
-                          setCompanyAccountDraft((prev) => ({
-                            ...prev,
-                            accountName: event.target.value,
-                          }))
-                        }
-                        placeholder="@nike"
-                      />
-                    </label>
-
-                    <button type="submit" className="primary-button" disabled={publishLoading}>
-                      {publishLoading ? 'Saving...' : 'Add social account'}
-                    </button>
-                  </form>
-                </article>
-              </div>
-            )}
-
-            {repostNotice && <p className="auth-message">{repostNotice}</p>}
-            {repostError && <p className="auth-message auth-error">{repostError}</p>}
-
-            <div className="split">
-              <article className="sub-panel tone-violet">
-                <h3>Company social accounts</h3>
-                {companySocialAccounts.map((account) => (
-                  <div key={account.id} className="list-row">
-                    <div>
-                      <p>{account.companyName}</p>
-                      <span>
-                        {account.platform} • {account.accountName}
-                      </span>
-                    </div>
-                    <span className="badge info">main account</span>
-                  </div>
-                ))}
-              </article>
-
-              <article className="sub-panel tone-amber">
-                <h3>Approval board</h3>
-                <p className="muted text-pending">Pending notifications: {pendingRepostCount}</p>
-                {repostQueue.length === 0 && (
-                  <p className="muted">No company posts have been submitted yet.</p>
-                )}
-
-                {repostQueue.map((item) => {
-                  const post = getCompanyPostById(item.companyPostId)
-                  if (!post) {
-                    return null
-                  }
-
-                  return (
-                    <div key={item.id} className="list-row">
-                      <div>
-                        <p>{post.title}</p>
-                        <span>
-                          {post.companyName} • {post.channels.join(', ')}
-                        </span>
-                      </div>
-                      <div className="queue-meta">
-                        <span className={getStatusBadgeClass(item.status)}>{item.status}</span>
-                        {item.status === 'pending' ? (
-                          <div className="action-row">
-                            <button
-                              type="button"
-                              className="primary-button"
-                              onClick={() => handleRepostDecision(item.id, 'approved')}
-                            >
-                              Approve repost
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              onClick={() => handleRepostDecision(item.id, 'declined')}
-                            >
-                              Decline
-                            </button>
-                          </div>
-                        ) : (
-                          <span>{item.decisionAt ? new Date(item.decisionAt).toLocaleString() : ''}</span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </article>
-            </div>
-
-            <article className="sub-panel tone-ocean">
-              <h3>Company main page posts</h3>
-              {companyMainPosts.map((post) => (
-                <div key={post.id} className="list-row">
-                  <div>
-                    <p>{post.title}</p>
-                    <span>{post.content}</span>
-                    <small>
-                      {post.companyName} • {new Date(post.publishedAt).toLocaleString()}
-                    </small>
-                  </div>
-                  <div className="queue-meta">
-                    <span>{post.channels.join(', ')}</span>
-                    <div className="action-row">
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => handleCopyCompanyPost(post)}
-                      >
-                        Copy post
-                      </button>
-                      {isAdminUser && (
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => handleBroadcastCompanyPost(post.id)}
-                          disabled={broadcastingPostId === post.id}
-                        >
-                          {broadcastingPostId === post.id ? 'Broadcasting...' : 'Broadcast to team'}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="primary-button"
-                        onClick={() => handleSendToApprovalBoard(post)}
-                      >
-                        {autoApproveCompanyPosts ? 'Auto repost now' : 'Send to approvals'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </article>
-
-            <article className="sub-panel tone-mint">
-              <h3>My repost history</h3>
-              {userReposts.length === 0 && (
-                <p className="muted">Approved company posts will appear here after reposting.</p>
-              )}
-
-              {userReposts.map((repost) => {
-                const post = getCompanyPostById(repost.companyPostId)
-                return (
-                  <div key={repost.id} className="list-row">
-                    <div>
-                      <p>{post?.title || 'Company post'}</p>
-                      <span>{repost.caption}</span>
-                    </div>
-                    <div className="queue-meta">
-                      <span className={getStatusBadgeClass(repost.status)}>{repost.status}</span>
-                      <span>{new Date(repost.postedAt).toLocaleString()}</span>
-                    </div>
-                  </div>
-                )
-              })}
-            </article>
-          </section>
+          <Suspense fallback={loadingPanel}>
+            <RepostHubPanel
+              companySocialAccounts={companySocialAccounts}
+              companyMainPosts={companyMainPosts}
+              repostQueue={repostQueue}
+              userReposts={userReposts}
+              autoApproveCompanyPosts={autoApproveCompanyPosts}
+              onToggleAutoApproval={handleToggleAutoApproval}
+              onPublishCompanyPost={handlePublishCompanyPost}
+              onAddCompanyAccount={handleAddCompanySocialAccount}
+              onBroadcastCompanyPost={handleBroadcastCompanyPost}
+              onSendToApprovalBoard={handleSendToApprovalBoard}
+              onRepostDecision={handleRepostDecision}
+              onDirectPublishRepost={handleDirectPublishRepost}
+              isAdminUser={isAdminUser}
+              broadcastingPostId={broadcastingPostId}
+              publishLoading={publishLoading}
+              repostNotice={repostNotice}
+              repostError={repostError}
+            />
+          </Suspense>
         )}
 
         {activeTab === 'scheduler' && (
