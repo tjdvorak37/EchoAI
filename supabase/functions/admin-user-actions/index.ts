@@ -4,7 +4,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
 
-const PRIVILEGED_ROLES = new Set(['admin', 'it'])
+const PRIVILEGED_ROLES = new Set(['admin', 'manager', 'it'])
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -107,7 +107,7 @@ Deno.serve(async (request) => {
 
     const { data: targetById } = await adminClient
       .from('profiles')
-      .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, created_at')
+      .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, created_at')
       .eq('id', lookupUserId)
       .maybeSingle()
 
@@ -115,7 +115,7 @@ Deno.serve(async (request) => {
     if (!target && typeof targetEmail === 'string' && targetEmail.trim()) {
       const { data: targetByEmail } = await adminClient
         .from('profiles')
-        .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, created_at')
+        .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, created_at')
         .ilike('email', targetEmail.trim())
         .maybeSingle()
       target = targetByEmail
@@ -246,6 +246,24 @@ Deno.serve(async (request) => {
 
       await recordAudit('updated_profile', patch)
 
+      return json({ profile: updated }, 200, request)
+    }
+
+    if (action === 'set-beta-ai-access') {
+      if (!['admin', 'manager', 'it'].includes(callerProfile.role)) {
+        return json({ error: 'IT or Management access is required to change beta AI access.' }, 403, request)
+      }
+      const isBetaTester = body.isBetaTester === true
+      const enabled = body.enabled === true
+      const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : ''
+      const { data: updated, error: updateError } = await adminClient
+        .from('profiles')
+        .update({ is_beta_tester: isBetaTester, ai_enabled: isBetaTester ? enabled : true, ai_access_note: isBetaTester ? note : '' })
+        .eq('id', target.id)
+        .select('id, is_beta_tester, ai_enabled, ai_access_note')
+        .single()
+      if (updateError) return json({ error: 'Could not update beta AI access.' }, 500, request)
+      await recordAudit('updated_beta_ai_access', { ai_enabled: enabled, ai_access_note: note })
       return json({ profile: updated }, 200, request)
     }
 

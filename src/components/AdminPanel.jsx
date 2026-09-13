@@ -3,6 +3,7 @@ import { FinancePanel } from './FinancePanel'
 import { TrademarkPanel } from './TrademarkPanel'
 import { DeveloperAppsPanel } from './DeveloperAppsPanel'
 import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
+import { AiOperationsPanel } from './AiOperationsPanel'
 
 const USERS_PER_PAGE = 25
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
@@ -159,6 +160,7 @@ export function AdminPanel({
   const [newUserDraft, setNewUserDraft] = useState({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
   const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
   const [profitShareDraft, setProfitShareDraft] = useState({ userId: '', value: '', saving: false, error: '' })
+  const [betaAiDraft, setBetaAiDraft] = useState({ userId: '', isBetaTester: false, enabled: false, note: '', saving: false, error: '' })
 
   const openUserDetail = (member) => {
     const nextId = expandedUserId === member.id ? null : member.id
@@ -167,6 +169,7 @@ export function AdminPanel({
     setRecoveryLink({ userId: null, url: '', error: '', loading: false })
     setProfileDraft({ fullName: member.fullName || '', company: member.company || '', saving: false, error: '' })
     setProfitShareDraft({ userId: member.id, value: String(member.profitSharePercent || ''), saving: false, error: '' })
+    setBetaAiDraft({ userId: member.id, isBetaTester: member.isBetaTester === true, enabled: member.aiEnabled !== false, note: member.aiAccessNote || '', saving: false, error: '' })
   }
 
   const loadVerification = async (member) => {
@@ -365,6 +368,7 @@ export function AdminPanel({
   }
 
   const isFullAdmin = currentUser?.role === 'admin'
+  const canManageAiAccess = ['admin', 'manager', 'it'].includes(currentUser?.role)
   const TABS = isFullAdmin ? [
     { id: 'overview', label: '📊 Overview' },
     { id: 'licenses', label: '🔑 Licenses' },
@@ -378,6 +382,7 @@ export function AdminPanel({
     { id: 'trademark', label: '⚖️ Trademark & Legal' },
     { id: 'developer-apps', label: '🔐 Developer Apps' },
     { id: 'integrations', label: '🔌 Integrations' },
+    { id: 'ai-operations', label: '🤖 Echo AI operations' },
     { id: 'controls', label: '⚙️ Site Controls' },
   ] : [
     { id: 'overview', label: '📊 Service overview' },
@@ -387,6 +392,7 @@ export function AdminPanel({
     { id: 'trademark', label: '⚖️ Trademark & Legal' },
     { id: 'developer-apps', label: '🔐 Developer Apps' },
     { id: 'integrations', label: '🔌 Integrations' },
+    { id: 'ai-operations', label: '🤖 Echo AI operations' },
     { id: 'controls', label: '⚙️ Notices' },
   ]
 
@@ -1130,7 +1136,7 @@ export function AdminPanel({
                           <p className="muted">Administrator accounts cannot be modified here.</p>
                         ) : (
                           <>
-                            {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group">
+                            {canManageAiAccess && member.id !== currentUser?.id && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Access</span>
                               <button type="button" className="ghost-button" onClick={() => handleToggleUserAccess(member)} disabled={adminLoading}>
                                 {member.accessStatus === 'deactivated' ? 'Reactivate' : 'Deactivate'}
@@ -1142,6 +1148,30 @@ export function AdminPanel({
                               >
                                 Quota: {member.storageQuotaMb ?? 500} MB
                               </button>
+                            </div>}
+
+                            {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Beta AI access</span>
+                              <label className="toggle-row">
+                                <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.isBetaTester : member.isBetaTester === true} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, isBetaTester: event.target.checked }))} />
+                                Beta tester account
+                              </label>
+                              <small className="muted">Beta accounts are free. Keep AI disabled until you are comfortable with their access.</small>
+                              <label className="toggle-row">
+                                <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.enabled : member.aiEnabled !== false} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, enabled: event.target.checked }))} />
+                                Allow AI generation
+                              </label>
+                              <textarea rows="2" value={betaAiDraft.userId === member.id ? betaAiDraft.note : member.aiAccessNote || ''} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, note: event.target.value }))} placeholder="Note shown when AI is disabled for this beta tester." />
+                              <button type="button" className="primary-button" disabled={betaAiDraft.saving} onClick={async () => {
+                                setBetaAiDraft((current) => ({ ...current, saving: true, error: '' }))
+                                try {
+                                  await onAdminUserAction({ action: 'set-beta-ai-access', userId: member.id, email: member.email, isBetaTester: betaAiDraft.isBetaTester, enabled: betaAiDraft.enabled, note: betaAiDraft.note })
+                                  setBetaAiDraft((current) => ({ ...current, saving: false }))
+                                } catch (error) {
+                                  setBetaAiDraft((current) => ({ ...current, saving: false, error: error.message }))
+                                }
+                              }}>{betaAiDraft.saving ? 'Saving...' : 'Save beta AI access'}</button>
+                              {betaAiDraft.error && <small className="field-error">{betaAiDraft.error}</small>}
                             </div>}
 
                             {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">
@@ -1502,6 +1532,8 @@ export function AdminPanel({
             </Section>
           </div>
         )}
+
+        {itTab === 'ai-operations' && <AiOperationsPanel />}
 
         {itTab === 'controls' && (
           <div>

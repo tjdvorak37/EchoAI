@@ -16,7 +16,6 @@ import { financeService } from './services/financeService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import echoMascot from './assets/echo-mascot.svg'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
-import { AiToolManager } from './components/AiToolManager'
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
 
@@ -66,10 +65,10 @@ const getPlatformMeta = (platformName) =>
 const SOCIAL_PUBLISHING_SCOPES = ['posts', 'images', 'videos', 'comments', 'analytics']
 
 const createDefaultAiAgentConfig = () => ({
-  enabled: false,
-  name: 'My AI Agent',
-  provider: 'custom_router',
-  endpoint: '',
+  enabled: true,
+  name: 'EchoAI Hosted AI',
+  provider: 'echoai',
+  endpoint: 'hosted',
   apiKey: '',
   model: '',
   capabilities: DEFAULT_AGENT_CAPABILITIES,
@@ -78,8 +77,8 @@ const createDefaultAiAgentConfig = () => ({
   negativePrompt: '',
   defaultStyle: '',
   lastSyncedAt: '',
-  status: 'not connected',
-  message: 'Connect an in-house AI endpoint for writing, documents, images, characters, video, audio, and media analysis.',
+  status: 'hosted',
+  message: 'EchoAI manages provider accounts, API keys, routing, and safety controls on the backend.',
 })
 
 const hydrateWorkspaceAssets = (assets) =>
@@ -249,7 +248,6 @@ function App() {
   const [aiAgentTesting, setAiAgentTesting] = useState(false)
   const [aiAgentFeedback, setAiAgentFeedback] = useState('')
   const [aiAgentFeedbackTone, setAiAgentFeedbackTone] = useState('info')
-  const [aiAgentConnections, setAiAgentConnections] = useState([])
   const [openAiGuideOpen, setOpenAiGuideOpen] = useState(false)
   const [workspaceFolders, setWorkspaceFolders] = useState([{ id: 'folder-root', name: 'My workspace', parentId: null, createdAt: new Date().toISOString() }])
   const [workspaceAssets, setWorkspaceAssets] = useState([])
@@ -334,30 +332,13 @@ function App() {
       ])
       setConnectedAccounts(socialAccounts)
       setScheduledPosts(savedPosts)
-      const profileAiAgentConfig = await authService.getUserAiAgentConfig({
-        userId: user.id,
-        email: user.email,
-      })
-
-      const nextAiAgentConfig = profileAiAgentConfig
-        ? { ...createDefaultAiAgentConfig(), ...profileAiAgentConfig }
-        : createDefaultAiAgentConfig()
-
+      const nextAiAgentConfig = createDefaultAiAgentConfig()
       setAiAgentConfig(nextAiAgentConfig)
       setAiAgentDraft(nextAiAgentConfig)
-      const connections = await authService.listAiAgentConnections()
-      setAiAgentConnections(connections)
-      if (connections[0]) {
-        const active = { ...createDefaultAiAgentConfig(), ...connections[0], connectionId: connections[0].id, enabled: connections[0].enabled }
-        setAiAgentConfig(active)
-        setAiAgentDraft(active)
-      }
       return
     }
 
-    const nextAiAgentConfig = d.aiAgentConfig
-      ? { ...createDefaultAiAgentConfig(), ...d.aiAgentConfig }
-      : createDefaultAiAgentConfig()
+    const nextAiAgentConfig = createDefaultAiAgentConfig()
 
     setAiAgentConfig(nextAiAgentConfig)
     setAiAgentDraft(nextAiAgentConfig)
@@ -1539,36 +1520,6 @@ function App() {
     return normalized
   }
 
-  const saveAiAgentConnection = async (connection) => {
-    const saved = await authService.saveAiAgentConnection(connection)
-    setAiAgentConnections((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
-    const active = { ...createDefaultAiAgentConfig(), ...saved, connectionId: saved.id }
-    setAiAgentConfig(active)
-    setAiAgentDraft(active)
-    return saved
-  }
-
-  const deleteAiAgentConnection = async (connectionId) => {
-    await authService.deleteAiAgentConnection(connectionId)
-    setAiAgentConnections((current) => current.filter((item) => item.id !== connectionId))
-    if (aiAgentConfig.connectionId === connectionId) {
-      setAiAgentConfig(createDefaultAiAgentConfig())
-      setAiAgentDraft(createDefaultAiAgentConfig())
-    }
-  }
-
-  const resyncAiAgentConnection = async (connection) => {
-    const { data, error } = await supabase.functions.invoke('inhouse-ai', {
-      body: { connectionId: connection.id, mode: 'test', capability: 'test', contractVersion: '2.0', prompt: 'EchoAI connection test' },
-    })
-    if (error) {
-      const detail = await error.context?.json?.().catch(() => null)
-      throw new Error(detail?.error || detail?.detail?.error?.message || error.message)
-    }
-    if (data?.error) throw new Error(data.error)
-    setAiAgentConnections((current) => current.map((item) => item.id === connection.id ? { ...item, status: 'connected', lastError: '' } : item))
-  }
-
   const handleInhouseAiAsset = (asset) => {
     setWorkspaceAssets((prev) => [{
       id: `asset_${Date.now()}`,
@@ -1977,8 +1928,8 @@ function App() {
     setSupportTicket((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleAdminUserAction = async ({ action, userId, fullName, company, email, role, enabled, profitSharePercent }) => {
-    const result = await authService.adminUserAction({ action, userId, fullName, company, email, role, enabled, profitSharePercent })
+  const handleAdminUserAction = async ({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent }) => {
+    const result = await authService.adminUserAction({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent })
 
     if (action === 'create-user' && result?.profile) {
       setTeamMembers((prev) => [
@@ -2019,6 +1970,10 @@ function App() {
 
     if (action === 'set-board-membership' && result?.profile) {
       setTeamMembers((prev) => prev.map((member) => member.id === userId ? { ...member, isBoardMember: result.profile.is_board_member === true, profitSharePercent: Number(result.profile.profit_share_percent || 0) } : member))
+    }
+
+    if (action === 'set-beta-ai-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => member.id === userId ? { ...member, isBetaTester: result.profile.is_beta_tester === true, aiEnabled: result.profile.ai_enabled !== false, aiAccessNote: result.profile.ai_access_note || '' } : member))
     }
 
     if (action === 'update-profile' && result?.profile) {
@@ -4256,6 +4211,7 @@ function App() {
                   assets={workspaceAssets}
                   onSaveConfig={saveInhouseAiConfig}
                   onAddAsset={handleInhouseAiAsset}
+                  onBuyCredits={(productKey) => billingService.buyCreditPack(productKey)}
                 />
               </Suspense>
             </div>
@@ -4804,15 +4760,18 @@ function App() {
             </div>
             {integrationError && <span className="field-error">{integrationError}</span>}
 
-            <AiToolManager
-              connections={aiAgentConnections}
-              userId={session.id}
-              onSave={saveAiAgentConnection}
-              onDelete={deleteAiAgentConnection}
-              onResync={resyncAiAgentConnection}
-            />
-
             <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
+              <div className="inhouse-engine-heading">
+                <div><h3>EchoAI hosted AI</h3><p className="muted">EchoAI Pro provides the AI accounts and keeps provider credentials on the backend. Your team uses Echo Credits instead of connecting personal AI accounts.</p></div>
+                <button type="button" className="primary-button" onClick={() => billingService.buyCreditPack('credit_500')}>Buy 500 credits</button>
+              </div>
+              <div className="agent-connection-note">
+                <strong>Account status</strong>
+                <p>Provider setup, model routing, cost controls, rate limits, and emergency shutdowns are managed by IT and Management.</p>
+              </div>
+            </article>
+
+            {aiAgentConfig.provider === '__legacy_customer_connection__' && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <div className="inhouse-engine-heading">
                 <div><h3>In-house AI engine</h3><p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p></div>
                 <button type="button" className="openai-guide-button" onClick={() => setOpenAiGuideOpen(true)}>OpenAI connection guide <span aria-hidden="true">↗</span></button>
@@ -5002,7 +4961,7 @@ function App() {
               </form>
 
               <OpenAiSetupGuide open={openAiGuideOpen} onClose={() => setOpenAiGuideOpen(false)} />
-            </article>
+              </article>}
 
             {canViewManagementBoard && <>
             <h3 className="section-label" style={{ marginTop: '2rem' }}>Third-party tools</h3>

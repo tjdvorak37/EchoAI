@@ -190,6 +190,19 @@ Deno.serve(async (request) => {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
+        if (session.mode === 'payment' && session.metadata?.type === 'echo_credit_pack') {
+          const userId = session.metadata.supabase_user_id || session.client_reference_id
+          const credits = Number(session.metadata.credits || 0)
+          if (!userId || !Number.isInteger(credits) || credits <= 0) throw new Error('Invalid Echo credit checkout metadata')
+          const { error: grantError } = await supabase.rpc('grant_echo_credits', {
+            p_user_id: userId,
+            p_credits: credits,
+            p_reference_id: null,
+            p_metadata: { source: 'stripe', checkoutSessionId: session.id, productKey: session.metadata.product_key || '' },
+          })
+          if (grantError) throw new Error(grantError.message)
+          break
+        }
         if (!session.subscription) break
 
         const subscriptionId = typeof session.subscription === 'string'

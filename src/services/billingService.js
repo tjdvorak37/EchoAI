@@ -47,6 +47,13 @@ export const billingService = {
     return data.url
   },
 
+  async buyCreditPack(productKey) {
+    const data = await invokeFunction('create-credit-checkout', { productKey })
+    if (!data?.url) throw new Error('Credit checkout is unavailable right now.')
+    window.location.assign(data.url)
+    return data.url
+  },
+
   async redeemPromoCode({ code, email }) {
     const { data, error } = await supabase.rpc('redeem_promo_code', {
       p_code: code,
