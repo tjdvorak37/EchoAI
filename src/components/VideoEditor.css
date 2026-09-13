@@ -608,7 +608,10 @@
   overflow-x: auto;
   overflow-y: hidden;
   cursor: ew-resize;
+  scrollbar-width: none;
 }
+
+.timeline-header::-webkit-scrollbar { display: none; }
 
 .timeline-ruler {
   display: flex;
@@ -646,7 +649,8 @@
 }
 
 .track-header {
-  flex: 0 0 150px;
+  flex: 0 0 270px;
+  min-width: 270px;
   background: #191a21;
   border-right: 1px solid #2b2e38;
   padding: 0.6rem;
@@ -667,6 +671,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .track-btn {
