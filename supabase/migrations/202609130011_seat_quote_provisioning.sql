@@ -6,6 +6,7 @@
 alter table public.company_seat_packages add column if not exists price_per_seat_year numeric;
 alter table public.company_seat_packages add column if not exists billing_period text not null default 'annual';
 alter table public.company_seat_packages add column if not exists quote_notes text;
+alter table public.company_seat_packages add column if not exists plan_key text not null default 'standard';
 
 alter table public.profiles add column if not exists seat_manager boolean not null default false;
 
@@ -14,7 +15,8 @@ create or replace function public.staff_provision_company_seats(
   p_seat_limit integer,
   p_price_per_seat_year numeric default null,
   p_notes text default null,
-  p_manager_email text default null
+  p_manager_email text default null,
+  p_plan_key text default 'standard'
 )
 returns public.company_seat_packages
 language plpgsql
@@ -23,6 +25,7 @@ set search_path = public
 as $$
 declare
   v_company text := lower(trim(coalesce(p_company_key, '')));
+  v_plan text := lower(trim(coalesce(p_plan_key, 'standard')));
   v_pkg public.company_seat_packages;
 begin
   if app.current_role() not in ('admin', 'manager', 'it') then
@@ -31,13 +34,17 @@ begin
   if v_company = '' or p_seat_limit is null or p_seat_limit < 1 then
     raise exception 'A company and a positive whole-number seat limit are required.';
   end if;
+  if v_plan not in ('standard', 'storage_plus', 'storage_pro', 'storage_max', 'creator') then
+    raise exception 'Unknown plan level: %', v_plan;
+  end if;
 
-  insert into public.company_seat_packages (company_key, seat_limit, price_per_seat_year, billing_period, quote_notes, created_by)
-  values (v_company, p_seat_limit, p_price_per_seat_year, 'annual', p_notes, auth.uid())
+  insert into public.company_seat_packages (company_key, seat_limit, price_per_seat_year, billing_period, quote_notes, plan_key, created_by)
+  values (v_company, p_seat_limit, p_price_per_seat_year, 'annual', p_notes, v_plan, auth.uid())
   on conflict (company_key) do update
     set seat_limit = excluded.seat_limit,
         price_per_seat_year = excluded.price_per_seat_year,
         quote_notes = excluded.quote_notes,
+        plan_key = excluded.plan_key,
         status = 'active'
   returning * into v_pkg;
 
@@ -51,8 +58,8 @@ begin
 end;
 $$;
 
-revoke all on function public.staff_provision_company_seats(text, integer, numeric, text, text) from public;
-grant execute on function public.staff_provision_company_seats(text, integer, numeric, text, text) to authenticated;
+revoke all on function public.staff_provision_company_seats(text, integer, numeric, text, text, text) from public;
+grant execute on function public.staff_provision_company_seats(text, integer, numeric, text, text, text) to authenticated;
 
 -- Seat managers (designated per company by staff) can view and manage their
 -- own company's seats without needing the internal admin/manager/it role.

@@ -4456,9 +4456,10 @@ function App() {
                 </p>
                 <div className="list-row">
                   <div>
-                    <p>{companySeatPackage.seatLimit} seat package</p>
+                    <p>{getPlan(companySeatPackage.planKey).label} — {companySeatPackage.seatLimit} seat package</p>
                     <span className="muted">
                       {companySeats.filter((seat) => seat.status !== 'revoked').length} of {companySeatPackage.seatLimit} seats assigned
+                      {' '}• {getPlan(companySeatPackage.planKey).storageGb} GB storage + {getPlan(companySeatPackage.planKey).includedAiCredits.toLocaleString('en-US')} AI credits/month per seat
                       {companySeatPackage.pricePerSeatYear ? ` • $${companySeatPackage.pricePerSeatYear}/seat/year` : ''}
                     </span>
                   </div>

@@ -5,7 +5,7 @@ import { DeveloperAppsPanel } from './DeveloperAppsPanel'
 import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
 import { AiOperationsPanel } from './AiOperationsPanel'
 import { PricingProfitabilityPanel } from './PricingProfitabilityPanel'
-import { SEAT_TIERS, SEAT_COGS_PER_SEAT_YEAR, getSeatQuote, getTierMarginPct, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
+import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
 const USERS_PER_PAGE = 25
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
@@ -158,6 +158,7 @@ export function AdminPanel({
   const [quoteCompanyKey, setQuoteCompanyKey] = useState('')
   const [quoteManagerEmail, setQuoteManagerEmail] = useState('')
   const [quoteSeatCount, setQuoteSeatCount] = useState(10)
+  const [quotePlanKey, setQuotePlanKey] = useState('standard')
   const [quotePriceOverride, setQuotePriceOverride] = useState('')
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [quoteError, setQuoteError] = useState('')
@@ -539,7 +540,7 @@ export function AdminPanel({
   const activeTabMeta = activeGroup?.tabs.find((tab) => tab.id === itTab)
 
   const companyPackageTickets = tickets.filter((t) => t.category === 'Company package' && isTicketActionable(t.status))
-  const currentQuote = getSeatQuote(quoteSeatCount, quotePriceOverride)
+  const currentQuote = getSeatQuote(quotePlanKey, quoteSeatCount, quotePriceOverride)
 
   const loadTicketIntoQuote = (ticket) => {
     setQuoteTicketId(ticket.id)
@@ -548,6 +549,7 @@ export function AdminPanel({
     setQuoteManagerEmail(ticket.requesterEmail || ticket.userEmail || '')
     const parsedSeats = parseRequestedSeatsFromDetails(ticket.details)
     setQuoteSeatCount(parsedSeats || 10)
+    setQuotePlanKey('standard')
     setQuotePriceOverride('')
     setQuoteMessage('')
     setQuoteError('')
@@ -577,13 +579,14 @@ export function AdminPanel({
         companyKey: quoteCompanyKey,
         seatLimit: currentQuote.count,
         pricePerSeatYear: currentQuote.pricePerSeatYear,
-        notes: `Quoted from ticket ${quoteTicketId || 'manual'} at ${formatUsd(currentQuote.totalAnnualPrice)}/year.`,
+        notes: `Quoted from ticket ${quoteTicketId || 'manual'} at ${formatUsd(currentQuote.totalAnnualPrice)}/year on the ${currentQuote.plan.label} plan.`,
         managerEmail: quoteManagerEmail,
+        planKey: quotePlanKey,
       })
       if (quoteTicketId) {
         await updateTicketStatus(quoteTicketId, 'resolved')
       }
-      setQuoteMessage(`Seats provisioned for ${quoteCompanyName || quoteCompanyKey}. ${quoteManagerEmail ? `${quoteManagerEmail} can now manage their own team.` : ''}`)
+      setQuoteMessage(`${currentQuote.plan.label} seats provisioned for ${quoteCompanyName || quoteCompanyKey}. ${quoteManagerEmail ? `${quoteManagerEmail} can now manage their own team.` : ''}`)
     } catch (provisionError) {
       setQuoteError(provisionError.message)
     } finally {
@@ -711,19 +714,43 @@ export function AdminPanel({
           <div>
             <Section title="Seat package pricing & quotes">
               <p className="panel-note">
-                Seat packages are sold by the year only. Use this to price a quote and make sure no one undersells our margin.
+                Seat packages are sold by the year only, and every seat is provisioned at one plan level
+                (Standard, Storage+, Storage Pro, Storage Max, or Creator Studio) \u2014 the same plans sold
+                individually. Pick the plan the customer wants below, then quote by seat count.
               </p>
+
+              <h4 className="section-label">1. Which plan are these seats getting?</h4>
+              <div className="chip-row">
+                {PLAN_ORDER.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={quotePlanKey === key ? 'chip active' : 'chip'}
+                    title={`${PLANS[key].storageGb} GB storage \u2022 ${PLANS[key].includedAiCredits.toLocaleString('en-US')} AI credits/month`}
+                    onClick={() => setQuotePlanKey(key)}
+                  >
+                    {PLANS[key].label}
+                  </button>
+                ))}
+              </div>
+              <p className="muted">
+                {currentQuote.plan.label}: {currentQuote.plan.storageGb} GB storage + {currentQuote.plan.includedAiCredits.toLocaleString('en-US')} AI credits/month per seat.
+                List price {formatUsd(currentQuote.plan.annualPrice)}/seat/year.
+              </p>
+
               <div className="seat-pricing-chart">
-                {SEAT_TIERS.map((tier) => {
-                  const margin = getTierMarginPct(tier.pricePerSeatYear)
+                {SEAT_VOLUME_DISCOUNTS.map((tier) => {
+                  const { pricePerSeatYear } = getPlanTierPrice(quotePlanKey, tier.minSeats)
+                  const cogs = getPlanCogsPerSeatYear(quotePlanKey)
+                  const margin = pricePerSeatYear > 0 ? ((pricePerSeatYear - cogs) / pricePerSeatYear) * 100 : 0
                   return (
                     <div key={tier.id} className="seat-pricing-bar-row">
                       <span className="seat-pricing-bar-label">{tier.label}</span>
                       <div className="seat-pricing-bar-track">
-                        <div className="seat-pricing-bar-cogs" style={{ width: `${Math.min(100, (SEAT_COGS_PER_SEAT_YEAR / tier.pricePerSeatYear) * 100)}%` }} />
+                        <div className="seat-pricing-bar-cogs" style={{ width: `${Math.min(100, (cogs / pricePerSeatYear) * 100)}%` }} />
                       </div>
                       <span className="seat-pricing-bar-value">
-                        {formatUsd(tier.pricePerSeatYear)}/seat
+                        {formatUsd(pricePerSeatYear)}/seat
                         <small className={margin < MINIMUM_HEALTHY_MARGIN_PCT ? 'seat-margin-warn' : 'seat-margin-ok'}> {margin.toFixed(0)}% margin</small>
                       </span>
                     </div>
@@ -731,10 +758,11 @@ export function AdminPanel({
                 })}
               </div>
               <p className="muted">
-                Shaded portion of each bar is our cost of goods per seat/year ({formatUsd(SEAT_COGS_PER_SEAT_YEAR)}). Do not quote below {MINIMUM_HEALTHY_MARGIN_PCT}% margin without manager approval.
+                Shaded portion of each bar is our cost of goods per seat/year for the {currentQuote.plan.label} plan ({formatUsd(getPlanCogsPerSeatYear(quotePlanKey))}).
+                Do not quote below {MINIMUM_HEALTHY_MARGIN_PCT}% margin without manager approval.
               </p>
 
-              <h4 className="section-label">Prepare a quote</h4>
+              <h4 className="section-label">2. Prepare a quote</h4>
               {companyPackageTickets.length > 0 && (
                 <div className="chip-row">
                   {companyPackageTickets.map((ticket) => (
@@ -754,11 +782,11 @@ export function AdminPanel({
                 <label>Company key (must match their account)<input type="text" value={quoteCompanyKey} onChange={(e) => setQuoteCompanyKey(e.target.value)} placeholder="acme co" /></label>
                 <label>Seat manager email<input type="email" value={quoteManagerEmail} onChange={(e) => setQuoteManagerEmail(e.target.value)} placeholder="owner@acme.com" /></label>
                 <label>Seat count<input type="number" min="1" value={quoteSeatCount} onChange={(e) => setQuoteSeatCount(e.target.value)} /></label>
-                <label>Price override ($/seat/year, optional)<input type="number" min="0" value={quotePriceOverride} onChange={(e) => setQuotePriceOverride(e.target.value)} placeholder={`Tier default: $${currentQuote.tier.pricePerSeatYear}`} /></label>
+                <label>Price override ($/seat/year, optional)<input type="number" min="0" value={quotePriceOverride} onChange={(e) => setQuotePriceOverride(e.target.value)} placeholder={`Tier default: $${currentQuote.pricePerSeatYear}`} /></label>
               </div>
 
               <div className="asset-usage-banner" style={currentQuote.belowFloor ? { borderColor: '#ef4444' } : undefined}>
-                <strong>{currentQuote.count} seats × {formatUsd(currentQuote.pricePerSeatYear)}/year = {formatUsd(currentQuote.totalAnnualPrice)}/year</strong>
+                <strong>{currentQuote.plan.label}: {currentQuote.count} seats × {formatUsd(currentQuote.pricePerSeatYear)}/year = {formatUsd(currentQuote.totalAnnualPrice)}/year</strong>
                 <span>
                   Cost of goods: {formatUsd(currentQuote.totalCogs)}/year • Margin: {currentQuote.marginPct.toFixed(1)}%
                   {currentQuote.belowFloor ? ' — below floor, get manager approval before sending' : ''}

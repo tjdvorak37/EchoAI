@@ -503,7 +503,7 @@ export const authService = {
 
     return {
       package: packages
-        ? { id: packages.id, companyKey: packages.company_key, seatLimit: packages.seat_limit, status: packages.status, pricePerSeatYear: packages.price_per_seat_year, billingPeriod: packages.billing_period, quoteNotes: packages.quote_notes }
+        ? { id: packages.id, companyKey: packages.company_key, seatLimit: packages.seat_limit, status: packages.status, pricePerSeatYear: packages.price_per_seat_year, billingPeriod: packages.billing_period, quoteNotes: packages.quote_notes, planKey: packages.plan_key }
         : null,
       seats: (seats ?? []).map((seat) => ({
         id: seat.id,
@@ -576,7 +576,7 @@ export const authService = {
   // Staff-only: provisions or resizes a seat package for a customer's
   // company after a quote is approved, and optionally flags the requester as
   // that company's seat manager so they can self-serve future assignments.
-  async provisionCompanySeatsForCustomer({ companyKey, seatLimit, pricePerSeatYear, notes, managerEmail }) {
+  async provisionCompanySeatsForCustomer({ companyKey, seatLimit, pricePerSeatYear, notes, managerEmail, planKey }) {
     const normalizedCompany = companyKey?.trim().toLowerCase()
     const parsedLimit = Number(seatLimit)
     if (!normalizedCompany || !Number.isInteger(parsedLimit) || parsedLimit < 1) {
@@ -584,7 +584,7 @@ export const authService = {
     }
 
     if (!isSupabaseConfigured) {
-      return { id: 'demo-seat-package', companyKey: normalizedCompany, seatLimit: parsedLimit, status: 'active', pricePerSeatYear: pricePerSeatYear ?? null, billingPeriod: 'annual', quoteNotes: notes ?? '' }
+      return { id: 'demo-seat-package', companyKey: normalizedCompany, seatLimit: parsedLimit, status: 'active', pricePerSeatYear: pricePerSeatYear ?? null, billingPeriod: 'annual', quoteNotes: notes ?? '', planKey: planKey || 'standard' }
     }
 
     const { data, error } = await supabase.rpc('staff_provision_company_seats', {
@@ -593,10 +593,11 @@ export const authService = {
       p_price_per_seat_year: pricePerSeatYear ? Number(pricePerSeatYear) : null,
       p_notes: notes || null,
       p_manager_email: managerEmail || null,
+      p_plan_key: planKey || 'standard',
     })
 
     if (error) throw new Error(error.message)
-    return { id: data.id, companyKey: data.company_key, seatLimit: data.seat_limit, status: data.status, pricePerSeatYear: data.price_per_seat_year, billingPeriod: data.billing_period, quoteNotes: data.quote_notes }
+    return { id: data.id, companyKey: data.company_key, seatLimit: data.seat_limit, status: data.status, pricePerSeatYear: data.price_per_seat_year, billingPeriod: data.billing_period, quoteNotes: data.quote_notes, planKey: data.plan_key }
   },
 
   async reviewAccessRequest({ requestId, decision }) {
