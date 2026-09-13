@@ -153,6 +153,7 @@ Deno.serve(async (request) => {
     return json({ url: session.url, referralApplied: Boolean(appliedReferralCode) }, 200, request)
   } catch (error) {
     console.error('create-checkout-session failed', error)
-    return json({ error: 'Unable to start checkout.' }, 500, request)
+    const errMessage = error instanceof Error ? error.message : String(error)
+    return json({ error: errMessage || 'Unable to start checkout.' }, 500, request)
   }
 })
