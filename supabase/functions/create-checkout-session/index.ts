@@ -110,45 +110,57 @@ Deno.serve(async (request) => {
     }
 
     const targetAmount = interval === 'annual' ? planMeta.annualPrice : planMeta.monthlyPrice
-    const lineItem = priceId
-      ? { price: priceId, quantity: 1 }
-      : {
-          price_data: {
-            currency: 'usd',
-            unit_amount: Math.round(targetAmount * 100),
-            recurring: {
-              interval: interval === 'annual' ? 'year' : 'month',
-            },
-            product_data: {
-              name: `EchoAI ${planMeta.label} (${interval === 'annual' ? 'Annual' : 'Monthly'})`,
-              description: `EchoAI ${planMeta.label} Plan — ${planMeta.storageGb} GB Storage & ${planMeta.tokens.toLocaleString()} Monthly Tokens`,
-            },
-          },
-          quantity: 1,
-        }
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      line_items: [lineItem],
-      customer_email: email,
-      client_reference_id: user?.id ?? undefined,
-      // Stripe rejects allow_promotion_codes alongside an applied discount.
-      ...(appliedReferralCode
-        ? { discounts: [{ coupon }] }
-        : { allow_promotion_codes: true }),
-      subscription_data: {
-        metadata: {
-          email,
-          plan,
-          billing_interval: interval,
-          full_name: typeof fullName === 'string' ? fullName : '',
-          ...(appliedReferralCode ? { referral_code: appliedReferralCode } : {}),
-          ...(user?.id ? { supabase_user_id: user.id } : {}),
+    const dynamicPriceData = {
+      price_data: {
+        currency: 'usd',
+        unit_amount: Math.round(targetAmount * 100),
+        recurring: {
+          interval: interval === 'annual' ? 'year' : 'month',
+        },
+        product_data: {
+          name: `EchoAI ${planMeta.label} (${interval === 'annual' ? 'Annual' : 'Monthly'})`,
+          description: `EchoAI ${planMeta.label} Plan — ${planMeta.storageGb} GB Storage & ${planMeta.tokens.toLocaleString()} Monthly Tokens`,
         },
       },
-      success_url: `${APP_URL}/?checkout=success`,
-      cancel_url: `${APP_URL}/?checkout=cancelled`,
-    })
+      quantity: 1,
+    }
+
+    const createCheckoutSession = async (lineItem: Record<string, unknown>) => {
+      return await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        line_items: [lineItem],
+        customer_email: email,
+        client_reference_id: user?.id ?? undefined,
+        // Stripe rejects allow_promotion_codes alongside an applied discount.
+        ...(appliedReferralCode
+          ? { discounts: [{ coupon }] }
+          : { allow_promotion_codes: true }),
+        subscription_data: {
+          metadata: {
+            email,
+            plan,
+            billing_interval: interval,
+            full_name: typeof fullName === 'string' ? fullName : '',
+            ...(appliedReferralCode ? { referral_code: appliedReferralCode } : {}),
+            ...(user?.id ? { supabase_user_id: user.id } : {}),
+          },
+        },
+        success_url: `${APP_URL}/?checkout=success`,
+        cancel_url: `${APP_URL}/?checkout=cancelled`,
+      })
+    }
+
+    let session: Stripe.Checkout.Session
+    if (priceId) {
+      try {
+        session = await createCheckoutSession({ price: priceId, quantity: 1 })
+      } catch (priceError) {
+        console.warn(`Price ID ${priceId} rejected by Stripe (inactive or missing). Falling back to direct price_data:`, priceError)
+        session = await createCheckoutSession(dynamicPriceData)
+      }
+    } else {
+      session = await createCheckoutSession(dynamicPriceData)
+    }
 
     return json({ url: session.url, referralApplied: Boolean(appliedReferralCode) }, 200, request)
   } catch (error) {
