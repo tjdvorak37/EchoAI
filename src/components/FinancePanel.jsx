@@ -151,14 +151,15 @@ export function FinancePanel({
   const toggleTask = (id) => setFinancialTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: t.status === 'done' ? 'open' : 'done' } : t))
 
   const TABS = [
-    { id: 'dashboard', label: '📊 P&L Dashboard' },
-    { id: 'profitability', label: '📈 Pricing & Profit Model' },
-    { id: 'revenue', label: '💰 Revenue' },
-    { id: 'expenses', label: '💸 Expenses' },
-    { id: 'payroll', label: '👥 Payroll' },
-    { id: 'taxes', label: '🧾 Taxes' },
-    { id: 'refunds', label: '↩️ Refunds' },
-    { id: 'tasks', label: `📋 Tasks${financialTasks.filter((t) => t.status === 'open').length > 0 ? ` (${financialTasks.filter((t) => t.status === 'open').length})` : ''}` },
+    { id: 'dashboard', label: '📊 P&L Dashboard', hint: 'Revenue, expenses, and profit at a glance' },
+    { id: 'profitability', label: '📈 Pricing & Profit Model', hint: 'Plan pricing, margins, and cost projections' },
+    { id: 'revenue', label: '💰 Revenue', hint: 'All confirmed and pending transactions' },
+    { id: 'expenses', label: '💸 Expenses', hint: 'Business expenses by category and vendor' },
+    { id: 'payroll', label: '👥 Payroll', hint: 'Employees, partners, and contractor pay' },
+    { id: 'taxes', label: '🧾 Taxes', hint: 'Tax records, estimates, and due dates' },
+    { id: 'refunds', label: '↩️ Refunds', hint: 'Review and process refund requests' },
+    { id: 'tasks', label: `📋 Tasks${financialTasks.filter((t) => t.status === 'open').length > 0 ? ` (${financialTasks.filter((t) => t.status === 'open').length})` : ''}`, hint: 'Financial to-dos like filings and collections' },
+    { id: 'board-payouts', label: '🏛️ Board Payouts', hint: 'Quarterly profit-share payouts for board members' },
   ]
 
   const maxBar = Math.max(confirmedRevenue, totalExpenses + totalPayroll, 1)
@@ -169,12 +170,13 @@ export function FinancePanel({
         <div>
           <h2>Financial Control Center</h2>
           <p className="fin-panel-sub">Admin &amp; Accountant access only</p>
+          <p className="fin-panel-sub">Track revenue, expenses, payroll, taxes, refunds, and board payouts in one place.</p>
         </div>
       </div>
 
       <nav className="fin-tabs">
         {TABS.map((t) => (
-          <button key={t.id} type="button" className={`fin-tab-btn ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+          <button key={t.id} type="button" className={`fin-tab-btn ${tab === t.id ? 'active' : ''}`} title={t.hint} onClick={() => setTab(t.id)}>
             {t.label}
           </button>
         ))}
@@ -524,8 +526,11 @@ export function FinancePanel({
           </div>
         )}
 
+        {tab === 'board-payouts' && (
+          <BoardPayoutsPanel company={company} boardMembers={boardMembers} currentUser={currentUser} adminMode />
+        )}
+
       </div>
-      <BoardPayoutsPanel company={company} boardMembers={boardMembers} currentUser={currentUser} adminMode />
     </div>
   )
 }
