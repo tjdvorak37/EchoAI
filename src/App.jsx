@@ -1386,8 +1386,9 @@ function App() {
   const handleSchedulePost = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    if ((!composer.message.trim() && !composer.mediaAssetIds.length) || !composer.scheduledAt || !composer.channels.length) {
-      setSchedulerError('Add a message or media, at least one channel, and a deployment date and time.')
+    const hasContent = Boolean(composer.message.trim() || composer.mediaAssetIds.length || composer.imageIdea.trim())
+    if (!hasContent || !composer.scheduledAt || !composer.channels.length) {
+      setSchedulerError('Attach a photo/video flyer, write a caption, or add an image brief, select at least one channel, and set a deployment date and time.')
       return
     }
 
@@ -1401,8 +1402,10 @@ function App() {
       return
     }
 
+    const defaultTitle = composer.campaign.trim() || (composer.mediaAssetIds.length ? 'Visual Flyer Post' : 'Social Post')
+
     const newPost = await platformService.schedulePost({
-      campaign: composer.campaign || 'Daily Campaign',
+      campaign: defaultTitle,
       message: composer.message,
       imageIdea: composer.imageIdea,
       scheduledAt: composer.scheduledAt,
@@ -1429,8 +1432,9 @@ function App() {
   const handlePostNow = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    if ((!composer.message.trim() && !composer.mediaAssetIds.length) || !composer.channels.length) {
-      setSchedulerError('Add a message or media and at least one channel before posting.')
+    const hasContent = Boolean(composer.message.trim() || composer.mediaAssetIds.length || composer.imageIdea.trim())
+    if (!hasContent || !composer.channels.length) {
+      setSchedulerError('Attach a photo/video flyer, write a caption, or add an image brief, and select at least one channel before posting.')
       return
     }
 
@@ -1444,9 +1448,11 @@ function App() {
       return
     }
 
+    const defaultTitle = composer.campaign.trim() || (composer.mediaAssetIds.length ? 'Visual Flyer Post' : 'Instant Post')
+
     try {
       const newPost = await platformService.postNow({
-        campaign: composer.campaign || 'Instant Campaign',
+        campaign: defaultTitle,
         message: composer.message,
         imageIdea: composer.imageIdea,
         channels: composer.channels,
