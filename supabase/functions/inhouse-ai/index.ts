@@ -83,6 +83,43 @@ const parseProviderBody = (rawBody: string, contentType: string) => {
   return { raw: rawBody.slice(0, 1000) }
 }
 
+const routeModel = (config: Record<string, unknown>, payload: Record<string, unknown>) => {
+  const routing = (config.routing ?? {}) as Record<string, unknown>
+  const models = (routing.models ?? {}) as Record<string, unknown>
+  const routeKey = String(payload.creatorMode || payload.capability || 'standard')
+  return String(models[routeKey] || config.model || 'default')
+}
+
+const reserveCreatorJob = async (admin: ReturnType<typeof createClient>, payload: Record<string, unknown>) => {
+  if (!payload.echoCreator) return null
+  const cost = Number.isInteger(payload.creditCost) ? Number(payload.creditCost) : 0
+  const { data, error } = await admin.rpc('reserve_echo_ai_job', {
+    p_capability: payload.capability,
+    p_mode: payload.creatorMode || 'standard',
+    p_prompt: payload.prompt,
+    p_cost: cost,
+    p_request: { settings: payload.output || {}, brandProfile: payload.brandProfile || null },
+  })
+  if (error) throw new Error(error.message)
+  return data
+}
+
+const estimateProviderCost = (payload: Record<string, unknown>) => {
+  if (!payload.echoCreator) return 0
+  if (payload.capability === 'video') return payload.creatorMode === 'premium' ? 1.2 : 0.5
+  if (payload.capability === 'image' || payload.capability === 'image_edit') return payload.creatorMode === 'premium' ? 0.12 : 0.04
+  return payload.creatorMode === 'premium' ? 0.03 : 0.01
+}
+
+const finishCreatorJob = async (admin: ReturnType<typeof createClient>, jobId: unknown, result: Record<string, unknown>, status = 'completed', error = null, providerCostUsd = 0) => {
+  if (!jobId) return
+  if (status === 'failed') {
+    await admin.rpc('fail_echo_ai_job', { p_job_id: jobId, p_error: error || 'Provider request failed' })
+    return
+  }
+  await admin.rpc('complete_echo_ai_job', { p_job_id: jobId, p_provider_cost_usd: providerCostUsd, p_result: result })
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: getCorsHeaders(request) })
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, request)
@@ -96,20 +133,24 @@ Deno.serve(async (request) => {
     { auth: { persistSession: false } },
   )
   const payload = await request.clone().json().catch(() => ({}))
-  const connectionQuery = payload.connectionId
-    ? admin.from('ai_agent_connections').select('id, endpoint, api_key, model, provider, capabilities, routing, enabled').eq('id', payload.connectionId).eq('user_id', user.id).maybeSingle()
-    : admin.from('user_ai_agent_config').select('config').eq('user_id', user.id).maybeSingle()
-  const { data: record, error: configError } = await connectionQuery
-
-  if (configError) return json({ error: 'Could not load the AI connection.' }, 500, request)
-  const config = record?.config ?? record ?? {}
+  const config = {
+    enabled: true,
+    provider: 'openai',
+    endpoint: Deno.env.get('OPENAI_API_BASE_URL') ?? 'https://api.openai.com/v1',
+    api_key: Deno.env.get('OPENAI_API_KEY') ?? '',
+    model: Deno.env.get('OPENAI_TEXT_MODEL') ?? 'gpt-4o-mini',
+    routing: { models: { standard: Deno.env.get('OPENAI_TEXT_MODEL') ?? 'gpt-4o-mini' } },
+  }
   if (config.enabled === false) return json({ error: 'This AI tool is disabled.' }, 409, request)
   if (!config.endpoint) return json({ error: 'No AI endpoint is configured. Add one in Integrations.' }, 503, request)
   const providerApiKey = config.api_key ?? config.apiKey ?? ''
+  const routedModel = routeModel(config, payload)
+  let creatorJob: Record<string, unknown> | null = null
 
   try {
+    creatorJob = await reserveCreatorJob(admin, payload)
     const result = config.provider === 'openai'
-      ? await openAiRequest(config, payload)
+      ? await openAiRequest({ ...config, model: routedModel }, payload)
       : await (async () => {
           const response = await fetch(config.endpoint as string, {
             method: 'POST',
@@ -121,6 +162,7 @@ Deno.serve(async (request) => {
     const upstream = result.response
     const responseBody = parseProviderBody(result.body, upstream.headers.get('content-type') ?? '')
     if (!upstream.ok) {
+      await finishCreatorJob(admin, creatorJob?.jobId, {}, 'failed', `Provider returned ${upstream.status}`)
       await admin.from('ai_agent_connections').update({ status: 'error', last_error: `Provider returned ${upstream.status}`, last_checked_at: new Date().toISOString() }).eq('id', payload.connectionId).eq('user_id', user.id)
       return json({ error: `AI provider returned ${upstream.status}.`, detail: responseBody }, 502, request)
     }
@@ -132,15 +174,21 @@ Deno.serve(async (request) => {
     }
     if (config.provider === 'openai' && (payload.capability === 'image' || payload.mode === 'image')) {
       const image = (responseBody as Record<string, unknown>)?.data?.[0] as Record<string, unknown> | undefined
-      return json({ imageUrl: image?.url, imageBase64: image?.b64_json, title: 'OpenAI generated image' }, 200, request)
+      const output = { imageUrl: image?.url, imageBase64: image?.b64_json, title: 'OpenAI generated image', jobId: creatorJob?.jobId, creditsRemaining: creatorJob?.creditsRemaining }
+      await finishCreatorJob(admin, creatorJob?.jobId, output, 'completed', null, estimateProviderCost(payload))
+      return json(output, 200, request)
     }
     if (config.provider === 'openai') {
       const choice = (responseBody as Record<string, unknown>)?.choices?.[0] as Record<string, unknown> | undefined
       const message = choice?.message as Record<string, unknown> | undefined
-      return json({ title: 'OpenAI response', text: message?.content || '' }, 200, request)
+      const output = { title: 'OpenAI response', text: message?.content || '', jobId: creatorJob?.jobId, creditsRemaining: creatorJob?.creditsRemaining }
+      await finishCreatorJob(admin, creatorJob?.jobId, output, 'completed', null, estimateProviderCost(payload))
+      return json(output, 200, request)
     }
+    await finishCreatorJob(admin, creatorJob?.jobId, responseBody as Record<string, unknown>, 'completed', null, estimateProviderCost(payload))
     return json(responseBody, 200, request)
   } catch (error) {
+    await finishCreatorJob(admin, creatorJob?.jobId, {}, 'failed', error instanceof Error ? error.message : 'Provider request failed')
     console.error('inhouse-ai proxy failed', error)
     return json({ error: error instanceof Error ? error.message : 'The configured AI provider could not be reached.' }, 502, request)
   }
