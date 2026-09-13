@@ -4771,7 +4771,7 @@ function App() {
               </div>
             </article>
 
-            {aiAgentConfig.provider === '__legacy_customer_connection__' && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
+            {aiAgentConfig.provider === '__legacy_customer_connection__' && typeof window === 'undefined' && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <div className="inhouse-engine-heading">
                 <div><h3>In-house AI engine</h3><p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p></div>
                 <button type="button" className="openai-guide-button" onClick={() => setOpenAiGuideOpen(true)}>OpenAI connection guide <span aria-hidden="true">↗</span></button>
@@ -4969,7 +4969,6 @@ function App() {
               {[
                 { name: 'Slack + Teams', icon: '💬', color: '#4A154B', desc: 'Send deployment alerts and campaign summaries to your ops channel.' },
                 { name: 'Zapier / Make', icon: '⚡', color: '#FF4A00', desc: 'Trigger workflows from CRM updates, forms, and ecommerce events.' },
-                { name: 'AI Image Tools', icon: '🎨', color: '#7C3AED', desc: 'Connect image generation APIs for campaign graphics at scale.' },
                 { name: 'Google Analytics', icon: '📊', color: '#E37400', desc: 'Pull traffic and conversion data alongside your social metrics.' },
                 { name: 'Shopify', icon: '🛍️', color: '#96BF48', desc: 'Sync product launches and inventory events to social posts automatically.' },
               ].map((item) => (
