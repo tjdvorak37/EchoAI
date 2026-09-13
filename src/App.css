@@ -924,6 +924,25 @@ main {
   border-color: #fed7aa;
 }
 
+.dashboard-ai-hub { margin-top: 1rem; }
+.dashboard-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.dashboard-section-heading h3 { margin: .2rem 0 0; }
+.dashboard-section-heading .muted { max-width: 720px; margin: .35rem 0 0; }
+.dashboard-ai-summary { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(0, 1.3fr); gap: 1rem; margin-top: 1rem; }
+.dashboard-ai-balance { display: grid; align-content: center; gap: .35rem; padding: 1rem; border: 1px solid #cfe0ff; border-radius: 10px; background: linear-gradient(135deg, #eef5ff, #f8fbff); }
+.dashboard-ai-balance span, .dashboard-ai-balance small { color: var(--text-soft); }
+.dashboard-ai-balance strong { color: #2364d8; font-size: 2rem; }
+.dashboard-ai-costs { min-width: 0; }
+.dashboard-ai-cost-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-top: .55rem; }
+.dashboard-ai-cost-item { display: flex; justify-content: space-between; gap: .7rem; padding: .65rem; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+.dashboard-ai-cost-item div { min-width: 0; display: grid; gap: .2rem; }
+.dashboard-ai-cost-item strong, .dashboard-ai-cost-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-ai-cost-item small { color: var(--text-soft); }
+.dashboard-ai-cost-item > span { flex: 0 0 auto; color: #2364d8; font-weight: 700; }
+.dashboard-ai-recent { display: grid; gap: .4rem; margin-top: 1rem; padding-top: .8rem; border-top: 1px solid #e2e8f0; }
+.dashboard-ai-job { display: flex; justify-content: space-between; gap: 1rem; color: var(--text); }
+.dashboard-ai-job small { color: var(--text-soft); }
+
 .stat-card p {
   margin: 0;
   color: #475569;
@@ -3132,6 +3151,9 @@ main {
   .it-user-filters {
     grid-template-columns: 1fr;
   }
+
+  .dashboard-section-heading, .dashboard-ai-job { flex-direction: column; }
+  .dashboard-ai-summary, .dashboard-ai-cost-grid { grid-template-columns: 1fr; }
 }
 
 .it-user-count {
