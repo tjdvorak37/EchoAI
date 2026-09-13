@@ -1,34 +1,10 @@
 import { Suspense, lazy, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import './App.css'
 import './components/VideoEditor.css'
 import './components/PhotoEditor.css'
-import {
-  accessRequestsSeed,
-  adminAlerts,
-  aiPromptIdeas,
-  companyMainPostsSeed,
-  companySocialAccountsSeed,
-  connectedAccountsSeed,
-  expensesSeed,
-  financialTasksSeed,
-  licensesSeed,
-  payrollSeed,
-  postTypeChips,
-  promoCodesSeed,
-  purchaseHistorySeed,
-  refundsSeed,
-  repostQueueSeed,
-  scheduledPostsSeed,
-  siteFeatureFlagsSeed,
-  starterStats,
-  supportTicketsSeed,
-  taxRecordsSeed,
-  teamMembersSeed,
-  userRepostsSeed,
-  workspaceAssetsSeed,
-  workspaceFoldersSeed,
-} from './data/demoData'
 import { authService } from './services/authService'
+import { announcementService, DEFAULT_ANNOUNCEMENTS } from './services/announcementService'
 import { billingService } from './services/billingService'
 import { brandService, createEmptyBrandKit, loadBrandFonts, MAX_LOGO_BYTES } from './services/brandService'
 import { CLOUD_PROVIDERS, cloudDriveService, toLinkedAsset } from './services/cloudDriveService'
@@ -36,9 +12,19 @@ import { getPlan, getStorageMb } from './data/plans'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
 import { socialIntegrationService } from './services/socialIntegrationService'
+import { financeService } from './services/financeService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import echoMascot from './assets/echo-mascot.svg'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
+import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
+import { AnnouncementBanner } from './components/AnnouncementBanner'
+
+const AI_PROMPT_IDEAS = [
+  'Create 3 Instagram captions for a weekend sale with urgency and energy.',
+  'Write a Facebook reminder for a flash sale ending tonight at midnight.',
+  'Draft Snapchat copy for a behind-the-scenes product reveal.',
+]
+const POST_TYPE_CHIPS = ['Product launch', 'Event promotion', 'Educational post', 'Customer story']
 
 const VideoEditor = lazy(() => import('./components/VideoEditor').then((module) => ({ default: module.VideoEditor })))
 const PhotoEditor = lazy(() => import('./components/PhotoEditor').then((module) => ({ default: module.PhotoEditor })))
@@ -48,14 +34,16 @@ const CompanyPackageRequest = lazy(() => import('./components/CompanyPackageRequ
 const PurchasePage = lazy(() => import('./components/PurchasePage').then((module) => ({ default: module.PurchasePage })))
 const AdminPanel = lazy(() => import('./components/AdminPanel').then((module) => ({ default: module.AdminPanel })))
 const FinancePanel = lazy(() => import('./components/FinancePanel').then((module) => ({ default: module.FinancePanel })))
+const BoardMemberFinancePanel = lazy(() => import('./components/BoardMemberFinancePanel').then((module) => ({ default: module.BoardMemberFinancePanel })))
 const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((module) => ({ default: module.CreativeBrief })))
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
-const InhouseAiStudio = lazy(() => import('./components/InhouseAiStudio').then((module) => ({ default: module.InhouseAiStudio })))
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
+const CreditPurchasePanel = lazy(() => import('./components/CreditPurchasePanel').then((module) => ({ default: module.CreditPurchasePanel })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
+const AI_GENERATIONS_FOLDER_ID = 'folder-ai-generations'
 const readUserData = (userId) => {
   try { return JSON.parse(localStorage.getItem(getUserKey(userId))) } catch { return null }
 }
@@ -74,30 +62,13 @@ const getPlatformMeta = (platformName) =>
   PLATFORM_META[platformName?.toLowerCase()] ??
   { label: platformName, icon: '🔗', color: '#64748b', bg: 'rgba(100,116,139,0.1)', border: 'rgba(100,116,139,0.25)' }
 
-const DEFAULT_ACCOUNT_HANDLES = {
-  instagram: '@youraccount',
-  facebook: 'Your page name',
-  tiktok: '@youraccount',
-  snapchat: 'Your Snapchat',
-  x: '@youraccount',
-  youtube: 'Your channel',
-  linkedin: 'Your profile / page',
-}
-
 const SOCIAL_PUBLISHING_SCOPES = ['posts', 'images', 'videos', 'comments', 'analytics']
 
-const getDefaultAccountHandle = (platformName) =>
-  DEFAULT_ACCOUNT_HANDLES[String(platformName || '').toLowerCase()] || 'Your account'
-
-const isPlaceholderAccountHandle = (platformName, accountName) => {
-  const defaultValue = getDefaultAccountHandle(platformName)
-  return !String(accountName || '').trim() || String(accountName).trim().toLowerCase() === defaultValue.toLowerCase()
-}
-
 const createDefaultAiAgentConfig = () => ({
-  enabled: false,
-  name: 'My AI Agent',
-  endpoint: '',
+  enabled: true,
+  name: 'EchoAI Hosted AI',
+  provider: 'echoai',
+  endpoint: 'hosted',
   apiKey: '',
   model: '',
   capabilities: DEFAULT_AGENT_CAPABILITIES,
@@ -106,8 +77,8 @@ const createDefaultAiAgentConfig = () => ({
   negativePrompt: '',
   defaultStyle: '',
   lastSyncedAt: '',
-  status: 'not connected',
-  message: 'Connect an in-house AI endpoint for writing, documents, images, characters, video, audio, and media analysis.',
+  status: 'hosted',
+  message: 'EchoAI manages provider accounts, API keys, routing, and safety controls on the backend.',
 })
 
 const hydrateWorkspaceAssets = (assets) =>
@@ -116,18 +87,13 @@ const hydrateWorkspaceAssets = (assets) =>
       return asset
     }
 
-    const seededAsset = workspaceAssetsSeed.find((item) => item.id === asset.id)
-    if (!seededAsset?.previewUrl) {
-      return asset
-    }
-
-    return { ...asset, previewUrl: seededAsset.previewUrl }
+    return asset
   })
 
 const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 
 // Staff accounts run the platform, so they get the top plan without paying for it.
-const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it']
+const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it', 'accountant', 'board_member']
 const STAFF_PLAN = 'creator'
 const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCase())
 
@@ -191,15 +157,15 @@ function App() {
   )
 
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [connectedAccounts, setConnectedAccounts] = useState(connectedAccountsSeed)
+  const [connectedAccounts, setConnectedAccounts] = useState([])
   const [socialPlatformReadiness, setSocialPlatformReadiness] = useState([])
   const [socialPlatformReadinessLoading, setSocialPlatformReadinessLoading] = useState(false)
   const [socialPlatformReadinessError, setSocialPlatformReadinessError] = useState('')
-  const [scheduledPosts, setScheduledPosts] = useState(scheduledPostsSeed)
-  const [companyMainPosts, setCompanyMainPosts] = useState(companyMainPostsSeed)
-  const [companySocialAccounts, setCompanySocialAccounts] = useState(companySocialAccountsSeed)
-  const [repostQueue, setRepostQueue] = useState(repostQueueSeed)
-  const [userReposts, setUserReposts] = useState(userRepostsSeed)
+  const [scheduledPosts, setScheduledPosts] = useState([])
+  const [companyMainPosts, setCompanyMainPosts] = useState([])
+  const [companySocialAccounts, setCompanySocialAccounts] = useState([])
+  const [repostQueue, setRepostQueue] = useState([])
+  const [userReposts, setUserReposts] = useState([])
   const [autoApproveCompanyPosts, setAutoApproveCompanyPosts] = useState(false)
   const [repostNotice, setRepostNotice] = useState('')
   const [repostError, setRepostError] = useState('')
@@ -216,9 +182,9 @@ function App() {
     accountName: '',
   })
   const localIdRef = useRef(3000)
-  const [alerts, setAlerts] = useState(adminAlerts)
-  const [accessRequests, setAccessRequests] = useState(accessRequestsSeed)
-  const [teamMembers, setTeamMembers] = useState(teamMembersSeed)
+  const [alerts, setAlerts] = useState([])
+  const [accessRequests, setAccessRequests] = useState([])
+  const [teamMembers, setTeamMembers] = useState([])
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminError, setAdminError] = useState('')
   const [companySeatPackage, setCompanySeatPackage] = useState(null)
@@ -255,7 +221,7 @@ function App() {
   const [accountScopeDrafts, setAccountScopeDrafts] = useState({})
   const [quickConnectOpen, setQuickConnectOpen] = useState(() => {
     const status = new URLSearchParams(window.location.search).get('social')
-    return status === 'connected' || status === 'failed'
+    return status === 'connected' || status === 'failed' || status === 'provider_error'
   })
   const [quickConnectEmail, setQuickConnectEmail] = useState(() => session?.email || '')
   const [quickConnectName, setQuickConnectName] = useState('')
@@ -264,14 +230,16 @@ function App() {
     const params = new URLSearchParams(window.location.search)
     const status = params.get('social')
     const platform = params.get('platform')
+    const reason = params.get('reason')
     if (!status || !platform) return ''
     return status === 'connected'
       ? `${getPlatformMeta(platform).label} connected successfully. Choose another selected provider to continue.`
-      : `${getPlatformMeta(platform).label} connection was not completed.`
+      : `${getPlatformMeta(platform).label} connection was not completed.${reason ? ` ${decodeURIComponent(reason)}` : ''}`
   })
   const [integrationError, setIntegrationError] = useState('')
   const [aiInput, setAiInput] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState([])
+  const [aiSuggestionError, setAiSuggestionError] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [creativeProject, setCreativeProject] = useState(null)
   const [aiAgentConfig, setAiAgentConfig] = useState(() => createDefaultAiAgentConfig())
@@ -280,8 +248,9 @@ function App() {
   const [aiAgentTesting, setAiAgentTesting] = useState(false)
   const [aiAgentFeedback, setAiAgentFeedback] = useState('')
   const [aiAgentFeedbackTone, setAiAgentFeedbackTone] = useState('info')
-  const [workspaceFolders, setWorkspaceFolders] = useState(workspaceFoldersSeed)
-  const [workspaceAssets, setWorkspaceAssets] = useState(workspaceAssetsSeed)
+  const [openAiGuideOpen, setOpenAiGuideOpen] = useState(false)
+  const [workspaceFolders, setWorkspaceFolders] = useState([{ id: 'folder-root', name: 'My workspace', parentId: null, createdAt: new Date().toISOString() }])
+  const [workspaceAssets, setWorkspaceAssets] = useState([])
   const [selectedFolderId, setSelectedFolderId] = useState('folder-root')
   const [assetSearch, setAssetSearch] = useState('')
   const [newFolderName, setNewFolderName] = useState('')
@@ -291,23 +260,17 @@ function App() {
   const [drawerDragActive, setDrawerDragActive] = useState(false)
   const [quotaEditingUserId, setQuotaEditingUserId] = useState('')
   const [quotaDraftMb, setQuotaDraftMb] = useState('2048')
-  const [licenses, setLicenses] = useState(licensesSeed)
-  const [tickets, setTickets] = useState(supportTicketsSeed)
-  const [purchaseHistory, setPurchaseHistory] = useState(purchaseHistorySeed)
-  const [featureFlags, setFeatureFlags] = useState(siteFeatureFlagsSeed)
-  const [landingAnnouncement, setLandingAnnouncement] = useState(() => {
-    try {
-      return localStorage.getItem('echoai-landing-announcement') || 'This application is currently in Beta Testing, if you purchase a subscription please report all bugs and issues to the Support Team as we are actively working through the problems. Expected launch date 9/15/2026 Thanks'
-    } catch {
-      return 'This application is currently in Beta Testing, if you purchase a subscription please report all bugs and issues to the Support Team as we are actively working through the problems. Expected launch date 9/15/2026 Thanks'
-    }
-  })
-  const [promoCodes, setPromoCodes] = useState(promoCodesSeed)
-  const [expenses, setExpenses] = useState(expensesSeed)
-  const [payroll, setPayroll] = useState(payrollSeed)
-  const [taxRecords, setTaxRecords] = useState(taxRecordsSeed)
-  const [refunds, setRefunds] = useState(refundsSeed)
-  const [financialTasks, setFinancialTasks] = useState(financialTasksSeed)
+  const [licenses, setLicenses] = useState([])
+  const [tickets, setTickets] = useState([])
+  const [purchaseHistory, setPurchaseHistory] = useState([])
+  const [featureFlags, setFeatureFlags] = useState([])
+  const [announcements, setAnnouncements] = useState(DEFAULT_ANNOUNCEMENTS)
+  const [promoCodes, setPromoCodes] = useState([])
+  const [expenses, setExpenses] = useState([])
+  const [payroll, setPayroll] = useState([])
+  const [taxRecords, setTaxRecords] = useState([])
+  const [refunds, setRefunds] = useState([])
+  const [financialTasks, setFinancialTasks] = useState([])
   const [showPurchase, setShowPurchase] = useState(false)
   const [companyPackageRequested, setCompanyPackageRequested] = useState(false)
   const [purchasePlan, setPurchasePlan] = useState('storage_pro')
@@ -316,14 +279,42 @@ function App() {
     () => new URLSearchParams(window.location.search).get('checkout') || '',
   )
   const [myEntitlement, setMyEntitlement] = useState(null)
+  const [aiDashboard, setAiDashboard] = useState(null)
+  const [creditPurchaseModalOpen, setCreditPurchaseModalOpen] = useState(false)
+  const [creditsCheckoutNotice, setCreditsCheckoutNotice] = useState(() => {
+    const status = new URLSearchParams(window.location.search).get('credits')
+    const tokens = new URLSearchParams(window.location.search).get('tokens')
+    if (status === 'success') {
+      return `🎉 Payment approved! ${tokens ? `${Number(tokens).toLocaleString()} ` : ''}Tokens have been added to your Echo AI balance.`
+    }
+    if (status === 'cancelled') {
+      return 'Token purchase was cancelled. No charges were made.'
+    }
+    return ''
+  })
   const [billingPortalLoading, setBillingPortalLoading] = useState(false)
   const [billingPortalError, setBillingPortalError] = useState('')
+  const [accountActionError, setAccountActionError] = useState('')
+  const [accountActionLoading, setAccountActionLoading] = useState(false)
   const [referralSummary, setReferralSummary] = useState(null)
   const [referralCopied, setReferralCopied] = useState(false)
   // Captured once on load so it survives the user navigating around before buying.
   const [incomingReferralCode] = useState(
     () => new URLSearchParams(window.location.search).get('ref') || '',
   )
+
+  const refreshAiBalance = async (addedAmount = null) => {
+    try {
+      if (!isSupabaseConfigured && addedAmount) {
+        setAiDashboard((prev) => (prev ? { ...prev, balance: (prev.balance || 0) + addedAmount } : { balance: 500 + addedAmount, monthlyAllowance: 500, pricing: [], recentJobs: [] }))
+        return
+      }
+      const data = await billingService.getAiDashboard()
+      setAiDashboard(data)
+    } catch (err) {
+      console.warn('Unable to refresh AI balance', err)
+    }
+  }
 
   const loadingPanel = (
     <section className="panel">
@@ -342,34 +333,28 @@ function App() {
     }
   }
 
-  // Loads and applies this user's persisted data after login.
-  // Demo users fall back to seed data on first login; all others start clean.
+  // Loads and applies this user's persisted live data after login.
   const applyUserData = async (user) => {
     const stored = readUserData(user.id)
-    const isDemo = user.id?.startsWith('demo-')
-    const defaults = isDemo
-      ? {
-          scheduledPosts: scheduledPostsSeed,
-          connectedAccounts: connectedAccountsSeed,
-          companyMainPosts: companyMainPostsSeed,
-          companySocialAccounts: companySocialAccountsSeed,
-          repostQueue: repostQueueSeed,
-          userReposts: userRepostsSeed,
-          workspaceFolders: workspaceFoldersSeed,
-          workspaceAssets: workspaceAssetsSeed,
-        }
-      : {}
-    const d = stored ?? defaults
+    const d = stored ?? {}
     setScheduledPosts(d.scheduledPosts ?? [])
     setConnectedAccounts(d.connectedAccounts ?? [])
     setCompanyMainPosts(d.companyMainPosts ?? [])
     setCompanySocialAccounts(d.companySocialAccounts ?? [])
     setRepostQueue(d.repostQueue ?? [])
     setUserReposts(d.userReposts ?? [])
-    setWorkspaceFolders(
-      d.workspaceFolders ?? [{ id: 'folder-root', name: 'My workspace', parentId: null, createdAt: new Date().toISOString() }],
-    )
+    const savedFolders = d.workspaceFolders ?? [{ id: 'folder-root', name: 'My workspace', parentId: null, createdAt: new Date().toISOString() }]
+    setWorkspaceFolders(savedFolders.some((folder) => folder.id === AI_GENERATIONS_FOLDER_ID)
+      ? savedFolders
+      : [...savedFolders, { id: AI_GENERATIONS_FOLDER_ID, name: 'AI Generations', parentId: 'folder-root', createdAt: new Date().toISOString(), system: true }])
     setWorkspaceAssets(hydrateWorkspaceAssets(d.workspaceAssets ?? []))
+
+    try {
+      setAiDashboard(await billingService.getAiDashboard())
+    } catch (error) {
+      console.warn('Unable to load AI dashboard data', error)
+      setAiDashboard(null)
+    }
 
     await loadContactCard(user)
 
@@ -380,23 +365,13 @@ function App() {
       ])
       setConnectedAccounts(socialAccounts)
       setScheduledPosts(savedPosts)
-      const profileAiAgentConfig = await authService.getUserAiAgentConfig({
-        userId: user.id,
-        email: user.email,
-      })
-
-      const nextAiAgentConfig = profileAiAgentConfig
-        ? { ...createDefaultAiAgentConfig(), ...profileAiAgentConfig }
-        : createDefaultAiAgentConfig()
-
+      const nextAiAgentConfig = createDefaultAiAgentConfig()
       setAiAgentConfig(nextAiAgentConfig)
       setAiAgentDraft(nextAiAgentConfig)
       return
     }
 
-    const nextAiAgentConfig = d.aiAgentConfig
-      ? { ...createDefaultAiAgentConfig(), ...d.aiAgentConfig }
-      : createDefaultAiAgentConfig()
+    const nextAiAgentConfig = createDefaultAiAgentConfig()
 
     setAiAgentConfig(nextAiAgentConfig)
     setAiAgentDraft(nextAiAgentConfig)
@@ -424,15 +399,60 @@ function App() {
     return { valid: true, message: `Code applied: ${found.description}`, codeObj: found }
   }
 
+  useEffect(() => {
+    let active = true
+
+    announcementService.list()
+      .then((records) => {
+        if (!active) return
+        setAnnouncements((current) => ({
+          ...current,
+          ...Object.fromEntries(records.map((notice) => [notice.id, notice])),
+        }))
+      })
+      .catch((error) => console.error('Unable to load platform announcements', error))
+
+    return () => { active = false }
+  }, [session?.id])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const creditsParam = params.get('credits')
+    if (!creditsParam) return undefined
+
+    params.delete('credits')
+    params.delete('tokens')
+    const newQuery = params.toString() ? `?${params.toString()}` : ''
+    window.history.replaceState({}, document.title, `${window.location.pathname}${newQuery}`)
+
+    if (creditsParam === 'success') {
+      billingService.getAiDashboard()
+        .then((data) => setAiDashboard(data))
+        .catch((err) => console.warn('Could not refresh AI balance', err))
+
+      if (isSupabaseConfigured) {
+        const t1 = setTimeout(() => {
+          billingService.getAiDashboard().then((data) => setAiDashboard(data)).catch(() => {})
+        }, 2500)
+        const t2 = setTimeout(() => {
+          billingService.getAiDashboard().then((data) => setAiDashboard(data)).catch(() => {})
+        }, 5000)
+        return () => {
+          clearTimeout(t1)
+          clearTimeout(t2)
+        }
+      }
+    }
+  }, [])
+
+  const handleSaveAnnouncement = async (notice) => {
+    const saved = await announcementService.save(notice)
+    setAnnouncements((current) => ({ ...current, [saved.id]: saved }))
+    return saved
+  }
+
   // Save all per-user data to their own namespaced localStorage key whenever any slice changes.
   // In production this is backed by Supabase with row-level security scoped to auth.uid().
-  useEffect(() => {
-    try {
-      localStorage.setItem('echoai-landing-announcement', landingAnnouncement)
-    } catch (err) {
-      console.error('Unable to save landing announcement', err)
-    }
-  }, [landingAnnouncement])
 
   useEffect(() => {
     if (!session?.id) return
@@ -480,10 +500,10 @@ function App() {
 
   const stats = useMemo(
     () => [
-      starterStats[0],
+      { label: 'Engagement growth', value: '—' },
       { label: 'Queued posts', value: `${upcomingPostCount}` },
       { label: 'Connected channels', value: `${connectedAccounts.length}` },
-      starterStats[3],
+      { label: 'Delivery success', value: '—' },
     ],
     [connectedAccounts.length, upcomingPostCount],
   )
@@ -534,20 +554,47 @@ function App() {
   }
 
   const isAdminUser = session?.role === 'admin'
-  const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant'].includes(session?.role || '')
+  const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant', 'board_member'].includes(session?.role || '') || session?.isBoardMember === true
   const canManageBrandKit = ['admin', 'manager'].includes(session?.role || '')
 
-  async function loadAdminData() {
+  async function loadAdminData(user = session) {
     setAdminError('')
     setAdminLoading(true)
 
     try {
+      if (user?.role === 'accountant') {
+        const [members, subscriptions, payments] = await Promise.all([
+          authService.getManagedUsers(),
+          billingService.listSubscriptions(),
+          billingService.listPayments(),
+        ])
+        if (members.length) setTeamMembers(members)
+        const nameByEmail = new Map(members.map((member) => [String(member.email || '').toLowerCase(), member.fullName]))
+        const withNames = (rows) => rows.map((row) => ({
+          ...row,
+          userFullName: nameByEmail.get(String(row.userEmail || '').toLowerCase()) || row.userEmail,
+        }))
+        setLicenses(withNames(subscriptions))
+        setPurchaseHistory(withNames(payments))
+        const finance = await financeService.listRecords(user?.company)
+        if (finance.expense) setExpenses(finance.expense)
+        if (finance.payroll) setPayroll(finance.payroll)
+        if (finance.tax) setTaxRecords(finance.tax)
+        if (finance.refund) setRefunds(finance.refund)
+        if (finance.task) setFinancialTasks(finance.task)
+        return
+      }
+
+      if (user?.role !== 'admin' && (user?.isBoardMember || user?.role === 'board_member')) {
+        return
+      }
+
       const [requests, members, subscriptions, payments, seatData, supportTickets] = await Promise.all([
         authService.getAccessRequests(),
         authService.getManagedUsers(),
         billingService.listSubscriptions(),
         billingService.listPayments(),
-        authService.getCompanySeatData({ companyKey: session?.company }),
+        authService.getCompanySeatData({ companyKey: user?.company }),
         authService.getSupportTickets(),
       ])
 
@@ -576,12 +623,48 @@ function App() {
 
         setLicenses(withNames(subscriptions))
         setPurchaseHistory(withNames(payments))
+        const finance = await financeService.listRecords(user?.company)
+        if (finance.expense) setExpenses(finance.expense)
+        if (finance.payroll) setPayroll(finance.payroll)
+        if (finance.tax) setTaxRecords(finance.tax)
+        if (finance.refund) setRefunds(finance.refund)
+        if (finance.task) setFinancialTasks(finance.task)
       }
+
+      const finance = await financeService.listRecords(user?.company)
+      if (finance.expense) setExpenses(finance.expense)
+      if (finance.payroll) setPayroll(finance.payroll)
+      if (finance.tax) setTaxRecords(finance.tax)
+      if (finance.refund) setRefunds(finance.refund)
+      if (finance.task) setFinancialTasks(finance.task)
     } catch (error) {
       setAdminError(error.message)
     } finally {
       setAdminLoading(false)
     }
+  }
+
+  const financeSetter = (type, setter) => (update) => {
+    setter((previous) => {
+      const next = typeof update === 'function' ? update(previous) : update
+      if (isSupabaseConfigured && session?.company && ['admin', 'accountant'].includes(session.role)) {
+        financeService.replaceRecords({
+          companyKey: session.company,
+          userId: session.id,
+          type,
+          records: next,
+        }).catch((error) => setAdminError(error.message))
+      }
+      return next
+    })
+  }
+
+  const persistedFinanceSetters = {
+    expenses: financeSetter('expense', setExpenses),
+    payroll: financeSetter('payroll', setPayroll),
+    taxRecords: financeSetter('tax', setTaxRecords),
+    refunds: financeSetter('refund', setRefunds),
+    financialTasks: financeSetter('task', setFinancialTasks),
   }
 
   const handleCreateCompanySeatPackage = async (seatLimit) => {
@@ -619,8 +702,8 @@ function App() {
 
       setSession(restoredUser)
       await applyUserData(restoredUser)
-      if (['admin', 'manager', 'it'].includes(restoredUser.role)) {
-        await loadAdminData()
+      if (['admin', 'manager', 'it', 'accountant', 'board_member'].includes(restoredUser.role)) {
+        await loadAdminData(restoredUser)
       }
     } catch {
       // An expired or insufficient-assurance session should fall through to sign-in.
@@ -1167,8 +1250,8 @@ function App() {
       await loadRepostWorkspace()
       await loadBrandKit()
       await loadCloudConnections()
-      if (result.user?.role === 'admin') {
-        await loadAdminData()
+      if (['admin', 'manager', 'it', 'accountant', 'board_member'].includes(result.user?.role)) {
+        await loadAdminData(result.user)
       }
       setMfaPending(false)
       setMfaChallenge({ factorId: '', challengeId: '' })
@@ -1200,8 +1283,8 @@ function App() {
     const normalizedPlatform = platform.toLowerCase()
     const normalizedName = accountName.trim()
 
-    if (!normalizedName || isPlaceholderAccountHandle(normalizedPlatform, normalizedName)) {
-      setIntegrationError(`Enter the real ${getPlatformMeta(normalizedPlatform).label} account name before saving.`)
+    if (!normalizedName) {
+      setIntegrationError(`Enter a ${getPlatformMeta(normalizedPlatform).label} account label before saving.`)
       return
     }
 
@@ -1300,18 +1383,18 @@ function App() {
   const handleSchedulePost = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    if (!composer.message.trim() || !composer.scheduledAt || !composer.channels.length) {
-      setSchedulerError('Add a message, at least one channel, and a deployment date and time.')
+    if ((!composer.message.trim() && !composer.mediaAssetIds.length) || !composer.scheduledAt || !composer.channels.length) {
+      setSchedulerError('Add a message or media, at least one channel, and a deployment date and time.')
       return
     }
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
-      return !linkedAccount || linkedAccount.status !== 'healthy' || isPlaceholderAccountHandle(channel, linkedAccount.accountName)
+      return !linkedAccount || linkedAccount.status !== 'healthy'
     })
 
     if (invalidSelectedChannels.length) {
-      setSchedulerError(`Connect a real ${invalidSelectedChannels.join(', ')} account before queuing this post.`)
+      setSchedulerError(`Complete OAuth for ${invalidSelectedChannels.join(', ')} before queuing this post.`)
       return
     }
 
@@ -1323,8 +1406,8 @@ function App() {
       channels: composer.channels,
       media: workspaceAssets
         .filter((asset) => composer.mediaAssetIds.includes(asset.id))
-        .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl }) => ({
-          id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl,
+        .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl }) => ({
+          id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl,
         })),
     })
 
@@ -1343,42 +1426,46 @@ function App() {
   const handlePostNow = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    if (!composer.message.trim() || !composer.channels.length) {
-      setSchedulerError('Add a message and at least one channel before posting.')
+    if ((!composer.message.trim() && !composer.mediaAssetIds.length) || !composer.channels.length) {
+      setSchedulerError('Add a message or media and at least one channel before posting.')
       return
     }
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
-      return !linkedAccount || linkedAccount.status !== 'healthy' || isPlaceholderAccountHandle(channel, linkedAccount.accountName)
+      return !linkedAccount || linkedAccount.status !== 'healthy'
     })
 
     if (invalidSelectedChannels.length) {
-      setSchedulerError(`Connect a real ${invalidSelectedChannels.join(', ')} account before posting.`)
+      setSchedulerError(`Complete OAuth for ${invalidSelectedChannels.join(', ')} before posting.`)
       return
     }
 
-    const newPost = await platformService.postNow({
-      campaign: composer.campaign || 'Instant Campaign',
-      message: composer.message,
-      imageIdea: composer.imageIdea,
-      channels: composer.channels,
-      media: workspaceAssets
-        .filter((asset) => composer.mediaAssetIds.includes(asset.id))
-        .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl }) => ({
-          id, name, type, mime, size, previewUrl, linked, provider, externalId, webUrl,
-        })),
-    })
+    try {
+      const newPost = await platformService.postNow({
+        campaign: composer.campaign || 'Instant Campaign',
+        message: composer.message,
+        imageIdea: composer.imageIdea,
+        channels: composer.channels,
+        media: workspaceAssets
+          .filter((asset) => composer.mediaAssetIds.includes(asset.id))
+          .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl }) => ({
+            id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl,
+          })),
+      })
 
-    setScheduledPosts((prev) => [newPost, ...prev])
-    setComposer({
-      campaign: '',
-      message: '',
-      imageIdea: '',
-      scheduledAt: '',
-      channels: [],
-      mediaAssetIds: [],
-    })
+      setScheduledPosts((prev) => [newPost, ...prev])
+      setComposer({
+        campaign: '',
+        message: '',
+        imageIdea: '',
+        scheduledAt: '',
+        channels: [],
+        mediaAssetIds: [],
+      })
+    } catch (error) {
+      setSchedulerError(error.message)
+    }
   }
 
   const handleGenerateAi = async () => {
@@ -1387,26 +1474,31 @@ function App() {
     }
 
     setAiLoading(true)
+    setAiSuggestionError('')
     try {
       const suggestions = await platformService.generateMessageIdeas(aiInput, aiAgentConfig)
       setAiSuggestions(suggestions)
+    } catch (error) {
+      setAiSuggestionError(error.message)
     } finally {
       setAiLoading(false)
+    }
+  }
+
+  const handleDeleteScheduledPost = async (post) => {
+    if (post.status !== 'scheduled') return
+    setSchedulerError('')
+    try {
+      await platformService.deleteScheduledPost(post.id)
+      setScheduledPosts((prev) => prev.filter((item) => item.id !== post.id))
+    } catch (error) {
+      setSchedulerError(error.message)
     }
   }
 
   const handleEditCreativeProject = (project) => {
     setCreativeProject(project)
     setActiveTab(project.outputType === 'video' ? 'studio' : 'photo')
-  }
-
-  const handleUseCreativeDraft = (project) => {
-    setComposer((prev) => ({
-      ...prev,
-      campaign: project.title || prev.campaign,
-      message: project.caption || prev.message,
-      imageIdea: project.visualPrompt || prev.imageIdea,
-    }))
   }
 
   const handleSaveCreativeProjectToWorkspace = async (project) => {
@@ -1417,10 +1509,10 @@ function App() {
       type: project.imageSrc ? 'image' : 'document',
       mime: project.imageSrc ? 'image/png' : 'application/json',
       size: project.imageSrc ? Math.round((project.imageSrc.length || 0) * 0.72) : 0,
-      folderId: selectedFolderId,
+      folderId: AI_GENERATIONS_FOLDER_ID,
       createdAt: new Date().toISOString(),
       previewUrl: project.imageSrc || '',
-      summary: `AI-generated ${project.outputType}: ${project.headline || project.title}`,
+      summary: `AI-generated ${project.outputType}: ${project.headline || project.title} • Saved automatically in AI Generations`,
       // Store the full project metadata so it can be retrieved/edited later
       projectMetadata: {
         title: project.title,
@@ -1430,6 +1522,8 @@ function App() {
         outputType: project.outputType,
         scenes: project.scenes,
         imageSource: project.imageSource,
+        imageSrc: project.imageSrc,
+        source: project.source,
       },
     }
 
@@ -1456,6 +1550,7 @@ function App() {
           endpoint: aiAgentDraft.endpoint.trim(),
           apiKey: aiAgentDraft.apiKey.trim(),
           model: aiAgentDraft.model.trim(),
+          provider: aiAgentDraft.provider || 'custom_router',
           status: aiAgentDraft.endpoint.trim() ? 'connected' : 'not connected',
           message: aiAgentDraft.endpoint.trim()
             ? 'Your in-house AI is ready for its enabled creative capabilities.'
@@ -1477,24 +1572,14 @@ function App() {
     }
   }
 
-  const saveInhouseAiConfig = async (nextConfig) => {
-    const savedConfig = await authService.updateUserAiAgentConfig({
-      userId: session.id,
-      aiAgentConfig: nextConfig,
-    })
-    const normalized = { ...createDefaultAiAgentConfig(), ...savedConfig }
-    setAiAgentConfig(normalized)
-    setAiAgentDraft(normalized)
-    return normalized
-  }
-
   const handleInhouseAiAsset = (asset) => {
     setWorkspaceAssets((prev) => [{
       id: `asset_${Date.now()}`,
       size: 0,
-      folderId: selectedFolderId,
+      folderId: AI_GENERATIONS_FOLDER_ID,
       createdAt: new Date().toISOString(),
       ...asset,
+      summary: `${asset.summary || 'AI-generated media'} • Saved automatically in AI Generations`,
     }, ...prev])
   }
 
@@ -1556,6 +1641,7 @@ function App() {
           contractVersion: '2.0',
           mode: 'test',
           capability: 'test',
+          ...(testConfig.connectionId ? { connectionId: testConfig.connectionId } : {}),
           model: testConfig.model || 'default',
           agentName: testConfig.name || 'My AI Agent',
           capabilities: testConfig.capabilities,
@@ -1565,7 +1651,10 @@ function App() {
 
       if (isSupabaseConfigured) {
         const { data, error } = await supabase.functions.invoke('inhouse-ai', { body: testPayload })
-        if (error) throw new Error(error.message)
+        if (error) {
+          const detail = await error.context?.json?.().catch(() => null)
+          throw new Error(detail?.error || detail?.detail?.error?.message || error.message)
+        }
         if (data?.error) throw new Error(data.error)
       } else {
         const response = await fetch(endpoint, {
@@ -1648,6 +1737,18 @@ function App() {
       reader.readAsDataURL(file)
     })
 
+    let storagePath = ''
+    if (isSupabaseConfigured && ['image', 'video'].includes(assetType)) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Sign in before uploading media.')
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+      storagePath = `${user.id}/${Date.now()}-${safeName}`
+      const { error } = await supabase.storage
+        .from('social-media')
+        .upload(storagePath, file, { contentType: file.type, upsert: false })
+      if (error) throw new Error(error.message)
+    }
+
     const asset = {
       id: `asset_${Date.now()}`,
       name: file.name,
@@ -1657,6 +1758,7 @@ function App() {
       folderId: selectedFolderId,
       createdAt: new Date().toISOString(),
       previewUrl,
+      storagePath,
       summary: 'Uploaded from your device',
     }
 
@@ -1696,6 +1798,17 @@ function App() {
       reader.onerror = () => reject(new Error('Unable to read file'))
       reader.readAsDataURL(file)
     })
+    let storagePath = ''
+    if (isSupabaseConfigured && ['image', 'video'].includes(assetType)) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Sign in before uploading media.')
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+      storagePath = `${user.id}/${Date.now()}-${safeName}`
+      const { error } = await supabase.storage
+        .from('social-media')
+        .upload(storagePath, file, { contentType: file.type, upsert: false })
+      if (error) throw new Error(error.message)
+    }
     setWorkspaceAssets((prev) => [{
       id: `asset_${Date.now()}`,
       name: file.name,
@@ -1705,6 +1818,7 @@ function App() {
       folderId: selectedFolderId,
       createdAt: new Date().toISOString(),
       previewUrl,
+      storagePath,
       summary: 'Dropped into workspace',
     }, ...prev])
   }
@@ -1823,6 +1937,7 @@ function App() {
       const updatedMember = await authService.updateUserRole({
         userId: member.id,
         role: nextRole,
+        profitSharePercent: nextRole === 'board_member' ? (member.profitSharePercent || 1) : 0,
       })
 
       setTeamMembers((prev) =>
@@ -1865,15 +1980,66 @@ function App() {
     setSupportTicket((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleAdminUserAction = async ({ action, userId, fullName, company }) => {
-    const result = await authService.adminUserAction({ action, userId, fullName, company })
+  const handleAdminUserAction = async ({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent }) => {
+    const result = await authService.adminUserAction({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent })
+
+    if (action === 'create-user' && result?.profile) {
+      setTeamMembers((prev) => [
+        {
+          id: result.profile.id,
+          fullName: result.profile.full_name,
+          email: result.profile.email,
+          company: result.profile.company,
+          role: result.profile.role,
+          accessStatus: result.profile.access_status,
+          storageQuotaMb: result.profile.storage_quota_mb,
+          trademarkEditAccess: result.profile.trademark_edit_access === true,
+          developerAppEditAccess: result.profile.developer_app_edit_access === true,
+          profitSharePercent: Number(result.profile.profit_share_percent || 0),
+          isBoardMember: result.profile.is_board_member === true || result.profile.role === 'board_member',
+        },
+        ...prev,
+      ])
+    }
+
+    if (action === 'set-trademark-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, trademarkEditAccess: result.profile.trademark_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-developer-app-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, developerAppEditAccess: result.profile.developer_app_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-board-member-profit-share' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, profitSharePercent: Number(result.profile.profit_share_percent || 0) } : member
+      )))
+    }
+
+    if (action === 'set-board-membership' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => member.id === userId ? { ...member, isBoardMember: result.profile.is_board_member === true, profitSharePercent: Number(result.profile.profit_share_percent || 0) } : member))
+    }
+
+    if (action === 'set-beta-ai-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => member.id === userId ? { ...member, isBetaTester: result.profile.is_beta_tester === true, aiEnabled: result.profile.ai_enabled !== false, aiAccessNote: result.profile.ai_access_note || '' } : member))
+    }
 
     if (action === 'update-profile' && result?.profile) {
       setTeamMembers((prev) => prev.map((member) => (
-        member.id === userId
+        member.id === result.profile.id
           ? { ...member, fullName: result.profile.full_name, company: result.profile.company }
           : member
       )))
+      if (session?.id === result.profile.id) {
+        setSession((prev) => ({ ...prev, fullName: result.profile.full_name, company: result.profile.company }))
+      }
+      if (session?.id === userId) {
+        setSession((current) => ({ ...current, fullName: result.profile.full_name, company: result.profile.company }))
+      }
     }
 
     return result
@@ -2342,6 +2508,22 @@ function App() {
     }
   }
 
+  const handleReviewAccessRequest = async (request, decision) => {
+    setAdminError('')
+    setAdminLoading(true)
+    try {
+      const result = await authService.reviewAccessRequest({ requestId: request.id, decision })
+      setAccessRequests((prev) => prev.map((item) => item.id === request.id ? result.request : item))
+      if (result.member) {
+        setTeamMembers((prev) => prev.map((member) => member.id === result.member.id ? { ...member, ...result.member } : member))
+      }
+    } catch (error) {
+      setAdminError(error.message)
+    } finally {
+      setAdminLoading(false)
+    }
+  }
+
   const handleOpenBillingPortal = async () => {
     setBillingPortalError('')
     setBillingPortalLoading(true)
@@ -2351,6 +2533,33 @@ function App() {
     } catch (error) {
       setBillingPortalError(error.message)
       setBillingPortalLoading(false)
+    }
+  }
+
+  const handleDeactivateAccount = async () => {
+    if (!window.confirm('Deactivate your account? You will be signed out and can contact support to restore access.')) return
+    setAccountActionError('')
+    setAccountActionLoading(true)
+    try {
+      await authService.deactivateMyAccount()
+      await signOut()
+    } catch (error) {
+      setAccountActionError(error.message)
+      setAccountActionLoading(false)
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('Permanently delete your account and associated data? This cannot be undone.')) return
+    setAccountActionError('')
+    setAccountActionLoading(true)
+    try {
+      await authService.deleteMyAccount()
+      setSession(null)
+      setAuthView('landing')
+    } catch (error) {
+      setAccountActionError(error.message)
+      setAccountActionLoading(false)
     }
   }
 
@@ -2386,7 +2595,10 @@ function App() {
 
     const enforceEntitlement = async () => {
       // Staff run the site itself and are never billed, so entitlement never gates them.
-      if (isStaffRole(session?.role)) return
+      if (isStaffRole(session?.role)) {
+        setMyEntitlement({ entitled: true, status: 'employee', plan: STAFF_PLAN, provider: 'internal', role: session.role })
+        return
+      }
 
       let entitlement
       try {
@@ -2431,6 +2643,7 @@ function App() {
     setUserReposts([])
     setWorkspaceFolders([])
     setWorkspaceAssets([])
+    setAiDashboard(null)
     setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: [], mediaAssetIds: [] })
     setAiSuggestions([])
     setAiAgentConfig(createDefaultAiAgentConfig())
@@ -2576,7 +2789,7 @@ function App() {
       return (
         <Suspense fallback={loadingPanel}>
           <LandingPage
-            announcementMessage={landingAnnouncement}
+            announcement={announcements.landing}
             onSignIn={() => setAuthView('signin')}
             onCompanyPackageRequest={() => setCompanyPackageRequested(false)}
             onPurchase={(planKey) => {
@@ -2630,7 +2843,7 @@ function App() {
           </p>
 
           <div className="chip-row">
-            {postTypeChips.map((chip) => (
+            {POST_TYPE_CHIPS.map((chip) => (
               <span key={chip} className="chip">
                 {chip}
               </span>
@@ -2819,6 +3032,12 @@ function App() {
 
   return (
     <div className="app-shell">
+      <AnnouncementBanner
+        key={announcements.application.updatedAt}
+        notice={announcements.application}
+        audience="application"
+        dismissalScope={session.id}
+      />
       <Suspense fallback={null}>
         <CalendarPopout
           open={calendarOpen}
@@ -3109,7 +3328,9 @@ function App() {
           ['assistant', 'Create'],
           ['photo', 'Photo Creator'],
           ['studio', 'Video Studio'],
+          ['credits', 'Buy Tokens'],
           ['integrations', 'Integrations'],
+          ['account', 'Manage account'],
           ['help', 'How To'],
           ...(canViewManagementBoard ? [['admin', 'IT / Management']] : []),
         ].map(([key, label]) => (
@@ -3318,8 +3539,9 @@ function App() {
               <div className="asset-list">
                 {workspaceFolders
                   .filter((folder) => folder.parentId === selectedFolderId)
+                  .sort((left, right) => Number(Boolean(right.system)) - Number(Boolean(left.system)))
                   .map((folder) => (
-                    <div key={folder.id} className="asset-card">
+                    <div key={folder.id} className={`asset-card ${folder.system ? 'ai-generations-folder' : ''}`}>
                       {editingItem?.type === 'folder' && editingItem?.id === folder.id ? (
                         <div className="asset-edit-row">
                           <input
@@ -3340,8 +3562,8 @@ function App() {
                       ) : (
                         <>
                           <button type="button" className="asset-card-main" onClick={() => setSelectedFolderId(folder.id)}>
-                            <strong>📁 {folder.name}</strong>
-                            <span>Subfolder</span>
+                            <strong>{folder.system ? '✨' : '📁'} {folder.name}</strong>
+                            <span>{folder.system ? 'Generated images and creative history' : 'Subfolder'}</span>
                           </button>
                           <div className="asset-actions">
                             <button type="button" className="asset-action-button" onClick={() => startRenameItem('folder', folder.id, folder.name)}>Rename</button>
@@ -3397,6 +3619,20 @@ function App() {
                           </small>
                         </div>
                         <div className="asset-actions">
+                          {asset.type === 'image' && (
+                            <button
+                              type="button"
+                              className="asset-action-button"
+                              onClick={() => {
+                                setCreativeProject(asset.projectMetadata
+                                  ? { ...asset.projectMetadata, imageSrc: asset.projectMetadata.imageSrc || asset.previewUrl, outputType: asset.projectMetadata.outputType || 'image' }
+                                  : { imageSrc: asset.previewUrl, outputType: 'image', headline: '', caption: '', visualPrompt: asset.summary || '' })
+                                setActiveTab('photo')
+                              }}
+                            >
+                              Edit
+                            </button>
+                          )}
                           <button type="button" className="asset-action-button" onClick={() => startRenameItem('asset', asset.id, asset.name)}>Rename</button>
                           <button type="button" className="asset-action-button" onClick={() => deleteAsset(asset.id)}>Delete</button>
                         </div>
@@ -3412,6 +3648,40 @@ function App() {
 
         {activeTab === 'dashboard' && (
           <section className="panel panel-dashboard">
+            {creditsCheckoutNotice && (
+              <div
+                className="auth-message tone-positive"
+                style={{
+                  background: '#ecfdf5',
+                  color: '#065f46',
+                  border: '1px solid #a7f3d0',
+                  padding: '0.85rem 1.15rem',
+                  borderRadius: '0.85rem',
+                  marginBottom: '1.25rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <span>{creditsCheckoutNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setCreditsCheckoutNotice('')}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#065f46',
+                    cursor: 'pointer',
+                    fontWeight: 800,
+                    fontSize: '1rem',
+                  }}
+                  aria-label="Dismiss notice"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             <h2>Overview</h2>
             <p className="panel-note">
               Build morning campaigns once, then deploy automatically throughout the day.
@@ -3429,6 +3699,97 @@ function App() {
                 <h3>{pendingRepostCount}</h3>
               </article>
             </div>
+
+            <article className="sub-panel dashboard-ai-hub">
+              <div className="dashboard-section-heading">
+                <div>
+                  <p className="section-label">Echo AI</p>
+                  <h3>Your AI balance and activity</h3>
+                  <p className="muted">Use this hub to see what is available, what each action costs, and your latest generations.</p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => setCreditPurchaseModalOpen(true)}
+                  >
+                    ⚡ Purchase additional tokens
+                  </button>
+                  <button type="button" className="ghost-button" onClick={() => setActiveTab('assistant')}>Create with AI</button>
+                </div>
+              </div>
+              <div className="dashboard-ai-summary">
+                <div className="dashboard-ai-balance">
+                  <span>Echo Credits remaining</span>
+                  <strong>{aiDashboard ? aiDashboard.balance.toLocaleString() : '—'}</strong>
+                  <small>{aiDashboard?.monthlyAllowance ? `${aiDashboard.monthlyAllowance.toLocaleString()} included this month` : 'Loading account balance'}</small>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    style={{ marginTop: '0.55rem', fontSize: '0.84rem', padding: '0.48rem 0.85rem' }}
+                    onClick={() => setCreditPurchaseModalOpen(true)}
+                  >
+                    + Add Tokens (500–5,000)
+                  </button>
+                </div>
+                <div className="dashboard-ai-costs">
+                  <strong>What actions cost</strong>
+                  <div className="dashboard-ai-cost-grid">
+                    {(aiDashboard?.pricing || []).slice(0, 6).map((item) => (
+                      <div key={`${item.capability}-${item.mode}`} className="dashboard-ai-cost-item">
+                        <div><strong>{item.botName}</strong><small>{item.description}</small></div>
+                        <span>{Number(item.creditCost).toLocaleString()} / {item.unit}</span>
+                      </div>
+                    ))}
+                    {!aiDashboard?.pricing?.length && <p className="muted">AI pricing will appear here when the account is connected.</p>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="dashboard-token-addons-banner">
+                <div className="dashboard-token-addons-header">
+                  <div>
+                    <strong>Need more tokens? Choose an instant add-on:</strong>
+                    <small style={{ color: '#64748b', display: 'block' }}>Instant deposit to your account • Powered by Stripe</small>
+                  </div>
+                  <button type="button" className="text-button" onClick={() => setActiveTab('credits')}>
+                    View Token Store →
+                  </button>
+                </div>
+                <div className="dashboard-token-quick-grid">
+                  {[
+                    { key: 'credit_500', tokens: '500', price: '$9.99' },
+                    { key: 'credit_1000', tokens: '1,000', price: '$18.99' },
+                    { key: 'credit_2500', tokens: '2,500', price: '$39.99', popular: true },
+                    { key: 'credit_5000', tokens: '5,000', price: '$74.99', bestValue: true },
+                  ].map((pkg) => (
+                    <button
+                      key={pkg.key}
+                      type="button"
+                      className={`dashboard-token-quick-card ${pkg.popular ? 'popular' : ''} ${pkg.bestValue ? 'best-value' : ''}`}
+                      onClick={() => setCreditPurchaseModalOpen(true)}
+                    >
+                      {pkg.popular && <span className="quick-badge popular">Popular</span>}
+                      {pkg.bestValue && <span className="quick-badge best-value">Best Value</span>}
+                      <strong>{pkg.tokens} Tokens</strong>
+                      <span>{pkg.price}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {aiDashboard?.recentJobs?.length > 0 && (
+                <div className="dashboard-ai-recent">
+                  <strong>Recent AI activity</strong>
+                  {aiDashboard.recentJobs.slice(0, 4).map((job) => (
+                    <div key={job.id} className="dashboard-ai-job">
+                      <span>{job.capability} · {job.mode}</span>
+                      <small>{job.credits_reserved} credits · {job.status}</small>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
 
             <div className="split">
               <article className="sub-panel tone-ocean">
@@ -3496,6 +3857,22 @@ function App() {
             <SocialListeningPanel
               connectedAccounts={connectedAccounts}
               aiAgentConfig={aiAgentConfig}
+              onCreateResponseDraft={(mention) => {
+                const signal = mention.text.length > 180 ? `${mention.text.slice(0, 177)}...` : mention.text
+                setComposer({
+                  campaign: `Response to ${mention.keyword || mention.hashtag || mention.platform} conversation`,
+                  message: `Thanks for sharing this, ${mention.author}. ${signal}`,
+                  imageIdea: `Create a helpful social response visual addressing ${mention.keyword || 'this customer conversation'}.`,
+                  scheduledAt: '',
+                  channels: [],
+                  mediaAssetIds: [],
+                })
+                setActiveTab('scheduler')
+              }}
+              onCreateCampaignDraft={(mention) => {
+                setAiInput(`Create a sales and marketing campaign inspired by this public ${mention.sourceType} signal: "${mention.text}". Focus on the demand, audience need, trigger terms, and a useful offer. Do not copy the original post verbatim.`)
+                setActiveTab('assistant')
+              }}
             />
           </Suspense>
         )}
@@ -3830,6 +4207,29 @@ function App() {
                     <span className="muted">No media available yet.</span>
                   )}
                 </div>
+                {composer.mediaAssetIds.length > 0 && (
+                  <div className="attached-media-list" aria-label="Media attached to this post">
+                    {workspaceAssets
+                      .filter((asset) => composer.mediaAssetIds.includes(asset.id))
+                      .map((asset) => (
+                        <div key={asset.id} className="attached-media-item">
+                          <span>{asset.type === 'video' ? 'Video' : 'Image'}: {asset.name}</span>
+                          <button
+                            type="button"
+                            className="attached-media-remove"
+                            aria-label={`Remove ${asset.name} from this post`}
+                            title="Remove from this post"
+                            onClick={() => setComposer((prev) => ({
+                              ...prev,
+                              mediaAssetIds: prev.mediaAssetIds.filter((id) => id !== asset.id),
+                            }))}
+                          >
+                            <X size={16} aria-hidden="true" />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
 
               <label>
@@ -3888,6 +4288,17 @@ function App() {
                     <span className={getStatusBadgeClass(post.status === 'scheduled' ? 'pending' : post.status)}>
                       {post.status}
                     </span>
+                    {String(post.status || '').toLowerCase() === 'scheduled' && (
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() => handleDeleteScheduledPost(post)}
+                        aria-label={`Delete scheduled post ${post.campaign}`}
+                        title="Remove this queued post"
+                      >
+                        Delete queued post
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -3917,7 +4328,6 @@ function App() {
                 agentConfig={aiAgentConfig}
                 workspaceAssets={workspaceAssets}
                 onEditProject={handleEditCreativeProject}
-                onUseDraft={handleUseCreativeDraft}
                 onSaveToWorkspace={handleSaveCreativeProjectToWorkspace}
               />
             </Suspense>
@@ -3933,7 +4343,7 @@ function App() {
                 />
 
                 <div className="chip-row">
-                  {aiPromptIdeas.map((idea) => (
+                  {AI_PROMPT_IDEAS.map((idea) => (
                     <button
                       key={idea}
                       type="button"
@@ -3945,7 +4355,7 @@ function App() {
                   ))}
                 </div>
 
-                <button type="button" className="primary-button" onClick={handleGenerateAi}>
+                <button type="button" className="primary-button" disabled={aiLoading} onClick={handleGenerateAi}>
                   {aiLoading ? 'Generating...' : 'Generate suggestions'}
                 </button>
               </article>
@@ -3955,6 +4365,7 @@ function App() {
                 {aiSuggestions.length === 0 && (
                   <p className="muted">Generate content to see campaign-ready ideas here.</p>
                 )}
+                {aiSuggestionError && <p className="field-error">{aiSuggestionError}</p>}
 
                 {aiSuggestions.map((suggestion, index) => (
                   <div key={`${suggestion.title}-${index}`} className="suggestion">
@@ -3964,23 +4375,6 @@ function App() {
                   </div>
                 ))}
               </article>
-            </div>
-            <div className="create-hub-advanced">
-              <div className="create-hub-advanced-heading">
-                <div>
-                  <p className="section-label">Advanced creation</p>
-                  <h3>Use your in-house AI engine</h3>
-                </div>
-                <span>For characters, image editing, video, audio, vision, and specialist models</span>
-              </div>
-              <Suspense fallback={loadingPanel}>
-                <InhouseAiStudio
-                  agentConfig={aiAgentConfig}
-                  assets={workspaceAssets}
-                  onSaveConfig={saveInhouseAiConfig}
-                  onAddAsset={handleInhouseAiAsset}
-                />
-              </Suspense>
             </div>
           </section>
         )}
@@ -4027,11 +4421,22 @@ function App() {
                 key={creativeProject?.imageSrc || 'photo-editor'}
                 assets={workspaceAssets}
                 onExport={handlePhotoExport}
+                  onGeneratedAsset={handleInhouseAiAsset}
                 agentConfig={aiAgentConfig}
                 brandKit={brandKit}
                 initialProject={creativeProject?.outputType !== 'video' ? creativeProject : null}
               />
             </section>
+          </Suspense>
+        )}
+
+        {activeTab === 'credits' && (
+          <Suspense fallback={loadingPanel}>
+            <CreditPurchasePanel
+              isModal={false}
+              aiDashboard={aiDashboard}
+              onRefreshBalance={refreshAiBalance}
+            />
           </Suspense>
         )}
 
@@ -4412,7 +4817,6 @@ function App() {
               ].map(({ key, accountPlaceholder, desc }) => {
                 const meta = getPlatformMeta(key)
                 const linked = connectedAccounts.find((a) => a.platform.toLowerCase() === key)
-                const isInvalidHandle = linked && isPlaceholderAccountHandle(key, linked.accountName)
                 const inputValue = accountHandleDrafts[key] ?? linked?.accountName ?? accountPlaceholder
                 const selectedScopes = accountScopeDrafts[key] ?? linked?.publishingScopes ?? ['posts']
                 return (
@@ -4428,8 +4832,8 @@ function App() {
                         {linked && <span className="integration-linked-handle">{linked.accountName}</span>}
                       </div>
                       {linked && (
-                        <span className={`integration-status-badge ${linked.status === 'healthy' && !isInvalidHandle ? 'good' : 'warn'}`}>
-                          {linked.status === 'healthy' && !isInvalidHandle ? '● OAuth connected' : 'OAuth access required'}
+                        <span className={`integration-status-badge ${linked.status === 'healthy' ? 'good' : 'warn'}`}>
+                          {linked.status === 'healthy' ? '● OAuth connected' : 'OAuth access required'}
                         </span>
                       )}
                     </div>
@@ -4528,8 +4932,21 @@ function App() {
             {integrationError && <span className="field-error">{integrationError}</span>}
 
             <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
-              <h3>In-house AI engine</h3>
-              <p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p>
+              <div className="inhouse-engine-heading">
+                <div><h3>EchoAI hosted AI</h3><p className="muted">EchoAI Pro provides the AI accounts and keeps provider credentials on the backend. Your team uses Echo Credits instead of connecting personal AI accounts.</p></div>
+                <button type="button" className="primary-button" onClick={() => setCreditPurchaseModalOpen(true)}>⚡ Purchase Tokens (500–5,000)</button>
+              </div>
+              <div className="agent-connection-note">
+                <strong>Account status</strong>
+                <p>Provider setup, model routing, cost controls, rate limits, and emergency shutdowns are managed by IT and Management.</p>
+              </div>
+            </article>
+
+            {aiAgentConfig.provider === '__legacy_customer_connection__' && typeof window === 'undefined' && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
+              <div className="inhouse-engine-heading">
+                <div><h3>In-house AI engine</h3><p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p></div>
+                <button type="button" className="openai-guide-button" onClick={() => setOpenAiGuideOpen(true)}>OpenAI connection guide <span aria-hidden="true">↗</span></button>
+              </div>
               <div className="agent-connection-note">
                 <strong>How connection works</strong>
                 <p>EchoAI connects to an API bridge, not a provider&apos;s public website. OpenArt, ChatGPT, and similar dashboard URLs cannot be pasted here because browsers block cross-site requests and those pages do not implement EchoAI&apos;s API contract.</p>
@@ -4574,6 +4991,20 @@ function App() {
                     onChange={(event) => handleAiAgentDraftChange('name', event.target.value)}
                     placeholder="My AI Agent"
                   />
+                </label>
+                <label>
+                  Preferred AI tool
+                  <select
+                    value={aiAgentDraft.provider || 'custom_router'}
+                    onChange={(event) => handleAiAgentDraftChange('provider', event.target.value)}
+                  >
+                    <option value="echoai">EchoAI hosted tools</option>
+                    <option value="openai">OpenAI / ChatGPT image tools</option>
+                    <option value="openart">OpenArt</option>
+                    <option value="anthropic">Anthropic / Claude</option>
+                    <option value="custom_router">My AI router or custom bridge</option>
+                  </select>
+                  <small className="muted">This label is sent to your bridge. The endpoint must route to the selected provider server-side.</small>
                 </label>
                 <label>
                   Endpoint URL
@@ -4699,7 +5130,9 @@ function App() {
                   }, null, 2)}</pre>
                 </div>
               </form>
-            </article>
+
+              <OpenAiSetupGuide open={openAiGuideOpen} onClose={() => setOpenAiGuideOpen(false)} />
+              </article>}
 
             {canViewManagementBoard && <>
             <h3 className="section-label" style={{ marginTop: '2rem' }}>Third-party tools</h3>
@@ -4707,7 +5140,6 @@ function App() {
               {[
                 { name: 'Slack + Teams', icon: '💬', color: '#4A154B', desc: 'Send deployment alerts and campaign summaries to your ops channel.' },
                 { name: 'Zapier / Make', icon: '⚡', color: '#FF4A00', desc: 'Trigger workflows from CRM updates, forms, and ecommerce events.' },
-                { name: 'AI Image Tools', icon: '🎨', color: '#7C3AED', desc: 'Connect image generation APIs for campaign graphics at scale.' },
                 { name: 'Google Analytics', icon: '📊', color: '#E37400', desc: 'Pull traffic and conversion data alongside your social metrics.' },
                 { name: 'Shopify', icon: '🛍️', color: '#96BF48', desc: 'Sync product launches and inventory events to social posts automatically.' },
               ].map((item) => (
@@ -4722,6 +5154,45 @@ function App() {
               ))}
             </div>
             </>}
+          </section>
+        )}
+
+        {activeTab === 'account' && (
+          <section className="panel">
+            <h2>Manage account</h2>
+            <p className="panel-note">Update your information, manage billing, or control your EchoAI account.</p>
+
+            <h3 className="section-label">Personal information</h3>
+            <div className="list-row">
+              <div>
+                <p>{contactCard?.fullName || session?.email}</p>
+                <span className="muted">{session?.email} {contactCard?.company ? `• ${contactCard.company}` : ''}</span>
+              </div>
+              <button type="button" className="ghost-button" onClick={openContactCard}>Edit information</button>
+            </div>
+
+            <h3 className="section-label">Subscription and payments</h3>
+            <div className="list-row">
+              <div>
+                <p>{myEntitlement?.plan ? `${getPlan(myEntitlement.plan).label} plan` : 'Your EchoAI subscription'}</p>
+                <span className="muted">Update payment method, upgrade, downgrade, or cancel your subscription.</span>
+              </div>
+              <button type="button" className="ghost-button" disabled={billingPortalLoading || !isSupabaseConfigured} onClick={handleOpenBillingPortal}>
+                {billingPortalLoading ? 'Opening...' : 'Manage billing'}
+              </button>
+            </div>
+            {billingPortalError && <span className="field-error">{billingPortalError}</span>}
+
+            <h3 className="section-label">Account access</h3>
+            <div className="list-row">
+              <div><p>Deactivate account</p><span className="muted">Sign out and disable access until support restores the account.</span></div>
+              <button type="button" className="ghost-button" disabled={accountActionLoading || !isSupabaseConfigured} onClick={handleDeactivateAccount}>Deactivate</button>
+            </div>
+            <div className="list-row">
+              <div><p>Delete account and data</p><span className="muted">Permanently remove your account and associated records.</span></div>
+              <button type="button" className="danger-button" disabled={accountActionLoading || !isSupabaseConfigured} onClick={handleDeleteAccount}>Delete account</button>
+            </div>
+            {accountActionError && <span className="field-error">{accountActionError}</span>}
           </section>
         )}
 
@@ -4742,21 +5213,24 @@ function App() {
               setPurchaseHistory={setPurchaseHistory}
               featureFlags={featureFlags}
               setFeatureFlags={setFeatureFlags}
-              landingAnnouncement={landingAnnouncement}
-              setLandingAnnouncement={setLandingAnnouncement}
+              announcements={announcements}
+              onSaveAnnouncement={handleSaveAnnouncement}
               billingLive={isSupabaseConfigured}
               promoCodes={promoCodes}
               setPromoCodes={setPromoCodes}
               expenses={expenses}
-              setExpenses={setExpenses}
+              setExpenses={persistedFinanceSetters.expenses}
               payroll={payroll}
-              setPayroll={setPayroll}
+              setPayroll={persistedFinanceSetters.payroll}
               taxRecords={taxRecords}
-              setTaxRecords={setTaxRecords}
+              setTaxRecords={persistedFinanceSetters.taxRecords}
               refunds={refunds}
-              setRefunds={setRefunds}
+              setRefunds={persistedFinanceSetters.refunds}
               financialTasks={financialTasks}
-              setFinancialTasks={setFinancialTasks}
+              setFinancialTasks={persistedFinanceSetters.financialTasks}
+              boardMembers={teamMembers.filter((member) => member.role === 'board_member')}
+              company={session.company}
+              currentUser={session}
               quotaEditingUserId={quotaEditingUserId}
               setQuotaEditingUserId={setQuotaEditingUserId}
               quotaDraftMb={quotaDraftMb}
@@ -4764,6 +5238,7 @@ function App() {
               handleQuotaUpdate={handleQuotaUpdate}
               handleToggleUserAccess={handleToggleUserAccess}
               handleUpdateUserRole={handleUpdateUserRole}
+              handleReviewAccessRequest={handleReviewAccessRequest}
               companySeatPackage={companySeatPackage}
               companySeats={companySeats}
               handleCreateCompanySeatPackage={handleCreateCompanySeatPackage}
@@ -4788,12 +5263,21 @@ function App() {
           <Suspense fallback={loadingPanel}>
             <FinancePanel
               purchaseHistory={purchaseHistory}
-              expenses={expenses} setExpenses={setExpenses}
-              payroll={payroll} setPayroll={setPayroll}
-              taxRecords={taxRecords} setTaxRecords={setTaxRecords}
-              refunds={refunds} setRefunds={setRefunds}
-              financialTasks={financialTasks} setFinancialTasks={setFinancialTasks}
+              expenses={expenses} setExpenses={persistedFinanceSetters.expenses}
+              payroll={payroll} setPayroll={persistedFinanceSetters.payroll}
+              taxRecords={taxRecords} setTaxRecords={persistedFinanceSetters.taxRecords}
+              refunds={refunds} setRefunds={persistedFinanceSetters.refunds}
+              financialTasks={financialTasks} setFinancialTasks={persistedFinanceSetters.financialTasks}
+              boardMembers={teamMembers.filter((member) => member.role === 'board_member')}
+              company={session.company}
+              currentUser={session}
             />
+          </Suspense>
+        )}
+
+        {activeTab === 'admin' && (session?.role === 'board_member' || session?.isBoardMember) && session?.role !== 'admin' && (
+          <Suspense fallback={loadingPanel}>
+            <BoardMemberFinancePanel company={session.company} />
           </Suspense>
         )}
       </main>
@@ -4884,12 +5368,24 @@ function App() {
           </section>
         </div>
       )}
+
+      {creditPurchaseModalOpen && (
+        <Suspense fallback={null}>
+          <CreditPurchasePanel
+            isModal={true}
+            onClose={() => setCreditPurchaseModalOpen(false)}
+            aiDashboard={aiDashboard}
+            onRefreshBalance={refreshAiBalance}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
 
 function AppRoot() {
-  if (window.location.pathname === '/privacy-policy') {
+  const normalizedPath = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (normalizedPath === '/privacy-policy') {
     return (
       <Suspense fallback={<div className="loading-panel">Loading privacy policy...</div>}>
         <PrivacyPolicy />

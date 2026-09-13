@@ -3,12 +3,12 @@ import { HELP_ARTICLES, HELP_CATEGORIES } from '../data/helpArticles'
 import './HelpCenter.css'
 
 const COMMON_QUESTIONS = [
-  ['How do I edit a photo?', 'edit a photo'],
-  ['How do I create a video?', 'create a video'],
+  ['How do I connect an AI tool?', 'multiple AI tools'],
+  ['How do I use the In-house AI Lab?', 'in-house AI lab'],
+  ['How do I use my brand kit?', 'brand kit'],
   ['How do I schedule a post?', 'schedule a post'],
-  ['How do I use several documents?', 'several documents'],
-  ['How do I use AI?', 'AI prompt agent'],
-  ['Why did my export fail?', 'export failed'],
+  ['How do I sync Google Calendar?', 'Google Calendar sync'],
+  ['How do I link cloud files?', 'link cloud files'],
 ]
 
 const searchableText = (article) => [

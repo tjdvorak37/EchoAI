@@ -24,6 +24,13 @@ export const AGENT_CAPABILITIES = [
 
 export const DEFAULT_AGENT_CAPABILITIES = AGENT_CAPABILITIES.map((item) => item.key)
 
+export const ECHO_CREATOR_MODES = {
+  standard: { label: 'Standard', description: 'Balanced quality and cost', costs: { message: 1, image: 5, image_edit: 10, video: 60, audio: 10, vision: 5, campaign: 10 } },
+  premium: { label: 'Premium', description: 'Use the configured premium route', costs: { message: 3, image: 10, image_edit: 15, video: 100, audio: 20, vision: 10, campaign: 25 } },
+}
+
+export const getEchoCreatorCost = (capability, mode = 'standard') => ECHO_CREATOR_MODES[mode]?.costs[capability] ?? 1
+
 const CAPABILITY_ALIASES = {
   copy: 'message',
   script: 'message',
@@ -88,6 +95,8 @@ export const runUserAiAgent = async ({ agentConfig, mode, payload, prompt, perso
     mode,
     capability: resolveCapability(mode),
     model: agentConfig.model || 'default',
+    provider: agentConfig.provider || 'custom_router',
+    connectionId: agentConfig.connectionId || null,
     agentName: agentConfig.name || 'My AI Agent',
     capabilities: agentConfig.capabilities || [],
     routing: agentConfig.routing || { strategy: 'best_quality', allowFallback: true },
@@ -98,7 +107,10 @@ export const runUserAiAgent = async ({ agentConfig, mode, payload, prompt, perso
 
   if (isSupabaseConfigured) {
     const { data, error } = await supabase.functions.invoke('inhouse-ai', { body: requestBody })
-    if (error) throw new Error(error.message)
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || detail?.detail?.error?.message || error.message)
+    }
     return {
       usedAgent: true,
       payload: data,
@@ -174,7 +186,7 @@ export const normalizeAgentOutput = (payload) => {
   }
 }
 
-export const runCreativeAgentJob = async ({ agentConfig, capability, prompt, persona, references = [], settings = {} }) => {
+export const runCreativeAgentJob = async ({ agentConfig, capability, prompt, persona, references = [], settings = {}, creatorMode = null, creditCost = 0, brandProfile = null }) => {
   if (!prompt?.trim()) throw new Error('Describe what the in-house AI should create.')
   if (!canUseAgentMode(agentConfig, capability)) {
     throw new Error(`Enable the ${resolveCapability(capability)} capability before running this job.`)
@@ -195,6 +207,10 @@ export const runCreativeAgentJob = async ({ agentConfig, capability, prompt, per
         summary: summary || '',
       })),
       task: 'Create production-ready media and return editable metadata when supported.',
+      echoCreator: agentConfig.provider === 'echoai' || Boolean(creatorMode),
+      creatorMode: creatorMode || 'standard',
+      creditCost,
+      brandProfile,
     },
   })
 

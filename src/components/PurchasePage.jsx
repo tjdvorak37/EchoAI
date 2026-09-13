@@ -208,6 +208,7 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
                       <span className="plan-price-period">{intervalMeta.suffix}</span>
                     </div>
                     <p className="plan-card-storage">{option.storageGb} GB storage</p>
+                    <p className="plan-card-note">{option.includedAiCredits.toLocaleString()} Echo Credits included monthly</p>
                     <p className="plan-card-note">{option.tagline}</p>
                     {billingInterval === 'annual' && (
                       <p className="plan-card-note">Save ${savings} a year</p>

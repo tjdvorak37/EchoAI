@@ -60,6 +60,9 @@ const SOURCE_CATALOG = [
 const CONVERSATION_THEMES = ['feature request', 'pricing', 'support issue', 'campaign result', 'competitor compare', 'onboarding friction']
 const CRISIS_KEYWORDS = ['outage', 'broken', 'scam', 'data leak', 'refund', 'lawsuit', 'boycott']
 const AI_CHATBOT_TERMS = ['chatgpt', 'gemini', 'copilot', 'claude', 'perplexity']
+const SALES_TERMS = ['buy', 'price', 'pricing', 'cost', 'quote', 'order', 'recommend', 'looking for', 'need a', 'where can', 'available']
+const PRODUCT_TERMS = ['wish', 'feature', 'request', 'missing', 'issue', 'problem', 'broken', 'support', 'help', 'feedback']
+const TREND_TERMS = ['trend', 'popular', 'viral', 'season', 'yearbook', 'sports', 'apparel', 'uniform', 'merch', 'event']
 
 const BUILTIN_SOURCE_NAMES = {
   social: 'Open social adapters',
@@ -660,6 +663,19 @@ export const filterMentions = ({ mentions, search, platform, sourceType, sentime
       .toLowerCase()
       .includes(query)
   })
+}
+
+export const classifyListeningSignal = (mention) => {
+  const content = `${mention.text} ${mention.keyword} ${mention.hashtag}`.toLowerCase()
+  const matches = (terms) => terms.filter((term) => content.includes(term))
+  const salesMatches = matches(SALES_TERMS)
+  const productMatches = matches(PRODUCT_TERMS)
+  const trendMatches = matches(TREND_TERMS)
+
+  if (salesMatches.length) return { kind: 'sales', label: 'Sales opportunity', terms: salesMatches }
+  if (productMatches.length) return { kind: 'product', label: 'Product feedback', terms: productMatches }
+  if (trendMatches.length || mention.reach >= 10000) return { kind: 'trend', label: 'Marketing trend', terms: trendMatches }
+  return { kind: 'conversation', label: 'Conversation signal', terms: [] }
 }
 
 const tally = (items, getKey) =>

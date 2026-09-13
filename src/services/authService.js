@@ -51,6 +51,7 @@ const normalizeAiAgentConfig = (value) => {
   return {
     enabled: Boolean(value.enabled),
     name: value.name || 'My AI Agent',
+    provider: value.provider || 'custom_router',
     endpoint: value.endpoint || '',
     apiKey: value.apiKey || '',
     model: value.model || '',
@@ -67,6 +68,21 @@ const normalizeAiAgentConfig = (value) => {
   }
 }
 
+const normalizeAiAgentConnection = (record) => ({
+  id: record.id,
+  name: record.name || 'AI tool',
+  provider: record.provider || 'custom_router',
+  endpoint: record.endpoint || '',
+  model: record.model || 'default',
+  capabilities: Array.isArray(record.capabilities) ? record.capabilities : [],
+  routing: record.routing || { strategy: 'best_quality', allowFallback: true },
+  enabled: record.enabled !== false,
+  status: record.status || 'not_connected',
+  lastError: record.last_error || '',
+  lastCheckedAt: record.last_checked_at || '',
+  updatedAt: record.updated_at || '',
+})
+
 const normalizeMember = (record) => ({
   id: record.id,
   fullName: record.full_name,
@@ -74,6 +90,13 @@ const normalizeMember = (record) => ({
   company: record.company,
   role: record.role,
   accessStatus: record.access_status,
+  isBetaTester: record.is_beta_tester === true,
+  aiEnabled: record.ai_enabled !== false,
+  aiAccessNote: record.ai_access_note || '',
+  trademarkEditAccess: record.trademark_edit_access === true,
+  developerAppEditAccess: record.developer_app_edit_access === true,
+  profitSharePercent: Number(record.profit_share_percent ?? record.profitSharePercent ?? 0),
+  isBoardMember: record.is_board_member === true || record.role === 'board_member',
   storageQuotaMb: record.storage_quota_mb ?? record.storageQuotaMb ?? 2048,
   aiAgentConfig: normalizeAiAgentConfig(record.ai_agent_config ?? record.aiAgentConfig),
 })
@@ -176,6 +199,8 @@ export const authService = {
       role: profile.role ?? session.user.user_metadata?.role ?? 'user',
       accessStatus: profile.access_status ?? 'active',
       company: profile.company ?? '',
+      isBoardMember: profile.is_board_member === true || profile.role === 'board_member',
+      profitSharePercent: Number(profile.profit_share_percent || 0),
     }
   },
 
@@ -236,6 +261,9 @@ export const authService = {
           ...data.user,
           role: profile?.role ?? 'user',
           accessStatus: profile?.access_status ?? 'active',
+          company: profile?.company ?? '',
+          isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
+          profitSharePercent: Number(profile?.profit_share_percent || 0),
         },
       }
     }
@@ -669,12 +697,12 @@ export const authService = {
     return normalizeMember(data)
   },
 
-  async updateUserRole({ userId, role }) {
+  async updateUserRole({ userId, role, profitSharePercent }) {
     if (!userId || !role) {
       throw new Error('User ID and role are required.')
     }
 
-    if (!['user', 'manager', 'it', 'accountant', 'admin'].includes(role)) {
+    if (!['user', 'manager', 'it', 'accountant', 'board_member', 'admin'].includes(role)) {
       throw new Error('Role must be user, manager, it, accountant, or admin.')
     }
 
@@ -698,7 +726,7 @@ export const authService = {
 
     const { data, error } = await supabase
       .from('profiles')
-      .update({ role })
+      .update({ role, ...(role === 'board_member' ? { profit_share_percent: Number(profitSharePercent) || 0 } : {}) })
       .eq('id', userId)
       .select('*')
       .single()
@@ -807,6 +835,48 @@ export const authService = {
     }
 
     return normalizeAiAgentConfig(data?.config)
+  },
+
+  async listAiAgentConnections() {
+    if (!isSupabaseConfigured) return []
+    const { data, error } = await supabase
+      .from('ai_agent_connections')
+      .select('id, user_id, name, provider, endpoint, model, capabilities, routing, enabled, status, last_error, last_checked_at, created_at, updated_at')
+      .order('updated_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return (data || []).map(normalizeAiAgentConnection)
+  },
+
+  async saveAiAgentConnection(connection) {
+    const payload = {
+      id: connection.id || undefined,
+      user_id: connection.userId,
+      name: connection.name.trim(),
+      provider: connection.provider || 'custom_router',
+      endpoint: connection.endpoint.trim(),
+      ...(connection.apiKey !== undefined ? { api_key: connection.apiKey.trim() } : {}),
+      model: connection.model?.trim() || 'default',
+      capabilities: connection.capabilities || [],
+      routing: connection.routing || { strategy: 'best_quality', allowFallback: true },
+      enabled: connection.enabled !== false,
+      status: connection.status || 'not_connected',
+      last_error: connection.lastError || null,
+      last_checked_at: connection.lastCheckedAt || null,
+      updated_at: new Date().toISOString(),
+    }
+    if (!isSupabaseConfigured) return normalizeAiAgentConnection({ ...payload, id: connection.id || `demo-${Date.now()}` })
+    const { data, error } = await supabase
+      .from('ai_agent_connections')
+      .upsert(payload)
+      .select('id, user_id, name, provider, endpoint, model, capabilities, routing, enabled, status, last_error, last_checked_at, created_at, updated_at')
+      .single()
+    if (error) throw new Error(error.message)
+    return normalizeAiAgentConnection(data)
+  },
+
+  async deleteAiAgentConnection(connectionId) {
+    const { error } = await supabase.from('ai_agent_connections').delete().eq('id', connectionId)
+    if (error) throw new Error(error.message)
   },
 
   // --- Multi-factor authentication ----------------------------------------
@@ -1023,9 +1093,9 @@ export const authService = {
   },
 
   // Privileged support actions. The caller's role is re-verified server-side.
-  async adminUserAction({ action, userId, fullName, company }) {
+  async adminUserAction({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent }) {
     const { data, error } = await supabase.functions.invoke('admin-user-actions', {
-      body: { action, userId, fullName, company },
+      body: { action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent },
     })
 
     if (error) {
@@ -1185,6 +1255,36 @@ export const authService = {
     }
 
     return normalizeContactCard(data)
+  },
+
+  async deactivateMyAccount() {
+    if (!isSupabaseConfigured) return { accessStatus: 'deactivated' }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError || !userData.user) throw new Error('You must be signed in to deactivate your account.')
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ access_status: 'deactivated' })
+      .eq('id', userData.user.id)
+      .select('access_status')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  async deleteMyAccount() {
+    if (!isSupabaseConfigured) return { deleted: true }
+
+    const { data, error } = await supabase.functions.invoke('account-actions', {
+      body: { action: 'delete' },
+    })
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message || 'Unable to delete your account.')
+    }
+    return data
   },
 
   async requestPasswordReset(email) {

@@ -158,7 +158,7 @@ const readResponseImage = async (payload) => {
   return null
 }
 
-export async function generatePhotoConcept({ prompt, style, aspectRatio, referenceImageSrc, agentConfig }) {
+export async function generatePhotoConcept({ prompt, style, aspectRatio, referenceImageSrc, references = [], agentConfig }) {
   const cleanedPrompt = prompt.trim()
   if (!cleanedPrompt) {
     throw new Error('A prompt is required to generate an image.')
@@ -170,7 +170,7 @@ export async function generatePhotoConcept({ prompt, style, aspectRatio, referen
         agentConfig,
         mode: 'image',
         prompt: cleanedPrompt,
-        payload: { prompt: cleanedPrompt, style, aspectRatio, referenceImageSrc: referenceImageSrc || null },
+        payload: { prompt: cleanedPrompt, style, aspectRatio, referenceImageSrc: referenceImageSrc || null, references },
       })
 
       const imageSrc = await readResponseImage(agentResult.payload)
@@ -184,8 +184,9 @@ export async function generatePhotoConcept({ prompt, style, aspectRatio, referen
           source: 'agent',
         }
       }
+      throw new Error('The selected AI tool returned no image. Check its image capability and model access.')
     } catch (error) {
-      console.warn('User AI agent unavailable, falling back to default image generation.', error)
+      throw new Error(`The selected AI tool could not generate an image: ${error.message}`, { cause: error })
     }
   }
 
@@ -201,11 +202,13 @@ export async function generatePhotoConcept({ prompt, style, aspectRatio, referen
         style,
         aspectRatio,
         referenceImageSrc: referenceImageSrc || null,
+        references,
       },
     })
 
     if (error) {
-      throw new Error(error.message)
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message)
     }
 
     const imageSrc = await readResponseImage(payload)

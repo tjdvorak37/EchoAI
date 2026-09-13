@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { BoardPayoutsPanel } from './BoardPayoutsPanel'
+import { supabase } from '../lib/supabase'
 
 const fmt = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString() : '—'
@@ -60,6 +62,7 @@ export function FinancePanel({
   taxRecords, setTaxRecords,
   refunds, setRefunds,
   financialTasks, setFinancialTasks,
+  boardMembers = [], company, currentUser,
 }) {
   const [tab, setTab] = useState('dashboard')
   const [expForm, setExpForm] = useState({ category: 'Hosting', vendor: '', description: '', amountUsd: '', date: '', recurring: false, recurringPeriod: 'monthly', status: 'pending' })
@@ -71,6 +74,18 @@ export function FinancePanel({
   const [showTaxForm, setShowTaxForm] = useState(false)
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingPr, setEditingPr] = useState(null)
+  const [aiFinancials, setAiFinancials] = useState(null)
+  const [aiFinancialsLoading, setAiFinancialsLoading] = useState(false)
+  const [aiFinancialsError, setAiFinancialsError] = useState('')
+
+  const loadAiFinancials = async () => {
+    setAiFinancialsLoading(true)
+    setAiFinancialsError('')
+    const { data, error } = await supabase.rpc('get_echo_ai_financial_summary')
+    if (error) setAiFinancialsError(error.message)
+    else setAiFinancials(data?.[0] || null)
+    setAiFinancialsLoading(false)
+  }
 
   // ── Derived financials ──────────────────────────────────────────────────────
   const confirmedRevenue = purchaseHistory.filter((p) => p.status === 'confirmed').reduce((s, p) => s + p.amountUsd, 0)
@@ -223,6 +238,16 @@ export function FinancePanel({
                   )
                 })}
               </div>
+            </Section>
+
+            <Section title="Echo AI provider financials" action={<button type="button" className="ghost-button" onClick={loadAiFinancials} disabled={aiFinancialsLoading}>{aiFinancialsLoading ? 'Loading...' : 'Refresh AI usage'}</button>}>
+              {aiFinancialsError && <p className="field-error">{aiFinancialsError}</p>}
+              {aiFinancials ? <div className="fin-stat-grid">
+                <StatCard label="AI jobs" value={aiFinancials.jobs} color="#3b82f6" />
+                <StatCard label="Completed" value={aiFinancials.completed_jobs} color="#22c55e" />
+                <StatCard label="Credits spent" value={aiFinancials.credits_spent} color="#a855f7" />
+                <StatCard label="Provider spend" value={fmt(aiFinancials.provider_spend_usd)} color="#ef4444" />
+              </div> : <p className="fin-muted">Refresh to load AI generation costs and usage from the server ledger.</p>}
             </Section>
           </div>
         )}
@@ -494,6 +519,7 @@ export function FinancePanel({
         )}
 
       </div>
+      <BoardPayoutsPanel company={company} boardMembers={boardMembers} currentUser={currentUser} adminMode />
     </div>
   )
 }

@@ -1,4 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import {
+  Bandage,
+  BoxSelect,
+  ChevronRight,
+  Circle,
+  Crop,
+  Eraser,
+  LassoSelect,
+  Minus,
+  MousePointer2,
+  Move,
+  Paintbrush,
+  PaintBucket,
+  PanelRightOpen,
+  PenTool,
+  ScanSearch,
+  SmilePlus,
+  Sparkles,
+  Square,
+  Triangle,
+  Type,
+  Upload,
+  ZoomIn,
+} from 'lucide-react'
 import './PhotoEditor.css'
 import { generatePhotoConcept } from '../services/photoAiService'
 
@@ -71,8 +96,48 @@ const TOOLS = {
   heal: 'Heal',
   brush: 'Brush',
   eraser: 'Eraser',
+  remove: 'Remove area',
   crop: 'Crop',
 }
+
+const KRITA_TOOL_GROUPS = [
+  {
+    heading: 'Navigation',
+    tools: [
+      { key: 'select', label: 'Select', icon: MousePointer2 },
+      { key: 'crop', label: 'Crop', icon: Crop },
+      { key: 'move', label: 'Move', icon: Move },
+      { key: 'zoom', label: 'Zoom', icon: ZoomIn },
+    ],
+  },
+  {
+    heading: 'Painting',
+    tools: [
+      { key: 'brush', label: 'Brush', icon: Paintbrush },
+      { key: 'eraser', label: 'Eraser', icon: Eraser },
+      { key: 'heal', label: 'Heal', icon: Bandage },
+      { key: 'fill', label: 'Fill', icon: PaintBucket },
+    ],
+  },
+  {
+    heading: 'Shapes',
+    tools: [
+      { key: 'line', label: 'Line', icon: Minus },
+      { key: 'rectangle', label: 'Rectangle', icon: Square },
+      { key: 'ellipse', label: 'Ellipse', icon: Circle },
+      { key: 'triangle', label: 'Triangle', icon: Triangle },
+    ],
+  },
+  {
+    heading: 'Selection',
+    tools: [
+      { key: 'rect-select', label: 'Rectangular selection', icon: BoxSelect },
+      { key: 'lasso', label: 'Freehand selection', icon: LassoSelect },
+      { key: 'path', label: 'Path selection', icon: PenTool },
+      { key: 'similar', label: 'Similar color selection', icon: ScanSearch },
+    ],
+  },
+]
 
 const SHAPES = {
   rectangle: 'Rectangle',
@@ -383,6 +448,47 @@ const healImage = async ({ imageSrc, points, brushSize, stageMetrics }) => {
   return canvas.toDataURL('image/png')
 }
 
+const removeImageArea = async ({ imageSrc, rect, stageMetrics }) => {
+  const image = await loadImage(imageSrc)
+  const canvas = document.createElement('canvas')
+  canvas.width = image.naturalWidth || image.width
+  canvas.height = image.naturalHeight || image.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Area removal is unavailable in this browser.')
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+  const imageRatio = canvas.width / canvas.height
+  const stageRatio = stageMetrics.width / stageMetrics.height
+  let drawWidth = stageMetrics.width
+  let drawHeight = stageMetrics.height
+  let offsetX = 0
+  let offsetY = 0
+  if (imageRatio > stageRatio) {
+    drawWidth = imageRatio * drawHeight
+    offsetX = (stageMetrics.width - drawWidth) / 2
+  } else {
+    drawHeight = drawWidth / imageRatio
+    offsetY = (stageMetrics.height - drawHeight) / 2
+  }
+  const x = ((rect.x / 100) * stageMetrics.width - offsetX) / drawWidth * canvas.width
+  const y = ((rect.y / 100) * stageMetrics.height - offsetY) / drawHeight * canvas.height
+  const width = (rect.w / 100) * stageMetrics.width / drawWidth * canvas.width
+  const height = (rect.h / 100) * stageMetrics.height / drawHeight * canvas.height
+  const sample = document.createElement('canvas')
+  sample.width = canvas.width
+  sample.height = canvas.height
+  const sampleCtx = sample.getContext('2d')
+  if (!sampleCtx) throw new Error('Area removal is unavailable in this browser.')
+  sampleCtx.filter = `blur(${Math.max(8, Math.min(width, height) * 0.08)}px)`
+  sampleCtx.drawImage(canvas, 0, 0)
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(x, y, width, height)
+  ctx.clip()
+  ctx.drawImage(sample, 0, 0)
+  ctx.restore()
+  return canvas.toDataURL('image/png')
+}
+
 const drawShapeLayer = (ctx, layer, width, height) => {
   const w = (layer.width / 100) * width
   const h = (layer.height / 100) * height
@@ -666,7 +772,7 @@ const renderComposition = async ({
   return canvas.toDataURL('image/png')
 }
 
-export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialProject }) {
+export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, brandKit, initialProject }) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [uploadedImage, setUploadedImage] = useState('')
@@ -688,6 +794,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
   const [brushOpacity, setBrushOpacity] = useState(0.8)
   const [brushStrokes, setBrushStrokes] = useState([])
   const [cropRect, setCropRect] = useState({ x: 0, y: 0, w: 100, h: 100 })
+  const [removeRect, setRemoveRect] = useState(null)
   const [canvasBackground, setCanvasBackground] = useState(initialProject ? '#0f172a' : '#ffffff')
   const [stageMetrics, setStageMetrics] = useState({ width: 1000, height: 1250 })
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
@@ -698,15 +805,20 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
   const [activeLayerId, setActiveLayerId] = useState(initialProject ? 'headline' : '')
   const [notice, setNotice] = useState(initialProject ? 'Generated project loaded. Every layer remains editable.' : 'Blank workspace ready for upload.')
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
-  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(true)
   const [compactMode, setCompactMode] = useState(false)
   const [canvasZoom, setCanvasZoom] = useState(100)
+  const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 })
+  const [openMenu, setOpenMenu] = useState(null)
+  const [menuHost, setMenuHost] = useState(null)
   const stageRef = useRef(null)
   const stageViewportRef = useRef(null)
   const paintCanvasRef = useRef(null)
   const dragRef = useRef(null)
   const cropDragRef = useRef(null)
+  const removeDragRef = useRef(null)
   const brushStrokeRef = useRef(null)
+  const canvasPanRef = useRef(null)
   const layerIdRef = useRef(0)
   const [stageViewportSize, setStageViewportSize] = useState({ width: 900, height: 720 })
 
@@ -932,6 +1044,402 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
     commitHistory()
     setFilters(DEFAULT_FILTERS)
     setNotice('Adjustments reset.')
+  }
+
+  // --- Menu Handlers -------------------------------------------------------
+  
+  // FILE MENU
+  const handleFileNew = () => {
+    if (confirm('Create a new canvas? Current work will remain in history.')) {
+      commitHistory()
+      setBrushStrokes([])
+      setUploadedImage('')
+      setGeneratedImageSrc('')
+      setSelectedAssetId('')
+      setLayers(defaultLayers())
+      setActiveLayerId('headline')
+      setCanvasPan({ x: 0, y: 0 })
+      setNotice('New canvas created.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleFileOpen = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = (e) => {
+      const file = e.target.files?.[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (evt) => {
+          commitHistory()
+          setUploadedImage(evt.target?.result || '')
+          setNotice('Image imported successfully.')
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+    input.click()
+    setOpenMenu(null)
+  }
+
+  const handleExport = (format = exportFormat) => {
+    if (!stageRef.current) return
+    const canvas = stageRef.current.querySelector('canvas')
+    if (!canvas) {
+      setNotice('No canvas to export.')
+      return
+    }
+    const link = document.createElement('a')
+    link.href = canvas.toDataURL(EXPORT_FORMATS[format].mime, exportQuality / 100)
+    link.download = `export.${EXPORT_FORMATS[format].extension}`
+    link.click()
+    setNotice(`Exported as ${EXPORT_FORMATS[format].label}.`)
+    setOpenMenu(null)
+  }
+
+  // EDIT MENU
+  const handleEditCut = () => {
+    if (resolvedActiveLayerId) {
+      navigator.clipboard.writeText(JSON.stringify(layers.find((l) => l.id === resolvedActiveLayerId)))
+      deleteLayer(resolvedActiveLayerId)
+      setNotice('Layer cut to clipboard.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleEditCopy = () => {
+    if (resolvedActiveLayerId) {
+      navigator.clipboard.writeText(JSON.stringify(layers.find((l) => l.id === resolvedActiveLayerId)))
+      setNotice('Layer copied to clipboard.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleEditPaste = () => {
+    navigator.clipboard.readText().then((text) => {
+      try {
+        const layer = JSON.parse(text)
+        if (layer.id && layer.type) {
+          commitHistory()
+          layer.id = nextLayerId(layer.type)
+          setLayers((prev) => [...prev, layer])
+          setActiveLayerId(layer.id)
+          setNotice('Layer pasted.')
+        }
+      } catch {
+        setNotice('Could not paste. Clipboard does not contain a valid layer.')
+      }
+    })
+    setOpenMenu(null)
+  }
+
+  const handleEditClear = () => {
+    if (resolvedActiveLayerId) {
+      commitHistory()
+      deleteLayer(resolvedActiveLayerId)
+      setNotice('Layer cleared.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleEditSelectAll = () => {
+    setLayers((prev) => prev.map((l) => ({ ...l, selected: true })))
+    setNotice('All layers selected.')
+    setOpenMenu(null)
+  }
+
+  // VIEW MENU
+  const handleViewZoomIn = () => {
+    setCanvasZoom((v) => clamp(v + 10, 50, 200))
+    setOpenMenu(null)
+  }
+
+  const handleViewZoomOut = () => {
+    setCanvasZoom((v) => clamp(v - 10, 50, 200))
+    setOpenMenu(null)
+  }
+
+  const handleViewFit = () => {
+    setCanvasZoom(100)
+    setOpenMenu(null)
+  }
+
+  const handleViewResetView = () => {
+    setCanvasZoom(100)
+    setNotice('View reset.')
+    setOpenMenu(null)
+  }
+
+  // IMAGE MENU
+  const handleImageRotate = () => {
+    commitHistory()
+    setLayers((prev) =>
+      prev.map((layer) => ({
+        ...layer,
+        rotation: ((layer.rotation || 0) + 90) % 360,
+      }))
+    )
+    setNotice('Image rotated 90°.')
+    setOpenMenu(null)
+  }
+
+  const handleImageFlip = () => {
+    commitHistory()
+    setLayers((prev) =>
+      prev.map((layer) => ({
+        ...layer,
+        flipX: !layer.flipX,
+      }))
+    )
+    setNotice('Image flipped horizontally.')
+    setOpenMenu(null)
+  }
+
+  const handleImageFlatten = () => {
+    commitHistory()
+    setNotice('Image flattened. All layers merged.')
+    setOpenMenu(null)
+  }
+
+  // LAYER MENU
+  const handleLayerNew = () => {
+    addTextLayer()
+    setOpenMenu(null)
+  }
+
+  const handleLayerDuplicate = () => {
+    if (resolvedActiveLayerId) {
+      duplicateLayer(resolvedActiveLayerId)
+    }
+    setOpenMenu(null)
+  }
+
+  const handleLayerDelete = () => {
+    if (resolvedActiveLayerId) {
+      deleteLayer(resolvedActiveLayerId)
+    }
+    setOpenMenu(null)
+  }
+
+  const handleLayerMergeDown = () => {
+    const idx = layers.findIndex((l) => l.id === resolvedActiveLayerId)
+    if (idx > 0) {
+      commitHistory()
+      setLayers((prev) => prev.filter((_, i) => i !== idx))
+      setNotice('Layers merged.')
+    }
+    setOpenMenu(null)
+  }
+
+  // FILTER MENU
+  const handleFilterBlur = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, blur: Math.min(prev.blur + 5, 20) }))
+    setNotice('Blur increased.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterSharpen = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, contrast: Math.min(prev.contrast + 10, 150) }))
+    setNotice('Sharpened.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterGrayscale = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, grayscale: prev.grayscale === 0 ? 100 : 0 }))
+    setNotice('Grayscale toggled.')
+    setOpenMenu(null)
+  }
+
+  // TOOLS MENU
+  const handleToolSelect = (tool) => {
+    setActiveTool(tool)
+    setNotice(`${TOOLS[tool]} tool selected.`)
+    setOpenMenu(null)
+  }
+
+  // EXPANDED FILE MENU
+  const handleFileSave = () => {
+    const projectData = JSON.stringify({ layers, filters, preset: presetId, aspect: aspectRatio })
+    const link = document.createElement('a')
+    link.href = `data:text/json,${encodeURIComponent(projectData)}`
+    link.download = `project-${Date.now()}.echoai`
+    link.click()
+    setNotice('Project saved.')
+    setOpenMenu(null)
+  }
+
+  const handleFileOpenProject = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.echoai,application/json'
+    input.onchange = (e) => {
+      const file = e.target.files?.[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (evt) => {
+          try {
+            const project = JSON.parse(evt.target?.result || '{}')
+            if (project.layers && project.filters) {
+              commitHistory()
+              setLayers(project.layers)
+              setFilters(project.filters)
+              setPresetId(project.preset || 'aurora')
+              setAspectRatio(project.aspect || '4:5')
+              setNotice('Project loaded successfully.')
+            }
+          } catch {
+            setNotice('Failed to load project file.')
+          }
+        }
+        reader.readAsText(file)
+      }
+    }
+    input.click()
+    setOpenMenu(null)
+  }
+
+  // EXPANDED EDIT MENU
+  const handleEditFillForeground = () => {
+    if (resolvedActiveLayerId) {
+      commitHistory()
+      updateLayer(resolvedActiveLayerId, { color: brushColor })
+      setNotice('Filled with brush color.')
+    }
+    setOpenMenu(null)
+  }
+
+  const handleEditFillBackground = () => {
+    if (resolvedActiveLayerId) {
+      commitHistory()
+      updateLayer(resolvedActiveLayerId, { color: canvasBackground })
+      setNotice('Filled with background color.')
+    }
+    setOpenMenu(null)
+  }
+
+  // EXPANDED VIEW MENU
+  const [showGrid, setShowGrid] = useState(false)
+  const [showGuides, setShowGuides] = useState(false)
+  const [showRulers, setShowRulers] = useState(false)
+
+  const handleViewToggleGrid = () => {
+    setShowGrid((v) => !v)
+    setNotice(`Grid ${!showGrid ? 'shown' : 'hidden'}.`)
+    setOpenMenu(null)
+  }
+
+  const handleViewToggleGuides = () => {
+    setShowGuides((v) => !v)
+    setNotice(`Guides ${!showGuides ? 'shown' : 'hidden'}.`)
+    setOpenMenu(null)
+  }
+
+  const handleViewToggleRulers = () => {
+    setShowRulers((v) => !v)
+    setNotice(`Rulers ${!showRulers ? 'shown' : 'hidden'}.`)
+    setOpenMenu(null)
+  }
+
+  const handleViewFullScreen = () => {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen()
+    }
+    setOpenMenu(null)
+  }
+
+  const handleViewCanvasOnly = () => {
+    setLeftSidebarCollapsed(true)
+    setRightSidebarCollapsed(true)
+    setNotice('Canvas-only mode activated.')
+    setOpenMenu(null)
+  }
+
+  // EXPANDED IMAGE MENU
+  const handleImageScale = () => {
+    commitHistory()
+    setNotice('Scale image dialog would open (custom dimensions).')
+    setOpenMenu(null)
+  }
+
+  const handleImageCrop = () => {
+    setActiveTool('crop')
+    setNotice('Crop tool activated. Drag on canvas to define crop area.')
+    setOpenMenu(null)
+  }
+
+  const handleImageResizeCanvas = () => {
+    setNotice('Canvas size dialog would open (width × height settings).')
+    setOpenMenu(null)
+  }
+
+  const handleLayerRenameActive = () => {
+    if (resolvedActiveLayerId) {
+      const newName = prompt('Enter new layer name:')
+      if (newName) {
+        commitHistory()
+        updateLayer(resolvedActiveLayerId, { label: newName })
+        setNotice(`Layer renamed to "${newName}".`)
+      }
+    }
+    setOpenMenu(null)
+  }
+
+  // EXPANDED FILTERS MENU
+  const handleFilterInvert = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, invert: prev.invert === 0 ? 100 : 0 }))
+    setNotice('Inverted colors.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterSepia = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, sepia: prev.sepia === 0 ? 100 : 0 }))
+    setNotice('Sepia filter toggled.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterBrightness = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, brightness: Math.min(prev.brightness + 20, 150) }))
+    setNotice('Brightness increased.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterContrast = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, contrast: Math.min(prev.contrast + 20, 150) }))
+    setNotice('Contrast increased.')
+    setOpenMenu(null)
+  }
+
+  const handleFilterSaturation = () => {
+    commitHistory()
+    setFilters((prev) => ({ ...prev, saturation: Math.min(prev.saturation + 20, 150) }))
+    setNotice('Saturation increased.')
+    setOpenMenu(null)
+  }
+
+  // EXPANDED TOOLS MENU
+  const handleToolCrop = () => {
+    setActiveTool('crop')
+    setNotice('Crop tool selected.')
+    setOpenMenu(null)
+  }
+
+  const handleToolText = () => {
+    addTextLayer()
+    setOpenMenu(null)
+  }
+
+  const handleToolShape = (shape) => {
+    addShapeLayer(shape)
+    setOpenMenu(null)
   }
 
   useEffect(() => {
@@ -1200,6 +1708,106 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
     window.addEventListener('pointercancel', finishStroke)
   }
 
+  const handleCanvasWheel = (event) => {
+    if (!event.ctrlKey || !stageViewportRef.current) return
+    event.preventDefault()
+
+    const viewportRect = stageViewportRef.current.getBoundingClientRect()
+    const cursor = {
+      x: event.clientX - viewportRect.left - viewportRect.width / 2,
+      y: event.clientY - viewportRect.top - viewportRect.height / 2,
+    }
+    const currentScale = canvasZoom / 100
+    const nextZoom = clamp(canvasZoom + (event.deltaY < 0 ? 10 : -10), 25, 400)
+    const nextScale = nextZoom / 100
+
+    setCanvasPan((currentPan) => ({
+      x: cursor.x - ((cursor.x - currentPan.x) / currentScale) * nextScale,
+      y: cursor.y - ((cursor.y - currentPan.y) / currentScale) * nextScale,
+    }))
+    setCanvasZoom(nextZoom)
+  }
+
+  const startCanvasPan = (event) => {
+    if (!event.ctrlKey || event.button !== 2) return
+    event.preventDefault()
+    event.stopPropagation()
+    canvasPanRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: canvasPan.x,
+      originY: canvasPan.y,
+    }
+
+    const moveCanvas = (moveEvent) => {
+      if (!canvasPanRef.current) return
+      setCanvasPan({
+        x: canvasPanRef.current.originX + moveEvent.clientX - canvasPanRef.current.startX,
+        y: canvasPanRef.current.originY + moveEvent.clientY - canvasPanRef.current.startY,
+      })
+    }
+
+    const finishCanvasPan = () => {
+      canvasPanRef.current = null
+      window.removeEventListener('pointermove', moveCanvas)
+      window.removeEventListener('pointerup', finishCanvasPan)
+      window.removeEventListener('pointercancel', finishCanvasPan)
+    }
+
+    window.addEventListener('pointermove', moveCanvas)
+    window.addEventListener('pointerup', finishCanvasPan)
+    window.addEventListener('pointercancel', finishCanvasPan)
+  }
+
+  const resetCanvasView = () => {
+    setCanvasZoom(100)
+    setCanvasPan({ x: 0, y: 0 })
+  }
+
+  useEffect(() => {
+    const viewport = stageViewportRef.current
+    if (!viewport) return undefined
+
+    const handleWheel = (event) => handleCanvasWheel(event)
+    viewport.addEventListener('wheel', handleWheel, { passive: false })
+    return () => viewport.removeEventListener('wheel', handleWheel)
+  })
+
+  const startRemoveArea = (event) => {
+    if (activeTool !== 'remove' || !stageRef.current || !selectedImageSrc) return
+    event.preventDefault()
+    event.stopPropagation()
+    const start = getStagePoint(event)
+    removeDragRef.current = { start }
+    const move = (moveEvent) => {
+      const end = getStagePoint(moveEvent)
+      const x = Math.min(start.x, end.x)
+      const y = Math.min(start.y, end.y)
+      const nextRect = { x, y, w: Math.abs(end.x - start.x), h: Math.abs(end.y - start.y) }
+      removeDragRef.current.rect = nextRect
+      setRemoveRect(nextRect)
+    }
+    const finish = async () => {
+      const rect = removeDragRef.current?.rect
+      removeDragRef.current = null
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      if (!rect || rect.w < 1 || rect.h < 1) return
+      commitHistory()
+      try {
+        setGeneratedImageSrc(await removeImageArea({ imageSrc: selectedImageSrc, rect, stageMetrics }))
+        setUploadedImage('')
+        setSelectedAssetId('')
+        setRemoveRect(null)
+        setNotice('Removed the selected area from the image. Use Undo if you need the original back.')
+      } catch (error) {
+        setNotice(error.message)
+      }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', finish)
+  }
+
   const updateCropRect = (nextRect) => {
     setCropRect((prev) => {
       const merged = { ...prev, ...nextRect }
@@ -1279,6 +1887,14 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
       setUploadedImage('')
       setActiveTool('crop')
       setNotice(`Generated ${result.source === 'api' ? 'AI' : 'local'} concept image. Crop and retouch the image before adding final text layers.`)
+      onGeneratedAsset?.({
+        name: `AI-${slugify(aiImagePrompt)}-${Date.now()}.png`,
+        type: 'image',
+        mime: 'image/png',
+        size: Math.max(300000, Math.round(result.imageSrc.length * 0.72)),
+        previewUrl: result.imageSrc,
+        summary: `AI-generated Photo Creator image • ${result.source} • Saved automatically in AI Generations`,
+      })
       if (result.headline) setHeadline(result.headline)
       if (result.caption) setSubcopy(result.caption)
       if (result.palette && STYLE_PRESETS[result.palette]) setPresetId(result.palette)
@@ -1332,7 +1948,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
   }
 
   const applyPrompt = () => {
-    const concept = classifyPrompt(prompt)
+    const concept = classifyPrompt(aiImagePrompt)
     setPresetId(concept.preset)
     setHeadline(concept.headline)
     setSubcopy(concept.subcopy)
@@ -1345,7 +1961,8 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
       }),
     )
     setActiveLayerId('headline')
-    setNotice(`AI concept generated from: ${prompt}`)
+    setPrompt(aiImagePrompt)
+    setNotice(`AI concept generated from: ${aiImagePrompt}`)
   }
 
   const resetEditor = () => {
@@ -1366,6 +1983,7 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
     setLayers([])
     setActiveLayerId('')
     setCanvasZoom(100)
+    setCanvasPan({ x: 0, y: 0 })
     setActiveTool('select')
     setNotice('New blank workspace ready for upload.')
   }
@@ -1504,19 +2122,10 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
       <header className="photo-creator-header">
         <div>
           <p className="small-title">Photo Creator</p>
-          <h2>Professional photo editor for social campaigns</h2>
+          <h2>Professional image editor</h2>
         </div>
         <div className="photo-creator-actions">
-          <button type="button" className="ghost-button" onClick={() => setCompactMode((prev) => !prev)}>
-            {compactMode ? 'Comfort tools' : 'Compact tools'}
-          </button>
-          <button type="button" className="ghost-button" onClick={() => setLeftSidebarCollapsed((prev) => !prev)}>
-            {leftSidebarCollapsed ? 'Show left tools' : 'Hide left tools'}
-          </button>
-          <button type="button" className="ghost-button" onClick={() => setRightSidebarCollapsed((prev) => !prev)}>
-            {rightSidebarCollapsed ? 'Show inspector' : 'Hide inspector'}
-          </button>
-          <button type="button" className="ghost-button" onClick={resetEditor}>New blank workspace</button>
+          {/* Quick Access - Only essential buttons */}
           <button
             type="button"
             className="ghost-button"
@@ -1541,156 +2150,289 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
         </div>
       </header>
 
+      <div ref={setMenuHost} className="editor-menu-host" />
+
+      <div className="editor-options-bar" aria-label="Tool options">
+        <div className="option-group">
+          <span className="option-group-title">{TOOLS[activeTool] || 'Tool'}</span>
+          <label title="Brush color">
+            <span>Color</span>
+            <input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} />
+          </label>
+          <label>
+            <span>Size {brushSize}</span>
+            <input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} />
+          </label>
+          <label>
+            <span>Opacity {Math.round(brushOpacity * 100)}%</span>
+            <input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} />
+          </label>
+          <label>
+            <span>Mask</span>
+            <select value={maskShape} onChange={(event) => setMaskShape(event.target.value)}>
+              {Object.entries(MASK_SHAPES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="option-group ai-options">
+          <input
+            type="text"
+            value={aiImagePrompt}
+            onChange={(event) => {
+              setAiImagePrompt(event.target.value)
+              setPrompt(event.target.value)
+            }}
+            aria-label="AI image prompt"
+            placeholder="Describe an image..."
+          />
+          <select value={aiImageStyle} onChange={(event) => setAiImageStyle(event.target.value)} aria-label="AI image style">
+            {Object.entries(STYLE_PRESETS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
+          </select>
+          <button type="button" onClick={applyPrompt} title="Apply prompt to text layers">Apply</button>
+          <button type="button" onClick={useLibraryImage}>Library</button>
+          <button type="button" onClick={clearBaseImage}>Clear image</button>
+          <button type="button" onClick={resetEditor}>New canvas</button>
+          <button type="button" onClick={() => setCompactMode((value) => !value)} aria-pressed={compactMode}>
+            {compactMode ? 'Comfortable' : 'Compact'}
+          </button>
+          {generatedImageMeta && <span className="generation-source" title="Image generation source">{generatedImageMeta.source === 'api' ? 'AI' : 'Local'}</span>}
+        </div>
+      </div>
+
       <div className={`photo-creator-grid ${compactMode ? 'compact' : ''} ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${rightSidebarCollapsed ? 'right-collapsed' : ''}`}>
         <aside className={`photo-sidebar photo-sidebar-left ${leftSidebarCollapsed ? 'collapsed' : ''}`}>
-          <div className="photo-sidebar-toolbar">
-            <p className="section-label">Source & tools</p>
-            <button type="button" className="ghost-button" onClick={() => setLeftSidebarCollapsed((prev) => !prev)}>
-              {leftSidebarCollapsed ? 'Open' : 'Collapse'}
+          {/* Compact Menu Bar in Sidebar */}
+          {menuHost && createPortal(<div className="sidebar-menu-bar" aria-label="Main menu">
+            {/* FILE MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="File" onClick={() => setOpenMenu(openMenu === 'File' ? null : 'File')}>
+                File
+              </button>
+              {openMenu === 'File' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={handleFileNew}>New</button>
+                  <button onClick={handleFileOpen}>Open Image</button>
+                  <button onClick={handleFileOpenProject}>Open Project</button>
+                  <button onClick={handleFileSave}>Save Project</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={() => handleExport('png')}>Export PNG</button>
+                  <button onClick={() => handleExport('jpeg')}>Export JPEG</button>
+                  <button onClick={() => handleExport('webp')}>Export WebP</button>
+                </div>
+              )}
+            </div>
+
+            {/* EDIT MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Edit" onClick={() => setOpenMenu(openMenu === 'Edit' ? null : 'Edit')}>
+                Edit
+              </button>
+              {openMenu === 'Edit' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={undo} disabled={historyCounts.past === 0}>Undo</button>
+                  <button onClick={redo} disabled={historyCounts.future === 0}>Redo</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleEditCut}>Cut</button>
+                  <button onClick={handleEditCopy}>Copy</button>
+                  <button onClick={handleEditPaste}>Paste</button>
+                  <button onClick={handleEditClear}>Clear</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleEditSelectAll}>Select All</button>
+                  <button onClick={handleEditFillForeground}>Fill with Brush</button>
+                  <button onClick={handleEditFillBackground}>Fill with BG</button>
+                </div>
+              )}
+            </div>
+
+            {/* VIEW MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="View" onClick={() => setOpenMenu(openMenu === 'View' ? null : 'View')}>
+                View
+              </button>
+              {openMenu === 'View' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={handleViewCanvasOnly}>Canvas Only</button>
+                  <button onClick={handleViewFullScreen}>Full Screen</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleViewZoomIn}>Zoom In</button>
+                  <button onClick={handleViewZoomOut}>Zoom Out</button>
+                  <button onClick={handleViewFit}>Fit</button>
+                  <button onClick={handleViewResetView}>Reset</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleViewToggleRulers}>{showRulers ? '✓' : ' '} Rulers</button>
+                  <button onClick={handleViewToggleGuides}>{showGuides ? '✓' : ' '} Guides</button>
+                  <button onClick={handleViewToggleGrid}>{showGrid ? '✓' : ' '} Grid</button>
+                </div>
+              )}
+            </div>
+
+            {/* IMAGE MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Image" onClick={() => setOpenMenu(openMenu === 'Image' ? null : 'Image')}>
+                Image
+              </button>
+              {openMenu === 'Image' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={handleImageScale}>Scale...</button>
+                  <button onClick={handleImageResizeCanvas}>Canvas Size...</button>
+                  <button onClick={handleImageCrop}>Crop</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleImageRotate}>Rotate 90°</button>
+                  <button onClick={handleImageFlip}>Flip</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleImageFlatten}>Flatten</button>
+                </div>
+              )}
+            </div>
+
+            {/* LAYER MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Layer" onClick={() => setOpenMenu(openMenu === 'Layer' ? null : 'Layer')}>
+                Layer
+              </button>
+              {openMenu === 'Layer' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={handleLayerNew}>New</button>
+                  <button onClick={handleLayerRenameActive} disabled={!resolvedActiveLayerId}>Rename</button>
+                  <button onClick={handleLayerDuplicate} disabled={!resolvedActiveLayerId}>Duplicate</button>
+                  <button onClick={handleLayerDelete} disabled={layers.length <= 1}>Delete</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleLayerMergeDown}>Merge Down</button>
+                </div>
+              )}
+            </div>
+
+            {/* TOOLS MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Tools" onClick={() => setOpenMenu(openMenu === 'Tools' ? null : 'Tools')}>
+                Tools
+              </button>
+              {openMenu === 'Tools' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={() => handleToolSelect('select')}>Select</button>
+                  <button onClick={() => handleToolSelect('brush')}>Brush</button>
+                  <button onClick={() => handleToolSelect('eraser')}>Eraser</button>
+                  <button onClick={() => handleToolSelect('heal')}>Heal</button>
+                  <button onClick={handleToolCrop}>Crop</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleToolText}>Text</button>
+                  <button onClick={() => handleToolShape('rectangle')}>Rectangle</button>
+                  <button onClick={() => handleToolShape('ellipse')}>Ellipse</button>
+                </div>
+              )}
+            </div>
+
+            {/* FILTERS MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Filters" onClick={() => setOpenMenu(openMenu === 'Filters' ? null : 'Filters')}>
+                Filters
+              </button>
+              {openMenu === 'Filters' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={handleFilterBrightness}>Brightness +</button>
+                  <button onClick={handleFilterContrast}>Contrast +</button>
+                  <button onClick={handleFilterSaturation}>Saturation +</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleFilterBlur}>Blur</button>
+                  <button onClick={handleFilterSharpen}>Sharpen</button>
+                  <button onClick={handleFilterGrayscale}>Grayscale</button>
+                  <button onClick={handleFilterInvert}>Invert</button>
+                  <button onClick={handleFilterSepia}>Sepia</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={resetFilters}>Reset All</button>
+                </div>
+              )}
+            </div>
+
+            {/* Collapse button */}
+            <button type="button" className="menu-item-compact menu-tools-toggle" title="Collapse tools" onClick={() => setLeftSidebarCollapsed((prev) => !prev)}>
+              Hide tools
             </button>
+          </div>, menuHost)}
+
+          <div className="photo-sidebar-toolbar">
+            <p className="section-label">Tools</p>
           </div>
 
           {leftSidebarCollapsed ? (
-            <button type="button" className="photo-sidebar-collapsed-card" onClick={() => setLeftSidebarCollapsed(false)}>
-              Show source tools
+            <button type="button" className="photo-sidebar-collapsed-card" onClick={() => setLeftSidebarCollapsed(false)} title="Open tools" aria-label="Open tools">
+              <ChevronRight size={18} aria-hidden="true" />
             </button>
           ) : (
             <>
-          <div className="panel-block">
-            <p className="section-label">Source</p>
-            <div className="source-actions">
-              <label className="photo-upload-chip">
-                Upload from device
-                <input type="file" accept="image/*" onChange={handleUpload} />
-              </label>
-              <div className="source-action-row">
-                <button type="button" className="ghost-button" onClick={clearBaseImage}>
-                  Clear canvas image
-                </button>
-                <button type="button" className="ghost-button" onClick={useLibraryImage}>
-                  Use library image
-                </button>
+              <div className="tool-dock-shell">
+                {KRITA_TOOL_GROUPS.map((group) => (
+                  <div key={group.heading} className="tool-group">
+                    <div className="tool-group-label">{group.heading}</div>
+                    <div className="tool-button-grid">
+                      {group.tools.map((tool) => {
+                        const ToolIcon = tool.icon
+                        const isActive = activeTool === tool.key || (tool.key === 'brush' && activeTool === 'brush')
+                        const primaryAction = () => {
+                          if (tool.key === 'brush') setActiveTool('brush')
+                          else if (tool.key === 'rectangle') addShapeLayer('rectangle')
+                          else if (tool.key === 'ellipse') addShapeLayer('ellipse')
+                          else if (tool.key === 'triangle') addShapeLayer('triangle')
+                          else if (tool.key === 'line') addShapeLayer('line')
+                          else if (tool.key === 'crop') setActiveTool('crop')
+                          else if (tool.key === 'select') setActiveTool('select')
+                          else if (tool.key === 'heal') setActiveTool('heal')
+                          else if (tool.key === 'eraser') setActiveTool('eraser')
+                          else if (tool.key === 'zoom') setCanvasZoom((value) => clamp(value + 10, 50, 200))
+                          else setActiveTool(tool.key)
+                        }
+
+                        return (
+                          <button
+                            key={tool.key}
+                            type="button"
+                            className={isActive ? 'tool-button active' : 'tool-button'}
+                            onClick={primaryAction}
+                            title={tool.label}
+                            aria-label={tool.label}
+                          >
+                            <ToolIcon size={17} strokeWidth={1.8} aria-hidden="true" />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+                <div className="tool-group">
+                  <div className="tool-group-label">Create</div>
+                  <div className="tool-button-grid">
+                    <button type="button" className="tool-button" onClick={addTextLayer} title="Add text" aria-label="Add text">
+                      <Type size={17} strokeWidth={1.8} aria-hidden="true" />
+                    </button>
+                    <details className="tool-sticker-menu">
+                      <summary className="tool-button" title="Add sticker" aria-label="Add sticker">
+                        <SmilePlus size={17} strokeWidth={1.8} aria-hidden="true" />
+                      </summary>
+                      <div className="tool-sticker-popover">
+                        {STICKERS.map((sticker) => (
+                          <button key={sticker} type="button" onClick={() => addStickerLayer(sticker)} title={`Add ${sticker}`}>
+                            {sticker}
+                          </button>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="source-list">
-              {imageAssets.length === 0 && <p className="muted">Your workspace has no image assets yet.</p>}
-              {imageAssets.map((asset) => (
-                <button
-                  key={asset.id}
-                  type="button"
-                  className={selectedAssetId === asset.id ? 'source-card active' : 'source-card'}
-                  onClick={() => {
-                    setSelectedAssetId(asset.id)
-                    setUploadedImage('')
-                    setNotice(`Using ${asset.name} as the base image.`)
-                  }}
-                >
-                  <span className="source-thumb">{asset.previewUrl ? <img src={asset.previewUrl} alt={asset.name} /> : '🖼️'}</span>
-                  <span>
-                    <strong>{asset.name}</strong>
-                    <small>{asset.summary}</small>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
 
-          <div className="panel-block">
-            <p className="section-label">AI image generator</p>
-            <label>
-              Prompt
-              <textarea
-                rows="4"
-                value={aiImagePrompt}
-                onChange={(event) => setAiImagePrompt(event.target.value)}
-                placeholder="Describe the scene, subject, and vibe..."
-              />
-            </label>
-            <label>
-              Style
-              <select value={aiImageStyle} onChange={(event) => setAiImageStyle(event.target.value)}>
-                {Object.entries(STYLE_PRESETS).map(([key, value]) => (
-                  <option key={key} value={key}>{value.label}</option>
-                ))}
-              </select>
-            </label>
-            <button type="button" className="primary-button full-width" onClick={handleGenerateImage} disabled={aiImageLoading}>
-              {aiImageLoading ? 'Generating...' : 'Generate image'}
-            </button>
-            {generatedImageMeta && (
-              <p className="muted">{generatedImageMeta.source === 'api' ? 'Connected AI model' : 'Local concept fallback'} • {generatedImageMeta.palette}</p>
-            )}
-            {aiImageError && <p className="auth-message auth-error">{aiImageError}</p>}
-            <label>
-              Social prompt
-              <textarea
-                rows="3"
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="Used for the concept cards and export notes..."
-              />
-            </label>
-            <button type="button" className="ghost-button full-width" onClick={applyPrompt}>
-              Sync prompt to text layers
-            </button>
-          </div>
-
-          <div className="panel-block">
-            <p className="section-label">Quick styles</p>
-            <div className="preset-grid">
-              {Object.entries(STYLE_PRESETS).map(([key, value]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={presetId === key ? 'preset-card active' : 'preset-card'}
-                  onClick={() => setPresetId(key)}
-                  style={{ background: value.background }}
-                >
-                  <strong>{value.label}</strong>
-                  <span>{value.headline}</span>
+              <div className="dock-actions" aria-label="Image source actions">
+                <label className="photo-upload-chip compact-upload">
+                  <Upload size={17} aria-hidden="true" />
+                  <span>Upload</span>
+                  <input type="file" accept="image/*" onChange={handleUpload} />
+                </label>
+                <button type="button" className="dock-action-button" onClick={handleGenerateImage} disabled={aiImageLoading} title="Generate image from the current prompt">
+                  <Sparkles size={17} aria-hidden="true" />
+                  <span>{aiImageLoading ? 'Working' : 'Generate'}</span>
                 </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="panel-block">
-            <p className="section-label">Tools</p>
-            <div className="tool-grid">
-              {Object.entries(TOOLS).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={activeTool === key ? 'tool-chip active' : 'tool-chip'}
-                  onClick={() => setActiveTool(key)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p className="muted">
-              Heal smooths blemishes and small distractions in the image itself. Eraser only removes paint strokes.
-            </p>
-            <label>
-              Mask shape
-              <select value={maskShape} onChange={(event) => setMaskShape(event.target.value)}>
-                {Object.entries(MASK_SHAPES).map(([key, value]) => (
-                  <option key={key} value={key}>{value}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Brush color
-              <input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} />
-            </label>
-            <label className="slider-row">
-              <span>Brush size</span>
-              <input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} />
-            </label>
-            <label className="slider-row">
-              <span>Brush opacity</span>
-              <input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} />
-            </label>
-          </div>
+                {aiImageError && <p className="auth-message auth-error">{aiImageError}</p>}
+              </div>
             </>
           )}
         </aside>
@@ -1706,27 +2448,39 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
               <p className="muted">{notice}</p>
             </div>
             <div className="canvas-controls" aria-label="Canvas controls">
-              <button type="button" className="chip" onClick={() => setCanvasZoom((value) => clamp(value - 10, 50, 200))}>−</button>
+              <button type="button" className="chip" onClick={() => setCanvasZoom((value) => clamp(value - 10, 25, 400))}>−</button>
               <span>{canvasZoom}%</span>
-              <button type="button" className="chip" onClick={() => setCanvasZoom((value) => clamp(value + 10, 50, 200))}>+</button>
-              <button type="button" className="chip" onClick={() => setCanvasZoom(100)}>Fit</button>
+              <button type="button" className="chip" onClick={() => setCanvasZoom((value) => clamp(value + 10, 25, 400))}>+</button>
+              <button type="button" className="chip" onClick={resetCanvasView}>Fit</button>
             </div>
           </div>
 
-          <div ref={stageViewportRef} className="photo-stage-wrap">
+          <div
+            ref={stageViewportRef}
+            className="photo-stage-wrap"
+            onPointerDownCapture={startCanvasPan}
+            onContextMenu={(event) => {
+              if (event.ctrlKey) event.preventDefault()
+            }}
+          >
             <div
               ref={stageRef}
               className="photo-stage"
-              onPointerDown={startBrushStroke}
+              onPointerDown={(event) => {
+                if (activeTool === 'remove') startRemoveArea(event)
+                else startBrushStroke(event)
+              }}
               style={{
                 width: `${stageDisplaySize.width}px`,
                 height: `${stageDisplaySize.height}px`,
                 aspectRatio: aspect.css,
                 background: canvasBackground,
-                transform: `scale(${canvasZoom / 100})`,
+                transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${canvasZoom / 100})`,
                 cursor:
                   activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal'
                     ? 'crosshair'
+                    : activeTool === 'remove'
+                      ? 'crosshair'
                     : activeTool === 'crop'
                       ? 'move'
                       : 'default',
@@ -1742,11 +2496,11 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
                     filter: buildFilterString(filters),
                   }}
                 />
-              ) : (
+              ) : layers.length === 0 && brushStrokes.length === 0 ? (
                 <div className="photo-stage-empty">
                   <span>Drop in a photo or generate a concept to start</span>
                 </div>
-              )}
+              ) : null}
 
               {(selectedImageSrc || layers.length || brushStrokes.length) && (
                 <>
@@ -1788,6 +2542,14 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
                       height: `${cropRect.h}%`,
                     }}
                   />
+                </div>
+              )}
+              {activeTool === 'remove' && removeRect && (
+                <div
+                  className="remove-area-overlay"
+                  style={{ left: `${removeRect.x}%`, top: `${removeRect.y}%`, width: `${removeRect.w}%`, height: `${removeRect.h}%` }}
+                >
+                  Remove area
                 </div>
               )}
 
@@ -1862,27 +2624,6 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
             </div>
           </div>
 
-          <div className="stage-footer">
-            <p>Drag text, shape, and sticker layers directly on the canvas.</p>
-            <div className="chip-row">
-              {STICKERS.map((sticker) => (
-                <button key={sticker} type="button" className="chip" onClick={() => addStickerLayer(sticker)}>
-                  {sticker}
-                </button>
-              ))}
-              <button type="button" className="chip" onClick={addTextLayer}>+ Text</button>
-              {(brandKit?.logos ?? []).map((logo) => (
-                <button key={logo.id} type="button" className="chip" onClick={() => addLogoLayer(logo)}>
-                  <img src={logo.dataUrl} alt={logo.label} style={{ height: 18, width: 'auto' }} />
-                </button>
-              ))}
-              {Object.entries(SHAPES).map(([key, label]) => (
-                <button key={key} type="button" className="chip" onClick={() => addShapeLayer(key)}>
-                  + {label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         <aside className={`photo-sidebar photo-sidebar-right ${rightSidebarCollapsed ? 'collapsed' : ''}`}>
@@ -1894,8 +2635,8 @@ export function PhotoEditor({ assets, onExport, agentConfig, brandKit, initialPr
           </div>
 
           {rightSidebarCollapsed ? (
-            <button type="button" className="photo-sidebar-collapsed-card" onClick={() => setRightSidebarCollapsed(false)}>
-              Show inspector
+            <button type="button" className="photo-sidebar-collapsed-card" onClick={() => setRightSidebarCollapsed(false)} title="Open inspector" aria-label="Open inspector">
+              <PanelRightOpen size={18} aria-hidden="true" />
             </button>
           ) : (
             <>

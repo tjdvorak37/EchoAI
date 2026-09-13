@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import { FinancePanel } from './FinancePanel'
+import { TrademarkPanel } from './TrademarkPanel'
+import { DeveloperAppsPanel } from './DeveloperAppsPanel'
+import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
+import { AiOperationsPanel } from './AiOperationsPanel'
 
 const USERS_PER_PAGE = 25
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
@@ -58,15 +62,69 @@ function Section({ title, children }) {
   )
 }
 
+function NoticeEditor({ title, description, notice, onSave }) {
+  const [draft, setDraft] = useState(notice)
+  const [status, setStatus] = useState({ saving: false, message: '', error: '' })
+
+  const save = async () => {
+    setStatus({ saving: true, message: '', error: '' })
+    try {
+      const message = draft.message.trim()
+      await onSave({ ...draft, message, enabled: draft.enabled && Boolean(message) })
+      setStatus({ saving: false, message: 'Saved', error: '' })
+    } catch (error) {
+      setStatus({ saving: false, message: '', error: error.message })
+    }
+  }
+
+  return (
+    <Section title={title}>
+      <p className="muted">{description}</p>
+      <div className="notice-editor-toggles">
+        <label>
+          <input
+            type="checkbox"
+            checked={draft.enabled}
+            onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
+          />
+          Display notice
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={draft.scrolling}
+            onChange={(event) => setDraft((current) => ({ ...current, scrolling: event.target.checked }))}
+          />
+          Scroll message
+        </label>
+      </div>
+      <textarea
+        rows="5"
+        value={draft.message}
+        onChange={(event) => setDraft((current) => ({ ...current, message: event.target.value }))}
+        placeholder="Leave empty to hide this notice."
+        className="notice-editor-textarea"
+      />
+      <div className="notice-editor-actions">
+        {status.error && <span className="field-error">{status.error}</span>}
+        {status.message && <span className="muted">{status.message}</span>}
+        <button type="button" className="primary-button" onClick={save} disabled={status.saving}>
+          {status.saving ? 'Saving...' : 'Save notice'}
+        </button>
+      </div>
+    </Section>
+  )
+}
+
 export function AdminPanel({
   teamMembers,
-  accessRequests, setAccessRequests,
+  accessRequests,
   alerts, setAlerts,
   licenses, setLicenses,
   tickets, setTickets,
   purchaseHistory, setPurchaseHistory,
   featureFlags, setFeatureFlags,
-  landingAnnouncement, setLandingAnnouncement,
+  announcements, onSaveAnnouncement,
   billingLive,
   promoCodes, setPromoCodes,
   expenses, setExpenses,
@@ -76,7 +134,7 @@ export function AdminPanel({
   financialTasks, setFinancialTasks,
   quotaEditingUserId, setQuotaEditingUserId,
   quotaDraftMb, setQuotaDraftMb,
-  handleQuotaUpdate, handleToggleUserAccess, handleUpdateUserRole,
+  handleQuotaUpdate, handleToggleUserAccess, handleUpdateUserRole, handleReviewAccessRequest,
   companySeatPackage, companySeats,
   handleCreateCompanySeatPackage, handleUpdateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
   handleRespondToSupportTicket,
@@ -86,7 +144,7 @@ export function AdminPanel({
   currentUser,
   onAdminUserAction,
 }) {
-  const [itTab, setItTab] = useState('overview')
+  const [itTab, setItTab] = useState(() => currentUser?.role === 'admin' ? 'overview' : 'integrations')
   const [ticketOpen, setTicketOpen] = useState(null)
   const [replyDraft, setReplyDraft] = useState('')
   const [licenseNote, setLicenseNote] = useState({})
@@ -99,6 +157,10 @@ export function AdminPanel({
   const [verification, setVerification] = useState({ userId: null, summary: null, loading: false, error: '' })
   const [recoveryLink, setRecoveryLink] = useState({ userId: null, url: '', error: '', loading: false })
   const [profileDraft, setProfileDraft] = useState({ fullName: '', company: '', saving: false, error: '' })
+  const [newUserDraft, setNewUserDraft] = useState({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
+  const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
+  const [profitShareDraft, setProfitShareDraft] = useState({ userId: '', value: '', saving: false, error: '' })
+  const [betaAiDraft, setBetaAiDraft] = useState({ userId: '', isBetaTester: false, enabled: false, note: '', saving: false, error: '' })
 
   const openUserDetail = (member) => {
     const nextId = expandedUserId === member.id ? null : member.id
@@ -106,6 +168,8 @@ export function AdminPanel({
     setVerification({ userId: null, summary: null, loading: false, error: '' })
     setRecoveryLink({ userId: null, url: '', error: '', loading: false })
     setProfileDraft({ fullName: member.fullName || '', company: member.company || '', saving: false, error: '' })
+    setProfitShareDraft({ userId: member.id, value: String(member.profitSharePercent || ''), saving: false, error: '' })
+    setBetaAiDraft({ userId: member.id, isBetaTester: member.isBetaTester === true, enabled: member.aiEnabled !== false, note: member.aiAccessNote || '', saving: false, error: '' })
   }
 
   const loadVerification = async (member) => {
@@ -134,12 +198,28 @@ export function AdminPanel({
       await onAdminUserAction({
         action: 'update-profile',
         userId: member.id,
+        email: member.email,
         fullName: profileDraft.fullName,
         company: profileDraft.company,
       })
       setProfileDraft((prev) => ({ ...prev, saving: false, error: '' }))
     } catch (error) {
       setProfileDraft((prev) => ({ ...prev, saving: false, error: error.message }))
+    }
+  }
+
+  const createUser = async (event) => {
+    event.preventDefault()
+    setNewUserStatus({ saving: true, message: '', error: '' })
+    try {
+      await onAdminUserAction({ action: 'create-user', ...newUserDraft })
+      setNewUserDraft({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
+      setNewUserStatus({ saving: false, message: 'Invitation sent. The new staff member can finish setup and MFA from the landing page.', error: '' })
+    } catch (error) {
+      const message = error.message?.includes('userId')
+        ? 'The live admin service is out of date. Deploy the updated admin-user-actions function, then try again. A new technician does not need a user ID.'
+        : error.message
+      setNewUserStatus({ saving: false, message: '', error: message })
     }
   }
 
@@ -154,8 +234,6 @@ export function AdminPanel({
     search: '',
   })
   const [ticketView, setTicketView] = useState('active')
-  const [announcementDraft, setAnnouncementDraft] = useState(landingAnnouncement)
-
   const activeLicenses = licenses.filter((l) => l.status === 'active').length
   const pendingLicenses = licenses.filter((l) => l.status === 'pending_payment').length
   const openTicketStatuses = ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated', 'open']
@@ -290,21 +368,39 @@ export function AdminPanel({
   }
 
   const isFullAdmin = currentUser?.role === 'admin'
+  const canManageAiAccess = ['admin', 'manager', 'it'].includes(currentUser?.role)
   const TABS = isFullAdmin ? [
     { id: 'overview', label: '📊 Overview' },
     { id: 'licenses', label: '🔑 Licenses' },
     { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}` },
     { id: 'billing', label: '💳 Billing' },
     { id: 'finance', label: '💹 Finance' },
-    { id: 'users', label: '👥 Users' },
+    ...(currentUser?.isBoardMember ? [{ id: 'board-summary', label: '📈 My Board Summary' }] : []),
+    { id: 'employees', label: '🧑‍💼 Employees' },
+    { id: 'users', label: '👥 Customer users' },
     { id: 'storage', label: '💾 Storage' },
+    { id: 'trademark', label: '⚖️ Trademark & Legal' },
+    { id: 'developer-apps', label: '🔐 Developer Apps' },
     { id: 'integrations', label: '🔌 Integrations' },
+    { id: 'ai-operations', label: '🤖 Echo AI operations' },
     { id: 'controls', label: '⚙️ Site Controls' },
   ] : [
+    { id: 'overview', label: '📊 Service overview' },
+    { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}` },
+    { id: 'users', label: '👥 User directory' },
+    { id: 'storage', label: '💾 Storage' },
+    { id: 'trademark', label: '⚖️ Trademark & Legal' },
+    { id: 'developer-apps', label: '🔐 Developer Apps' },
     { id: 'integrations', label: '🔌 Integrations' },
+    { id: 'ai-operations', label: '🤖 Echo AI operations' },
+    { id: 'controls', label: '⚙️ Notices' },
   ]
 
-  const filteredUsers = teamMembers.filter((member) => {
+  const employeeRoles = ['admin', 'manager', 'it', 'accountant', 'board_member']
+  const filteredDirectoryMembers = itTab === 'employees'
+    ? teamMembers.filter((member) => employeeRoles.includes(member.role))
+    : teamMembers.filter((member) => !employeeRoles.includes(member.role))
+  const filteredUsers = filteredDirectoryMembers.filter((member) => {
     const term = userSearch.trim().toLowerCase()
     const matchesSearch = !term
       || member.fullName?.toLowerCase().includes(term)
@@ -377,7 +473,7 @@ export function AdminPanel({
       <div className="it-header">
         <div>
           <h2>IT / Admin Backend</h2>
-          <p className="it-header-sub">Restricted to administrators only</p>
+          <p className="it-header-sub">Restricted staff workspace • {currentUser?.role === 'admin' ? 'Super Admin' : 'Technician'}</p>
         </div>
       </div>
 
@@ -948,8 +1044,23 @@ export function AdminPanel({
           </div>
         )}
 
-        {itTab === 'users' && (
+        {(itTab === 'users' || itTab === 'employees') && (
           <div>
+            {isFullAdmin && itTab === 'employees' && (
+              <Section title="Add staff account">
+                <p className="muted">Invite staff directly without a subscription. They will set their password and MFA from the landing page.</p>
+                <form className="auth-form" onSubmit={createUser}>
+                  <label>Full name<input required value={newUserDraft.fullName} onChange={(event) => setNewUserDraft((current) => ({ ...current, fullName: event.target.value }))} /></label>
+                  <label>Email<input required type="email" value={newUserDraft.email} onChange={(event) => setNewUserDraft((current) => ({ ...current, email: event.target.value }))} /></label>
+                  <label>Company<input required value={newUserDraft.company} onChange={(event) => setNewUserDraft((current) => ({ ...current, company: event.target.value }))} /></label>
+                  <label>Role<select value={newUserDraft.role} onChange={(event) => setNewUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="it">Technician</option><option value="accountant">Accounting</option><option value="board_member">Board Member</option><option value="manager">Manager</option><option value="user">Standard user</option></select></label>
+                  {newUserDraft.role === 'board_member' && <label>Profit share percentage (1-10%)<input required type="number" min="1" max="10" step="0.01" value={newUserDraft.profitSharePercent || ''} onChange={(event) => setNewUserDraft((current) => ({ ...current, profitSharePercent: event.target.value }))} /></label>}
+                  <div className="action-row"><button type="submit" className="primary-button" disabled={newUserStatus.saving}>{newUserStatus.saving ? 'Sending invitation...' : 'Create and invite user'}</button></div>
+                  {newUserStatus.message && <p className="auth-message">{newUserStatus.message}</p>}
+                  {newUserStatus.error && <p className="auth-message auth-error">{newUserStatus.error}</p>}
+                </form>
+              </Section>
+            )}
             <Section title="User management">
               <div className="it-user-filters">
                 <label>
@@ -988,9 +1099,9 @@ export function AdminPanel({
               </div>
 
               <p className="muted it-user-count">
-                {sortedUsers.length === teamMembers.length
+                {sortedUsers.length === filteredDirectoryMembers.length
                   ? `${sortedUsers.length} user${sortedUsers.length === 1 ? '' : 's'}`
-                  : `${sortedUsers.length} of ${teamMembers.length} users match`}
+                  : `${sortedUsers.length} of ${filteredDirectoryMembers.length} users match`}
                 {sortedUsers.length > USERS_PER_PAGE && ` • page ${safeUserPage} of ${userPageCount}`}
               </p>
 
@@ -1021,11 +1132,11 @@ export function AdminPanel({
 
                     {expanded && (
                       <div className="it-user-detail">
-                        {member.role === 'admin' ? (
+                        {member.role === 'admin' && member.id !== currentUser?.id ? (
                           <p className="muted">Administrator accounts cannot be modified here.</p>
                         ) : (
                           <>
-                            <div className="it-user-detail-group">
+                            {canManageAiAccess && member.id !== currentUser?.id && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Access</span>
                               <button type="button" className="ghost-button" onClick={() => handleToggleUserAccess(member)} disabled={adminLoading}>
                                 {member.accessStatus === 'deactivated' ? 'Reactivate' : 'Deactivate'}
@@ -1037,9 +1148,123 @@ export function AdminPanel({
                               >
                                 Quota: {member.storageQuotaMb ?? 500} MB
                               </button>
-                            </div>
+                            </div>}
 
-                            <div className="it-user-detail-group">
+                            {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Beta AI access</span>
+                              <label className="toggle-row">
+                                <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.isBetaTester : member.isBetaTester === true} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, isBetaTester: event.target.checked }))} />
+                                Beta tester account
+                              </label>
+                              <small className="muted">Beta accounts are free. Keep AI disabled until you are comfortable with their access.</small>
+                              <label className="toggle-row">
+                                <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.enabled : member.aiEnabled !== false} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, enabled: event.target.checked }))} />
+                                Allow AI generation
+                              </label>
+                              <textarea rows="2" value={betaAiDraft.userId === member.id ? betaAiDraft.note : member.aiAccessNote || ''} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, note: event.target.value }))} placeholder="Note shown when AI is disabled for this beta tester." />
+                              <button type="button" className="primary-button" disabled={betaAiDraft.saving} onClick={async () => {
+                                setBetaAiDraft((current) => ({ ...current, saving: true, error: '' }))
+                                try {
+                                  await onAdminUserAction({ action: 'set-beta-ai-access', userId: member.id, email: member.email, isBetaTester: betaAiDraft.isBetaTester, enabled: betaAiDraft.enabled, note: betaAiDraft.note })
+                                  setBetaAiDraft((current) => ({ ...current, saving: false }))
+                                } catch (error) {
+                                  setBetaAiDraft((current) => ({ ...current, saving: false, error: error.message }))
+                                }
+                              }}>{betaAiDraft.saving ? 'Saving...' : 'Save beta AI access'}</button>
+                              {betaAiDraft.error && <small className="field-error">{betaAiDraft.error}</small>}
+                            </div>}
+
+                            {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Trademark specialist</span>
+                              <button
+                                type="button"
+                                className={member.trademarkEditAccess ? 'primary-button' : 'ghost-button'}
+                                onClick={async () => {
+                                  try {
+                                    await onAdminUserAction({ action: 'set-trademark-edit-access', userId: member.id, email: member.email, enabled: !member.trademarkEditAccess })
+                                  } catch (error) {
+                                    setNewUserStatus({ saving: false, message: '', error: error.message })
+                                  }
+                                }}
+                              >
+                                {member.trademarkEditAccess ? 'Editing granted' : 'Grant editing access'}
+                              </button>
+                              <small className="muted">Only grant this to a trained trademark/legal specialist.</small>
+                            </div>}
+
+                            {isFullAdmin && (member.isBoardMember || member.role === 'board_member' || member.id === currentUser?.id) && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Quarterly profit share</span>
+                              <input
+                                type="number"
+                                min="1"
+                                max="10"
+                                step="0.01"
+                                value={profitShareDraft.userId === member.id ? profitShareDraft.value : String(member.profitSharePercent || '')}
+                                onChange={(event) => setProfitShareDraft({ userId: member.id, value: event.target.value, saving: false, error: '' })}
+                              />
+                              <button
+                                type="button"
+                                className="primary-button"
+                                disabled={profitShareDraft.saving}
+                                onClick={async () => {
+                                  const value = Number(profitShareDraft.value)
+                                  if (!Number.isFinite(value) || value < 1 || value > 10) {
+                                    setProfitShareDraft((current) => ({ ...current, error: 'Enter a percentage from 1 to 10.' }))
+                                    return
+                                  }
+                                  setProfitShareDraft((current) => ({ ...current, saving: true, error: '' }))
+                                  try {
+                                    await onAdminUserAction({ action: 'set-board-member-profit-share', userId: member.id, email: member.email, profitSharePercent: value })
+                                    setProfitShareDraft((current) => ({ ...current, saving: false }))
+                                  } catch (error) {
+                                    setProfitShareDraft((current) => ({ ...current, saving: false, error: error.message }))
+                                  }
+                                }}
+                              >
+                                {profitShareDraft.saving ? 'Saving...' : 'Save percentage'}
+                              </button>
+                              {profitShareDraft.error && <small className="field-error">{profitShareDraft.error}</small>}
+                            </div>}
+
+                            {isFullAdmin && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Board Membership</span>
+                              <button
+                                type="button"
+                                className={member.isBoardMember || member.role === 'board_member' ? 'primary-button' : 'ghost-button'}
+                                onClick={async () => {
+                                  const enabled = !(member.isBoardMember || member.role === 'board_member')
+                                  const share = Number(member.profitSharePercent || 1)
+                                  try {
+                                    await onAdminUserAction({ action: 'set-board-membership', userId: member.id, email: member.email, enabled, profitSharePercent: share })
+                                  } catch (error) {
+                                    setNewUserStatus({ saving: false, message: '', error: error.message })
+                                  }
+                                }}
+                              >
+                                {member.isBoardMember || member.role === 'board_member' ? 'Board Member enabled' : 'Add Board Member role'}
+                              </button>
+                              <small className="muted">Board Membership can coexist with Admin and payroll. Set the percentage above after enabling.</small>
+                            </div>}
+
+                            {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Developer Apps specialist</span>
+                              <button
+                                type="button"
+                                className={member.developerAppEditAccess ? 'primary-button' : 'ghost-button'}
+                                onClick={async () => {
+                                  try {
+                                    await onAdminUserAction({ action: 'set-developer-app-edit-access', userId: member.id, email: member.email, enabled: !member.developerAppEditAccess })
+                                  } catch (error) {
+                                    setNewUserStatus({ saving: false, message: '', error: error.message })
+                                  }
+                                }}
+                              >
+                                {member.developerAppEditAccess ? 'Editing granted' : 'Grant editing access'}
+                              </button>
+                              <small className="muted">Only grant this to a trusted provider-credentials specialist.</small>
+                            </div>}
+
+                            {isFullAdmin && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Role</span>
                               {USER_ROLES.map((role) => (
                                 <button
@@ -1052,7 +1277,7 @@ export function AdminPanel({
                                   {role}
                                 </button>
                               ))}
-                            </div>
+                            </div>}
 
                             <div className="it-user-detail-group it-user-detail-stack">
                               <span className="it-user-detail-label">Identity</span>
@@ -1166,7 +1391,7 @@ export function AdminPanel({
               )}
             </Section>
 
-            <Section title="Access requests">
+            {itTab === 'users' && <Section title="Access requests">
               {accessRequests.length === 0 && <p className="muted">No pending access requests.</p>}
               {accessRequests.map((req) => (
                 <div key={req.id} className="it-row">
@@ -1178,10 +1403,10 @@ export function AdminPanel({
                     <StatusBadge value={req.status} />
                     {req.status === 'pending' && (
                       <>
-                        <button type="button" className="primary-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => setAccessRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, status: 'approved', reviewedAt: new Date().toISOString() } : r))}>
+                        <button type="button" className="primary-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} disabled={adminLoading} onClick={() => handleReviewAccessRequest(req, 'approved')}>
                           Approve
                         </button>
-                        <button type="button" className="ghost-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} onClick={() => setAccessRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, status: 'denied', reviewedAt: new Date().toISOString() } : r))}>
+                        <button type="button" className="ghost-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} disabled={adminLoading} onClick={() => handleReviewAccessRequest(req, 'denied')}>
                           Deny
                         </button>
                       </>
@@ -1189,7 +1414,7 @@ export function AdminPanel({
                   </div>
                 </div>
               ))}
-            </Section>
+            </Section>}
 
             {quotaEditingUserId && (
               <Section title="Edit storage quota">
@@ -1258,8 +1483,19 @@ export function AdminPanel({
             taxRecords={taxRecords} setTaxRecords={setTaxRecords}
             refunds={refunds} setRefunds={setRefunds}
             financialTasks={financialTasks} setFinancialTasks={setFinancialTasks}
+            boardMembers={teamMembers.filter((member) => member.role === 'board_member')}
+            company={currentUser?.company}
+            currentUser={currentUser}
           />
         )}
+
+        {itTab === 'board-summary' && currentUser?.isBoardMember && (
+          <BoardMemberFinancePanel company={currentUser.company} />
+        )}
+
+        {itTab === 'trademark' && <TrademarkPanel currentUser={currentUser} />}
+
+        {itTab === 'developer-apps' && <DeveloperAppsPanel currentUser={currentUser} />}
 
         {itTab === 'integrations' && (
           <div>
@@ -1297,28 +1533,27 @@ export function AdminPanel({
           </div>
         )}
 
+        {itTab === 'ai-operations' && <AiOperationsPanel />}
+
         {itTab === 'controls' && (
           <div>
-            <Section title="Landing page announcement">
-              <p className="muted">Publish a highlighted notice that appears at the top of the public landing page before sign-in.</p>
-              <textarea
-                rows="5"
-                value={announcementDraft}
-                onChange={(event) => setAnnouncementDraft(event.target.value)}
-                style={{ width: '100%', resize: 'vertical', padding: '0.75rem', borderRadius: '0.8rem', border: '1px solid #dbeafe', font: 'inherit' }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => setLandingAnnouncement(announcementDraft.trim() || 'This application is currently in Beta Testing...')}
-                >
-                  Save announcement
-                </button>
-              </div>
-            </Section>
+            <NoticeEditor
+              key={`landing-${announcements.landing.updatedAt}`}
+              title="Landing page note"
+              description="Shown publicly above the landing page. An empty message is never displayed."
+              notice={announcements.landing}
+              onSave={onSaveAnnouncement}
+            />
 
-            <Section title="Site feature flags">
+            <NoticeEditor
+              key={`application-${announcements.application.updatedAt}`}
+              title="Application note"
+              description="Shown only inside the signed-in application for account holders."
+              notice={announcements.application}
+              onSave={onSaveAnnouncement}
+            />
+
+            {isFullAdmin && <Section title="Site feature flags">
               <p className="muted">Enable or disable platform features globally.</p>
               {featureFlags.map((flag) => (
                 <div key={flag.id} className="it-row">
@@ -1336,9 +1571,9 @@ export function AdminPanel({
                   </button>
                 </div>
               ))}
-            </Section>
+            </Section>}
 
-            <Section title="Issue desk">
+            {isFullAdmin && <Section title="Issue desk">
               {alerts.map((alert) => (
                 <div key={alert.id} className="it-row">
                   <div>
@@ -1359,7 +1594,7 @@ export function AdminPanel({
                   </div>
                 </div>
               ))}
-            </Section>
+            </Section>}
           </div>
         )}
       </div>

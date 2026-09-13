@@ -38,7 +38,7 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const { prompt, style, aspectRatio, referenceImageSrc } = await request.json()
+    const { prompt, style, aspectRatio, referenceImageSrc, references = [] } = await request.json()
 
     if (typeof prompt !== 'string' || !prompt.trim()) {
       return json({ error: 'A prompt is required.' }, 400, request)
@@ -56,14 +56,22 @@ Deno.serve(async (request) => {
         aspectRatio,
         model: MODEL,
         referenceImageSrc: referenceImageSrc || null,
+        references: Array.isArray(references) ? references.slice(0, 8) : [],
       }),
     })
 
     if (!upstream.ok) {
-      return json({ error: `Image generation failed (${upstream.status})` }, 502, request)
+      const detail = await upstream.text().catch(() => '')
+      console.error('image provider rejected request', upstream.status, detail.slice(0, 500))
+      return json({ error: `Image provider failed (${upstream.status}).`, detail: detail.slice(0, 500) }, 502, request)
     }
 
-    return json(await upstream.json(), 200, request)
+    const rawBody = await upstream.text()
+    try {
+      return json(JSON.parse(rawBody), 200, request)
+    } catch {
+      return json({ error: 'Image provider returned an invalid JSON response.', detail: rawBody.slice(0, 500) }, 502, request)
+    }
   } catch (error) {
     console.error('ai-image failed', error)
     return json({ error: 'Image generation is unavailable right now.' }, 500, request)

@@ -47,6 +47,144 @@ export const billingService = {
     return data.url
   },
 
+  async buyCreditPack(productKey) {
+    if (!isSupabaseConfigured) {
+      return { success: true, demo: true }
+    }
+    const data = await invokeFunction('create-credit-checkout', { productKey })
+    if (!data?.url) throw new Error('Credit checkout is unavailable right now.')
+    window.location.assign(data.url)
+    return data.url
+  },
+
+  async listCreditProducts() {
+    const defaultProducts = [
+      {
+        id: 'credit_500',
+        product_key: 'credit_500',
+        label: '500 AI Tokens',
+        credits: 500,
+        price_usd: 9.99,
+        tag: 'Starter Add-on',
+        badge: null,
+        popular: false,
+        bestValue: false,
+        features: [
+          '500 Echo Credits / Tokens',
+          '~500 Copywriter prompts',
+          '~100 Image Studio designs',
+          '~8 Video seconds',
+          'Never expires • Instant activation',
+        ],
+      },
+      {
+        id: 'credit_1000',
+        product_key: 'credit_1000',
+        label: '1,000 AI Tokens',
+        credits: 1000,
+        price_usd: 18.99,
+        tag: 'Creator Pack',
+        badge: 'Save 5%',
+        popular: false,
+        bestValue: false,
+        features: [
+          '1,000 Echo Credits / Tokens',
+          '~1,000 Copywriter prompts',
+          '~200 Image Studio designs',
+          '~16 Video seconds',
+          'Never expires • Instant activation',
+        ],
+      },
+      {
+        id: 'credit_2500',
+        product_key: 'credit_2500',
+        label: '2,500 AI Tokens',
+        credits: 2500,
+        price_usd: 39.99,
+        tag: 'Most Popular',
+        badge: 'Popular Choice',
+        popular: true,
+        bestValue: false,
+        features: [
+          '2,500 Echo Credits / Tokens',
+          '~2,500 Copywriter prompts',
+          '~500 Image Studio designs',
+          '~40 Video seconds',
+          'Never expires • Priority processing',
+        ],
+      },
+      {
+        id: 'credit_5000',
+        product_key: 'credit_5000',
+        label: '5,000 AI Tokens',
+        credits: 5000,
+        price_usd: 74.99,
+        tag: 'Best Value',
+        badge: 'Best Value (Save 25%)',
+        popular: false,
+        bestValue: true,
+        features: [
+          '5,000 Echo Credits / Tokens',
+          '~5,000 Copywriter prompts',
+          '~1,000 Image Studio designs',
+          '~80 Video seconds',
+          'Never expires • Maximum token savings',
+        ],
+      },
+    ]
+
+    if (!isSupabaseConfigured) return defaultProducts
+
+    const { data, error } = await supabase
+      .from('echo_credit_products')
+      .select('*')
+      .eq('enabled', true)
+      .order('sort_order')
+
+    if (error || !data || data.length === 0) return defaultProducts
+
+    return data.map((item) => {
+      const is5000 = item.credits >= 5000
+      const is2500 = item.credits === 2500
+      const is1000 = item.credits === 1000
+      return {
+        id: item.id,
+        product_key: item.product_key,
+        label: item.label,
+        credits: item.credits,
+        price_usd: Number(item.price_usd),
+        stripe_price_id: item.stripe_price_id,
+        tag: is5000 ? 'Best Value' : is2500 ? 'Most Popular' : is1000 ? 'Creator Pack' : 'Starter Add-on',
+        badge: is5000 ? 'Best Value (Save 25%)' : is2500 ? 'Popular Choice' : is1000 ? 'Save 5%' : null,
+        popular: is2500,
+        bestValue: is5000,
+        features: [
+          `${item.credits.toLocaleString()} Echo Credits / Tokens`,
+          `~${item.credits.toLocaleString()} Copywriter prompts`,
+          `~${Math.floor(item.credits / 5).toLocaleString()} Image Studio designs`,
+          `~${Math.floor(item.credits / 60)} Video seconds`,
+          'Never expires • Instant activation',
+        ],
+      }
+    })
+  },
+
+  async listCreditTransactions() {
+    if (!isSupabaseConfigured) {
+      return [
+        { id: 'tx-1', amount: 500, kind: 'grant', created_at: new Date().toISOString(), metadata: { source: 'plan_inclusion' } }
+      ]
+    }
+    const { data, error } = await supabase
+      .from('echo_credit_transactions')
+      .select('id, amount, kind, reference_id, metadata, created_at')
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    if (error) return []
+    return data || []
+  },
+
   async redeemPromoCode({ code, email }) {
     const { data, error } = await supabase.rpc('redeem_promo_code', {
       p_code: code,
@@ -72,6 +210,44 @@ export const billingService = {
     }
 
     return data ?? { entitled: false, status: 'none' }
+  },
+
+  async getAiDashboard() {
+    if (!isSupabaseConfigured) {
+      return {
+        balance: 500,
+        monthlyAllowance: 500,
+        periodEnd: null,
+        pricing: [
+          { capability: 'message', mode: 'standard', botName: 'Echo Copywriter', description: 'Captions, posts, hashtags, and rewrites.', creditCost: 1, unit: 'request' },
+          { capability: 'image', mode: 'standard', botName: 'Echo Image Studio', description: 'Campaign image generation.', creditCost: 5, unit: 'image' },
+          { capability: 'video', mode: 'standard', botName: 'Echo Video Fast', description: 'Short-form video generation.', creditCost: 60, unit: 'second' },
+        ],
+        recentJobs: [],
+      }
+    }
+
+    const [account, pricing, jobs] = await Promise.all([
+      supabase.from('echo_credit_accounts').select('balance, monthly_allowance, period_end').maybeSingle(),
+      supabase.from('echo_ai_pricing').select('capability, mode, bot_name, bot_description, echo_credit_cost, credit_cost, unit').eq('enabled', true).order('capability'),
+      supabase.from('echo_ai_jobs').select('id, capability, mode, credits_reserved, status, created_at').order('created_at', { ascending: false }).limit(6),
+    ])
+    const failed = [account, pricing, jobs].find((result) => result.error)
+    if (failed) throw new Error(failed.error.message)
+    return {
+      balance: account.data?.balance ?? 0,
+      monthlyAllowance: account.data?.monthly_allowance ?? 0,
+      periodEnd: account.data?.period_end ?? null,
+      pricing: (pricing.data ?? []).map((item) => ({
+        capability: item.capability,
+        mode: item.mode,
+        botName: item.bot_name || item.capability,
+        description: item.bot_description || '',
+        creditCost: item.echo_credit_cost ?? item.credit_cost ?? 0,
+        unit: item.unit || 'request',
+      })),
+      recentJobs: jobs.data ?? [],
+    }
   },
 
   async getReferralSummary() {

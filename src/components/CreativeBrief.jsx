@@ -9,7 +9,7 @@ const formatSize = (bytes) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject, onUseDraft, onSaveToWorkspace }) {
+export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject, onSaveToWorkspace }) {
   const [sources, setSources] = useState([])
   const [instruction, setInstruction] = useState('Create a polished campaign flyer based on this information.')
   const [outputType, setOutputType] = useState('flyer')
@@ -19,6 +19,7 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
   const [project, setProject] = useState(null)
   const [saving, setSaving] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+  const [autoSaved, setAutoSaved] = useState(false)
   const inputRef = useRef(null)
 
   const addFiles = async (files) => {
@@ -73,7 +74,15 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
     setBusy(true)
     setError('')
     try {
-      setProject(await buildCreativeProject({ instruction, outputType, sources, agentConfig }))
+      const generatedProject = await buildCreativeProject({
+        instruction,
+        outputType,
+        sources,
+        agentConfig,
+          })
+          setProject(generatedProject)
+          await onSaveToWorkspace(generatedProject)
+          setAutoSaved(true)
     } catch (generationError) {
       setError(generationError.message)
     } finally {
@@ -108,6 +117,12 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
         <div>
           <p className="section-label">Source material</p>
           <h3>Build from your documents</h3>
+        </div>
+
+        <div className="creative-provider-status">
+          <strong>Generation tool</strong>
+          <span>EchoAI Hosted AI</span>
+          <small>EchoAI manages provider accounts, routing, credits, and API security for this campaign.</small>
         </div>
 
         <div
@@ -283,6 +298,7 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
               </ol>
             )}
             {project.warning && <p className="muted">{project.warning}</p>}
+            {autoSaved && <p className="creative-auto-save-note">✓ Saved automatically to AI Generations</p>}
             <div className="brief-result-actions">
               {(project.outputType === 'flyer' || project.outputType === 'image') && (
                 <button type="button" className="primary-button" onClick={() => onEditProject(project)}>Edit visual</button>

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { canUseAgentMode, runCreativeAgentJob } from '../services/aiAgentService'
+import { canUseAgentMode, ECHO_CREATOR_MODES, getEchoCreatorCost, runCreativeAgentJob } from '../services/aiAgentService'
 import './InhouseAiStudio.css'
 
 const CREATIVE_MODES = [
@@ -33,12 +33,14 @@ const fileExtension = (mime, kind) => {
   return kind === 'video' ? 'webm' : kind === 'audio' ? 'mp3' : 'png'
 }
 
-export function InhouseAiStudio({ agentConfig, assets, onSaveConfig, onAddAsset }) {
+export function InhouseAiStudio({ agentConfig, assets, onSaveConfig, onAddAsset, onBuyCredits }) {
   const [mode, setMode] = useState('image')
   const [prompt, setPrompt] = useState('')
   const [personaId, setPersonaId] = useState('')
   const [referenceIds, setReferenceIds] = useState([])
   const [settings, setSettings] = useState({ aspectRatio: '1:1', durationSeconds: 6, quality: 'high', style: agentConfig.defaultStyle || '' })
+  const [creatorEnabled, setCreatorEnabled] = useState(false)
+  const [creatorMode, setCreatorMode] = useState('standard')
   const [personaDraft, setPersonaDraft] = useState(emptyPersona)
   const [personaOpen, setPersonaOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -106,7 +108,17 @@ export function InhouseAiStudio({ agentConfig, assets, onSaveConfig, onAddAsset 
         negativePrompt: agentConfig.negativePrompt || '',
         returnEditableMetadata: true,
       }
-      setResult(await runCreativeAgentJob({ agentConfig, capability: mode, prompt, persona: selectedPersona, references, settings: output }))
+      setResult(await runCreativeAgentJob({
+        agentConfig,
+        capability: mode,
+        prompt,
+        persona: selectedPersona,
+        references,
+        settings: output,
+        creatorMode: creatorEnabled ? creatorMode : null,
+        creditCost: creatorEnabled ? getEchoCreatorCost(mode, creatorMode) : 0,
+        brandProfile: agentConfig.brandProfile || null,
+      }))
     } catch (jobError) {
       setError(jobError.message)
     } finally {
@@ -157,6 +169,7 @@ export function InhouseAiStudio({ agentConfig, assets, onSaveConfig, onAddAsset 
           <span />
           <div><strong>{agentConfig.name}</strong><small>{agentConfig.enabled && agentConfig.endpoint ? 'Connected and ready' : 'Configure the agent in Integrations'}</small></div>
         </div>
+        <button type="button" className="ghost-button" onClick={() => onBuyCredits?.('credit_500')}>Buy 500 credits</button>
       </header>
 
       <div className="inhouse-ai-mode-strip" aria-label="AI job type">
@@ -239,6 +252,16 @@ export function InhouseAiStudio({ agentConfig, assets, onSaveConfig, onAddAsset 
               <label>Style<input value={settings.style} onChange={(event) => setSettings((current) => ({ ...current, style: event.target.value }))} placeholder="Photoreal, editorial..." /></label>
               {mode === 'video' && <label>Duration<input type="number" min="2" max="30" value={settings.durationSeconds} onChange={(event) => setSettings((current) => ({ ...current, durationSeconds: Number(event.target.value) }))} /></label>}
             </div>
+            <label className="inhouse-creator-toggle">
+              <input type="checkbox" checked={creatorEnabled} onChange={(event) => setCreatorEnabled(event.target.checked)} />
+              <span><strong>Use Echo Creator credits</strong><small>Route this job through the credit ledger and selected model alias.</small></span>
+            </label>
+            {creatorEnabled && (
+              <div className="inhouse-settings-grid">
+                <label>Creator route<select value={creatorMode} onChange={(event) => setCreatorMode(event.target.value)}>{Object.entries(ECHO_CREATOR_MODES).map(([key, value]) => <option key={key} value={key}>{value.label} - {value.description}</option>)}</select></label>
+                <p className="muted">This job uses {getEchoCreatorCost(mode, creatorMode)} Echo Credits.</p>
+              </div>
+            )}
           </div>
 
           {error && <p className="auth-message auth-error">{error}</p>}
@@ -248,7 +271,7 @@ export function InhouseAiStudio({ agentConfig, assets, onSaveConfig, onAddAsset 
         </div>
 
         <aside className="inhouse-ai-result">
-          <div className="inhouse-ai-result-heading"><div><p className="section-label">Result</p><h3>{result?.title || 'Ready for a creative job'}</h3></div>{result?.usage && <span>{result.usage.totalTokens || result.usage.credits || ''}</span>}</div>
+          <div className="inhouse-ai-result-heading"><div><p className="section-label">Result</p><h3>{result?.title || 'Ready for a creative job'}</h3></div>{result?.creditsRemaining !== undefined ? <span>{result.creditsRemaining} credits left</span> : result?.usage && <span>{result.usage.totalTokens || result.usage.credits || ''}</span>}</div>
           {!result && <div className="inhouse-result-empty"><span>AI</span><p>Your generated text, character profile, image, video, or audio will appear here.</p></div>}
           {result?.text && <div className="inhouse-result-copy"><p>{result.text}</p></div>}
           {result?.persona && <div className="inhouse-result-persona"><strong>{result.persona.name || 'Generated character'}</strong><pre>{JSON.stringify(result.persona, null, 2)}</pre><button type="button" className="primary-button" onClick={saveGeneratedPersona}>Save as reusable persona</button></div>}

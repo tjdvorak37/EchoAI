@@ -10,6 +10,24 @@ const getCurrentUserId = async () => {
   return data.user.id
 }
 
+const localMessageIdeas = (prompt) => [
+  {
+    title: 'Launch urgency',
+    copy: `Today only: ${prompt.slice(0, 80)}... Claim your offer before midnight.`,
+    image: 'Bold product close-up with energetic typography overlay.',
+  },
+  {
+    title: 'Community angle',
+    copy: `Your followers asked for this. ${prompt.slice(0, 90)} and share your pick in comments.`,
+    image: 'Lifestyle scene showing customers using the product in daylight.',
+  },
+  {
+    title: 'Story sequence',
+    copy: `Frame 1: Hook. Frame 2: Benefit. Frame 3: ${prompt.slice(0, 70)} with a clear CTA.`,
+    image: 'Three-panel storyboard with warm gradients and social-safe margins.',
+  },
+]
+
 export const platformService = {
   async listPosts() {
     if (!isSupabaseConfigured) return []
@@ -77,11 +95,28 @@ export const platformService = {
     }
   },
 
+  async deleteScheduledPost(postId) {
+    if (!postId) throw new Error('Post ID is required.')
+
+    if (!isSupabaseConfigured) {
+      return { id: postId, deleted: true }
+    }
+
+    const { data, error } = await supabase.functions.invoke('social-publisher', {
+      body: { action: 'cancel_scheduled', postId },
+    })
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message)
+    }
+    return data
+  },
+
   async postNow(payload) {
     const publishedAt = new Date().toISOString()
     const post = {
       id: randomId(),
-      status: 'published',
+      status: 'scheduled',
       scheduledAt: publishedAt,
       ...payload,
     }
@@ -102,13 +137,29 @@ export const platformService = {
         scheduled_at: publishedAt,
         channels: payload.channels,
         media: payload.media ?? [],
-        status: 'published',
+        status: 'scheduled',
       })
       .select('*')
       .single()
 
     if (error) {
       throw new Error(error.message)
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData?.session?.access_token
+    if (!accessToken) throw new Error('Sign in before publishing a post.')
+
+    const { data: publishResult, error: publishError } = await supabase.functions.invoke('social-publisher', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: { action: 'publish_now', postId: data.id },
+    })
+    if (publishError) {
+      const detail = await publishError.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || publishError.message || 'Unable to publish this post.')
+    }
+    if (publishResult?.status !== 'published') {
+      throw new Error(publishResult?.error || 'The social provider did not confirm publication.')
     }
 
     return {
@@ -119,7 +170,7 @@ export const platformService = {
       scheduledAt: data.scheduled_at,
       channels: data.channels,
       media: data.media ?? [],
-      status: data.status,
+      status: publishResult.status,
     }
   },
 
@@ -146,34 +197,6 @@ export const platformService = {
       }
     }
 
-    if (!isSupabaseConfigured) {
-      return [
-        {
-          title: 'Launch urgency',
-          copy: `Today only: ${cleanedPrompt.slice(0, 80)}... Claim your offer before midnight.`,
-          image: 'Bold product close-up with energetic typography overlay.',
-        },
-        {
-          title: 'Community angle',
-          copy: `Your followers asked for this. ${cleanedPrompt.slice(0, 90)} and share your pick in comments.`,
-          image: 'Lifestyle scene showing customers using the product in daylight.',
-        },
-        {
-          title: 'Story sequence',
-          copy: `Frame 1: Hook. Frame 2: Benefit. Frame 3: ${cleanedPrompt.slice(0, 70)} with a clear CTA.`,
-          image: 'Three-panel storyboard with warm gradients and social-safe margins.',
-        },
-      ]
-    }
-
-    const { data, error } = await supabase.functions.invoke('generate-social-copy', {
-      body: { prompt: cleanedPrompt },
-    })
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    return data.suggestions ?? []
+    return localMessageIdeas(cleanedPrompt)
   },
 }

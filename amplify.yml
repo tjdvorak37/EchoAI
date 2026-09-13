@@ -17,6 +17,11 @@ frontend:
 
 # A single-page app must serve index.html for unknown paths, or deep links
 # (/?ref=CODE, /?checkout=success) return 404.
+customRules:
+  - source: '/<*>'
+    target: '/index.html'
+    status: '200'
+
 customHeaders:
   # index.html must never be cached, or the browser keeps requesting asset
   # hashes from a previous build that no longer exist (white screen).

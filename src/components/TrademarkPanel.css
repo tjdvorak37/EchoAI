@@ -1,0 +1,16 @@
+.trademark-panel { display: grid; gap: 1.2rem; }
+.trademark-header { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.trademark-header h2 { margin: .2rem 0 .45rem; }
+.trademark-header p:not(.section-label) { max-width: 720px; color: var(--text-soft); }
+.trademark-badge { white-space: nowrap; color: #155e75; background: #cffafe; border: 1px solid #a5f3fc; border-radius: 999px; padding: .45rem .75rem; font-size: .82rem; font-weight: 700; }
+.trademark-warning { padding: .8rem 1rem; color: #713f12; background: #fff7ed; border: 1px solid #fed7aa; border-radius: .7rem; }
+.trademark-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.trademark-card { padding: 1rem; background: var(--bg-surface, #fff); border: 1px solid var(--border); border-radius: .8rem; }
+.trademark-card h3 { margin: 0 0 .7rem; }
+.trademark-wide { grid-column: 1 / -1; }
+.trademark-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
+.trademark-fields label:first-child, .trademark-fields label:nth-child(6), .trademark-fields label:nth-child(7) { grid-column: span 2; }
+.trademark-card textarea { width: 100%; resize: vertical; box-sizing: border-box; }
+.trademark-actions { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding-top: .4rem; }
+@media (max-width: 800px) { .trademark-grid, .trademark-fields { grid-template-columns: 1fr; } .trademark-wide { grid-column: auto; } .trademark-fields label:first-child, .trademark-fields label:nth-child(6), .trademark-fields label:nth-child(7) { grid-column: auto; } .trademark-header, .trademark-actions { flex-direction: column; } }
+@media print { .trademark-panel { color: #000; } .trademark-actions, .trademark-badge { display: none; } .trademark-card { break-inside: avoid; } .trademark-grid { gap: .5rem; } }

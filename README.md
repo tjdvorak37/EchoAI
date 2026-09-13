@@ -247,10 +247,11 @@ environment:
    ```
 
    Invoke it every minute from a trusted scheduler with
-   `Authorization: Bearer <SOCIAL_PUBLISHER_CRON_SECRET>`. The worker currently
-   publishes Facebook Page text posts and Instagram single-image posts. Other
-   platforms remain blocked until their provider-specific publishing adapters
-   are implemented and approved.
+   `Authorization: Bearer <SOCIAL_PUBLISHER_CRON_SECRET>`. The worker publishes
+   Facebook Page text posts, Instagram single-image posts, and YouTube videos.
+   YouTube uploads are private by default during beta. Other platforms remain
+   blocked until their provider-specific publishing adapters are implemented and
+   approved.
 6. Configure the image generation and listening provider endpoints. Live mode
    intentionally reports provider failures or zero results instead of fabricating
    content. Verify each connector with an authenticated non-admin account.

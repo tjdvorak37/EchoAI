@@ -3,6 +3,7 @@ import demoPosterImage from '../assets/demo-poster.svg'
 import echoMascot from '../assets/echo-mascot.svg'
 import { PLAN_ORDER, PLANS, getAnnualSavings } from '../data/plans'
 import { authService } from '../services/authService'
+import { AnnouncementBanner } from './AnnouncementBanner'
 import './LandingPage.css'
 
 const SUPPORT_CATEGORIES = [
@@ -14,17 +15,19 @@ const SUPPORT_CATEGORIES = [
 ]
 
 const workflow = [
-  ['01', 'Bring the source material', 'Add PowerPoint, Word, Excel, PDF, images, video, or a written brief.', 'blue'],
-  ['02', 'Choose what to make', 'Ask for a flyer, social image, video plan, or a complete post package.', 'coral'],
-  ['03', 'Refine every detail', 'Edit layers, heal image pixels, trim footage, adjust copy, and stay on brand.', 'yellow'],
-  ['04', 'Schedule and learn', 'Publish across channels and turn audience signals into the next brief.', 'green'],
+  ['01', 'Bring your source material', 'Upload documents and media, or link files from Google Drive, OneDrive, and SharePoint.', 'blue'],
+  ['02', 'Create with the right AI', 'Build briefs and copy, or route image, video, audio, character, and analysis jobs to your private AI tools.', 'coral'],
+  ['03', 'Refine every detail', 'Edit photo layers, heal pixels, build branded layouts, trim footage, and mix timeline effects.', 'yellow'],
+  ['04', 'Publish and learn', 'Schedule connected social channels, sync your calendar, manage reposts, and monitor audience signals.', 'green'],
 ]
 
 const capabilities = [
-  ['Create', 'One brief, every format', 'Transform mixed documents into campaign copy, editable images, flyers, and video storyboards.', '#ff6b5e'],
-  ['Edit', 'Real media tools', 'Clean image pixels, crop, recolor, build layers, trim clips, add transitions, and export.', '#2364d8'],
-  ['Publish', 'A calmer content calendar', 'Prepare channel-specific posts, schedule campaigns, and keep approvals moving.', '#11866f'],
-  ['Listen', 'Know what happens next', 'Track sentiment, competitors, trends, influencers, and reputation risk.', '#d58b00'],
+  ['AI Studio', 'One brief, every format', 'Combine documents into campaign copy, flyers, social concepts, video plans, and complete post packages.', '#ff6b5e'],
+  ['In-house AI', 'Bring your strongest models', 'Connect multiple private AI tools for writing, image editing, characters, video, audio, and media analysis.', '#7b4bc9'],
+  ['Photo + video', 'Real media editors', 'Build branded image layers, heal and paint pixels, arrange timeline clips, add effects, and export.', '#2364d8'],
+  ['Publish', 'Social scheduling that stays connected', 'Authorize social accounts, queue multi-channel posts, sync Google Calendar, and move company reposts through approvals.', '#11866f'],
+  ['Listen', 'Know what happens next', 'Track sentiment, competitors, trends, influencers, share of voice, and reputation risk.', '#d58b00'],
+  ['Workspace', 'Files and brand assets together', 'Organize media, link cloud drives, and reuse company colors, licensed fonts, logos, and guidelines.', '#c24f72'],
 ]
 
 const Brand = () => (
@@ -103,16 +106,16 @@ function SupportDialog({ onClose }) {
   )
 }
 
-export function LandingPage({ announcementMessage, onSignIn, onPurchase, children }) {
+export function LandingPage({ announcement, onSignIn, onPurchase, children }) {
   const [supportOpen, setSupportOpen] = useState(() => new URLSearchParams(window.location.search).get('support') === 'privacy')
 
   return (
     <div className="landing-page" id="top">
-      {announcementMessage && (
-        <div className="landing-announcement" role="status" aria-live="polite">
-          <strong>Important:</strong> {announcementMessage}
-        </div>
-      )}
+      <AnnouncementBanner
+        key={announcement.updatedAt}
+        notice={announcement}
+        audience="landing"
+      />
       <header className="landing-nav">
         <a href="#top" aria-label="EchoAI home"><Brand /></a>
         <nav className="landing-nav-links" aria-label="Landing page">
@@ -132,10 +135,10 @@ export function LandingPage({ announcementMessage, onSignIn, onPurchase, childre
         <section className="landing-hero">
           <div className="landing-hero-content">
             <div className="landing-badge"><span /> AI content workspace for growing teams</div>
-            <h1 className="landing-headline">EchoAI turns your source files into ready-to-publish content.</h1>
+            <h1 className="landing-headline">EchoAI brings creation, editing, publishing, and listening into one workspace.</h1>
             <p className="landing-subhead">
-              Bring the deck, spreadsheet, notes, photos, and clips. EchoAI finds the story,
-              builds the creative, and keeps every post editable from brief to publish.
+              Bring documents, cloud files, brand assets, and your preferred AI models. Build the
+              creative, refine it in real editors, publish to connected channels, and learn from the response.
             </p>
             <div className="landing-hero-actions">
               <button type="button" className="landing-primary-action landing-hero-btn" onClick={onPurchase}>
@@ -256,10 +259,10 @@ export function LandingPage({ announcementMessage, onSignIn, onPurchase, childre
           </div>
           <div className="landing-included-row">
             <span>Included with every package</span>
-            <strong>AI Content Studio</strong>
+            <strong>AI Studio + private AI tools</strong>
             <strong>Photo + video editors</strong>
-            <strong>Scheduler</strong>
-            <strong>Social listening</strong>
+            <strong>Scheduler + reposting</strong>
+            <strong>Listening + cloud workspace</strong>
           </div>
           <p className="landing-pricing-note">Annual billing saves 15%. Secure checkout powered by Stripe. Cancel anytime.</p>
         </section>
