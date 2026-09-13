@@ -127,6 +127,8 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   const [inspectorTab, setInspectorTab] = useState('video')
   const clipCounter = useRef(0)
   const timelineRef = useRef(null)
+  const timelineHeaderRef = useRef(null)
+  const timelineTracksRef = useRef(null)
   const stageRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
@@ -722,7 +724,13 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
   const timelinePixelsPerSecond = 40 * zoom
   const totalPixels = duration * timelinePixelsPerSecond
-  const timelineLabelWidth = 150
+  const timelineLabelWidth = 270
+
+  const syncTimelineScroll = (source) => {
+    const target = source === 'header' ? timelineTracksRef.current : timelineHeaderRef.current
+    const origin = source === 'header' ? timelineHeaderRef.current : timelineTracksRef.current
+    if (target && origin) target.scrollLeft = origin.scrollLeft
+  }
 
   const setTimelineTimeFromPointer = (event) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -1480,7 +1488,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           </div>
 
           <div className="timeline-container" ref={timelineRef}>
-            <div className="timeline-header" onPointerDown={setTimelineTimeFromPointer} onPointerMove={scrubTimeline}>
+            <div className="timeline-header" ref={timelineHeaderRef} onScroll={() => syncTimelineScroll('header')} onPointerDown={setTimelineTimeFromPointer} onPointerMove={scrubTimeline}>
               <div className="timeline-ruler" style={{ minWidth: `${timelineLabelWidth + totalPixels}px` }}>
                 {Array.from({ length: duration + 1 }).map((_, i) => (
                   <div
@@ -1494,7 +1502,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
               </div>
             </div>
 
-            <div className="timeline-tracks">
+            <div className="timeline-tracks" ref={timelineTracksRef} onScroll={() => syncTimelineScroll('tracks')}>
               {tracks.map((track) => (
                 <div key={track.id} className="track">
                   <div className="track-header">
