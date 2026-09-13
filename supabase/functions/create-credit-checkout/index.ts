@@ -16,11 +16,11 @@ Deno.serve(async (request) => {
   if (!auth?.user) return json({ error: 'Authentication required.' }, 401, request)
   try {
     const { productKey } = await request.json()
-    const CANONICAL_PACKS: Record<string, { label: string; credits: number; price_usd: number }> = {
-      credit_500: { label: '500 AI Tokens', credits: 500, price_usd: 9.99 },
-      credit_1000: { label: '1,000 AI Tokens', credits: 1000, price_usd: 18.99 },
-      credit_2500: { label: '2,500 AI Tokens', credits: 2500, price_usd: 39.99 },
-      credit_5000: { label: '5,000 AI Tokens', credits: 5000, price_usd: 74.99 },
+    const CANONICAL_PACKS: Record<string, { label: string; credits: number; price_usd: number; stripe_price_id: string }> = {
+      credit_500: { label: '500 AI Tokens', credits: 500, price_usd: 9.99, stripe_price_id: 'price_1UFGcbRrklQsqC82iY7GVtDr' },
+      credit_1000: { label: '1,000 AI Tokens', credits: 1000, price_usd: 18.99, stripe_price_id: 'price_1UFGdRRrklQsqC82fUcEFFP3' },
+      credit_2500: { label: '2,500 AI Tokens', credits: 2500, price_usd: 39.99, stripe_price_id: 'price_1UFGeBRrklQsqC82JMP7nUXL' },
+      credit_5000: { label: '5,000 AI Tokens', credits: 5000, price_usd: 74.99, stripe_price_id: 'price_1UFGeqRrklQsqC82fuiF4ksA' },
     }
 
     const canonical = CANONICAL_PACKS[productKey]
@@ -39,7 +39,7 @@ Deno.serve(async (request) => {
       label: dbProduct?.label || canonical.label,
       credits: Number(dbProduct?.credits) || canonical.credits,
       price_usd: Number(dbProduct?.price_usd) || canonical.price_usd,
-      stripe_price_id: dbProduct?.stripe_price_id || Deno.env.get(`STRIPE_PRICE_${productKey.toUpperCase()}`) || '',
+      stripe_price_id: dbProduct?.stripe_price_id || Deno.env.get(`STRIPE_PRICE_${productKey.toUpperCase()}`) || canonical.stripe_price_id || '',
     }
 
     const lineItem = product.stripe_price_id

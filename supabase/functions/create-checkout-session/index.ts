@@ -21,9 +21,24 @@ const PLAN_DEFAULTS: Record<string, { label: string; monthlyPrice: number; annua
   creator: { label: 'Creator Studio', monthlyPrice: 129, annualPrice: 1299, storageGb: 100, tokens: 7500 },
 }
 
+const DEFAULT_STRIPE_PRICES: Record<string, string> = {
+  STRIPE_PRICE_STANDARD_MONTHLY: 'price_1UFGJ9RrklQsqC822EUTvcKQ',
+  STRIPE_PRICE_STANDARD_ANNUAL: 'price_1UFGJ9RrklQsqC823cmY2TfS',
+  STRIPE_PRICE_STORAGE_PLUS_MONTHLY: 'price_1UFGHxRrklQsqC820fmti9kY',
+  STRIPE_PRICE_STORAGE_PLUS_ANNUAL: 'price_1UFGHxRrklQsqC820FuI8teb',
+  STRIPE_PRICE_STORAGE_PRO_MONTHLY: 'price_1UFGGdRrklQsqC825AahS61v',
+  STRIPE_PRICE_STORAGE_PRO_ANNUAL: 'price_1UFGGdRrklQsqC82PLtdTqAr',
+  STRIPE_PRICE_STORAGE_MAX_MONTHLY: 'price_1UFGEiRrklQsqC82jSx1SMxs',
+  STRIPE_PRICE_STORAGE_MAX_ANNUAL: 'price_1UFGEiRrklQsqC82kFKGekg3',
+  STRIPE_PRICE_CREATOR_MONTHLY: 'price_1UFGCRRrklQsqC82vjVbVkuJ',
+  STRIPE_PRICE_CREATOR_ANNUAL: 'price_1UFGCRRrklQsqC82NfiDNVOW',
+}
+
 // One Stripe price per tier per interval, e.g. STRIPE_PRICE_STORAGE_PRO_ANNUAL.
-const priceFor = (plan: string, interval: string) =>
-  Deno.env.get(`STRIPE_PRICE_${plan.toUpperCase()}_${interval.toUpperCase()}`)
+const priceFor = (plan: string, interval: string) => {
+  const envKey = `STRIPE_PRICE_${plan.toUpperCase()}_${interval.toUpperCase()}`
+  return Deno.env.get(envKey) || DEFAULT_STRIPE_PRICES[envKey] || ''
+}
 
 // 20% off the first month, or 10% off the first year. Both are duration=once
 // coupons in Stripe, so the discount never carries into later renewals.
