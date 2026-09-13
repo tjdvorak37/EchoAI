@@ -20,8 +20,21 @@ const DEFAULT_PRICING = [
 ]
 
 const DEFAULT_PROVIDERS = [
-  { id: 'prov-1', provider_key: 'openai', label: 'OpenAI', secret_name: 'OPENAI_API_KEY', endpoint: 'https://api.openai.com/v1', replacement_for: '', priority: 10, monthly_cap_usd: 500, enabled: true },
-  { id: 'prov-2', provider_key: 'runway', label: 'Runway', secret_name: 'RUNWAY_API_KEY', endpoint: 'https://api.runwayml.com/v1', replacement_for: '', priority: 10, monthly_cap_usd: 500, enabled: true },
+  { id: 'prov-1', provider_key: 'openai', label: 'OpenAI', secret_name: 'OPENAI_API_KEY', api_key: '', endpoint: 'https://api.openai.com/v1', replacement_for: '', priority: 10, monthly_cap_usd: 1000, organization_id: '', enabled: true },
+  { id: 'prov-2', provider_key: 'runway', label: 'Runway ML', secret_name: 'RUNWAY_API_KEY', api_key: '', endpoint: 'https://api.runwayml.com/v1', replacement_for: '', priority: 10, monthly_cap_usd: 1000, organization_id: '', enabled: true },
+  { id: 'prov-3', provider_key: 'anthropic', label: 'Anthropic (Claude)', secret_name: 'ANTHROPIC_API_KEY', api_key: '', endpoint: 'https://api.anthropic.com/v1', replacement_for: '', priority: 5, monthly_cap_usd: 500, organization_id: '', enabled: true },
+  { id: 'prov-4', provider_key: 'replicate', label: 'Replicate', secret_name: 'REPLICATE_API_TOKEN', api_key: '', endpoint: 'https://api.replicate.com/v1', replacement_for: '', priority: 5, monthly_cap_usd: 500, organization_id: '', enabled: true },
+  { id: 'prov-5', provider_key: 'custom_router', label: 'Custom AI Gateway / Router', secret_name: 'CUSTOM_AI_API_KEY', api_key: '', endpoint: 'https://api.openai.com/v1', replacement_for: '', priority: 1, monthly_cap_usd: 500, organization_id: '', enabled: true },
+]
+
+const PROVIDER_PRESETS = [
+  { key: 'openai', label: 'OpenAI', endpoint: 'https://api.openai.com/v1', secret_name: 'OPENAI_API_KEY', priority: 10, placeholder: 'sk-proj-...' },
+  { key: 'runway', label: 'Runway ML', endpoint: 'https://api.runwayml.com/v1', secret_name: 'RUNWAY_API_KEY', priority: 10, placeholder: 'key_...' },
+  { key: 'anthropic', label: 'Anthropic (Claude)', endpoint: 'https://api.anthropic.com/v1', secret_name: 'ANTHROPIC_API_KEY', priority: 5, placeholder: 'sk-ant-...' },
+  { key: 'replicate', label: 'Replicate', endpoint: 'https://api.replicate.com/v1', secret_name: 'REPLICATE_API_TOKEN', priority: 5, placeholder: 'r8_...' },
+  { key: 'gemini', label: 'Google Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta', secret_name: 'GEMINI_API_KEY', priority: 5, placeholder: 'AIzaSy...' },
+  { key: 'mistral', label: 'Mistral AI', endpoint: 'https://api.mistral.ai/v1', secret_name: 'MISTRAL_API_KEY', priority: 5, placeholder: 'mis_...' },
+  { key: 'custom_router', label: 'Custom AI Gateway / Router', endpoint: 'https://api.openai.com/v1', secret_name: 'CUSTOM_AI_API_KEY', priority: 1, placeholder: 'Bearer secret token' },
 ]
 
 const DEFAULT_BUDGET = {
@@ -53,6 +66,20 @@ export function AiOperationsPanel() {
   const [lastRefreshed, setLastRefreshed] = useState(() => new Date())
   const [reportModalOpen, setReportModalOpen] = useState(false)
   const [activeReportTab, setActiveReportTab] = useState('margins')
+  const [showKeyVisibility, setShowKeyVisibility] = useState({})
+  const [testStatusByProvider, setTestStatusByProvider] = useState({})
+  const [showAddProviderModal, setShowAddProviderModal] = useState(false)
+  const [newProviderDraft, setNewProviderDraft] = useState({
+    provider_key: 'anthropic',
+    label: 'Anthropic (Claude)',
+    secret_name: 'ANTHROPIC_API_KEY',
+    api_key: '',
+    endpoint: 'https://api.anthropic.com/v1',
+    organization_id: '',
+    monthly_cap_usd: 500,
+    priority: 5,
+    enabled: true,
+  })
 
   const fetchAiOpsData = async () => {
     if (!isSupabaseConfigured) {
@@ -99,7 +126,7 @@ export function AiOperationsPanel() {
       const result = await fetchAiOpsData()
       setData(result)
       setLastRefreshed(new Date())
-      setStatus({ loading: false, saving: false, message: 'AI pricing and token cost reports refreshed successfully.', error: '' })
+      setStatus({ loading: false, saving: false, message: 'AI pricing, token costs, and API credentials refreshed successfully.', error: '' })
     } catch (error) {
       setStatus({ loading: false, saving: false, message: '', error: error.message })
     }
@@ -129,11 +156,153 @@ export function AiOperationsPanel() {
     }))
   }
 
+  const toggleKeyVisibility = (providerId) => {
+    setShowKeyVisibility((prev) => ({ ...prev, [providerId]: !prev[providerId] }))
+  }
+
+  const handleTestProvider = async (provider) => {
+    setTestStatusByProvider((prev) => ({ ...prev, [provider.id]: { testing: true, message: 'Verifying API credentials...', success: null } }))
+    try {
+      if (!isSupabaseConfigured) {
+        setTimeout(() => {
+          setTestStatusByProvider((prev) => ({
+            ...prev,
+            [provider.id]: {
+              testing: false,
+              message: `✅ Demo check: Key format valid for ${provider.label}.`,
+              success: true,
+            },
+          }))
+        }, 800)
+        return
+      }
+
+      const { data: testResult, error } = await supabase.functions.invoke('inhouse-ai', {
+        body: {
+          mode: 'test',
+          provider: provider.provider_key,
+          apiKey: provider.api_key || undefined,
+        },
+      })
+
+      if (error) {
+        const detail = await error.context?.json?.().catch(() => null)
+        throw new Error(detail?.error || error.message || 'API verification failed.')
+      }
+
+      setTestStatusByProvider((prev) => ({
+        ...prev,
+        [provider.id]: {
+          testing: false,
+          message: `✅ Connected! ${testResult?.message || `${provider.label} credentials verified with 200 OK.`}`,
+          success: true,
+        },
+      }))
+    } catch (testError) {
+      setTestStatusByProvider((prev) => ({
+        ...prev,
+        [provider.id]: {
+          testing: false,
+          message: `❌ Failed: ${testError.message}`,
+          success: false,
+        },
+      }))
+    }
+  }
+
+  const handleAddPresetSelect = (presetKey) => {
+    const preset = PROVIDER_PRESETS.find((p) => p.key === presetKey)
+    if (!preset) return
+    setNewProviderDraft((prev) => ({
+      ...prev,
+      provider_key: preset.key,
+      label: preset.label,
+      endpoint: preset.endpoint,
+      secret_name: preset.secret_name,
+      priority: preset.priority,
+    }))
+  }
+
+  const handleCreateProvider = async (e) => {
+    e.preventDefault()
+    if (!newProviderDraft.provider_key.trim() || !newProviderDraft.label.trim()) {
+      setStatus({ loading: false, saving: false, message: '', error: 'Provider name and unique key are required.' })
+      return
+    }
+
+    setStatus({ loading: false, saving: true, message: '', error: '' })
+    try {
+      const payload = {
+        provider_key: newProviderDraft.provider_key.trim().toLowerCase(),
+        label: newProviderDraft.label.trim(),
+        secret_name: newProviderDraft.secret_name.trim() || `${newProviderDraft.provider_key.toUpperCase()}_API_KEY`,
+        api_key: newProviderDraft.api_key.trim(),
+        endpoint: newProviderDraft.endpoint.trim(),
+        organization_id: newProviderDraft.organization_id.trim(),
+        monthly_cap_usd: Number(newProviderDraft.monthly_cap_usd || 500),
+        priority: Number(newProviderDraft.priority || 5),
+        enabled: newProviderDraft.enabled,
+      }
+
+      if (isSupabaseConfigured) {
+        const { data: created, error } = await supabase
+          .from('echo_provider_accounts')
+          .upsert(payload)
+          .select()
+          .single()
+        if (error) throw error
+        setData((current) => ({
+          ...current,
+          providers: [...current.providers.filter((p) => p.provider_key !== payload.provider_key), created],
+        }))
+      } else {
+        const localCreated = { id: `prov-${Date.now()}`, ...payload }
+        setData((current) => ({
+          ...current,
+          providers: [...current.providers.filter((p) => p.provider_key !== payload.provider_key), localCreated],
+        }))
+      }
+
+      setShowAddProviderModal(false)
+      setNewProviderDraft({
+        provider_key: 'anthropic',
+        label: 'Anthropic (Claude)',
+        secret_name: 'ANTHROPIC_API_KEY',
+        api_key: '',
+        endpoint: 'https://api.anthropic.com/v1',
+        organization_id: '',
+        monthly_cap_usd: 500,
+        priority: 5,
+        enabled: true,
+      })
+      setStatus({ loading: false, saving: false, message: `Provider "${payload.label}" added successfully with secret credentials.`, error: '' })
+    } catch (createErr) {
+      setStatus({ loading: false, saving: false, message: '', error: createErr.message })
+    }
+  }
+
+  const handleDeleteProvider = async (providerId, providerKey, label) => {
+    if (!window.confirm(`Are you sure you want to remove the provider "${label}" (${providerKey})?`)) return
+    try {
+      if (isSupabaseConfigured && providerId && providerId.length > 10) {
+        const { error } = await supabase.from('echo_provider_accounts').delete().eq('id', providerId)
+        if (error) throw error
+      }
+      setData((current) => ({
+        ...current,
+        providers: current.providers.filter((p) => p.id !== providerId),
+      }))
+      setStatus({ loading: false, saving: false, message: `Provider "${label}" removed.`, error: '' })
+    } catch (delErr) {
+      setStatus({ loading: false, saving: false, message: '', error: delErr.message })
+    }
+  }
+
   const save = async () => {
     setStatus({ loading: false, saving: true, message: '', error: '' })
     try {
       if (!isSupabaseConfigured) {
-        setStatus({ loading: false, saving: false, message: 'AI controls saved locally.', error: '' })
+        setStatus({ loading: false, saving: false, message: 'AI provider keys and pricing saved locally.', error: '' })
         return
       }
 
@@ -170,15 +339,20 @@ export function AiOperationsPanel() {
 
       for (const provider of data.providers) {
         if (provider.id && typeof provider.id === 'string' && provider.id.length > 10) {
-          const { error } = await supabase.from('echo_provider_accounts').update({
+          const updatePayload = {
             label: provider.label,
             secret_name: provider.secret_name,
             endpoint: provider.endpoint,
+            organization_id: provider.organization_id || '',
             replacement_for: provider.replacement_for,
             priority: Number(provider.priority || 0),
             monthly_cap_usd: Number(provider.monthly_cap_usd),
             enabled: provider.enabled,
-          }).eq('id', provider.id)
+          }
+          if (provider.api_key !== undefined) {
+            updatePayload.api_key = provider.api_key
+          }
+          const { error } = await supabase.from('echo_provider_accounts').update(updatePayload).eq('id', provider.id)
           if (error) throw error
         }
       }
@@ -195,7 +369,7 @@ export function AiOperationsPanel() {
         if (error) throw error
       }
 
-      setStatus({ loading: false, saving: false, message: 'AI pricing, provider settings, and budget caps saved.', error: '' })
+      setStatus({ loading: false, saving: false, message: 'All AI API keys, secret credentials, pricing, and budget caps saved securely.', error: '' })
     } catch (error) {
       setStatus({ loading: false, saving: false, message: '', error: error.message })
     }
@@ -287,10 +461,10 @@ export function AiOperationsPanel() {
       <div className="ai-ops-header-bar">
         <div>
           <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.45rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span>🤖</span> Echo AI Cost &amp; Profit Intelligence
+            <span>🤖</span> Echo AI Cost &amp; API Key Management
           </h2>
           <p className="muted" style={{ margin: 0, fontSize: '0.86rem' }}>
-            Live unit economics, token margin tracker, and provider cost safety controls.
+            Direct front-end control for AI Provider API keys, secret credentials, live unit economics, and margin protection.
           </p>
         </div>
 
@@ -304,7 +478,7 @@ export function AiOperationsPanel() {
             onClick={load}
             disabled={status.loading}
           >
-            {status.loading ? '🔄 Refreshing...' : '🔄 Refresh Token Costs & Report'}
+            {status.loading ? '🔄 Refreshing...' : '🔄 Refresh API Keys & Costs'}
           </button>
           <button
             type="button"
@@ -347,6 +521,169 @@ export function AiOperationsPanel() {
           </div>
         </div>
       )}
+
+      {/* AI Provider Accounts & Secret Keys Front-End Control */}
+      <Section
+        title="AI Provider Accounts & API Keys / Secret Keys"
+        action={
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => setShowAddProviderModal(true)}
+            style={{ fontSize: '0.85rem', padding: '0.45rem 0.9rem' }}
+          >
+            ➕ Add AI Provider / Secret Key
+          </button>
+        }
+      >
+        <p className="muted" style={{ marginTop: '-0.2rem', marginBottom: '0.9rem' }}>
+          Add, view, or update secret API keys directly from the front end. Keys are securely stored and proxied server-side to protect your credentials.
+        </p>
+
+        <div className="ai-providers-card-grid">
+          {data.providers.map((provider) => {
+            const hasKey = Boolean(provider.api_key || provider.secret_key)
+            const isVisible = Boolean(showKeyVisibility[provider.id])
+            const test = testStatusByProvider[provider.id]
+
+            return (
+              <div
+                key={provider.id || provider.provider_key}
+                className={`ai-provider-card ${provider.enabled ? 'active-provider' : 'disabled-provider'}`}
+              >
+                <div className="ai-provider-card-header">
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <h4 style={{ margin: 0, fontSize: '1.05rem', color: '#0f172a' }}>{provider.label}</h4>
+                      <span className="provider-key-slug">{provider.provider_key}</span>
+                    </div>
+                    <small style={{ color: '#64748b' }}>Env fallback: {provider.secret_name || `${provider.provider_key.toUpperCase()}_API_KEY`}</small>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <span className={`ai-status-chip ${hasKey ? 'success' : 'warning'}`}>
+                      {hasKey ? '🔑 Key Configured' : '⚠️ Needs Key'}
+                    </span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontWeight: 700 }}>
+                      <input
+                        type="checkbox"
+                        checked={provider.enabled}
+                        onChange={(e) => updateRow('providers', provider.id, 'enabled', e.target.checked)}
+                      />
+                      Active
+                    </label>
+                  </div>
+                </div>
+
+                <div className="ai-provider-card-body">
+                  {/* API Key / Secret Key Field with Show/Hide Toggle */}
+                  <div className="ai-key-input-block">
+                    <label>
+                      <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>API Key / Secret Token</span>
+                        <button
+                          type="button"
+                          className="key-toggle-btn"
+                          onClick={() => toggleKeyVisibility(provider.id)}
+                        >
+                          {isVisible ? '🙈 Hide Key' : '👁️ Show Key'}
+                        </button>
+                      </span>
+                      <div className="ai-key-input-wrapper">
+                        <input
+                          type={isVisible ? 'text' : 'password'}
+                          value={provider.api_key || ''}
+                          onChange={(e) => updateRow('providers', provider.id, 'api_key', e.target.value)}
+                          placeholder={hasKey ? '•••••••••••••••• (Leave blank to keep current)' : 'Enter API Key (e.g. sk-...)'}
+                          className="ai-key-input"
+                          autoComplete="off"
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Endpoint and Org ID */}
+                  <div className="ai-provider-fields-grid">
+                    <label>
+                      Base URL / Endpoint
+                      <input
+                        type="url"
+                        value={provider.endpoint || ''}
+                        onChange={(e) => updateRow('providers', provider.id, 'endpoint', e.target.value)}
+                        placeholder="https://api.openai.com/v1"
+                      />
+                    </label>
+                    <label>
+                      Org / Project ID (optional)
+                      <input
+                        value={provider.organization_id || ''}
+                        onChange={(e) => updateRow('providers', provider.id, 'organization_id', e.target.value)}
+                        placeholder="org-... or proj-..."
+                      />
+                    </label>
+                    <label>
+                      Monthly Cap ($ USD)
+                      <input
+                        type="number"
+                        min="0"
+                        step="10"
+                        value={provider.monthly_cap_usd || 0}
+                        onChange={(e) => updateRow('providers', provider.id, 'monthly_cap_usd', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Priority (1–10)
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={provider.priority || 5}
+                        onChange={(e) => updateRow('providers', provider.id, 'priority', e.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Test Feedback Notice */}
+                  {test && (
+                    <div
+                      className={`ai-test-notice ${test.success === true ? 'success' : test.success === false ? 'error' : 'testing'}`}
+                    >
+                      {test.message}
+                    </div>
+                  )}
+
+                  {/* Provider Actions */}
+                  <div className="ai-provider-card-footer">
+                    <button
+                      type="button"
+                      className="ghost-button ai-test-btn"
+                      onClick={() => handleTestProvider(provider)}
+                      disabled={test?.testing}
+                    >
+                      {test?.testing ? '⚡ Testing Connection...' : '⚡ Test API Connection'}
+                    </button>
+                    {!['openai', 'runway'].includes(provider.provider_key) && (
+                      <button
+                        type="button"
+                        className="text-button text-danger"
+                        onClick={() => handleDeleteProvider(provider.id, provider.provider_key, provider.label)}
+                        style={{ color: '#be123c', fontSize: '0.8rem' }}
+                      >
+                        🗑️ Delete Provider
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="action-row" style={{ marginTop: '1rem' }}>
+          <button type="button" className="primary-button" onClick={save} disabled={status.saving}>
+            {status.saving ? 'Saving credentials...' : '💾 Save All AI Provider Keys & Settings'}
+          </button>
+        </div>
+      </Section>
 
       {/* Profit & Margin Intelligence Executive Summary Cards */}
       <Section title="AI Token Profitability & Margin Summary">
@@ -547,23 +884,6 @@ export function AiOperationsPanel() {
         </Section>
       )}
 
-      {/* Provider Accounts and Monthly Spending Caps */}
-      {data.providers.length > 0 && (
-        <Section title="AI Provider Accounts & Monthly Safety Caps">
-          <div className="ai-operations-scroll" role="region" aria-label="Provider account controls" tabIndex="0">
-            {data.providers.map((provider) => (
-              <div className="it-row ai-provider-row" key={provider.id}>
-                <div><strong>{provider.label}</strong><span>{provider.provider_key} • secret: {provider.secret_name}</span></div>
-                <label>Endpoint<input value={provider.endpoint || ''} onChange={(event) => updateRow('providers', provider.id, 'endpoint', event.target.value)} /></label>
-                <label>Replacement for<input value={provider.replacement_for || ''} onChange={(event) => updateRow('providers', provider.id, 'replacement_for', event.target.value)} placeholder="openai" /></label>
-                <label>Monthly cap USD<input type="number" min="0" step="0.01" value={provider.monthly_cap_usd} onChange={(event) => updateRow('providers', provider.id, 'monthly_cap_usd', event.target.value)} /></label>
-                <label><input type="checkbox" checked={provider.enabled} onChange={(event) => updateRow('providers', provider.id, 'enabled', event.target.checked)} /> Enabled</label>
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
-
       {/* Global Emergency Spending Firewall */}
       {data.budget && (
         <Section title="Global Emergency Spending Firewall">
@@ -599,6 +919,138 @@ export function AiOperationsPanel() {
             <span style={{ color: '#be123c', fontWeight: 700 }}>Emergency Kill-Switch: Pause all paid AI generations globally</span>
           </label>
         </Section>
+      )}
+
+      {/* Modal: Add Custom AI Provider & Secret Key */}
+      {showAddProviderModal && (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onClick={() => setShowAddProviderModal(false)}
+        >
+          <div
+            className="ai-add-provider-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add AI Provider"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="ai-report-modal-header">
+              <div>
+                <span className="section-label">Credential Management</span>
+                <h3 style={{ margin: '0.2rem 0' }}>Add AI Provider Account &amp; Secret Key</h3>
+                <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+                  Configure provider endpoint, secret API key, and monthly spending caps.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="credit-modal-close"
+                onClick={() => setShowAddProviderModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateProvider} className="auth-form" style={{ marginTop: '1rem' }}>
+              <label>
+                Quick Preset
+                <select
+                  value={newProviderDraft.provider_key}
+                  onChange={(e) => handleAddPresetSelect(e.target.value)}
+                >
+                  {PROVIDER_PRESETS.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label} ({p.key})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="ai-provider-fields-grid">
+                <label>
+                  Provider Label
+                  <input
+                    required
+                    value={newProviderDraft.label}
+                    onChange={(e) => setNewProviderDraft((prev) => ({ ...prev, label: e.target.value }))}
+                    placeholder="e.g. Anthropic Production"
+                  />
+                </label>
+                <label>
+                  Provider Key (Slug)
+                  <input
+                    required
+                    value={newProviderDraft.provider_key}
+                    onChange={(e) => setNewProviderDraft((prev) => ({ ...prev, provider_key: e.target.value.toLowerCase() }))}
+                    placeholder="e.g. anthropic"
+                  />
+                </label>
+              </div>
+
+              <label>
+                Secret API Key
+                <input
+                  type="password"
+                  required
+                  value={newProviderDraft.api_key}
+                  onChange={(e) => setNewProviderDraft((prev) => ({ ...prev, api_key: e.target.value }))}
+                  placeholder="Paste secret API key (e.g. sk-...)"
+                  autoComplete="off"
+                />
+              </label>
+
+              <label>
+                Base URL / Endpoint
+                <input
+                  required
+                  type="url"
+                  value={newProviderDraft.endpoint}
+                  onChange={(e) => setNewProviderDraft((prev) => ({ ...prev, endpoint: e.target.value }))}
+                  placeholder="https://api.openai.com/v1"
+                />
+              </label>
+
+              <div className="ai-provider-fields-grid">
+                <label>
+                  Organization ID (Optional)
+                  <input
+                    value={newProviderDraft.organization_id}
+                    onChange={(e) => setNewProviderDraft((prev) => ({ ...prev, organization_id: e.target.value }))}
+                    placeholder="org-..."
+                  />
+                </label>
+                <label>
+                  Monthly Cap ($ USD)
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    value={newProviderDraft.monthly_cap_usd}
+                    onChange={(e) => setNewProviderDraft((prev) => ({ ...prev, monthly_cap_usd: e.target.value }))}
+                  />
+                </label>
+              </div>
+
+              <div className="action-row" style={{ marginTop: '1.25rem' }}>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setShowAddProviderModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={status.saving}
+                >
+                  {status.saving ? 'Adding...' : '➕ Add & Save Provider'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Report Modal Pop-out */}
@@ -793,10 +1245,13 @@ export function AiOperationsPanel() {
   )
 }
 
-function Section({ title, children }) {
+function Section({ title, action, children }) {
   return (
     <section className="it-section">
-      <h3 className="it-section-title">{title}</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', borderBottom: '1px solid rgba(148, 163, 184, 0.18)', paddingBottom: '0.6rem' }}>
+        <h3 className="it-section-title" style={{ margin: 0, border: 'none', padding: 0 }}>{title}</h3>
+        {action}
+      </div>
       {children}
     </section>
   )

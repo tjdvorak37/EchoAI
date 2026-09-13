@@ -157,12 +157,30 @@ Deno.serve(async (request) => {
     routing: { models: { standard: Deno.env.get('OPENAI_TEXT_MODEL') ?? 'gpt-4o-mini' } },
   }
   const route = await loadRoute(admin, payload)
-  const routeProvider = route?.provider_key || 'openai'
-  const routeEndpoint = Deno.env.get(`${routeProvider.toUpperCase()}_API_BASE_URL`) || config.endpoint
-  const routeKey = Deno.env.get(`${routeProvider.toUpperCase()}_API_KEY`) || config.api_key
-  const routedConfig = { ...config, provider: routeProvider, endpoint: routeEndpoint, api_key: routeKey, model: route?.model || routeModel(config, payload) }
-  if (config.enabled === false) return json({ error: 'This AI tool is disabled.' }, 409, request)
-  if (!config.endpoint) return json({ error: 'No AI endpoint is configured. Add one in Integrations.' }, 503, request)
+  const routeProvider = payload.provider || route?.provider_key || 'openai'
+
+  // Look up provider account configured directly from the front end
+  const { data: dbProvider } = await admin
+    .from('echo_provider_accounts')
+    .select('provider_key, label, secret_name, api_key, secret_key, endpoint, enabled, monthly_cap_usd')
+    .eq('provider_key', routeProvider)
+    .maybeSingle()
+
+  const routeEndpoint = dbProvider?.endpoint || Deno.env.get(`${routeProvider.toUpperCase()}_API_BASE_URL`) || config.endpoint
+  const routeKey = dbProvider?.api_key || dbProvider?.secret_key || Deno.env.get(dbProvider?.secret_name || `${routeProvider.toUpperCase()}_API_KEY`) || config.api_key
+  const isProviderEnabled = dbProvider ? dbProvider.enabled !== false : true
+
+  const routedConfig = {
+    ...config,
+    provider: routeProvider,
+    endpoint: routeEndpoint,
+    api_key: payload.apiKey || routeKey,
+    model: payload.model || route?.model || routeModel(config, payload),
+    enabled: isProviderEnabled,
+  }
+
+  if (routedConfig.enabled === false) return json({ error: 'This AI provider is currently disabled.' }, 409, request)
+  if (!routedConfig.endpoint) return json({ error: 'No AI endpoint is configured for this provider.' }, 503, request)
   const routedModel = routeModel(config, payload)
   let creatorJob: Record<string, unknown> | null = null
 
@@ -184,8 +202,8 @@ Deno.serve(async (request) => {
       await finishCreatorJob(admin, creatorJob?.jobId, {}, 'failed', `Provider returned ${upstream.status}`)
       return json({ error: `AI provider returned ${upstream.status}.`, detail: responseBody }, 502, request)
     }
-    if (routedConfig.provider === 'openai' && payload.mode === 'test') {
-      return json({ status: 'ok', provider: routedConfig.provider, botName: route?.bot_name || '', message: 'AI provider key verified.' }, 200, request)
+    if (payload.mode === 'test') {
+      return json({ status: 'ok', provider: routedConfig.provider, botName: route?.bot_name || '', message: `AI provider (${routedConfig.provider}) credentials verified successfully.` }, 200, request)
     }
     if (routedConfig.provider === 'openai' && (payload.capability === 'image' || payload.mode === 'image')) {
       const image = (responseBody as Record<string, unknown>)?.data?.[0] as Record<string, unknown> | undefined
