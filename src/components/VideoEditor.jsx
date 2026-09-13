@@ -1042,6 +1042,10 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
   return (
     <div className="video-editor">
+      <div className="video-editor-intro">
+        <p className="small-title">Video Studio</p>
+        <p className="panel-note">Add or generate clips, arrange them on the timeline below, add text/effects, then export.</p>
+      </div>
       {brief && (
         <div className="video-brief-bar">
           <div>
@@ -1121,11 +1125,21 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
         </div>
 
         <div className="toolbar-groups">
-          {['generate', 'media', 'transitions', 'effects', 'filters', 'text', 'audio', 'elements'].map((tool) => (
+          {[
+            ['generate', 'Create a scene with AI'],
+            ['media', 'Add your uploaded photos, video, or audio'],
+            ['transitions', 'Fades and wipes between clips'],
+            ['effects', 'Position, scale, opacity, and blend'],
+            ['filters', 'Color looks like Vintage or B&W'],
+            ['text', 'Titles, subtitles, and captions'],
+            ['audio', 'Volume, mute, and music'],
+            ['elements', 'Callout badges and graphic markers'],
+          ].map(([tool, hint]) => (
             <button
               key={tool}
               type="button"
               className={`toolbar-group-btn ${activeToolbar === tool ? 'active' : ''}`}
+              title={hint}
               onClick={() => setActiveToolbar(tool)}
             >
               {tool.charAt(0).toUpperCase() + tool.slice(1)}
@@ -1444,9 +1458,14 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                   <small>
                     {activeVisualClip
                       ? 'Re-upload this file to enable playback'
-                      : 'Add a start frame or describe your video to begin'}
+                      : 'Upload your own clip or describe a scene for AI to generate'}
                   </small>
-                  {!activeVisualClip && <button type="button" className="preview-generate-button" onClick={openGeneratePanel}>✦ Go generate <span>›</span></button>}
+                  {!activeVisualClip && (
+                    <div className="preview-placeholder-actions">
+                      <button type="button" className="preview-generate-button" onClick={() => setActiveToolbar('media')}>Upload media <span>›</span></button>
+                      <button type="button" className="preview-generate-button" onClick={openGeneratePanel}>✦ Go generate <span>›</span></button>
+                    </div>
+                  )}
                 </div>
               )}
 
