@@ -4,6 +4,7 @@ import { TrademarkPanel } from './TrademarkPanel'
 import { DeveloperAppsPanel } from './DeveloperAppsPanel'
 import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
 import { AiOperationsPanel } from './AiOperationsPanel'
+import { PricingProfitabilityPanel } from './PricingProfitabilityPanel'
 
 const USERS_PER_PAGE = 25
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
@@ -375,6 +376,7 @@ export function AdminPanel({
     { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}` },
     { id: 'billing', label: '💳 Billing' },
     { id: 'finance', label: '💹 Finance' },
+    { id: 'profitability', label: '📈 Pricing & Profit Model' },
     ...(currentUser?.isBoardMember ? [{ id: 'board-summary', label: '📈 My Board Summary' }] : []),
     { id: 'employees', label: '🧑‍💼 Employees' },
     { id: 'users', label: '👥 Customer users' },
@@ -387,6 +389,7 @@ export function AdminPanel({
   ] : [
     { id: 'overview', label: '📊 Service overview' },
     { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}` },
+    { id: 'profitability', label: '📈 Pricing & Profit Model' },
     { id: 'users', label: '👥 User directory' },
     { id: 'storage', label: '💾 Storage' },
     { id: 'trademark', label: '⚖️ Trademark & Legal' },
@@ -1488,6 +1491,8 @@ export function AdminPanel({
             currentUser={currentUser}
           />
         )}
+
+        {itTab === 'profitability' && <PricingProfitabilityPanel />}
 
         {itTab === 'board-summary' && currentUser?.isBoardMember && (
           <BoardMemberFinancePanel company={currentUser.company} />
