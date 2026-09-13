@@ -13,7 +13,6 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
   const [sources, setSources] = useState([])
   const [instruction, setInstruction] = useState('Create a polished campaign flyer based on this information.')
   const [outputType, setOutputType] = useState('flyer')
-  const [providerChoice, setProviderChoice] = useState('configured')
   const [busy, setBusy] = useState(false)
   const [readingFiles, setReadingFiles] = useState(false)
   const [error, setError] = useState('')
@@ -79,11 +78,7 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
         instruction,
         outputType,
         sources,
-        agentConfig: providerChoice === 'echoai'
-          ? { ...agentConfig, enabled: false }
-          : providerChoice === 'configured'
-            ? agentConfig
-            : { ...agentConfig, provider: providerChoice, enabled: true },
+        agentConfig,
           })
           setProject(generatedProject)
           await onSaveToWorkspace(generatedProject)
@@ -124,22 +119,11 @@ export function CreativeBrief({ agentConfig, workspaceAssets = [], onEditProject
           <h3>Build from your documents</h3>
         </div>
 
-        <label className="creative-provider-select">
-          Generation tool
-          <select value={providerChoice} onChange={(event) => setProviderChoice(event.target.value)}>
-            <option value="configured">Use configured AI tool</option>
-            <option value="echoai">EchoAI hosted image tools</option>
-            {agentConfig?.enabled && agentConfig?.endpoint && (
-              <>
-                <option value="openai">OpenAI / ChatGPT bridge</option>
-                <option value="openart">OpenArt bridge</option>
-                <option value="anthropic">Anthropic / Claude bridge</option>
-                <option value="custom_router">Custom AI router</option>
-              </>
-            )}
-          </select>
-          <small>External tools require your configured HTTPS bridge. EchoAI never sends API keys directly from the browser.</small>
-        </label>
+        <div className="creative-provider-status">
+          <strong>Generation tool</strong>
+          <span>EchoAI Hosted AI</span>
+          <small>EchoAI manages provider accounts, routing, credits, and API security for this campaign.</small>
+        </div>
 
         <div
           className="brief-dropzone"

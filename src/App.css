@@ -2982,6 +2982,12 @@ main {
 }
 
 .ai-operations-panel { min-width: 0; }
+.ai-operations-scroll-hint {
+  margin: -.2rem 0 .1rem;
+  color: var(--text-soft);
+  font-size: .8rem;
+  font-weight: 600;
+}
 .ai-operations-scroll {
   max-width: 100%;
   overflow-x: auto;
@@ -2992,6 +2998,18 @@ main {
 .ai-operations-scroll:focus-visible { outline: 2px solid #2364d8; outline-offset: 3px; }
 .ai-pricing-row { min-width: 1260px; align-items: end; }
 .ai-provider-row { min-width: 900px; align-items: end; }
+
+.creative-provider-status {
+  display: grid;
+  gap: .3rem;
+  padding: .8rem 1rem;
+  border: 1px solid #cfe0ff;
+  border-radius: 8px;
+  background: #f5f8ff;
+}
+.creative-provider-status strong { color: var(--text); }
+.creative-provider-status span { color: #2364d8; font-weight: 700; }
+.creative-provider-status small { color: var(--text-soft); }
 
 .it-section-title {
   font-size: 1rem;
