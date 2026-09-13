@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BoardPayoutsPanel } from './BoardPayoutsPanel'
+import { PricingProfitabilityPanel } from './PricingProfitabilityPanel'
 import { supabase } from '../lib/supabase'
 
 const fmt = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -151,6 +152,7 @@ export function FinancePanel({
 
   const TABS = [
     { id: 'dashboard', label: '📊 P&L Dashboard' },
+    { id: 'profitability', label: '📈 Pricing & Profit Model' },
     { id: 'revenue', label: '💰 Revenue' },
     { id: 'expenses', label: '💸 Expenses' },
     { id: 'payroll', label: '👥 Payroll' },
@@ -250,6 +252,10 @@ export function FinancePanel({
               </div> : <p className="fin-muted">Refresh to load AI generation costs and usage from the server ledger.</p>}
             </Section>
           </div>
+        )}
+
+        {tab === 'profitability' && (
+          <PricingProfitabilityPanel />
         )}
 
         {tab === 'revenue' && (
