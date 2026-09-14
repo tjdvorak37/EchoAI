@@ -1489,9 +1489,9 @@ export function AdminPanel({
                               <span className="it-user-detail-label">Board Membership</span>
                               <button
                                 type="button"
-                                className={member.isBoardMember || member.role === 'board_member' ? 'primary-button' : 'ghost-button'}
+                                className={member.isBoardMember ? 'primary-button' : 'ghost-button'}
                                 onClick={async () => {
-                                  const enabled = !(member.isBoardMember || member.role === 'board_member')
+                                  const enabled = !member.isBoardMember
                                   const share = Number(member.profitSharePercent || 1)
                                   try {
                                     await onAdminUserAction({ action: 'set-board-membership', userId: member.id, email: member.email, enabled, profitSharePercent: share })
@@ -1500,7 +1500,7 @@ export function AdminPanel({
                                   }
                                 }}
                               >
-                                {member.isBoardMember || member.role === 'board_member' ? 'Board Member enabled' : 'Add Board Member role'}
+                                {member.isBoardMember ? 'Board Member enabled' : 'Add Board Member role'}
                               </button>
                               <small className="muted">Board Membership can coexist with Admin and payroll. Set the percentage above after enabling.</small>
                             </div>}
