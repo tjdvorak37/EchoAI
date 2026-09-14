@@ -2067,7 +2067,7 @@ function App() {
     }
 
     if (action === 'set-board-membership' && result?.profile) {
-      setTeamMembers((prev) => prev.map((member) => member.id === userId ? { ...member, isBoardMember: result.profile.is_board_member === true, profitSharePercent: Number(result.profile.profit_share_percent || 0) } : member))
+      setTeamMembers((prev) => prev.map((member) => member.id === userId ? { ...member, role: result.profile.role || member.role, isBoardMember: result.profile.is_board_member === true, profitSharePercent: Number(result.profile.profit_share_percent || 0) } : member))
     }
 
     if (action === 'set-beta-ai-access' && result?.profile) {

@@ -555,9 +555,10 @@ Deno.serve(async (request) => {
       const enabled = body.enabled === true
       const share = Number(body.profitSharePercent || 0)
       if (enabled && (!Number.isFinite(share) || share < 1 || share > 10)) return json({ error: 'Board Member profit share must be between 1% and 10%.' }, 400, request)
-      const { data: updated, error: updateError } = await adminClient.from('profiles').update({ is_board_member: enabled, profit_share_percent: enabled ? share : 0 }).eq('id', target.id).select('id, is_board_member, profit_share_percent').single()
+      const nextRole = !enabled && target.role === 'board_member' ? 'user' : target.role
+      const { data: updated, error: updateError } = await adminClient.from('profiles').update({ role: nextRole, is_board_member: enabled, profit_share_percent: enabled ? share : 0 }).eq('id', target.id).select('id, role, is_board_member, profit_share_percent').single()
       if (updateError) return json({ error: 'Could not update Board Membership.' }, 500, request)
-      await recordAudit('updated_profile', { is_board_member: enabled, profit_share_percent: enabled ? share : 0 })
+      await recordAudit('updated_profile', { role: nextRole, is_board_member: enabled, profit_share_percent: enabled ? share : 0 })
       return json({ profile: updated }, 200, request)
     }
 
