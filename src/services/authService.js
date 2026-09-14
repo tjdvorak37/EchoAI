@@ -1168,7 +1168,8 @@ export const authService = {
 
     if (error) {
       const detail = await error.context?.json?.().catch(() => null)
-      throw new Error(detail?.error || 'That action could not be completed.')
+      const responseText = await error.context?.text?.().catch(() => '')
+      throw new Error(detail?.error || responseText || error.message || 'That action could not be completed.')
     }
 
     return data

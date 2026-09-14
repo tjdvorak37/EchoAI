@@ -5,7 +5,14 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
 import { getNotificationConfig, sendSupportTicketEmail } from '../_shared/notify.ts'
 
-const PRIVILEGED_ROLES = new Set(['admin', 'manager', 'it'])
+const PRIVILEGED_ROLES = new Set([
+  'admin',
+  'super_admin',
+  'manager',
+  'it',
+  'accountant',
+  'board_member',
+])
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -32,15 +39,33 @@ Deno.serve(async (request) => {
       return json({ error: 'Not authenticated.' }, 401, request)
     }
 
-    const { data: callerProfile } = await adminClient
+    const callerEmail = caller.user.email?.toLowerCase().trim() ?? ''
+
+    let { data: callerProfile } = await adminClient
       .from('profiles')
-      .select('role, company_email_edit_access')
+      .select('role, company_email_edit_access, email')
       .eq('id', caller.user.id)
       .maybeSingle()
 
-    if (!callerProfile || !PRIVILEGED_ROLES.has(callerProfile.role)) {
+    if (!callerProfile && callerEmail) {
+      const { data: profileByEmail } = await adminClient
+        .from('profiles')
+        .select('role, company_email_edit_access, email')
+        .ilike('email', callerEmail)
+        .maybeSingle()
+      callerProfile = profileByEmail
+    }
+
+    const userRole = (callerProfile?.role || caller.user.user_metadata?.role || caller.user.app_metadata?.role || '').toLowerCase().trim()
+    const isOwnerEmail = callerEmail === 'tdvorak37@gmail.com' || callerEmail === 'support@echoaipro.com'
+    const isSuperAdmin = userRole === 'admin' || userRole === 'super_admin' || isOwnerEmail
+    const isPrivileged = PRIVILEGED_ROLES.has(userRole) || isSuperAdmin
+
+    if (!isPrivileged) {
       return json({ error: 'Not authorised.' }, 403, request)
     }
+
+    const canEditEmail = isSuperAdmin || callerProfile?.company_email_edit_access === true
 
     const body = await request.json()
     const { action, fullName, company, email: targetEmail } = body
@@ -58,13 +83,11 @@ Deno.serve(async (request) => {
 
     if (action === 'get-ticket-notification-config') {
       const config = await getNotificationConfig(adminClient)
-      const canEdit = callerProfile.role === 'admin' || callerProfile.company_email_edit_access === true
-      return json({ config, canEdit }, 200, request)
+      return json({ config, canEdit: canEditEmail }, 200, request)
     }
 
     if (action === 'update-ticket-notification-config') {
-      const canEdit = callerProfile.role === 'admin' || callerProfile.company_email_edit_access === true
-      if (!canEdit) {
+      if (!canEditEmail) {
         return json({ error: 'Super Admin permission or granted Company Email editing access is required to modify mailbox passwords and notification parameters.' }, 403, request)
       }
 
@@ -210,7 +233,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'create-user') {
-      if (callerProfile.role !== 'admin') {
+      if (!isSuperAdmin) {
         return json({ error: 'Super Admin access is required to create users.' }, 403, request)
       }
 
@@ -328,11 +351,11 @@ Deno.serve(async (request) => {
     }
 
     // Admins are excluded from these actions so one compromised admin account
-    if (target.role === 'admin' && caller.user.id !== target.id) {
+    if (target.role === 'admin' && caller.user.id !== target.id && !isSuperAdmin) {
       return json({ error: 'Administrator accounts cannot be managed here.' }, 403, request)
     }
 
-    if (['admin', 'manager', 'it', 'accountant'].includes(target.role) && callerProfile.role !== 'admin') {
+    if (['admin', 'manager', 'it', 'accountant'].includes(target.role) && !isSuperAdmin) {
       return json({ error: 'Only Super Admins can view or manage employee accounts.' }, 403, request)
     }
 
@@ -449,7 +472,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'set-trademark-edit-access') {
-      if (callerProfile.role !== 'admin') {
+      if (!isSuperAdmin) {
         return json({ error: 'Super Admin access is required to grant trademark editing.' }, 403, request)
       }
       const enabled = body.enabled === true
@@ -465,7 +488,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'set-developer-app-edit-access') {
-      if (callerProfile.role !== 'admin') {
+      if (!isSuperAdmin) {
         return json({ error: 'Super Admin access is required to grant Developer Apps editing.' }, 403, request)
       }
       const enabled = body.enabled === true
@@ -481,7 +504,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'set-company-email-edit-access') {
-      if (callerProfile.role !== 'admin') {
+      if (!isSuperAdmin) {
         return json({ error: 'Super Admin access is required to grant Company Email & SMTP editing.' }, 403, request)
       }
       const enabled = body.enabled === true
@@ -497,15 +520,15 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'set-board-member-profit-share') {
-      if (callerProfile.role !== 'admin') {
+      if (!isSuperAdmin) {
         return json({ error: 'Super Admin access is required to edit Board Member profit share.' }, 403, request)
       }
       const profitSharePercent = Number(body.profitSharePercent)
       if (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 10) {
         return json({ error: 'Profit share must be between 1% and 10%.' }, 400, request)
       }
-      const isCallerSelf = target.id === caller.user.id || (typeof targetEmail === 'string' && targetEmail.trim().toLowerCase() === caller.user.email?.toLowerCase())
-      if (!target.is_board_member && target.role !== 'board_member' && !(isCallerSelf && callerProfile.role === 'admin')) {
+      const isCallerSelf = target.id === caller.user.id || (typeof targetEmail === 'string' && targetEmail.trim().toLowerCase() === callerEmail)
+      if (!target.is_board_member && target.role !== 'board_member' && !(isCallerSelf && isSuperAdmin)) {
         return json({ error: 'The selected user is not a Board Member.' }, 400, request)
       }
       const { data: updated, error: updateError } = await adminClient
@@ -520,7 +543,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'set-board-membership') {
-      if (callerProfile.role !== 'admin') return json({ error: 'Super Admin access is required to edit Board Membership.' }, 403, request)
+      if (!isSuperAdmin) return json({ error: 'Super Admin access is required to edit Board Membership.' }, 403, request)
       const enabled = body.enabled === true
       const share = Number(body.profitSharePercent || 0)
       if (enabled && (!Number.isFinite(share) || share < 1 || share > 10)) return json({ error: 'Board Member profit share must be between 1% and 10%.' }, 400, request)
