@@ -1089,12 +1089,12 @@ export function CompanyEmailPanel({
                 </div>
                 {newStaff.role === 'board_member' && (
                   <label style={{ marginTop: '0.5rem' }}>
-                    Profit share percentage (1-10%)
+                    Profit share percentage (1-50%)
                     <input
                       required
                       type="number"
                       min="1"
-                      max="10"
+                      max="50"
                       step="0.01"
                       value={newStaff.profitSharePercent || ''}
                       onChange={(e) => setNewStaff((prev) => ({ ...prev, profitSharePercent: e.target.value }))}
