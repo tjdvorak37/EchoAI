@@ -254,8 +254,8 @@ Deno.serve(async (request) => {
       if (!email || !newFullName || !newCompany || !['it', 'accountant', 'board_member', 'manager', 'user'].includes(role)) {
         return json({ error: 'Name, email, company, and a valid staff role are required.' }, 400, request)
       }
-      if (role === 'board_member' && (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 10)) {
-        return json({ error: 'Board Member profit share must be between 1% and 10%.' }, 400, request)
+      if (role === 'board_member' && (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 50)) {
+        return json({ error: 'Board Member profit share must be between 1% and 50%.' }, 400, request)
       }
 
       const rawAppUrl = Deno.env.get('APP_URL') ?? ''
@@ -532,8 +532,8 @@ Deno.serve(async (request) => {
         return json({ error: 'Super Admin access is required to edit Board Member profit share.' }, 403, request)
       }
       const profitSharePercent = Number(body.profitSharePercent)
-      if (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 10) {
-        return json({ error: 'Profit share must be between 1% and 10%.' }, 400, request)
+      if (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 50) {
+        return json({ error: 'Profit share must be between 1% and 50%.' }, 400, request)
       }
       const isCallerSelf = target.id === caller.user.id || (typeof targetEmail === 'string' && targetEmail.trim().toLowerCase() === callerEmail)
       if (!target.is_board_member && target.role !== 'board_member' && !(isCallerSelf && isSuperAdmin)) {
@@ -554,7 +554,7 @@ Deno.serve(async (request) => {
       if (!isSuperAdmin) return json({ error: 'Super Admin access is required to edit Board Membership.' }, 403, request)
       const enabled = body.enabled === true
       const share = Number(body.profitSharePercent || 0)
-      if (enabled && (!Number.isFinite(share) || share < 1 || share > 10)) return json({ error: 'Board Member profit share must be between 1% and 10%.' }, 400, request)
+      if (enabled && (!Number.isFinite(share) || share < 1 || share > 50)) return json({ error: 'Board Member profit share must be between 1% and 50%.' }, 400, request)
       const nextRole = !enabled && target.role === 'board_member' ? 'user' : target.role
       const { data: updated, error: updateError } = await adminClient.from('profiles').update({ role: nextRole, is_board_member: enabled, profit_share_percent: enabled ? share : 0 }).eq('id', target.id).select('id, role, is_board_member, profit_share_percent').single()
       if (updateError) return json({ error: 'Could not update Board Membership.' }, 500, request)

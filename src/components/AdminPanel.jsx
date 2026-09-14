@@ -1304,7 +1304,7 @@ export function AdminPanel({
                   <label>Email<input required type="email" value={newUserDraft.email} onChange={(event) => setNewUserDraft((current) => ({ ...current, email: event.target.value }))} /></label>
                   <label>Company<input required value={newUserDraft.company} onChange={(event) => setNewUserDraft((current) => ({ ...current, company: event.target.value }))} /></label>
                   <label>Role<select value={newUserDraft.role} onChange={(event) => setNewUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="it">Technician</option><option value="accountant">Accounting</option><option value="board_member">Board Member</option><option value="manager">Manager</option><option value="user">Standard user</option></select></label>
-                  {newUserDraft.role === 'board_member' && <label>Profit share percentage (1-10%)<input required type="number" min="1" max="10" step="0.01" value={newUserDraft.profitSharePercent || ''} onChange={(event) => setNewUserDraft((current) => ({ ...current, profitSharePercent: event.target.value }))} /></label>}
+                  {newUserDraft.role === 'board_member' && <label>Profit share percentage (1-50%)<input required type="number" min="1" max="50" step="0.01" value={newUserDraft.profitSharePercent || ''} onChange={(event) => setNewUserDraft((current) => ({ ...current, profitSharePercent: event.target.value }))} /></label>}
                   <div className="action-row"><button type="submit" className="primary-button" disabled={newUserStatus.saving}>{newUserStatus.saving ? 'Sending invitation...' : 'Create and invite user'}</button></div>
                   {newUserStatus.message && <p className="auth-message">{newUserStatus.message}</p>}
                   {newUserStatus.error && <p className="auth-message auth-error">{newUserStatus.error}</p>}
@@ -1456,7 +1456,7 @@ export function AdminPanel({
                               <input
                                 type="number"
                                 min="1"
-                                max="10"
+                                max="50"
                                 step="0.01"
                                 value={profitShareDraft.userId === member.id ? profitShareDraft.value : String(member.profitSharePercent || '')}
                                 onChange={(event) => setProfitShareDraft({ userId: member.id, value: event.target.value, saving: false, error: '' })}
@@ -1467,8 +1467,8 @@ export function AdminPanel({
                                 disabled={profitShareDraft.saving}
                                 onClick={async () => {
                                   const value = Number(profitShareDraft.value)
-                                  if (!Number.isFinite(value) || value < 1 || value > 10) {
-                                    setProfitShareDraft((current) => ({ ...current, error: 'Enter a percentage from 1 to 10.' }))
+                                  if (!Number.isFinite(value) || value < 1 || value > 50) {
+                                    setProfitShareDraft((current) => ({ ...current, error: 'Enter a percentage from 1 to 50.' }))
                                     return
                                   }
                                   setProfitShareDraft((current) => ({ ...current, saving: true, error: '' }))
