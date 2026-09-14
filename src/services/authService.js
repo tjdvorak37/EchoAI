@@ -368,10 +368,13 @@ export const authService = {
       return { ok: true }
     }
 
+    const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://echoaipro.com'
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: `${appOrigin}/`,
         data: {
           full_name: fullName,
           company,
@@ -1056,6 +1059,23 @@ export const authService = {
       throw new Error(error.message)
     }
 
+    // Notify support@echoaipro.com & configured staff of the new ticket
+    try {
+      await supabase.functions.invoke('admin-user-actions', {
+        body: {
+          action: 'notify-ticket-created',
+          ticketId: data.id,
+          category,
+          details,
+          requesterName: user.user_metadata?.full_name || user.email,
+          requesterEmail: user.email,
+          source: 'app',
+        },
+      })
+    } catch (notifyError) {
+      console.warn('Unable to dispatch support email notification:', notifyError)
+    }
+
     return data
   },
 
@@ -1126,9 +1146,9 @@ export const authService = {
   },
 
   // Privileged support actions. The caller's role is re-verified server-side.
-  async adminUserAction({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent }) {
+  async adminUserAction(params) {
     const { data, error } = await supabase.functions.invoke('admin-user-actions', {
-      body: { action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent },
+      body: params,
     })
 
     if (error) {
@@ -1137,6 +1157,47 @@ export const authService = {
     }
 
     return data
+  },
+
+  async getTicketNotificationConfig() {
+    if (!isSupabaseConfigured) {
+      return {
+        enabled: true,
+        recipient_email: 'support@echoaipro.com',
+        secondary_email: '',
+        sender_name: 'EchoAI Support System',
+        subject_prefix: '[EchoAI Support]',
+        include_full_description: true,
+        notify_on_landing_tickets: true,
+        notify_on_app_tickets: true,
+        notify_on_company_requests: true,
+        webhook_url: '',
+        webhook_enabled: false,
+      }
+    }
+    const result = await this.adminUserAction({ action: 'get-ticket-notification-config' })
+    return result?.config
+  },
+
+  async updateTicketNotificationConfig(config) {
+    if (!isSupabaseConfigured) {
+      return config
+    }
+    const result = await this.adminUserAction({
+      action: 'update-ticket-notification-config',
+      ...config,
+    })
+    return result?.config
+  },
+
+  async testTicketNotification(payload = {}) {
+    if (!isSupabaseConfigured) {
+      return { ok: true, message: 'Supabase demo mode: test notification logged.' }
+    }
+    return this.adminUserAction({
+      action: 'test-ticket-notification',
+      ...payload,
+    })
   },
 
   async submitCompanyPackageRequest({ fullName, email, company, seatCount, details }) {
@@ -1158,6 +1219,22 @@ export const authService = {
 
     if (error) {
       throw new Error(error.message)
+    }
+
+    try {
+      await supabase.functions.invoke('admin-user-actions', {
+        body: {
+          action: 'notify-ticket-created',
+          category: 'Company package',
+          details: `Company package inquiry from ${fullName.trim()} (${company.trim()}) for ${seatCount} seats.\n\nDetails: ${details?.trim() || 'No additional details provided.'}`,
+          requesterName: fullName.trim(),
+          requesterEmail: email.trim().toLowerCase(),
+          company: company.trim(),
+          source: 'company_package',
+        },
+      })
+    } catch (notifyError) {
+      console.warn('Unable to dispatch company request notification:', notifyError)
     }
 
     return { ok: true }
@@ -1331,8 +1408,11 @@ export const authService = {
       return { ok: true }
     }
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+    const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://echoaipro.com'
+    const cleanEmail = String(email).trim().toLowerCase()
+
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: `${appOrigin}/reset-password`,
     })
 
     if (error) {
