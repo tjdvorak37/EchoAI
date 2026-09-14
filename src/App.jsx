@@ -14,6 +14,7 @@ import { socialIntegrationService } from './services/socialIntegrationService'
 import { financeService } from './services/financeService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import echoMascot from './assets/echo-mascot.svg'
+import { CalendarDays } from 'lucide-react'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
@@ -3397,7 +3398,7 @@ function App() {
             aria-label="Open calendar"
             aria-expanded={calendarOpen}
           >
-            <span aria-hidden="true">📅</span>
+            <CalendarDays size={20} strokeWidth={2} aria-hidden="true" />
           </button>
           <button
             type="button"
