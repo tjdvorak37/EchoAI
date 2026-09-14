@@ -5,6 +5,7 @@ import { DeveloperAppsPanel } from './DeveloperAppsPanel'
 import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
 import { AiOperationsPanel } from './AiOperationsPanel'
 import { PricingProfitabilityPanel } from './PricingProfitabilityPanel'
+import { CompanyEmailPanel } from './CompanyEmailPanel'
 import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
 const USERS_PER_PAGE = 25
@@ -225,16 +226,23 @@ export function AdminPanel({
 
   const createUser = async (event) => {
     event.preventDefault()
-    setNewUserStatus({ saving: true, message: '', error: '' })
+    setNewUserStatus({ saving: true, message: '', error: '', recoveryLink: '' })
     try {
-      await onAdminUserAction({ action: 'create-user', ...newUserDraft })
+      const response = await onAdminUserAction({ action: 'create-user', ...newUserDraft })
+      const recoveryLink = response?.recoveryLink || ''
+      const email = newUserDraft.email
       setNewUserDraft({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
-      setNewUserStatus({ saving: false, message: 'Invitation sent. The new staff member can finish setup and MFA from the landing page.', error: '' })
+      setNewUserStatus({
+        saving: false,
+        message: `Account created for ${email}. An automated invite was sent. You can also copy the direct setup link below to give to them immediately:`,
+        recoveryLink,
+        error: '',
+      })
     } catch (error) {
       const message = error.message?.includes('userId')
         ? 'The live admin service is out of date. Deploy the updated admin-user-actions function, then try again. A new technician does not need a user ID.'
         : error.message
-      setNewUserStatus({ saving: false, message: '', error: message })
+      setNewUserStatus({ saving: false, message: '', error: message, recoveryLink: '' })
     }
   }
 
@@ -412,6 +420,7 @@ export function AdminPanel({
     {
       group: 'Platform',
       tabs: [
+        { id: 'company-email', label: '📧 Company Email & SMTP', hint: 'Manage outbound support email, Microsoft 365, and mail routing' },
         { id: 'licenses', label: '🔑 Licenses', hint: 'Manage company seat licenses' },
         { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents' },
         { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration' },
@@ -444,6 +453,7 @@ export function AdminPanel({
     {
       group: 'Platform',
       tabs: [
+        { id: 'company-email', label: '📧 Company Email & SMTP', hint: 'Manage outbound support email, Microsoft 365, and mail routing' },
         { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents' },
         { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration' },
         { id: 'integrations', label: '🔌 Integrations', hint: 'Third-party and platform integrations' },
@@ -1298,6 +1308,15 @@ export function AdminPanel({
                   <div className="action-row"><button type="submit" className="primary-button" disabled={newUserStatus.saving}>{newUserStatus.saving ? 'Sending invitation...' : 'Create and invite user'}</button></div>
                   {newUserStatus.message && <p className="auth-message">{newUserStatus.message}</p>}
                   {newUserStatus.error && <p className="auth-message auth-error">{newUserStatus.error}</p>}
+                  {newUserStatus.recoveryLink && (
+                    <div className="it-recovery-link" style={{ marginTop: '0.75rem' }}>
+                      <p className="muted">Direct setup link (expires in 1 hour):</p>
+                      <textarea readOnly rows={2} value={newUserStatus.recoveryLink} onFocus={(e) => e.target.select()} />
+                      <button type="button" className="ghost-button" onClick={() => navigator.clipboard?.writeText(newUserStatus.recoveryLink)}>
+                        Copy setup link
+                      </button>
+                    </div>
+                  )}
                 </form>
               </Section>
             )}
@@ -1736,6 +1755,20 @@ export function AdminPanel({
         )}
 
         {itTab === 'trademark' && <TrademarkPanel currentUser={currentUser} />}
+
+        {itTab === 'company-email' && (
+          <CompanyEmailPanel
+            currentUser={currentUser}
+            teamMembers={teamMembers}
+            onAdminUserAction={onAdminUserAction}
+            companySeatPackage={companySeatPackage}
+            companySeats={companySeats}
+            handleCreateCompanySeatPackage={handleCreateCompanySeatPackage}
+            handleUpdateCompanySeatPackage={handleUpdateCompanySeatPackage}
+            handleAssignCompanySeat={handleAssignCompanySeat}
+            handleRevokeCompanySeat={handleRevokeCompanySeat}
+          />
+        )}
 
         {itTab === 'developer-apps' && <DeveloperAppsPanel currentUser={currentUser} />}
 

@@ -109,9 +109,28 @@ function App() {
     company: '',
     otpCode: '',
   })
-  const [authError, setAuthError] = useState('')
+  const [authError, setAuthError] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    const hash = window.location.hash || ''
+    if (hash.startsWith('#')) {
+      const params = new URLSearchParams(hash.slice(1))
+      const errorDesc = params.get('error_description') || params.get('error')
+      if (errorDesc) {
+        return decodeURIComponent(errorDesc.replace(/\+/g, ' '))
+      }
+    }
+    return ''
+  })
   const [authNotice, setAuthNotice] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
+  const [isPasswordRecoveryActive, setIsPasswordRecoveryActive] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const path = window.location.pathname
+    const search = new URLSearchParams(window.location.search)
+    const hash = window.location.hash || ''
+    const hasHashRecovery = hash.includes('type=recovery') || hash.includes('type=invite') || hash.includes('error=')
+    return path === '/reset-password' || search.get('recovery') === '1' || search.get('type') === 'recovery' || hasHashRecovery
+  })
   const [resetPassword, setResetPassword] = useState({ newPassword: '', confirmPassword: '' })
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
   const [mfaPending, setMfaPending] = useState(false)
@@ -741,7 +760,9 @@ function App() {
     let active = true
     let restoreTimer
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'INITIAL_SESSION') {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecoveryActive(true)
+      } else if (event === 'INITIAL_SESSION') {
         // Defer Supabase calls until after its auth callback completes.
         restoreTimer = window.setTimeout(() => restorePersistedSession(() => active), 0)
       }
@@ -916,6 +937,7 @@ function App() {
       setAuthNotice('Your password has been updated. You can sign in now.')
       setResetPassword({ newPassword: '', confirmPassword: '' })
       setTimeout(() => {
+        setIsPasswordRecoveryActive(false)
         setAuthView('signin')
         window.history.replaceState({}, '', window.location.origin)
       }, 1200)
@@ -2695,26 +2717,38 @@ function App() {
     setAiAgentDraft(createDefaultAiAgentConfig())
   }
 
-  const isResetPasswordRoute = typeof window !== 'undefined' && window.location.pathname === '/reset-password'
+  const isResetPasswordRoute = isPasswordRecoveryActive || (typeof window !== 'undefined' && window.location.pathname === '/reset-password')
 
   if (isResetPasswordRoute) {
     return (
       <div className="auth-page">
         <header className="auth-header">
-          <button type="button" className="text-button" onClick={() => setAuthView('signin')}>
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => {
+              setIsPasswordRecoveryActive(false)
+              setAuthView('signin')
+              if (typeof window !== 'undefined' && window.location.pathname === '/reset-password') {
+                window.history.replaceState({}, '', window.location.origin)
+              }
+            }}
+          >
             ← Back to sign in
           </button>
         </header>
 
         <section className="auth-panel">
-          <h1>Set a new password</h1>
-          <p>Choose a new password for your account.</p>
+          <h1>Set your password</h1>
+          <p>Choose a secure password for your account to complete setup or restore access.</p>
 
           <form className="auth-form" onSubmit={handleResetPasswordSubmit}>
             <label>
               New password
               <input
                 type="password"
+                required
+                minLength={8}
                 value={resetPassword.newPassword}
                 onChange={(event) => setResetPassword((prev) => ({ ...prev, newPassword: event.target.value }))}
                 placeholder="••••••••"
@@ -2724,17 +2758,34 @@ function App() {
               Confirm new password
               <input
                 type="password"
+                required
+                minLength={8}
                 value={resetPassword.confirmPassword}
                 onChange={(event) => setResetPassword((prev) => ({ ...prev, confirmPassword: event.target.value }))}
                 placeholder="••••••••"
               />
             </label>
             <button type="submit" disabled={resetPasswordLoading}>
-              {resetPasswordLoading ? 'Updating...' : 'Update password'}
+              {resetPasswordLoading ? 'Saving password...' : 'Save password'}
             </button>
           </form>
 
-          {authError && <p className="auth-message auth-error">{authError}</p>}
+          {authError && (
+            <div style={{ marginTop: '0.8rem' }}>
+              <p className="auth-message auth-error">{authError}</p>
+              <button
+                type="button"
+                className="text-button"
+                style={{ marginTop: '0.4rem', fontSize: '0.85rem' }}
+                onClick={() => {
+                  setIsPasswordRecoveryActive(false)
+                  setAuthView('forgot')
+                }}
+              >
+                Need a new reset link? Click here →
+              </button>
+            </div>
+          )}
           {authNotice && <p className="auth-message">{authNotice}</p>}
         </section>
       </div>

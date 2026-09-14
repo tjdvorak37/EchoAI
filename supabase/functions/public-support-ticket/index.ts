@@ -2,6 +2,7 @@
 // path, so it is rate limited per email and per IP and never accepts uploads.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
+import { sendSupportTicketEmail } from '../_shared/notify.ts'
 
 const MAX_PER_EMAIL_PER_HOUR = 3
 const MAX_PER_IP_PER_HOUR = 6
@@ -79,7 +80,7 @@ Deno.serve(async (request) => {
       .ilike('email', cleanEmail)
       .maybeSingle()
 
-    const { error: insertError } = await adminClient.from('support_tickets').insert({
+    const { data: ticketRecord, error: insertError } = await adminClient.from('support_tickets').insert({
       user_id: null,
       contact_email: cleanEmail,
       contact_name: cleanName || null,
@@ -89,10 +90,25 @@ Deno.serve(async (request) => {
         : cleanDetails,
       source: 'landing',
       status: 'open',
-    })
+    }).select('id, created_at').single()
 
     if (insertError) {
       return json({ error: 'Could not submit that request.' }, 500, request)
+    }
+
+    // Trigger outbound email / webhook notification to support@echoaipro.com & configured staff
+    try {
+      await sendSupportTicketEmail({
+        ticketId: ticketRecord?.id,
+        requesterName: cleanName || cleanEmail,
+        requesterEmail: cleanEmail,
+        category: cleanCategory,
+        details: cleanDetails,
+        source: 'landing',
+        createdAt: ticketRecord?.created_at,
+      }, adminClient)
+    } catch (notifyErr) {
+      console.warn('Failed to dispatch support notification:', notifyErr)
     }
 
     // Always the same response, so this cannot be used to test which emails

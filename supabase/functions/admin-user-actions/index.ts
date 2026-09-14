@@ -3,6 +3,7 @@
 // own view of who it is never decides access.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
+import { getNotificationConfig, sendSupportTicketEmail } from '../_shared/notify.ts'
 
 const PRIVILEGED_ROLES = new Set(['admin', 'manager', 'it'])
 
@@ -43,8 +44,117 @@ Deno.serve(async (request) => {
 
     const body = await request.json()
     const { action, userId, fullName, company, email: targetEmail } = body
-    if (!action || (action !== 'create-user' && !userId)) {
+    const globalActions = new Set([
+      'create-user',
+      'get-ticket-notification-config',
+      'update-ticket-notification-config',
+      'test-ticket-notification',
+      'notify-ticket-created',
+    ])
+    if (!action || (!globalActions.has(action) && !userId)) {
       return json({ error: 'An action and userId are required.' }, 400, request)
+    }
+
+    if (action === 'get-ticket-notification-config') {
+      const config = await getNotificationConfig(adminClient)
+      return json({ config }, 200, request)
+    }
+
+    if (action === 'update-ticket-notification-config') {
+      const {
+        enabled,
+        recipientEmail,
+        secondaryEmail,
+        senderName,
+        subjectPrefix,
+        includeFullDescription,
+        notifyOnLandingTickets,
+        notifyOnAppTickets,
+        notifyOnCompanyRequests,
+        webhookUrl,
+        webhookEnabled,
+      } = body
+
+      const updateData = {
+        id: 'default',
+        enabled: enabled !== false,
+        recipient_email: typeof recipientEmail === 'string' ? recipientEmail.trim() : 'support@echoaipro.com',
+        secondary_email: typeof secondaryEmail === 'string' ? secondaryEmail.trim() : '',
+        sender_name: typeof senderName === 'string' ? senderName.trim().slice(0, 100) : 'EchoAI Support System',
+        subject_prefix: typeof subjectPrefix === 'string' ? subjectPrefix.trim().slice(0, 50) : '[EchoAI Support]',
+        include_full_description: includeFullDescription !== false,
+        notify_on_landing_tickets: notifyOnLandingTickets !== false,
+        notify_on_app_tickets: notifyOnAppTickets !== false,
+        notify_on_company_requests: notifyOnCompanyRequests !== false,
+        webhook_url: typeof webhookUrl === 'string' ? webhookUrl.trim().slice(0, 500) : '',
+        webhook_enabled: webhookEnabled === true,
+        updated_by: caller.user.id,
+        updated_at: new Date().toISOString(),
+      }
+
+      const { data: savedConfig, error: saveError } = await adminClient
+        .from('support_ticket_notifications')
+        .upsert(updateData, { onConflict: 'id' })
+        .select('*')
+        .single()
+
+      if (saveError) {
+        return json({ error: saveError.message }, 500, request)
+      }
+
+      await adminClient.from('admin_user_audit').insert({
+        actor_id: caller.user.id,
+        target_user_id: null,
+        action: 'updated_support_notification_config',
+        detail: { recipient_email: updateData.recipient_email, enabled: updateData.enabled },
+      })
+
+      return json({ config: savedConfig }, 200, request)
+    }
+
+    if (action === 'test-ticket-notification') {
+      const testCategory = typeof body.category === 'string' ? body.category : 'Technical issue'
+      const testDetails = typeof body.details === 'string' && body.details.trim()
+        ? body.details.trim()
+        : 'This is a test notification dispatched from the EchoAI Support Configuration Panel to verify outbound email and webhook routing.'
+
+      const testResult = await sendSupportTicketEmail({
+        ticketId: `test-${Date.now().toString(36)}`,
+        requesterName: callerProfile.role === 'admin' ? 'Super Admin (Test)' : 'Technician (Test)',
+        requesterEmail: caller.user.email || 'support@echoaipro.com',
+        category: `[TEST] ${testCategory}`,
+        subject: `[TEST NOTIFICATION] EchoAI Support Routing Test`,
+        details: testDetails,
+        source: 'app',
+        company: 'EchoAI Internal Test',
+        createdAt: new Date().toISOString(),
+      }, adminClient)
+
+      return json({
+        ok: true,
+        result: testResult,
+        message: `Test notification sent successfully to ${(testResult.recipients || ['support@echoaipro.com']).join(', ')}. Provider: ${testResult.provider || 'default'}.`,
+      }, 200, request)
+    }
+
+    if (action === 'notify-ticket-created') {
+      const { ticketId, category, details, requesterName, requesterEmail, company: ticketCompany, source } = body
+      if (!category || !details) {
+        return json({ error: 'Category and details are required.' }, 400, request)
+      }
+
+      const notifyResult = await sendSupportTicketEmail({
+        ticketId,
+        category,
+        details,
+        requesterName: requesterName || caller.user.email,
+        requesterEmail: requesterEmail || caller.user.email,
+        company: ticketCompany,
+        source: source || 'app',
+        createdAt: new Date().toISOString(),
+      }, adminClient)
+
+      return json({ ok: true, result: notifyResult }, 200, request)
     }
 
     if (action === 'create-user') {
@@ -64,9 +174,12 @@ Deno.serve(async (request) => {
         return json({ error: 'Board Member profit share must be between 1% and 10%.' }, 400, request)
       }
 
+      const rawAppUrl = Deno.env.get('APP_URL') ?? ''
+      const appUrl = rawAppUrl.trim().replace(/\/$/, '') || 'https://echoaipro.com'
+
       const { data: created, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, {
         data: { full_name: newFullName, company: newCompany },
-        redirectTo: `${Deno.env.get('APP_URL') ?? ''}/`,
+        redirectTo: `${appUrl}/reset-password`,
       })
       let invitedUser = created?.user ?? null
       if (!invitedUser && createError) {
@@ -75,6 +188,19 @@ Deno.serve(async (request) => {
       }
       if (!invitedUser) {
         return json({ error: createError?.message || 'Could not create that user.' }, 409, request)
+      }
+
+      // Also generate a single-use setup / recovery link in case email delivery is delayed
+      let directRecoveryLink: string | null = null
+      try {
+        const { data: recoveryData } = await adminClient.auth.admin.generateLink({
+          type: 'recovery',
+          email,
+          options: { redirectTo: `${appUrl}/reset-password` },
+        })
+        directRecoveryLink = recoveryData?.properties?.action_link ?? null
+      } catch {
+        // Link generation is a best-effort convenience alongside the invite email
       }
 
       const { data: profile, error: profileError } = await adminClient
@@ -96,7 +222,7 @@ Deno.serve(async (request) => {
         action: 'updated_profile',
         detail: { action: 'created-user', role },
       })
-      return json({ profile }, 201, request)
+      return json({ profile, recoveryLink: directRecoveryLink }, 201, request)
     }
 
     const callerEmail = caller.user.email?.toLowerCase() ?? ''
@@ -204,12 +330,15 @@ Deno.serve(async (request) => {
         return json({ error: 'That account has no email address on file.' }, 400, request)
       }
 
+      const rawAppUrl = Deno.env.get('APP_URL') ?? ''
+      const appUrl = rawAppUrl.trim().replace(/\/$/, '') || 'https://echoaipro.com'
+
       // generateLink issues a single-use recovery URL. The admin never learns or
       // sets the password; the user completes the reset themselves.
       const { data: link, error: linkError } = await adminClient.auth.admin.generateLink({
         type: 'recovery',
         email: target.email,
-        options: { redirectTo: `${Deno.env.get('APP_URL') ?? ''}/?recovery=1` },
+        options: { redirectTo: `${appUrl}/reset-password` },
       })
 
       if (linkError) {
