@@ -259,8 +259,25 @@
 
 .company-email-form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1rem;
+  width: 100%;
+}
+
+.company-email-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.company-email-form-grid input,
+.company-email-form-grid select,
+.company-email-form-grid textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .company-email-checkbox-group {

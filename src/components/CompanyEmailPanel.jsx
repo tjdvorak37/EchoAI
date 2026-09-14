@@ -455,24 +455,27 @@ export function CompanyEmailPanel({
               </label>
 
               <label>
-                SMTP Port &amp; Encryption
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                  <input
-                    type="number"
-                    required
-                    value={notifyConfig.smtp_port}
-                    onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_port: Number(e.target.value) || 587 }))}
-                    placeholder="587"
-                  />
-                  <select
-                    value={notifyConfig.smtp_encryption}
-                    onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_encryption: e.target.value }))}
-                  >
-                    <option value="STARTTLS">STARTTLS (Port 587)</option>
-                    <option value="TLS">TLS / SSL (Port 465)</option>
-                  </select>
-                </div>
-                <small className="muted">Port 587 with STARTTLS is recommended for Microsoft 365.</small>
+                SMTP Port
+                <input
+                  type="number"
+                  required
+                  value={notifyConfig.smtp_port}
+                  onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_port: Number(e.target.value) || 587 }))}
+                  placeholder="587"
+                />
+                <small className="muted">Standard: 587 (or 465 for direct SSL).</small>
+              </label>
+
+              <label>
+                Encryption Protocol
+                <select
+                  value={notifyConfig.smtp_encryption}
+                  onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_encryption: e.target.value }))}
+                >
+                  <option value="STARTTLS">STARTTLS (Port 587)</option>
+                  <option value="TLS">TLS / SSL (Port 465)</option>
+                </select>
+                <small className="muted">STARTTLS recommended for Microsoft 365.</small>
               </label>
             </div>
 
