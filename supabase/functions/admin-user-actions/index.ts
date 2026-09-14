@@ -263,7 +263,7 @@ Deno.serve(async (request) => {
 
       const { data: created, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, {
         data: { full_name: newFullName, company: newCompany },
-        redirectTo: `${appUrl}/reset-password`,
+        redirectTo: `${appUrl}/?recovery=1`,
       })
       let invitedUser = created?.user ?? null
       if (!invitedUser && createError) {
@@ -280,7 +280,7 @@ Deno.serve(async (request) => {
         const { data: recoveryData } = await adminClient.auth.admin.generateLink({
           type: 'recovery',
           email,
-          options: { redirectTo: `${appUrl}/reset-password` },
+          options: { redirectTo: `${appUrl}/?recovery=1` },
         })
         directRecoveryLink = recoveryData?.properties?.action_link ?? null
       } catch {
@@ -421,7 +421,7 @@ Deno.serve(async (request) => {
       const { data: link, error: linkError } = await adminClient.auth.admin.generateLink({
         type: 'recovery',
         email: target.email,
-        options: { redirectTo: `${appUrl}/reset-password` },
+        options: { redirectTo: `${appUrl}/?recovery=1` },
       })
 
       if (linkError) {
