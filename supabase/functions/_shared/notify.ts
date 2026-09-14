@@ -27,6 +27,13 @@ export interface NotificationConfig {
   notify_on_company_requests?: boolean
   webhook_url?: string
   webhook_enabled?: boolean
+  smtp_host?: string
+  smtp_port?: number
+  smtp_encryption?: string
+  smtp_user?: string
+  smtp_password?: string
+  resend_api_key?: string
+  sendgrid_api_key?: string
 }
 
 export const getNotificationConfig = async (adminClient?: any): Promise<NotificationConfig> => {
@@ -56,6 +63,13 @@ export const getNotificationConfig = async (adminClient?: any): Promise<Notifica
         notify_on_company_requests: data.notify_on_company_requests !== false,
         webhook_url: data.webhook_url || '',
         webhook_enabled: data.webhook_enabled === true,
+        smtp_host: data.smtp_host || 'smtp.office365.com',
+        smtp_port: data.smtp_port || 587,
+        smtp_encryption: data.smtp_encryption || 'STARTTLS',
+        smtp_user: data.smtp_user || 'support@echoaipro.com',
+        smtp_password: data.smtp_password || '',
+        resend_api_key: data.resend_api_key || '',
+        sendgrid_api_key: data.sendgrid_api_key || '',
       }
     }
   } catch (err) {
@@ -74,6 +88,13 @@ export const getNotificationConfig = async (adminClient?: any): Promise<Notifica
     notify_on_company_requests: true,
     webhook_url: Deno.env.get('SUPPORT_NOTIFICATION_WEBHOOK_URL') || '',
     webhook_enabled: Boolean(Deno.env.get('SUPPORT_NOTIFICATION_WEBHOOK_URL')),
+    smtp_host: 'smtp.office365.com',
+    smtp_port: 587,
+    smtp_encryption: 'STARTTLS',
+    smtp_user: 'support@echoaipro.com',
+    smtp_password: '',
+    resend_api_key: '',
+    sendgrid_api_key: '',
   }
 }
 
@@ -207,7 +228,7 @@ https://echoaipro.com/
   let providerUsed = 'logged'
 
   // 1. Resend API
-  const resendApiKey = Deno.env.get('RESEND_API_KEY')
+  const resendApiKey = config.resend_api_key || Deno.env.get('RESEND_API_KEY')
   if (resendApiKey) {
     try {
       const response = await fetch('https://api.resend.com/emails', {
@@ -238,7 +259,7 @@ https://echoaipro.com/
   }
 
   // 2. SendGrid API
-  const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY')
+  const sendgridApiKey = config.sendgrid_api_key || Deno.env.get('SENDGRID_API_KEY')
   if (!sent && sendgridApiKey) {
     try {
       const response = await fetch('https://api.sendgrid.com/v3/mail/send', {

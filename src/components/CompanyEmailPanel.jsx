@@ -13,7 +13,7 @@ export function CompanyEmailPanel({
   handleAssignCompanySeat,
   handleRevokeCompanySeat,
 }) {
-  const [activeSubTab, setActiveSubTab] = useState('overview')
+  const [activeSubTab, setActiveSubTab] = useState('credentials')
   const [recoveryLinks, setRecoveryLinks] = useState({})
   const [loadingLinks, setLoadingLinks] = useState({})
   const [copiedLink, setCopiedLink] = useState(null)
@@ -54,10 +54,21 @@ export function CompanyEmailPanel({
     notify_on_company_requests: true,
     webhook_url: '',
     webhook_enabled: false,
+    smtp_host: 'smtp.office365.com',
+    smtp_port: 587,
+    smtp_encryption: 'STARTTLS',
+    smtp_user: 'support@echoaipro.com',
+    smtp_password: '',
+    resend_api_key: '',
+    sendgrid_api_key: '',
   })
+  const [showPassword, setShowPassword] = useState(false)
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [hasExistingPassword, setHasExistingPassword] = useState(false)
   const [notifyLoading, setNotifyLoading] = useState(false)
   const [notifySaving, setNotifySaving] = useState(false)
   const [notifyStatus, setNotifyStatus] = useState({ message: '', error: '' })
+  const [smtpStatus, setSmtpStatus] = useState({ saving: false, message: '', error: '' })
 
   // Test Notification State
   const [testCategory, setTestCategory] = useState('Technical issue')
@@ -79,7 +90,15 @@ export function CompanyEmailPanel({
           ...prev,
           ...config,
           recipient_email: config.recipient_email || 'support@echoaipro.com',
+          smtp_host: config.smtp_host || 'smtp.office365.com',
+          smtp_port: config.smtp_port || 587,
+          smtp_encryption: config.smtp_encryption || 'STARTTLS',
+          smtp_user: config.smtp_user || 'support@echoaipro.com',
+          smtp_password: config.smtp_password || '',
+          resend_api_key: config.resend_api_key || '',
+          sendgrid_api_key: config.sendgrid_api_key || '',
         }))
+        setHasExistingPassword(Boolean(config.smtp_password))
       }
     } catch (err) {
       setNotifyStatus({ message: '', error: err.message })
@@ -109,9 +128,17 @@ export function CompanyEmailPanel({
         notifyOnCompanyRequests: notifyConfig.notify_on_company_requests,
         webhookUrl: notifyConfig.webhook_url,
         webhookEnabled: notifyConfig.webhook_enabled,
+        smtpHost: notifyConfig.smtp_host,
+        smtpPort: notifyConfig.smtp_port,
+        smtpEncryption: notifyConfig.smtp_encryption,
+        smtpUser: notifyConfig.smtp_user,
+        smtpPassword: notifyConfig.smtp_password,
+        resendApiKey: notifyConfig.resend_api_key,
+        sendgridApiKey: notifyConfig.sendgrid_api_key,
       })
       if (saved) {
         setNotifyConfig((prev) => ({ ...prev, ...saved }))
+        if (saved.smtp_password) setHasExistingPassword(true)
       }
       setNotifyStatus({ message: 'Ticket email notification parameters saved successfully.', error: '' })
       setTimeout(() => setNotifyStatus((prev) => ({ ...prev, message: '' })), 4000)
@@ -119,6 +146,41 @@ export function CompanyEmailPanel({
       setNotifyStatus({ message: '', error: err.message })
     } finally {
       setNotifySaving(false)
+    }
+  }
+
+  const handleSaveSmtpCredentials = async (e) => {
+    if (e) e.preventDefault()
+    setSmtpStatus({ saving: true, message: '', error: '' })
+    try {
+      const saved = await authService.updateTicketNotificationConfig({
+        enabled: notifyConfig.enabled,
+        recipientEmail: notifyConfig.recipient_email,
+        secondaryEmail: notifyConfig.secondary_email,
+        senderName: notifyConfig.sender_name,
+        subjectPrefix: notifyConfig.subject_prefix,
+        includeFullDescription: notifyConfig.include_full_description,
+        notifyOnLandingTickets: notifyConfig.notify_on_landing_tickets,
+        notifyOnAppTickets: notifyConfig.notify_on_app_tickets,
+        notifyOnCompanyRequests: notifyConfig.notify_on_company_requests,
+        webhookUrl: notifyConfig.webhook_url,
+        webhookEnabled: notifyConfig.webhook_enabled,
+        smtpHost: notifyConfig.smtp_host,
+        smtpPort: notifyConfig.smtp_port,
+        smtpEncryption: notifyConfig.smtp_encryption,
+        smtpUser: notifyConfig.smtp_user,
+        smtpPassword: notifyConfig.smtp_password,
+        resendApiKey: notifyConfig.resend_api_key,
+        sendgridApiKey: notifyConfig.sendgrid_api_key,
+      })
+      if (saved) {
+        setNotifyConfig((prev) => ({ ...prev, ...saved }))
+        if (notifyConfig.smtp_password || saved.smtp_password) setHasExistingPassword(true)
+      }
+      setSmtpStatus({ saving: false, message: 'Email password & SMTP credentials saved successfully.', error: '' })
+      setTimeout(() => setSmtpStatus((prev) => ({ ...prev, message: '' })), 4000)
+    } catch (err) {
+      setSmtpStatus({ saving: false, message: '', error: err.message })
     }
   }
 
@@ -275,12 +337,15 @@ export function CompanyEmailPanel({
             <span>📧</span> Company Email &amp; Outbound Mail Routing
           </div>
           <p className="company-email-hero-subtitle">
-            Manage your Microsoft 365 Essential mailboxes, outbound customer notifications, ticket email forwarding to <strong>support@echoaipro.com</strong>, and technician accounts.
+            Manage your Microsoft 365 Essential mailboxes, email passwords, outbound SMTP credentials, and ticket notifications to <strong>support@echoaipro.com</strong>.
           </p>
         </div>
-        <div>
-          <span className={`company-email-badge ${notifyConfig.enabled ? 'success' : 'warning'}`}>
-            {notifyConfig.enabled ? `● Notifications: ON (${notifyConfig.recipient_email})` : '○ Notifications: OFF'}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+          <span className={`company-email-badge ${hasExistingPassword || notifyConfig.smtp_password ? 'success' : 'warning'}`}>
+            {hasExistingPassword || notifyConfig.smtp_password ? '● Password Configured' : '○ Password Needed'}
+          </span>
+          <span className={`company-email-badge ${notifyConfig.enabled ? 'info' : 'warning'}`}>
+            {notifyConfig.enabled ? `● Forwarding: ${notifyConfig.recipient_email}` : '○ Forwarding: Off'}
           </span>
         </div>
       </div>
@@ -288,10 +353,10 @@ export function CompanyEmailPanel({
       <nav className="company-email-tabs" role="tablist">
         <button
           type="button"
-          className={`company-email-tab-btn ${activeSubTab === 'overview' ? 'active' : ''}`}
-          onClick={() => setActiveSubTab('overview')}
+          className={`company-email-tab-btn ${activeSubTab === 'credentials' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('credentials')}
         >
-          📮 Outbound &amp; Mailboxes
+          🔐 Mailbox &amp; Email Password
         </button>
         <button
           type="button"
@@ -302,10 +367,17 @@ export function CompanyEmailPanel({
         </button>
         <button
           type="button"
+          className={`company-email-tab-btn ${activeSubTab === 'overview' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('overview')}
+        >
+          📮 Outbound &amp; Mailboxes
+        </button>
+        <button
+          type="button"
           className={`company-email-tab-btn ${activeSubTab === 'smtp-guide' ? 'active' : ''}`}
           onClick={() => setActiveSubTab('smtp-guide')}
         >
-          ⚙️ Microsoft 365 &amp; Supabase SMTP Setup
+          ⚙️ Microsoft 365 Setup Guide
         </button>
         <button
           type="button"
@@ -323,121 +395,150 @@ export function CompanyEmailPanel({
         </button>
       </nav>
 
-      {activeSubTab === 'overview' && (
-        <>
-          <div className="company-email-cards">
-            <div className="company-email-card">
-              <div className="company-email-card-header">
-                <h4 className="company-email-card-title">📨 Outbound Support Mailbox</h4>
-                <span className="company-email-badge success">Active</span>
-              </div>
-              <p className="muted" style={{ fontSize: '0.85rem' }}>
-                All outbound emails mailed to customers (password resets, activation links, support ticket replies, billing receipts) are branded and sent from this address.
+      {/* 1. Mailbox & Email Password Tab */}
+      {activeSubTab === 'credentials' && (
+        <div className="it-section">
+          <h3 className="it-section-title">🔐 Mailbox Password &amp; Outbound SMTP Settings</h3>
+          <p className="muted">
+            Enter your Microsoft 365 Essential mailbox password or App Password below. This allows all outbound support emails, password resets, and ticket replies to be sent directly through <strong>{notifyConfig.smtp_user || 'support@echoaipro.com'}</strong>.
+          </p>
+
+          <form onSubmit={handleSaveSmtpCredentials}>
+            <div className="company-email-form-grid">
+              <label>
+                Email Address / Username
+                <input
+                  type="email"
+                  required
+                  value={notifyConfig.smtp_user}
+                  onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_user: e.target.value }))}
+                  placeholder="support@echoaipro.com"
+                />
+                <small className="muted">Your Microsoft 365 Essential support mailbox.</small>
+              </label>
+
+              <label>
+                Email Password / App Password
+                <div className="company-email-password-input-wrap">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={notifyConfig.smtp_password}
+                    onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_password: e.target.value }))}
+                    placeholder={hasExistingPassword ? '•••••••••••• (password saved)' : 'Enter mailbox password'}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="company-email-password-toggle"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <small className="muted">
+                  {hasExistingPassword && !notifyConfig.smtp_password
+                    ? 'Password is saved. Leave blank to keep current, or enter a new one to update.'
+                    : 'Microsoft 365 account password or generated App Password.'}
+                </small>
+              </label>
+
+              <label>
+                SMTP Host / Server
+                <input
+                  type="text"
+                  required
+                  value={notifyConfig.smtp_host}
+                  onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_host: e.target.value }))}
+                  placeholder="smtp.office365.com"
+                />
+                <small className="muted">Default: smtp.office365.com for Microsoft 365.</small>
+              </label>
+
+              <label>
+                SMTP Port &amp; Encryption
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <input
+                    type="number"
+                    required
+                    value={notifyConfig.smtp_port}
+                    onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_port: Number(e.target.value) || 587 }))}
+                    placeholder="587"
+                  />
+                  <select
+                    value={notifyConfig.smtp_encryption}
+                    onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_encryption: e.target.value }))}
+                  >
+                    <option value="STARTTLS">STARTTLS (Port 587)</option>
+                    <option value="TLS">TLS / SSL (Port 465)</option>
+                  </select>
+                </div>
+                <small className="muted">Port 587 with STARTTLS is recommended for Microsoft 365.</small>
+              </label>
+            </div>
+
+            <div style={{ marginTop: '1rem' }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Optional Email Relay API Keys (Resend / SendGrid)</h4>
+              <p className="muted" style={{ fontSize: '0.85rem', margin: '0 0 0.75rem 0' }}>
+                If you use an email delivery API service alongside Microsoft 365 for high-volume delivery, enter your API key below:
               </p>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Sender Address</span>
-                <span className="company-email-field-value">support@echoaipro.com</span>
-              </div>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Sender Name</span>
-                <span className="company-email-field-value">EchoAI Support</span>
-              </div>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Provider</span>
-                <span className="company-email-field-value">Microsoft 365 Essential</span>
-              </div>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Delivery Channel</span>
-                <span className="company-email-field-value">Authenticated SMTP (TLS 587)</span>
+              <div className="company-email-form-grid">
+                <label>
+                  Resend API Key (Optional)
+                  <div className="company-email-password-input-wrap">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={notifyConfig.resend_api_key}
+                      onChange={(e) => setNotifyConfig((prev) => ({ ...prev, resend_api_key: e.target.value }))}
+                      placeholder="re_123456789..."
+                    />
+                    <button
+                      type="button"
+                      className="company-email-password-toggle"
+                      onClick={() => setShowApiKey((prev) => !prev)}
+                    >
+                      {showApiKey ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </label>
+
+                <label>
+                  SendGrid API Key (Optional)
+                  <input
+                    type="password"
+                    value={notifyConfig.sendgrid_api_key}
+                    onChange={(e) => setNotifyConfig((prev) => ({ ...prev, sendgrid_api_key: e.target.value }))}
+                    placeholder="SG.123456789..."
+                  />
+                </label>
               </div>
             </div>
 
-            <div className="company-email-card">
-              <div className="company-email-card-header">
-                <h4 className="company-email-card-title">🔔 Incoming Ticket Notifications</h4>
-                <span className={`company-email-badge ${notifyConfig.enabled ? 'success' : 'warning'}`}>
-                  {notifyConfig.enabled ? 'Enabled' : 'Disabled'}
-                </span>
-              </div>
-              <p className="muted" style={{ fontSize: '0.85rem' }}>
-                Whenever a customer submits a support ticket, a full notification and description are instantly forwarded to your team.
-              </p>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Primary Recipient</span>
-                <span className="company-email-field-value">{notifyConfig.recipient_email || 'support@echoaipro.com'}</span>
-              </div>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Secondary / Tech Email</span>
-                <span className="company-email-field-value">{notifyConfig.secondary_email || 'None configured'}</span>
-              </div>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Full Descriptions</span>
-                <span className="company-email-field-value">{notifyConfig.include_full_description ? 'Included' : 'Summarized'}</span>
-              </div>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Webhook Routing</span>
-                <span className="company-email-field-value">{notifyConfig.webhook_enabled ? 'Active' : 'Disabled'}</span>
-              </div>
+            <div className="company-email-security-note">
+              🔒 <strong>Security Guarantee:</strong> Credentials are encrypted and stored with restricted Row-Level Security policies. Only technicians and administrators can view or update these settings.
             </div>
 
-            <div className="company-email-card">
-              <div className="company-email-card-header">
-                <h4 className="company-email-card-title">🧑‍🔧 Technician Account</h4>
-                <span className="company-email-badge info">Assigned</span>
-              </div>
-              <p className="muted" style={{ fontSize: '0.85rem' }}>
-                Dedicated mailbox for your hired technician and IT staff to manage support operations, triage tickets, and administer accounts.
-              </p>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Primary Role</span>
-                <span className="company-email-field-value">Technician (IT / Admin)</span>
-              </div>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Staff Count</span>
-                <span className="company-email-field-value">{staffMembers.length} active</span>
-              </div>
-              <div className="company-email-field-row">
-                <span className="company-email-field-label">Account Provisioning</span>
-                <span className="company-email-field-value">Instant Link + Email Invite</span>
-              </div>
+            <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button type="submit" className="primary-button" disabled={smtpStatus.saving || notifyLoading}>
+                {smtpStatus.saving ? 'Saving credentials…' : 'Save Email Password & Credentials'}
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={handleSendTestNotification}
+                disabled={testStatus.running}
+              >
+                {testStatus.running ? 'Testing…' : '⚡ Send Test Email via support@echoaipro.com'}
+              </button>
+              {smtpStatus.message && <span style={{ color: '#166534', fontWeight: 600 }}>✓ {smtpStatus.message}</span>}
+              {smtpStatus.error && <span className="auth-message auth-error" style={{ margin: 0 }}>{smtpStatus.error}</span>}
+              {testStatus.message && <span style={{ color: '#0369a1', fontWeight: 600 }}>✓ {testStatus.message}</span>}
+              {testStatus.error && <span className="auth-message auth-error" style={{ margin: 0 }}>{testStatus.error}</span>}
             </div>
-          </div>
-
-          <div className="it-section">
-            <h3 className="it-section-title">⚡ Quick Diagnostics &amp; Fixes</h3>
-            <div className="company-email-guide-box">
-              <div className="company-email-guide-step">
-                <span className="company-email-step-number">1</span>
-                <div>
-                  <strong>How do incoming tickets get emailed to support@echoaipro.com?</strong>
-                  <p className="muted" style={{ margin: '0.3rem 0 0 0' }}>
-                    Open the <strong>🔔 Ticket Notifications &amp; Alerts</strong> tab. You can toggle notifications on/off, adjust the recipient address (default: <code>support@echoaipro.com</code>), add your technician&apos;s email, and test the notification with a live sample ticket.
-                  </p>
-                </div>
-              </div>
-              <div className="company-email-guide-step">
-                <span className="company-email-step-number">2</span>
-                <div>
-                  <strong>Why did password reset or activation give &quot;This site can&apos;t be reached&quot;?</strong>
-                  <p className="muted" style={{ margin: '0.3rem 0 0 0' }}>
-                    By default, Supabase Auth redirects email links to <code>http://localhost:3000</code> if the <strong>Site URL</strong> is not set to your production domain (<code>https://echoaipro.com</code>). When remote users clicked the link, their browser could not connect to localhost. Once configured to <code>https://echoaipro.com</code> and <code>https://echoaipro.com/reset-password</code>, all email links work immediately across all devices.
-                  </p>
-                </div>
-              </div>
-              <div className="company-email-guide-step">
-                <span className="company-email-step-number">3</span>
-                <div>
-                  <strong>Can I give my technician a direct link if they didn&apos;t get the email?</strong>
-                  <p className="muted" style={{ margin: '0.3rem 0 0 0' }}>
-                    Yes! Switch to the <strong>Technician &amp; Staff Setup Links</strong> tab above. You can generate a single-use setup / password reset link for any technician or staff member with one click and send it to them directly via Microsoft Teams, Outlook, or SMS.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
+          </form>
+        </div>
       )}
 
+      {/* 2. Ticket Notifications & Alerts Tab */}
       {activeSubTab === 'ticket-notifications' && (
         <div className="it-section">
           <h3 className="it-section-title">🔔 Incoming Ticket Notification Management</h3>
@@ -633,6 +734,155 @@ export function CompanyEmailPanel({
         </div>
       )}
 
+      {/* 3. Overview Tab */}
+      {activeSubTab === 'overview' && (
+        <>
+          <div className="company-email-cards">
+            <div className="company-email-card">
+              <div className="company-email-card-header">
+                <h4 className="company-email-card-title">📨 Outbound Support Mailbox</h4>
+                <span className="company-email-badge success">Active</span>
+              </div>
+              <p className="muted" style={{ fontSize: '0.85rem' }}>
+                All outbound emails mailed to customers (password resets, activation links, support ticket replies, billing receipts) are branded and sent from this address.
+              </p>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Sender Address</span>
+                <span className="company-email-field-value">{notifyConfig.smtp_user || 'support@echoaipro.com'}</span>
+              </div>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Sender Name</span>
+                <span className="company-email-field-value">{notifyConfig.sender_name || 'EchoAI Support'}</span>
+              </div>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Provider</span>
+                <span className="company-email-field-value">Microsoft 365 Essential</span>
+              </div>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Password Status</span>
+                <span className="company-email-field-value">
+                  {hasExistingPassword ? '✓ Saved' : '⚠️ Password Needed'}
+                </span>
+              </div>
+              <div style={{ marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                  onClick={() => setActiveSubTab('credentials')}
+                >
+                  Configure Mailbox Password &amp; SMTP →
+                </button>
+              </div>
+            </div>
+
+            <div className="company-email-card">
+              <div className="company-email-card-header">
+                <h4 className="company-email-card-title">🔔 Incoming Ticket Notifications</h4>
+                <span className={`company-email-badge ${notifyConfig.enabled ? 'success' : 'warning'}`}>
+                  {notifyConfig.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+              <p className="muted" style={{ fontSize: '0.85rem' }}>
+                Whenever a customer submits a support ticket, a full notification and description are instantly forwarded to your team.
+              </p>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Primary Recipient</span>
+                <span className="company-email-field-value">{notifyConfig.recipient_email || 'support@echoaipro.com'}</span>
+              </div>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Secondary / Tech Email</span>
+                <span className="company-email-field-value">{notifyConfig.secondary_email || 'None configured'}</span>
+              </div>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Full Descriptions</span>
+                <span className="company-email-field-value">{notifyConfig.include_full_description ? 'Included' : 'Summarized'}</span>
+              </div>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Webhook Routing</span>
+                <span className="company-email-field-value">{notifyConfig.webhook_enabled ? 'Active' : 'Disabled'}</span>
+              </div>
+              <div style={{ marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                  onClick={() => setActiveSubTab('ticket-notifications')}
+                >
+                  Manage Notification Rules →
+                </button>
+              </div>
+            </div>
+
+            <div className="company-email-card">
+              <div className="company-email-card-header">
+                <h4 className="company-email-card-title">🧑‍🔧 Technician Account</h4>
+                <span className="company-email-badge info">Assigned</span>
+              </div>
+              <p className="muted" style={{ fontSize: '0.85rem' }}>
+                Dedicated mailbox for your hired technician and IT staff to manage support operations, triage tickets, and administer accounts.
+              </p>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Primary Role</span>
+                <span className="company-email-field-value">Technician (IT / Admin)</span>
+              </div>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Staff Count</span>
+                <span className="company-email-field-value">{staffMembers.length} active</span>
+              </div>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Account Provisioning</span>
+                <span className="company-email-field-value">Instant Link + Email Invite</span>
+              </div>
+              <div style={{ marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                  onClick={() => setActiveSubTab('staff-setup')}
+                >
+                  Manage Staff Setup Links →
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="it-section">
+            <h3 className="it-section-title">⚡ Quick Diagnostics &amp; Fixes</h3>
+            <div className="company-email-guide-box">
+              <div className="company-email-guide-step">
+                <span className="company-email-step-number">1</span>
+                <div>
+                  <strong>Where do I put in my support mailbox password?</strong>
+                  <p className="muted" style={{ margin: '0.3rem 0 0 0' }}>
+                    Click the <strong>🔐 Mailbox &amp; Email Password</strong> tab above to enter your Microsoft 365 password or App Password. It is securely saved so all outbound system emails and notifications send properly.
+                  </p>
+                </div>
+              </div>
+              <div className="company-email-guide-step">
+                <span className="company-email-step-number">2</span>
+                <div>
+                  <strong>How do incoming tickets get emailed to support@echoaipro.com?</strong>
+                  <p className="muted" style={{ margin: '0.3rem 0 0 0' }}>
+                    Open the <strong>🔔 Ticket Notifications &amp; Alerts</strong> tab. You can toggle notifications on/off, adjust the recipient address (default: <code>support@echoaipro.com</code>), add your technician&apos;s email, and test the notification with a live sample ticket.
+                  </p>
+                </div>
+              </div>
+              <div className="company-email-guide-step">
+                <span className="company-email-step-number">3</span>
+                <div>
+                  <strong>Can I give my technician a direct link if they didn&apos;t get the email?</strong>
+                  <p className="muted" style={{ margin: '0.3rem 0 0 0' }}>
+                    Yes! Switch to the <strong>Technician &amp; Staff Setup Links</strong> tab above. You can generate a single-use setup / password reset link for any technician or staff member with one click and send it to them directly via Microsoft Teams, Outlook, or SMS.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 4. Microsoft 365 Setup Guide Tab */}
       {activeSubTab === 'smtp-guide' && (
         <div className="it-section">
           <h3 className="it-section-title">🔧 Microsoft 365 Essential &amp; Supabase SMTP Setup Guide</h3>
@@ -713,6 +963,7 @@ export function CompanyEmailPanel({
         </div>
       )}
 
+      {/* 5. Staff Setup Links Tab */}
       {activeSubTab === 'staff-setup' && (
         <div className="it-section">
           <h3 className="it-section-title">🧑‍💼 Technician &amp; Staff Account Management</h3>
@@ -879,6 +1130,7 @@ export function CompanyEmailPanel({
         </div>
       )}
 
+      {/* 6. Company Email Seats Tab */}
       {activeSubTab === 'seats' && (
         <div className="it-section">
           <h3 className="it-section-title">👥 Company Email Seats</h3>
