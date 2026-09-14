@@ -418,3 +418,45 @@ export const sendSupportAcknowledgmentEmail = async (
 
   return { success: false, provider: 'none', error: 'No configured email provider accepted the acknowledgment.' }
 }
+
+export const sendPasswordResetEmail = async (
+  recipientEmail: string,
+  actionLink: string,
+  adminClient?: any,
+): Promise<{ success: boolean; provider?: string; error?: string }> => {
+  const config = await getNotificationConfig(adminClient)
+  const resendApiKey = config.resend_api_key || Deno.env.get('RESEND_API_KEY')
+  const sendgridApiKey = config.sendgrid_api_key || Deno.env.get('SENDGRID_API_KEY')
+  const fromEmail = Deno.env.get('MAIL_FROM_EMAIL') || 'support@echoaipro.com'
+  const fromName = config.sender_name || 'EchoAI Support'
+  const subject = 'Reset your EchoAI password'
+  const text = `A password reset was requested for your EchoAI account.\n\nReset your password: ${actionLink}\n\nThis link is single-use and expires in one hour. If you did not request this, you can ignore this email.`
+  const safeLink = actionLink.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:600px;margin:auto"><h2 style="color:#173ea5">Reset your EchoAI password</h2><p>A password reset was requested for your account.</p><p><a href="${safeLink}" style="display:inline-block;background:#2357d6;color:#fff;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:700">Reset password</a></p><p>This link is single-use and expires in one hour. If you did not request this, you can ignore this email.</p></div>`
+
+  if (resendApiKey) {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [recipientEmail], reply_to: fromEmail, subject, text, html }),
+    })
+    if (response.ok) return { success: true, provider: 'resend' }
+  }
+
+  if (sendgridApiKey) {
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${sendgridApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: recipientEmail }] }],
+        from: { email: fromEmail, name: fromName },
+        reply_to: { email: fromEmail },
+        subject,
+        content: [{ type: 'text/plain', value: text }, { type: 'text/html', value: html }],
+      }),
+    })
+    if (response.ok || response.status === 202) return { success: true, provider: 'sendgrid' }
+  }
+
+  return { success: false, provider: 'none', error: 'No configured email provider accepted the password reset email.' }
+}

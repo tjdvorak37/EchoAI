@@ -1609,18 +1609,18 @@ export const authService = {
       return { ok: true }
     }
 
-    const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://echoaipro.com'
     const cleanEmail = String(email).trim().toLowerCase()
 
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: `${appOrigin}/?recovery=1`,
+    const { data, error } = await supabase.functions.invoke('password-reset-request', {
+      body: { email: cleanEmail },
     })
 
     if (error) {
-      throw new Error(error.message)
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message || 'Unable to request a password reset.')
     }
 
-    return { ok: true }
+    return data ?? { ok: true }
   },
 
   async signOut() {
