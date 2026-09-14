@@ -19,6 +19,14 @@ type Credential = {
 
 const GRAPH_URL = 'https://graph.facebook.com/v21.0'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const TIKTOK_API_URL = 'https://open.tiktokapis.com/v2'
+const X_API_URL = 'https://api.x.com/2'
+const refreshEndpoints: Record<string, string> = {
+  youtube: GOOGLE_TOKEN_URL,
+  tiktok: 'https://open.tiktokapis.com/v2/oauth/token/',
+  x: 'https://api.x.com/2/oauth2/token',
+  linkedin: 'https://www.linkedin.com/oauth/v2/accessToken',
+}
 const maxAttempts = 3
 
 const admin = () =>
@@ -162,23 +170,134 @@ const publishYouTubeVideo = async (credential: Credential, post: ScheduledPost) 
   return String(uploaded.id)
 }
 
-const refreshYouTubeCredential = async (credential: Credential, userId: string) => {
-  if (credential.platform !== 'youtube' || !credential.refresh_token || !credential.expires_at) return credential
+const publishTikTokVideo = async (credential: Credential, post: ScheduledPost) => {
+  const video = post.media.find((item) => item.type === 'video' && item.storagePath)
+  if (!video?.storagePath) throw new Error('TikTok publishing requires an uploaded video attached to the post.')
+
+  const { data: file, error } = await admin().storage.from('social-media').download(video.storagePath)
+  if (error || !file) throw new Error('Unable to retrieve the selected video for TikTok publishing.')
+
+  const initResponse = await fetch(`${TIKTOK_API_URL}/post/publish/video/init/`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${credential.access_token}`, 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({
+      post_info: { title: post.message.slice(0, 220), privacy_level: 'PUBLIC_TO_EVERYONE', disable_duet: false, disable_comment: false, disable_stitch: false },
+      source_info: { source: 'FILE_UPLOAD', video_size: file.size, chunk_size: file.size, total_chunk_count: 1 },
+    }),
+  })
+  if (!initResponse.ok) throw new Error(await providerError(initResponse, 'TikTok upload session could not be created.'))
+  const init = await initResponse.json()
+  const uploadUrl = init.data?.upload_url
+  if (!uploadUrl) throw new Error('TikTok did not return an upload URL.')
+
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': video.mime || 'video/mp4', 'Content-Range': `bytes 0-${file.size - 1}/${file.size}` },
+    body: file,
+  })
+  if (!uploadResponse.ok) throw new Error('TikTok video upload failed.')
+  return String(init.data?.publish_id ?? 'tiktok-upload-accepted')
+}
+
+const publishXPost = async (credential: Credential, post: ScheduledPost) => {
+  if (post.media?.some((item) => item.type === 'image' || item.type === 'video')) {
+    throw new Error('X text publishing is ready; media upload requires an approved X media API product.')
+  }
+  const response = await fetch(`${X_API_URL}/tweets`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${credential.access_token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: post.message.slice(0, 280) }),
+  })
+  if (!response.ok) throw new Error(await providerError(response, 'X publishing failed.'))
+  const payload = await response.json()
+  if (!payload.data?.id) throw new Error('X did not return a post ID.')
+  return String(payload.data.id)
+}
+
+const publishLinkedInPost = async (credential: Credential, post: ScheduledPost) => {
+  if (post.media?.some((item) => item.type === 'image' || item.type === 'video')) {
+    throw new Error('LinkedIn text publishing is ready; image and video uploads are not enabled for this adapter yet.')
+  }
+  const author = credential.external_account_id.startsWith('urn:')
+    ? credential.external_account_id
+    : `urn:li:person:${credential.external_account_id}`
+  const response = await fetch('https://api.linkedin.com/rest/posts', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${credential.access_token}`,
+      'Content-Type': 'application/json',
+      'LinkedIn-Version': Deno.env.get('LINKEDIN_VERSION') ?? '202501',
+      'X-Restli-Protocol-Version': '2.0.0',
+    },
+    body: JSON.stringify({
+      author,
+      commentary: post.message,
+      visibility: 'PUBLIC',
+      distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+      lifecycleState: 'PUBLISHED',
+      isReshareDisabledByAuthor: false,
+    }),
+  })
+  if (!response.ok) throw new Error(await providerError(response, 'LinkedIn publishing failed.'))
+  const postId = response.headers.get('x-restli-id')
+  if (!postId) throw new Error('LinkedIn did not return a post ID.')
+  return postId
+}
+
+const refreshCredential = async (credential: Credential, userId: string) => {
+  if (!refreshEndpoints[credential.platform] || !credential.refresh_token || !credential.expires_at) return credential
   if (new Date(credential.expires_at).getTime() > Date.now() + 60_000) return credential
 
-  const clientId = Deno.env.get('YOUTUBE_CLIENT_ID') ?? Deno.env.get('youtube_client_id') ?? ''
-  const clientSecret = Deno.env.get('YOUTUBE_CLIENT_SECRET') ?? Deno.env.get('youtube_client_secret') ?? ''
-  if (!clientId || !clientSecret) throw new Error('YouTube token refresh is not configured.')
+  const environmentNames: Record<string, [string, string]> = {
+    youtube: ['YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET'],
+    tiktok: ['TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET'],
+    x: ['X_CLIENT_ID', 'X_CLIENT_SECRET'],
+    linkedin: ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'],
+  }
+  const [clientIdName, clientSecretName] = environmentNames[credential.platform]
+  const { data: app } = await admin()
+    .from('developer_app_credentials')
+    .select('client_id, client_secret, enabled')
+    .eq('provider', credential.platform)
+    .maybeSingle()
+  const clientId = app?.enabled !== false && app?.client_id
+    ? app.client_id
+    : Deno.env.get(clientIdName) ?? ''
+  const clientSecret = app?.enabled !== false && app?.client_secret
+    ? app.client_secret
+    : Deno.env.get(clientSecretName) ?? ''
+  if (!clientId || !clientSecret) throw new Error(`${credential.platform} token refresh is not configured.`)
 
-  const response = await fetch(GOOGLE_TOKEN_URL, {
+  const body: Record<string, string> = {
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: credential.refresh_token,
+    grant_type: 'refresh_token',
+  }
+  if (credential.platform === 'tiktok') {
+    body.client_key = clientId
+    delete body.client_id
+  }
+  const headers: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' }
+  if (credential.platform === 'x') {
+    headers.Authorization = `Basic ${btoa(`${clientId}:${clientSecret}`)}`
+    delete body.client_secret
+  }
+  const response = await fetch(refreshEndpoints[credential.platform], {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: credential.refresh_token, grant_type: 'refresh_token' }),
+    headers,
+    body: new URLSearchParams(body),
   })
-  if (!response.ok) throw new Error(await providerError(response, 'YouTube authorization could not be refreshed.'))
+  if (!response.ok) throw new Error(await providerError(response, `${credential.platform} authorization could not be refreshed.`))
   const token = await response.json()
-  const refreshed = { ...credential, access_token: token.access_token, expires_at: new Date(Date.now() + Number(token.expires_in || 3600) * 1000).toISOString() }
-  await admin().from('social_oauth_credentials').update({ access_token: refreshed.access_token, expires_at: refreshed.expires_at, updated_at: new Date().toISOString() }).eq('user_id', userId).eq('platform', 'youtube')
+  const tokenData = token.data ?? token
+  const refreshed = {
+    ...credential,
+    access_token: tokenData.access_token,
+    refresh_token: tokenData.refresh_token ?? credential.refresh_token,
+    expires_at: new Date(Date.now() + Number(tokenData.expires_in || 3600) * 1000).toISOString(),
+  }
+  await admin().from('social_oauth_credentials').update({ access_token: refreshed.access_token, refresh_token: refreshed.refresh_token, expires_at: refreshed.expires_at, updated_at: new Date().toISOString() }).eq('user_id', userId).eq('platform', credential.platform)
   return refreshed
 }
 
@@ -186,6 +305,9 @@ const publishChannel = async (post: ScheduledPost, channel: string, credential: 
   if (channel === 'facebook') return publishFacebookPost(credential, post.message, post.media ?? [])
   if (channel === 'instagram') return publishInstagramImage(credential, post.message, post.media ?? [])
   if (channel === 'youtube') return publishYouTubeVideo(credential, post)
+  if (channel === 'tiktok') return publishTikTokVideo(credential, post)
+  if (channel === 'x') return publishXPost(credential, post)
+  if (channel === 'linkedin') return publishLinkedInPost(credential, post)
   throw new Error(`${channel} publishing is not deployed yet.`)
 }
 
@@ -221,7 +343,7 @@ const publishPost = async (post: ScheduledPost) => {
     }
     let activeCredential: Credential
     try {
-      activeCredential = await refreshYouTubeCredential(credential, post.user_id)
+      activeCredential = await refreshCredential(credential, post.user_id)
     } catch (error) {
       failures.push(`${channel}: ${error instanceof Error ? error.message : 'authorization refresh failed'}`)
       continue
@@ -263,7 +385,11 @@ const publishPost = async (post: ScheduledPost) => {
     .eq('id', post.id)
     .single()
   const attempts = Number(current?.publish_attempts ?? maxAttempts)
-  const retry = attempts < maxAttempts && !failures.some((failure) => failure.includes('not deployed yet'))
+  const retry = attempts < maxAttempts && !failures.some((failure) =>
+    failure.includes('not deployed yet')
+      || failure.includes('not enabled')
+      || failure.includes('approved X media API product'),
+  )
 
   await db
     .from('scheduled_posts')

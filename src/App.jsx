@@ -4629,9 +4629,9 @@ function App() {
                         { key: 'instagram', available: true },
                         { key: 'facebook', available: true },
                         { key: 'youtube', available: true },
-                        { key: 'tiktok', available: false },
-                        { key: 'x', available: false },
-                        { key: 'linkedin', available: false },
+                        { key: 'tiktok', available: true },
+                        { key: 'x', available: true },
+                        { key: 'linkedin', available: true },
                       ].map(({ key, available }) => {
                         const meta = getPlatformMeta(key)
                         const connected = connectedAccounts.some((account) => account.platform.toLowerCase() === key && account.status === 'healthy')
@@ -4759,7 +4759,7 @@ function App() {
                         >
                           Save account profile
                         </button>
-                        {['instagram', 'facebook', 'youtube'].includes(key) && (
+                        {['instagram', 'facebook', 'youtube', 'tiktok', 'x', 'linkedin'].includes(key) && (
                           <button
                             type="button"
                             className="ghost-button"

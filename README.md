@@ -225,10 +225,12 @@ environment:
    Each provider needs its own approved scopes, callback URL, client ID, client
    secret, token refresh implementation, and outbound publish API integration.
    A saved account handle is a private profile record, not authorization to post.
-   Meta (Facebook Pages and Instagram Professional accounts) and YouTube have
-   the first self-service connector implementation. Set `META_CLIENT_ID`,
-   `META_CLIENT_SECRET`, `YOUTUBE_CLIENT_ID`, and `YOUTUBE_CLIENT_SECRET`, then
-   deploy it with:
+   Meta (Facebook Pages and Instagram Professional accounts), YouTube, TikTok,
+   X, and LinkedIn have self-service connector adapters. Enter each provider's
+   client ID and secret in Admin > Developer Apps, or set the matching function
+   secrets (`META_*`, `YOUTUBE_*`, `TIKTOK_*`, `X_*`, and `LINKEDIN_*`). X also
+   requires PKCE and LinkedIn requires the approved `w_member_social` scope.
+   Deploy the OAuth function with:
 
    ```bash
    supabase functions deploy social-oauth
@@ -248,10 +250,11 @@ environment:
 
    Invoke it every minute from a trusted scheduler with
    `Authorization: Bearer <SOCIAL_PUBLISHER_CRON_SECRET>`. The worker publishes
-   Facebook Page text posts, Instagram single-image posts, and YouTube videos.
-   YouTube uploads are private by default during beta. Other platforms remain
-   blocked until their provider-specific publishing adapters are implemented and
-   approved.
+   Facebook Page text posts, Instagram single-image posts, YouTube videos,
+   TikTok videos, X text posts, and LinkedIn text posts. TikTok direct posting,
+   X posting, and LinkedIn posting remain subject to each provider's app review
+   and account permissions. Snapchat remains intentionally gated until its
+   Public Profile or Marketing API product is selected.
 6. Configure the image generation and listening provider endpoints. Live mode
    intentionally reports provider failures or zero results instead of fabricating
    content. Verify each connector with an authenticated non-admin account.
@@ -265,5 +268,6 @@ environment:
    in frontend environment variables.
 
 The checked-in app is ready for authenticated, owner-scoped beta workflows after
-these deployment prerequisites are completed. Direct social-network publishing is
-blocked until the provider OAuth and server-side publisher in items 4-5 exist.
+these deployment prerequisites are completed. Direct social-network publishing
+is blocked until each provider's OAuth app review, credentials, and server-side
+publisher permissions are complete.
