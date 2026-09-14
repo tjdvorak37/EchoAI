@@ -56,6 +56,10 @@ verify_jwt = false
 # Public support intake validates and rate-limits requests inside the function.
 verify_jwt = false
 
+[functions.password-reset-request]
+# Password recovery is public, but the function uses generic responses and hashed throttling.
+verify_jwt = false
+
 [functions.social-publisher]
 # The trusted scheduler authenticates with SOCIAL_PUBLISHER_CRON_SECRET rather
 # than a Supabase user JWT.
