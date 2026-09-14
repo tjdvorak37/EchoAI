@@ -95,6 +95,7 @@ const normalizeMember = (record) => ({
   aiAccessNote: record.ai_access_note || '',
   trademarkEditAccess: record.trademark_edit_access === true,
   developerAppEditAccess: record.developer_app_edit_access === true,
+  companyEmailEditAccess: record.company_email_edit_access === true || record.companyEmailEditAccess === true,
   profitSharePercent: Number(record.profit_share_percent ?? record.profitSharePercent ?? 0),
   isBoardMember: record.is_board_member === true || record.role === 'board_member',
   seatManager: record.seat_manager === true,
@@ -203,6 +204,9 @@ export const authService = {
       isBoardMember: profile.is_board_member === true || profile.role === 'board_member',
       profitSharePercent: Number(profile.profit_share_percent || 0),
       seatManager: profile.seat_manager === true,
+      trademarkEditAccess: profile.trademark_edit_access === true,
+      developerAppEditAccess: profile.developer_app_edit_access === true,
+      companyEmailEditAccess: profile.company_email_edit_access === true,
     }
   },
 
@@ -267,6 +271,9 @@ export const authService = {
           isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
           profitSharePercent: Number(profile?.profit_share_percent || 0),
           seatManager: profile?.seat_manager === true,
+          trademarkEditAccess: profile?.trademark_edit_access === true,
+          developerAppEditAccess: profile?.developer_app_edit_access === true,
+          companyEmailEditAccess: profile?.company_email_edit_access === true,
         },
       }
     }
@@ -330,6 +337,9 @@ export const authService = {
         company: profile?.company ?? '',
         isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
         seatManager: profile?.seat_manager === true,
+        trademarkEditAccess: profile?.trademark_edit_access === true,
+        developerAppEditAccess: profile?.developer_app_edit_access === true,
+        companyEmailEditAccess: profile?.company_email_edit_access === true,
       },
     }
   },

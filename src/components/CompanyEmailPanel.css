@@ -361,4 +361,29 @@
   margin-top: 0.5rem;
 }
 
+.company-email-locked-banner {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 0.85rem 1.15rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: #92400e;
+  font-size: 0.88rem;
+}
+
+.company-email-locked-banner strong {
+  color: #78350f;
+  font-size: 0.95rem;
+}
+
+.company-email-locked-banner p {
+  margin: 0;
+  line-height: 1.45;
+  color: #b45309;
+}
+
 
