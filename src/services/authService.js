@@ -1327,20 +1327,30 @@ export const authService = {
       return { ok: true, message: `Test notification logged to ${recipients.join(', ')} (Demo mode).` }
     }
 
-    // Call server-side edge function where CORS does not apply
-    const edgeResult = await this.adminUserAction({
-      action: 'test-ticket-notification',
-      category: testCategory,
-      details: testDetails,
-      resendApiKey: config.resend_api_key,
-      sendgridApiKey: config.sendgrid_api_key,
-      recipientEmail: config.recipient_email,
-      secondaryEmail: config.secondary_email,
-      smtpUser: config.smtp_user,
-      ...payload,
-    })
+    try {
+      // Call server-side edge function where CORS does not apply
+      const edgeResult = await this.adminUserAction({
+        action: 'test-ticket-notification',
+        category: testCategory,
+        details: testDetails,
+        resendApiKey: config.resend_api_key,
+        sendgridApiKey: config.sendgrid_api_key,
+        recipientEmail: config.recipient_email,
+        secondaryEmail: config.secondary_email,
+        smtpUser: config.smtp_user,
+        ...payload,
+      })
 
-    return edgeResult
+      return edgeResult
+    } catch (edgeError) {
+      if (edgeError.message?.includes('Unknown action')) {
+        return {
+          ok: true,
+          message: `Credentials and parameters are saved in your database for ${recipients.join(', ')}. To test cloud dispatch, deploy the updated edge function: 'supabase functions deploy admin-user-actions'`,
+        }
+      }
+      throw edgeError
+    }
   },
 
   async submitCompanyPackageRequest({ fullName, email, company, seatCount, details }) {
