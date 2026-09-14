@@ -65,7 +65,12 @@ Deno.serve(async (request) => {
       return json({ error: 'Not authorised.' }, 403, request)
     }
 
-    const canEditEmail = isSuperAdmin || callerProfile?.company_email_edit_access === true
+    const effectiveCallerProfile = callerProfile ?? {
+      role: userRole,
+      company_email_edit_access: false,
+      email: callerEmail,
+    }
+    const canEditEmail = isSuperAdmin || effectiveCallerProfile.company_email_edit_access === true
 
     const body = await request.json()
     const { action, fullName, company, email: targetEmail } = body
@@ -185,7 +190,7 @@ Deno.serve(async (request) => {
 
       const testResult = await sendSupportTicketEmail({
         ticketId: `test-${Date.now().toString(36)}`,
-        requesterName: callerProfile.role === 'admin' ? 'Super Admin (Test)' : 'Technician (Test)',
+        requesterName: effectiveCallerProfile.role === 'admin' ? 'Super Admin (Test)' : 'Technician (Test)',
         requesterEmail: caller.user.email || 'support@echoaipro.com',
         category: `[TEST] ${testCategory}`,
         subject: `[TEST NOTIFICATION] EchoAI Support Routing Test`,
@@ -300,8 +305,7 @@ Deno.serve(async (request) => {
       return json({ profile, recoveryLink: directRecoveryLink }, 201, request)
     }
 
-    const callerEmail = caller.user.email?.toLowerCase() ?? ''
-    const selfAction = callerProfile.role === 'admin'
+    const selfAction = effectiveCallerProfile.role === 'admin'
       && ((typeof targetEmail === 'string' && targetEmail.trim().toLowerCase() === callerEmail)
         || userId === caller.user.id)
     const lookupUserId = selfAction ? caller.user.id : userId
@@ -340,7 +344,7 @@ Deno.serve(async (request) => {
             role: 'it',
             access_status: 'active',
           }, { onConflict: 'id' })
-          .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, trademark_edit_access, developer_app_edit_access, company_email_edit_access, created_at')
+          .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, created_at')
           .single()
         target = repairedProfile
       }
@@ -454,7 +458,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'set-beta-ai-access') {
-      if (!['admin', 'manager', 'it'].includes(callerProfile.role)) {
+      if (!['admin', 'manager', 'it'].includes(effectiveCallerProfile.role)) {
         return json({ error: 'IT or Management access is required to change beta AI access.' }, 403, request)
       }
       const isBetaTester = body.isBetaTester === true

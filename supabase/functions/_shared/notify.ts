@@ -123,7 +123,7 @@ export const sendSupportTicketEmail = async (
   }
 
   const recipients = [config.recipient_email, config.secondary_email]
-    .filter(Boolean)
+    .filter((e): e is string => Boolean(e))
     .flatMap((e) => e.split(','))
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
