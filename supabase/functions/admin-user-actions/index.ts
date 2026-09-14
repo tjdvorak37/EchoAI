@@ -436,6 +436,40 @@ Deno.serve(async (request) => {
       }, 200, request)
     }
 
+    if (action === 'set-temporary-password') {
+      if (!isSuperAdmin) {
+        return json({ error: 'Super Admin access is required to set a temporary password.' }, 403, request)
+      }
+      if (target.id === caller.user.id) {
+        return json({ error: 'Use the normal password change flow for your own account.' }, 400, request)
+      }
+
+      const temporaryPassword = typeof body.temporaryPassword === 'string' ? body.temporaryPassword : ''
+      if (temporaryPassword.length < 12) {
+        return json({ error: 'Temporary passwords must contain at least 12 characters.' }, 400, request)
+      }
+
+      const { data: authTarget, error: authTargetError } = await adminClient.auth.admin.getUserById(target.id)
+      if (authTargetError || !authTarget.user) {
+        return json({ error: 'Could not load that authentication account.' }, 404, request)
+      }
+
+      const { error: passwordError } = await adminClient.auth.admin.updateUserById(target.id, {
+        password: temporaryPassword,
+        app_metadata: {
+          ...(authTarget.user.app_metadata || {}),
+          must_change_password: true,
+          temporary_password_set_at: new Date().toISOString(),
+        },
+      })
+      if (passwordError) {
+        return json({ error: 'Could not set the temporary password.' }, 500, request)
+      }
+
+      await recordAudit('set_temporary_password', { must_change_password: true })
+      return json({ ok: true, mustChangePassword: true }, 200, request)
+    }
+
     if (action === 'update-profile') {
       const patch: Record<string, string> = {}
       if (typeof fullName === 'string' && fullName.trim()) patch.full_name = fullName.trim().slice(0, 120)

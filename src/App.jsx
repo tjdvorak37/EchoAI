@@ -931,8 +931,10 @@ function App() {
       return
     }
 
-    if (resetPassword.newPassword.length < 8) {
-      setAuthError('Choose a password with at least 8 characters.')
+    const isTemporaryPasswordChange = session?.mustChangePassword === true || session?.app_metadata?.must_change_password === true
+    const minimumLength = isTemporaryPasswordChange ? 12 : 8
+    if (resetPassword.newPassword.length < minimumLength) {
+      setAuthError(`Choose a password with at least ${minimumLength} characters.`)
       return
     }
 
@@ -944,20 +946,28 @@ function App() {
         return
       }
 
-      const { error } = await supabase.auth.updateUser({
-        password: resetPassword.newPassword,
-      })
-
-      if (error) {
-        throw new Error(error.message)
+      if (isTemporaryPasswordChange) {
+        await authService.changeTemporaryPassword(resetPassword.newPassword)
+      } else {
+        const { error } = await supabase.auth.updateUser({
+          password: resetPassword.newPassword,
+        })
+        if (error) throw new Error(error.message)
       }
 
-      setAuthNotice('Your password has been updated. You can sign in now.')
+      setAuthNotice(isTemporaryPasswordChange ? 'Your password has been updated. Opening your account...' : 'Your password has been updated. You can sign in now.')
       setResetPassword({ newPassword: '', confirmPassword: '' })
       setTimeout(() => {
+        if (isTemporaryPasswordChange) {
+          setSession((current) => current ? {
+            ...current,
+            mustChangePassword: false,
+            app_metadata: { ...(current.app_metadata || {}), must_change_password: false },
+          } : current)
+        }
         setIsPasswordRecoveryActive(false)
         setAuthView('signin')
-        window.history.replaceState({}, '', window.location.origin)
+        if (!isTemporaryPasswordChange) window.history.replaceState({}, '', window.location.origin)
       }, 1200)
     } catch (error) {
       setAuthError(error.message)
@@ -2037,8 +2047,8 @@ function App() {
     setSupportTicket((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleAdminUserAction = async ({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent }) => {
-    const result = await authService.adminUserAction({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent })
+  const handleAdminUserAction = async ({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent, temporaryPassword }) => {
+    const result = await authService.adminUserAction({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent, temporaryPassword })
 
     if (action === 'create-user' && result?.profile) {
       setTeamMembers((prev) => [
@@ -2742,13 +2752,14 @@ function App() {
     setAiAgentDraft(createDefaultAiAgentConfig())
   }
 
-  const isResetPasswordRoute = isPasswordRecoveryActive || (typeof window !== 'undefined' && window.location.pathname === '/reset-password')
+  const isTemporaryPasswordChange = session?.mustChangePassword === true || session?.app_metadata?.must_change_password === true
+  const isResetPasswordRoute = isTemporaryPasswordChange || isPasswordRecoveryActive || (typeof window !== 'undefined' && window.location.pathname === '/reset-password')
 
   if (isResetPasswordRoute) {
     return (
       <div className="auth-page">
         <header className="auth-header">
-          <button
+          {!isTemporaryPasswordChange && <button
             type="button"
             className="text-button"
             onClick={() => {
@@ -2760,12 +2771,12 @@ function App() {
             }}
           >
             ← Back to sign in
-          </button>
+          </button>}
         </header>
 
         <section className="auth-panel">
-          <h1>Set your password</h1>
-          <p>Choose a secure password for your account to complete setup or restore access.</p>
+          <h1>{isTemporaryPasswordChange ? 'Replace your temporary password' : 'Set your password'}</h1>
+          <p>{isTemporaryPasswordChange ? 'You must choose a private password before continuing to your account.' : 'Choose a secure password for your account to complete setup or restore access.'}</p>
 
           <form className="auth-form" onSubmit={handleResetPasswordSubmit}>
             <label>
@@ -2773,7 +2784,7 @@ function App() {
               <input
                 type="password"
                 required
-                minLength={8}
+                minLength={isTemporaryPasswordChange ? 12 : 8}
                 value={resetPassword.newPassword}
                 onChange={(event) => setResetPassword((prev) => ({ ...prev, newPassword: event.target.value }))}
                 placeholder="••••••••"
@@ -2784,7 +2795,7 @@ function App() {
               <input
                 type="password"
                 required
-                minLength={8}
+                minLength={isTemporaryPasswordChange ? 12 : 8}
                 value={resetPassword.confirmPassword}
                 onChange={(event) => setResetPassword((prev) => ({ ...prev, confirmPassword: event.target.value }))}
                 placeholder="••••••••"
@@ -2798,7 +2809,7 @@ function App() {
           {authError && (
             <div style={{ marginTop: '0.8rem' }}>
               <p className="auth-message auth-error">{authError}</p>
-              <button
+              {!isTemporaryPasswordChange && <button
                 type="button"
                 className="text-button"
                 style={{ marginTop: '0.4rem', fontSize: '0.85rem' }}
@@ -2808,7 +2819,7 @@ function App() {
                 }}
               >
                 Need a new reset link? Click here →
-              </button>
+              </button>}
             </div>
           )}
           {authNotice && <p className="auth-message">{authNotice}</p>}

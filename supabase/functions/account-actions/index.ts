@@ -29,9 +29,31 @@ Deno.serve(async (request) => {
   if (!data.user) return json({ error: 'Authentication required.' }, 401, request)
 
   const body = await request.json().catch(() => ({}))
+  const database = admin()
+  if (body.action === 'change-temporary-password') {
+    const password = typeof body.password === 'string' ? body.password : ''
+    if (password.length < 12) {
+      return json({ error: 'Choose a password with at least 12 characters.' }, 400, request)
+    }
+    if (data.user.app_metadata?.must_change_password !== true) {
+      return json({ error: 'This account does not require a temporary password change.' }, 409, request)
+    }
+
+    const { error: updateError } = await database.auth.admin.updateUserById(data.user.id, {
+      password,
+      app_metadata: {
+        ...(data.user.app_metadata || {}),
+        must_change_password: false,
+        temporary_password_set_at: null,
+        password_changed_at: new Date().toISOString(),
+      },
+    })
+    if (updateError) return json({ error: 'Unable to update your password.' }, 500, request)
+    return json({ updated: true }, 200, request)
+  }
+
   if (body.action !== 'delete') return json({ error: 'Unsupported account action.' }, 400, request)
 
-  const database = admin()
   const { data: subscription } = await database
     .from('subscriptions')
     .select('stripe_customer_id')

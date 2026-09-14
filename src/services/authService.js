@@ -198,6 +198,7 @@ export const authService = {
 
     return {
       ...session.user,
+      mustChangePassword: session.user.app_metadata?.must_change_password === true,
       role: profile.role ?? session.user.user_metadata?.role ?? 'user',
       accessStatus: profile.access_status ?? 'active',
       company: profile.company ?? '',
@@ -265,6 +266,7 @@ export const authService = {
         enrollmentRequired: true,
         user: {
           ...data.user,
+          mustChangePassword: data.user?.app_metadata?.must_change_password === true,
           role: profile?.role ?? 'user',
           accessStatus: profile?.access_status ?? 'active',
           company: profile?.company ?? '',
@@ -332,6 +334,7 @@ export const authService = {
     return {
       user: {
         ...data.user,
+        mustChangePassword: data.user?.app_metadata?.must_change_password === true,
         role: profile?.role ?? data.user?.user_metadata?.role ?? 'user',
         accessStatus: profile?.access_status ?? 'active',
         company: profile?.company ?? '',
@@ -1579,6 +1582,21 @@ export const authService = {
       const detail = await error.context?.json?.().catch(() => null)
       throw new Error(detail?.error || error.message || 'Unable to delete your account.')
     }
+    return data
+  },
+
+  async changeTemporaryPassword(password) {
+    if (!isSupabaseConfigured) throw new Error('Supabase is not configured.')
+
+    const { data, error } = await supabase.functions.invoke('account-actions', {
+      body: { action: 'change-temporary-password', password },
+    })
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message || 'Unable to update your password.')
+    }
+
+    await supabase.auth.refreshSession()
     return data
   },
 
