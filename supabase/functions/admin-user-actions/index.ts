@@ -170,7 +170,17 @@ Deno.serve(async (request) => {
         source: 'app',
         company: 'EchoAI Internal Test',
         createdAt: new Date().toISOString(),
-      }, adminClient)
+      }, adminClient, {
+        resend_api_key: typeof body.resendApiKey === 'string' ? body.resendApiKey.trim() : undefined,
+        sendgrid_api_key: typeof body.sendgridApiKey === 'string' ? body.sendgridApiKey.trim() : undefined,
+        recipient_email: typeof body.recipientEmail === 'string' ? body.recipientEmail.trim() : undefined,
+        secondary_email: typeof body.secondaryEmail === 'string' ? body.secondaryEmail.trim() : undefined,
+        smtp_user: typeof body.smtpUser === 'string' ? body.smtpUser.trim() : undefined,
+      })
+
+      if (testResult.error && !testResult.success) {
+        return json({ error: testResult.error }, 400, request)
+      }
 
       return json({
         ok: true,

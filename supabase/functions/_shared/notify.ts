@@ -101,8 +101,10 @@ export const getNotificationConfig = async (adminClient?: any): Promise<Notifica
 export const sendSupportTicketEmail = async (
   payload: TicketNotificationPayload,
   adminClient?: any,
+  overrideConfig?: Partial<NotificationConfig>,
 ): Promise<{ success: boolean; provider?: string; recipients?: string[]; error?: string }> => {
-  const config = await getNotificationConfig(adminClient)
+  const baseConfig = await getNotificationConfig(adminClient)
+  const config = { ...baseConfig, ...(overrideConfig || {}) }
 
   if (!config.enabled) {
     console.log('[Ticket Notification] Skipped: Support notifications are currently disabled in settings.')
