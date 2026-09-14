@@ -231,7 +231,8 @@ https://echoaipro.com/
   const resendApiKey = config.resend_api_key || Deno.env.get('RESEND_API_KEY')
   if (resendApiKey) {
     try {
-      const response = await fetch('https://api.resend.com/emails', {
+      // First try sending with the custom domain support@echoaipro.com
+      let resendResponse = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${resendApiKey}`,
@@ -246,15 +247,55 @@ https://echoaipro.com/
           html: htmlBody,
         }),
       })
-      if (response.ok) {
+
+      if (resendResponse.ok) {
         sent = true
         providerUsed = 'resend'
       } else {
-        const errJson = await response.json().catch(() => ({}))
-        console.warn('Resend error:', errJson)
+        const errJson = await resendResponse.json().catch(() => ({}))
+        console.warn('Resend send from custom domain failed:', errJson)
+
+        // If custom domain is not yet verified in Resend, fallback to Resend's verified test sender
+        if (resendResponse.status === 403 || resendResponse.status === 422 || errJson.message?.toLowerCase().includes('domain')) {
+          const fallbackResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${resendApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: `${fromName} <onboarding@resend.dev>`,
+              to: recipients,
+              reply_to: fromEmail,
+              subject,
+              text: textBody,
+              html: htmlBody,
+            }),
+          })
+          if (fallbackResponse.ok) {
+            sent = true
+            providerUsed = 'resend (onboarding@resend.dev)'
+          } else {
+            const fallbackErr = await fallbackResponse.json().catch(() => ({}))
+            return {
+              success: false,
+              provider: 'resend',
+              recipients,
+              error: fallbackErr.message || errJson.message || 'Resend delivery failed. Check your API key and verified domain in Resend.',
+            }
+          }
+        } else {
+          return {
+            success: false,
+            provider: 'resend',
+            recipients,
+            error: errJson.message || 'Resend error. Check your API key in settings.',
+          }
+        }
       }
     } catch (err) {
       console.error('Failed sending via Resend:', err)
+      return { success: false, provider: 'resend', recipients, error: (err as Error).message }
     }
   }
 

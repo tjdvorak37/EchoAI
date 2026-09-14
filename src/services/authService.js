@@ -1362,21 +1362,65 @@ export const authService = {
 
     if (config.resend_api_key) {
       try {
-        await fetch('https://api.resend.com/emails', {
+        // Attempt 1: Send from custom domain (support@echoaipro.com)
+        let resendResponse = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${config.resend_api_key}`,
+            'Authorization': `Bearer ${config.resend_api_key.trim()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             from: `${config.sender_name || 'EchoAI Support'} <${config.smtp_user || 'support@echoaipro.com'}>`,
             to: recipients,
+            reply_to: config.smtp_user || 'support@echoaipro.com',
             subject: `${config.subject_prefix || '[EchoAI Support]'} [TEST] ${testCategory}`,
             text: `This is a test notification from EchoAI Support System.\n\nCategory: ${testCategory}\nDetails: ${testDetails}`,
           }),
         })
-      } catch {
-        // Resend error ignored
+
+        if (resendResponse.ok) {
+          const okData = await resendResponse.json().catch(() => ({}))
+          return {
+            ok: true,
+            message: `✓ Test email sent via Resend to ${recipients.join(', ')} (ID: ${okData.id || 'ok'}). Check your inbox!`,
+          }
+        }
+
+        const errData = await resendResponse.json().catch(() => ({}))
+        const errMsg = errData.message || errData.error || ''
+
+        // If domain echoaipro.com is not verified yet, fallback to onboarding@resend.dev
+        if (resendResponse.status === 403 || resendResponse.status === 422 || errMsg.toLowerCase().includes('domain')) {
+          const fallbackResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${config.resend_api_key.trim()}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: `${config.sender_name || 'EchoAI Support'} <onboarding@resend.dev>`,
+              to: recipients,
+              reply_to: config.smtp_user || 'support@echoaipro.com',
+              subject: `${config.subject_prefix || '[EchoAI Support]'} [TEST] ${testCategory}`,
+              text: `This is a test notification from EchoAI Support System.\n\nCategory: ${testCategory}\nDetails: ${testDetails}`,
+            }),
+          })
+
+          if (fallbackResponse.ok) {
+            const fbData = await fallbackResponse.json().catch(() => ({}))
+            return {
+              ok: true,
+              message: `✓ Test email delivered via Resend test sender (onboarding@resend.dev) to ${recipients.join(', ')} (ID: ${fbData.id || 'ok'}). Note: To send from support@echoaipro.com directly, verify echoaipro.com in Resend → Domains.`,
+            }
+          }
+
+          const fbErr = await fallbackResponse.json().catch(() => ({}))
+          throw new Error(fbErr.message || errMsg || 'Resend delivery failed. Check your API key and verified domain in Resend.')
+        }
+
+        throw new Error(errMsg || 'Resend rejected the email. Check your Resend API key and domain settings.')
+      } catch (resendErr) {
+        throw new Error(`Resend Error: ${resendErr.message}`, { cause: resendErr })
       }
     }
 
