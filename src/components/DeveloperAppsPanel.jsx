@@ -27,7 +27,7 @@ export function DeveloperAppsPanel({ currentUser }) {
   const [draft, setDraft] = useState({ appName: '', clientId: '', clientSecret: '', redirectUri: DEFAULT_REDIRECT, scopes: '', enabled: true })
   const [canEdit, setCanEdit] = useState(false)
   const [status, setStatus] = useState({ loading: true, saving: false, message: '', error: '' })
-  const isAdmin = currentUser?.role === 'admin'
+  const isAdmin = ['admin', 'super_admin'].includes(currentUser?.role)
 
   useEffect(() => {
     let active = true
@@ -70,6 +70,12 @@ export function DeveloperAppsPanel({ currentUser }) {
   return (
     <section className="sub-panel">
       <div className="list-row"><div><h3>Developer Apps &amp; Credentials</h3><p className="muted">Manage provider app settings without editing source code. Secret values are write-only and never shown.</p></div><span className="badge info">{isAdmin ? 'Super Admin' : canEdit ? 'Credential specialist' : 'View only'}</span></div>
+      {!status.loading && !canEdit && (
+        <div className="panel-note">
+          <strong>Editing access is locked.</strong> A Super Admin can grant your account Developer Apps specialist access from People &gt; Employees. Sign out and back in after access is granted.
+        </div>
+      )}
+      {status.loading && <p className="muted">Checking secure credential access...</p>}
       <div className="chip-row">{Object.entries(PROVIDER_LABELS).map(([key, label]) => <button key={key} type="button" className={selected === key ? 'chip active' : 'chip'} onClick={() => selectProvider(key)}>{label}</button>)}</div>
       <div className="list-row"><div><strong>{PROVIDER_LABELS[selected]}</strong><span className="muted">{record?.client_id ? `Client ID configured: ${record.client_id}` : 'No client ID configured'}</span></div><span className={`badge ${record?.client_id ? 'success' : 'pending'}`}>{record?.client_id ? 'Configured' : 'Needs setup'}</span></div>
       <form className="auth-form" onSubmit={save}>

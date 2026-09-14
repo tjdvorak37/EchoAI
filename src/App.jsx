@@ -738,6 +738,23 @@ function App() {
     return updated
   }
 
+  const handleUpdateSupportTicket = async (payload) => {
+    const updated = await authService.updateSupportTicket(payload)
+    const assignee = teamMembers.find((member) => member.id === updated.assigneeId)
+    const normalized = {
+      ...updated,
+      ...(payload.assigneeId !== undefined ? { assignee: assignee?.fullName || assignee?.email || '' } : {}),
+    }
+    setTickets((prev) => prev.map((ticket) => ticket.id === payload.ticketId ? { ...ticket, ...normalized } : ticket))
+    return normalized
+  }
+
+  const handleRefreshSupportTickets = async () => {
+    const supportTickets = await authService.getSupportTickets()
+    setTickets(supportTickets)
+    return supportTickets
+  }
+
   const restorePersistedSession = useEffectEvent(async (isActive) => {
     try {
       const restoredUser = await authService.restoreSession()
@@ -5077,6 +5094,8 @@ function App() {
               handleProvisionCompanySeatsForCustomer={handleProvisionCompanySeatsForCustomer}
               handleRespondToSupportTicket={handleRespondToSupportTicket}
               handleUpdateSupportTicketStatus={handleUpdateSupportTicketStatus}
+              handleUpdateSupportTicket={handleUpdateSupportTicket}
+              handleRefreshSupportTickets={handleRefreshSupportTickets}
               onAdminUserAction={handleAdminUserAction}
               handleAssignCompanySeat={handleAssignCompanySeat}
               handleRevokeCompanySeat={handleRevokeCompanySeat}

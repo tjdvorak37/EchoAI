@@ -4219,6 +4219,33 @@ main {
   margin-bottom: 1rem;
 }
 
+.it-ticket-toolbar,
+.it-ticket-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.it-ticket-pagination {
+  margin-top: 1rem;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.it-ticket-pagination > div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.it-ticket-tag-editor {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .it-ticket-filter-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

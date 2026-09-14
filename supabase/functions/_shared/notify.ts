@@ -374,3 +374,47 @@ https://echoaipro.com/
   console.log(`[Ticket Notification] Notification dispatched to ${recipients.join(', ')} via ${providerUsed} for: "${subject}"`)
   return { success: true, provider: providerUsed, recipients }
 }
+
+export const sendSupportAcknowledgmentEmail = async (
+  payload: TicketNotificationPayload,
+  adminClient?: any,
+): Promise<{ success: boolean; provider?: string; error?: string }> => {
+  if (!payload.requesterEmail) return { success: false, error: 'Requester email is required.' }
+
+  const config = await getNotificationConfig(adminClient)
+  const resendApiKey = config.resend_api_key || Deno.env.get('RESEND_API_KEY')
+  const sendgridApiKey = config.sendgrid_api_key || Deno.env.get('SENDGRID_API_KEY')
+  const fromEmail = Deno.env.get('MAIL_FROM_EMAIL') || 'support@echoaipro.com'
+  const fromName = config.sender_name || 'EchoAI Support'
+  const ticketReference = payload.ticketId ? payload.ticketId.slice(0, 8).toUpperCase() : 'PENDING'
+  const safeName = (payload.requesterName || 'there').replace(/[<>]/g, '')
+  const subject = `We received your EchoAI support request (${ticketReference})`
+  const text = `Hi ${safeName},\n\nYour support request has been received and will be addressed as soon as possible.\n\nReference: ${ticketReference}\nCategory: ${payload.category}\n\nPlease reply to this email if you need to add important information.\n\nEchoAI Support`
+  const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:600px;margin:auto"><h2 style="color:#173ea5">We received your request</h2><p>Hi ${safeName},</p><p>Your support request has been received and will be addressed as soon as possible.</p><div style="background:#f5f7fb;border:1px solid #dce3ef;padding:16px"><strong>Reference:</strong> ${ticketReference}<br><strong>Category:</strong> ${payload.category.replace(/[<>]/g, '')}</div><p>Please reply to this email if you need to add important information.</p><p>EchoAI Support</p></div>`
+
+  if (resendApiKey) {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [payload.requesterEmail], reply_to: fromEmail, subject, text, html }),
+    })
+    if (response.ok) return { success: true, provider: 'resend' }
+  }
+
+  if (sendgridApiKey) {
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${sendgridApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: payload.requesterEmail }] }],
+        from: { email: fromEmail, name: fromName },
+        reply_to: { email: fromEmail },
+        subject,
+        content: [{ type: 'text/plain', value: text }, { type: 'text/html', value: html }],
+      }),
+    })
+    if (response.ok || response.status === 202) return { success: true, provider: 'sendgrid' }
+  }
+
+  return { success: false, provider: 'none', error: 'No configured email provider accepted the acknowledgment.' }
+}
