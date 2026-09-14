@@ -175,6 +175,7 @@ export function AdminPanel({
   const [expandedUserId, setExpandedUserId] = useState(null)
   const [verification, setVerification] = useState({ userId: null, summary: null, loading: false, error: '' })
   const [recoveryLink, setRecoveryLink] = useState({ userId: null, url: '', error: '', loading: false })
+  const [temporaryPassword, setTemporaryPassword] = useState({ userId: null, value: '', saving: false, message: '', error: '' })
   const [profileDraft, setProfileDraft] = useState({ fullName: '', company: '', saving: false, error: '' })
   const [newUserDraft, setNewUserDraft] = useState({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
   const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
@@ -186,6 +187,7 @@ export function AdminPanel({
     setExpandedUserId(nextId)
     setVerification({ userId: null, summary: null, loading: false, error: '' })
     setRecoveryLink({ userId: null, url: '', error: '', loading: false })
+    setTemporaryPassword({ userId: nextId, value: '', saving: false, message: '', error: '' })
     setProfileDraft({ fullName: member.fullName || '', company: member.company || '', saving: false, error: '' })
     setProfitShareDraft({ userId: member.id, value: String(member.profitSharePercent || ''), saving: false, error: '' })
     setBetaAiDraft({ userId: member.id, isBetaTester: member.isBetaTester === true, enabled: member.aiEnabled !== false, note: member.aiAccessNote || '', saving: false, error: '' })
@@ -209,6 +211,28 @@ export function AdminPanel({
     } catch (error) {
       setRecoveryLink({ userId: member.id, url: '', error: error.message, loading: false })
     }
+  }
+
+  const setUserTemporaryPassword = async (member) => {
+    const value = temporaryPassword.userId === member.id ? temporaryPassword.value : ''
+    if (value.length < 12) {
+      setTemporaryPassword((current) => ({ ...current, error: 'Use at least 12 characters.', message: '' }))
+      return
+    }
+    setTemporaryPassword((current) => ({ ...current, saving: true, error: '', message: '' }))
+    try {
+      await onAdminUserAction({ action: 'set-temporary-password', userId: member.id, email: member.email, temporaryPassword: value })
+      setTemporaryPassword({ userId: member.id, value: '', saving: false, message: 'Temporary password set. The user must replace it immediately after signing in.', error: '' })
+    } catch (error) {
+      setTemporaryPassword((current) => ({ ...current, saving: false, error: error.message, message: '' }))
+    }
+  }
+
+  const generateTemporaryPassword = (member) => {
+    const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+    const bytes = crypto.getRandomValues(new Uint8Array(12))
+    const generated = `${Array.from(bytes, (byte) => characters[byte % characters.length]).join('')}A7!`
+    setTemporaryPassword({ userId: member.id, value: generated, saving: false, message: '', error: '' })
   }
 
   const saveProfileDraft = async (member) => {
@@ -1705,6 +1729,31 @@ export function AdminPanel({
                                     <button type="button" className="ghost-button" onClick={() => navigator.clipboard?.writeText(recoveryLink.url)}>
                                       Copy link
                                     </button>
+                                  </div>
+                                )}
+
+                                {isFullAdmin && member.id !== currentUser?.id && (
+                                  <div className="it-temp-password">
+                                    <p className="muted it-verify-hint">Set a temporary password after verifying the user. They will be required to replace it before entering the app.</p>
+                                    <label>
+                                      Temporary password
+                                      <input
+                                        type="text"
+                                        minLength={12}
+                                        autoComplete="new-password"
+                                        value={temporaryPassword.userId === member.id ? temporaryPassword.value : ''}
+                                        onChange={(event) => setTemporaryPassword({ userId: member.id, value: event.target.value, saving: false, message: '', error: '' })}
+                                        placeholder="At least 12 characters"
+                                      />
+                                    </label>
+                                    <div className="action-row">
+                                      <button type="button" className="ghost-button" onClick={() => generateTemporaryPassword(member)}>Generate</button>
+                                      <button type="button" className="primary-button" disabled={temporaryPassword.saving} onClick={() => setUserTemporaryPassword(member)}>
+                                        {temporaryPassword.saving ? 'Setting...' : 'Set temporary password'}
+                                      </button>
+                                    </div>
+                                    {temporaryPassword.userId === member.id && temporaryPassword.error && <p className="auth-message auth-error">{temporaryPassword.error}</p>}
+                                    {temporaryPassword.userId === member.id && temporaryPassword.message && <p className="auth-message">{temporaryPassword.message}</p>}
                                   </div>
                                 )}
                               </div>
