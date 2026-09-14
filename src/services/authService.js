@@ -1390,14 +1390,26 @@ export const authService = {
   async getSupportTickets() {
     if (!isSupabaseConfigured) return []
 
-    const { data, error } = await supabase
+    const { data: tickets, error } = await supabase
       .from('support_tickets')
-      .select('*, assignee:profiles!support_tickets_assigned_to_fkey(id, full_name, email)')
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (error) throw new Error(error.message)
 
-    return (data ?? []).map((ticket) => ({
+    const assigneeIds = [...new Set((tickets ?? []).map((ticket) => ticket.assigned_to).filter(Boolean))]
+    let assigneesById = new Map()
+    if (assigneeIds.length) {
+      const { data: assignees } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', assigneeIds)
+      assigneesById = new Map((assignees ?? []).map((assignee) => [assignee.id, assignee]))
+    }
+
+    return (tickets ?? []).map((ticket) => {
+      const assignee = assigneesById.get(ticket.assigned_to)
+      return {
       id: ticket.id,
       subject: ticket.subject || ticket.category,
       category: ticket.category,
@@ -1413,7 +1425,7 @@ export const authService = {
       queue: ticket.queue || 'general',
       tags: ticket.tags || [],
       assigneeId: ticket.assigned_to || '',
-      assignee: ticket.assignee?.full_name || ticket.assignee?.email || '',
+      assignee: assignee?.full_name || assignee?.email || '',
       createdAt: ticket.created_at,
       updatedAt: ticket.updated_at,
       messages: [{
@@ -1424,7 +1436,8 @@ export const authService = {
         sentAt: ticket.created_at,
       }],
       adminResponse: ticket.admin_response || '',
-    }))
+      }
+    })
   },
 
   async respondToSupportTicket({ ticketId, response }) {
