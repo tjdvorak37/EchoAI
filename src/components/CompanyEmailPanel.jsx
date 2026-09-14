@@ -1021,11 +1021,11 @@ export function CompanyEmailPanel({
             <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               <div className="company-email-field-row">
                 <span className="company-email-field-label">Site URL</span>
-                <span className="company-email-field-value">https://echoaipro.com</span>
+                <span className="company-email-field-value">https://www.echoaipro.com</span>
               </div>
               <div className="company-email-field-row">
                 <span className="company-email-field-label">Additional Redirect URLs</span>
-                <span className="company-email-field-value">https://echoaipro.com/**, https://www.echoaipro.com/**, https://echoaipro.com/reset-password</span>
+                <span className="company-email-field-value">https://echoaipro.com/**, https://www.echoaipro.com/**, https://www.echoaipro.com/?recovery=1</span>
               </div>
             </div>
           </div>

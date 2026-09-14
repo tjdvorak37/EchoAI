@@ -1595,7 +1595,7 @@ export const authService = {
     const cleanEmail = String(email).trim().toLowerCase()
 
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: `${appOrigin}/reset-password`,
+      redirectTo: `${appOrigin}/?recovery=1`,
     })
 
     if (error) {
