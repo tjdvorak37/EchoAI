@@ -1069,18 +1069,11 @@ export const authService = {
       throw new Error(error.message)
     }
 
-    // Notify support@echoaipro.com & configured staff of the new ticket
+    // Dispatch staff notification and requester acknowledgment through an
+    // ownership-checked endpoint available to signed-in customers.
     try {
-      await supabase.functions.invoke('admin-user-actions', {
-        body: {
-          action: 'notify-ticket-created',
-          ticketId: data.id,
-          category,
-          details,
-          requesterName: user.user_metadata?.full_name || user.email,
-          requesterEmail: user.email,
-          source: 'app',
-        },
+      await supabase.functions.invoke('support-ticket-notify', {
+        body: { ticketId: data.id },
       })
     } catch (notifyError) {
       console.warn('Unable to dispatch support email notification:', notifyError)
@@ -1399,7 +1392,7 @@ export const authService = {
 
     const { data, error } = await supabase
       .from('support_tickets')
-      .select('*')
+      .select('*, assignee:profiles!support_tickets_assigned_to_fkey(id, full_name, email)')
       .order('created_at', { ascending: false })
 
     if (error) throw new Error(error.message)
@@ -1415,8 +1408,12 @@ export const authService = {
       companyName: ticket.company_name || '',
       source: ticket.source || 'app',
       attachmentPaths: ticket.attachment_paths || [],
-      status: ticket.status,
-      priority: ticket.category === 'Company package' ? 'high' : 'medium',
+      status: ticket.status === 'open' ? 'new' : ticket.status,
+      priority: ticket.priority || 'medium',
+      queue: ticket.queue || 'general',
+      tags: ticket.tags || [],
+      assigneeId: ticket.assigned_to || '',
+      assignee: ticket.assignee?.full_name || ticket.assignee?.email || '',
       createdAt: ticket.created_at,
       updatedAt: ticket.updated_at,
       messages: [{
@@ -1445,19 +1442,38 @@ export const authService = {
     return { id: data.id, status: data.status, adminResponse: data.admin_response }
   },
 
-  async updateSupportTicketStatus({ ticketId, status }) {
-    if (!ticketId || !status) throw new Error('A ticket and status are required.')
-    if (!isSupabaseConfigured) return { id: ticketId, status, updatedAt: new Date().toISOString() }
+  async updateSupportTicket({ ticketId, status, priority, queue, tags, assigneeId }) {
+    if (!ticketId) throw new Error('A ticket is required.')
+    const update = {}
+    if (status) update.status = status
+    if (priority) update.priority = priority
+    if (typeof queue === 'string') update.queue = queue.trim() || 'general'
+    if (Array.isArray(tags)) update.tags = [...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))].slice(0, 20)
+    if (assigneeId !== undefined) update.assigned_to = assigneeId || null
+    if (!Object.keys(update).length) throw new Error('Choose a ticket field to update.')
+    if (!isSupabaseConfigured) return { id: ticketId, ...update, assigneeId: update.assigned_to || '', updatedAt: new Date().toISOString() }
 
     const { data, error } = await supabase
       .from('support_tickets')
-      .update({ status })
+      .update(update)
       .eq('id', ticketId)
-      .select('id, status, updated_at')
+      .select('id, status, priority, queue, tags, assigned_to, updated_at')
       .single()
 
     if (error) throw new Error(error.message)
-    return { id: data.id, status: data.status, updatedAt: data.updated_at }
+    return {
+      id: data.id,
+      status: data.status,
+      priority: data.priority,
+      queue: data.queue,
+      tags: data.tags || [],
+      assigneeId: data.assigned_to || '',
+      updatedAt: data.updated_at,
+    }
+  },
+
+  async updateSupportTicketStatus({ ticketId, status }) {
+    return this.updateSupportTicket({ ticketId, status })
   },
 
   async updateCompanySeatPackage({ packageId, seatLimit, assignedSeats = 0 }) {

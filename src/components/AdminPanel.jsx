@@ -9,6 +9,7 @@ import { CompanyEmailPanel } from './CompanyEmailPanel'
 import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
 const USERS_PER_PAGE = 25
+const TICKETS_PER_PAGE = 50
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
 const USER_STATUSES = ['active', 'pending', 'deactivated', 'approved', 'denied']
 
@@ -143,6 +144,8 @@ export function AdminPanel({
   handleProvisionCompanySeatsForCustomer,
   handleRespondToSupportTicket,
   handleUpdateSupportTicketStatus,
+  handleUpdateSupportTicket,
+  handleRefreshSupportTickets,
   socialPlatformReadiness, socialPlatformReadinessLoading, socialPlatformReadinessError, handleRefreshSocialPlatformReadiness,
   adminLoading, adminError,
   currentUser,
@@ -257,6 +260,8 @@ export function AdminPanel({
     search: '',
   })
   const [ticketView, setTicketView] = useState('active')
+  const [ticketPage, setTicketPage] = useState(1)
+  const [ticketRefresh, setTicketRefresh] = useState({ loading: false, error: '' })
   const activeLicenses = licenses.filter((l) => l.status === 'active').length
   const pendingLicenses = licenses.filter((l) => l.status === 'pending_payment').length
   const openTicketStatuses = ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated', 'open']
@@ -529,11 +534,43 @@ export function AdminPanel({
     return matchesSearch && matchesStatus && matchesPriority && matchesQueue && matchesAssignee
   })
 
-  const updateTicketField = (ticketId, patch) => {
-    setTickets((prev) => prev.map((ticket) =>
-      ticket.id === ticketId ? { ...ticket, ...patch, updatedAt: new Date().toISOString() } : ticket,
-    ))
+  const priorityRank = { critical: 0, high: 1, medium: 2, low: 3 }
+  const sortedTickets = [...filteredTickets].sort((left, right) =>
+    (priorityRank[left.priority] ?? 4) - (priorityRank[right.priority] ?? 4)
+      || new Date(right.createdAt) - new Date(left.createdAt),
+  )
+  const ticketPageCount = Math.max(1, Math.ceil(sortedTickets.length / TICKETS_PER_PAGE))
+  const safeTicketPage = Math.min(ticketPage, ticketPageCount)
+  const visibleTickets = sortedTickets.slice((safeTicketPage - 1) * TICKETS_PER_PAGE, safeTicketPage * TICKETS_PER_PAGE)
+
+  const updateTicketField = async (ticketId, patch) => {
+    try {
+      const updated = await handleUpdateSupportTicket({ ticketId, ...patch })
+      setTicketOpen((current) => current?.id === ticketId ? { ...current, ...updated } : current)
+      setSeatError('')
+    } catch (error) {
+      setSeatError(error.message)
+    }
   }
+
+  const refreshTickets = async () => {
+    setTicketRefresh({ loading: true, error: '' })
+    try {
+      const refreshed = await handleRefreshSupportTickets()
+      setTicketOpen((current) => current ? refreshed.find((ticket) => ticket.id === current.id) || null : null)
+      setTicketRefresh({ loading: false, error: '' })
+    } catch (error) {
+      setTicketRefresh({ loading: false, error: error.message })
+    }
+  }
+
+  useEffect(() => {
+    if (itTab !== 'tickets') return undefined
+    const intervalId = window.setInterval(() => {
+      handleRefreshSupportTickets().catch(() => {})
+    }, 30000)
+    return () => window.clearInterval(intervalId)
+  }, [itTab, handleRefreshSupportTickets])
 
   useEffect(() => {
     if (!openTabGroup) return undefined
@@ -949,6 +986,7 @@ export function AdminPanel({
             <div className="it-ticket-list">
               <Section title="Support tickets">
                 <div className="it-ticket-filters">
+                  <div className="it-ticket-toolbar">
                   <div className="it-ticket-view-tabs" role="tablist" aria-label="Ticket views">
                     <button
                       type="button"
@@ -973,6 +1011,11 @@ export function AdminPanel({
                       History ({tickets.filter((ticket) => ticket.status === 'closed').length})
                     </button>
                   </div>
+                    <button type="button" className="ghost-button" onClick={refreshTickets} disabled={ticketRefresh.loading}>
+                      {ticketRefresh.loading ? 'Refreshing...' : 'Refresh tickets'}
+                    </button>
+                  </div>
+                  {ticketRefresh.error && <p className="auth-message auth-error">{ticketRefresh.error}</p>}
                   <input
                     type="text"
                     value={ticketFilter.search}
@@ -1026,7 +1069,7 @@ export function AdminPanel({
                   ))}
                 </div>
 
-                {filteredTickets.map((t) => (
+                {visibleTickets.map((t) => (
                   <div
                     key={t.id}
                     className={`it-row it-ticket-row ${ticketOpen?.id === t.id ? 'active' : ''}`}
@@ -1051,6 +1094,15 @@ export function AdminPanel({
                   </div>
                 ))}
                 {filteredTickets.length === 0 && <p className="muted">No tickets match this filter.</p>}
+                {filteredTickets.length > TICKETS_PER_PAGE && (
+                  <div className="it-ticket-pagination">
+                    <span>Showing {(safeTicketPage - 1) * TICKETS_PER_PAGE + 1}-{Math.min(safeTicketPage * TICKETS_PER_PAGE, filteredTickets.length)} of {filteredTickets.length}</span>
+                    <div>
+                      <button type="button" className="ghost-button" disabled={safeTicketPage === 1} onClick={() => setTicketPage((page) => Math.max(1, page - 1))}>Previous</button>
+                      <button type="button" className="ghost-button" disabled={safeTicketPage === ticketPageCount} onClick={() => setTicketPage((page) => Math.min(ticketPageCount, page + 1))}>Next</button>
+                    </div>
+                  </div>
+                )}
               </Section>
             </div>
 
@@ -1097,15 +1149,25 @@ export function AdminPanel({
                     <option value="low">Low</option>
                   </select>
                   <select
-                    value={ticketOpen.assignee || 'Unassigned'}
-                    onChange={(event) => updateTicketField(ticketOpen.id, { assignee: event.target.value === 'Unassigned' ? '' : event.target.value })}
+                    value={ticketOpen.assigneeId || ''}
+                    onChange={(event) => updateTicketField(ticketOpen.id, { assigneeId: event.target.value })}
                   >
-                    <option value="Unassigned">Unassigned</option>
-                    {ticketAssignees.filter((assignee) => assignee !== 'Unassigned').map((assignee) => (
-                      <option key={assignee} value={assignee}>{assignee}</option>
+                    <option value="">Unassigned</option>
+                    {teamMembers.filter((member) => ['admin', 'manager', 'it'].includes(member.role)).map((member) => (
+                      <option key={member.id} value={member.id}>{member.fullName || member.email}</option>
                     ))}
                   </select>
                 </div>
+
+                <label className="it-ticket-tag-editor">
+                  Tags
+                  <input
+                    value={(ticketOpen.tags || []).join(', ')}
+                    onChange={(event) => setTicketOpen((current) => ({ ...current, tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) }))}
+                    onBlur={() => updateTicketField(ticketOpen.id, { tags: ticketOpen.tags || [] })}
+                    placeholder="billing, login, security"
+                  />
+                </label>
 
                 <div className="it-ticket-messages">
                   {ticketOpen.messages.map((msg) => (
