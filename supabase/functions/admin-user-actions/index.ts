@@ -43,7 +43,8 @@ Deno.serve(async (request) => {
     }
 
     const body = await request.json()
-    const { action, userId, fullName, company, email: targetEmail } = body
+    const { action, fullName, company, email: targetEmail } = body
+    const userId = body.userId || caller.user.id
     const globalActions = new Set([
       'create-user',
       'get-ticket-notification-config',
@@ -73,9 +74,16 @@ Deno.serve(async (request) => {
         notifyOnCompanyRequests,
         webhookUrl,
         webhookEnabled,
+        smtpHost,
+        smtpPort,
+        smtpEncryption,
+        smtpUser,
+        smtpPassword,
+        resendApiKey,
+        sendgridApiKey,
       } = body
 
-      const updateData = {
+      const updateData: Record<string, unknown> = {
         id: 'default',
         enabled: enabled !== false,
         recipient_email: typeof recipientEmail === 'string' ? recipientEmail.trim() : 'support@echoaipro.com',
@@ -88,8 +96,36 @@ Deno.serve(async (request) => {
         notify_on_company_requests: notifyOnCompanyRequests !== false,
         webhook_url: typeof webhookUrl === 'string' ? webhookUrl.trim().slice(0, 500) : '',
         webhook_enabled: webhookEnabled === true,
+        smtp_host: typeof smtpHost === 'string' && smtpHost.trim() ? smtpHost.trim() : 'smtp.office365.com',
+        smtp_port: Number(smtpPort) || 587,
+        smtp_encryption: typeof smtpEncryption === 'string' ? smtpEncryption.trim() : 'STARTTLS',
+        smtp_user: typeof smtpUser === 'string' && smtpUser.trim() ? smtpUser.trim() : 'support@echoaipro.com',
         updated_by: caller.user.id,
         updated_at: new Date().toISOString(),
+      }
+
+      const { data: existing } = await adminClient
+        .from('support_ticket_notifications')
+        .select('smtp_password, resend_api_key, sendgrid_api_key')
+        .eq('id', 'default')
+        .maybeSingle()
+
+      if (typeof smtpPassword === 'string' && smtpPassword.trim()) {
+        updateData.smtp_password = smtpPassword.trim()
+      } else if (existing?.smtp_password) {
+        updateData.smtp_password = existing.smtp_password
+      }
+
+      if (typeof resendApiKey === 'string') {
+        updateData.resend_api_key = resendApiKey.trim()
+      } else if (existing?.resend_api_key) {
+        updateData.resend_api_key = existing.resend_api_key
+      }
+
+      if (typeof sendgridApiKey === 'string') {
+        updateData.sendgrid_api_key = sendgridApiKey.trim()
+      } else if (existing?.sendgrid_api_key) {
+        updateData.sendgrid_api_key = existing.sendgrid_api_key
       }
 
       const { data: savedConfig, error: saveError } = await adminClient

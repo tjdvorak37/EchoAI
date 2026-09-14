@@ -305,3 +305,43 @@
   flex-wrap: wrap;
 }
 
+.company-email-password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.company-email-password-input-wrap input {
+  width: 100%;
+  padding-right: 4.5rem;
+}
+
+.company-email-password-toggle {
+  position: absolute;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text-soft, #64748b);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.company-email-password-toggle:hover {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.company-email-security-note {
+  background: #f8fafc;
+  border-left: 4px solid #3b82f6;
+  padding: 0.75rem 1rem;
+  border-radius: 0 8px 8px 0;
+  font-size: 0.85rem;
+  color: #334155;
+  margin-top: 0.5rem;
+}
+
+

@@ -1147,8 +1147,13 @@ export const authService = {
 
   // Privileged support actions. The caller's role is re-verified server-side.
   async adminUserAction(params) {
+    let callerId = params?.userId
+    if (!callerId) {
+      const { data } = await supabase.auth.getUser()
+      callerId = data?.user?.id || 'system'
+    }
     const { data, error } = await supabase.functions.invoke('admin-user-actions', {
-      body: params,
+      body: { userId: callerId, ...params },
     })
 
     if (error) {
@@ -1160,34 +1165,106 @@ export const authService = {
   },
 
   async getTicketNotificationConfig() {
-    if (!isSupabaseConfigured) {
-      return {
-        enabled: true,
-        recipient_email: 'support@echoaipro.com',
-        secondary_email: '',
-        sender_name: 'EchoAI Support System',
-        subject_prefix: '[EchoAI Support]',
-        include_full_description: true,
-        notify_on_landing_tickets: true,
-        notify_on_app_tickets: true,
-        notify_on_company_requests: true,
-        webhook_url: '',
-        webhook_enabled: false,
-      }
+    const defaultConfig = {
+      enabled: true,
+      recipient_email: 'support@echoaipro.com',
+      secondary_email: '',
+      sender_name: 'EchoAI Support System',
+      subject_prefix: '[EchoAI Support]',
+      include_full_description: true,
+      notify_on_landing_tickets: true,
+      notify_on_app_tickets: true,
+      notify_on_company_requests: true,
+      webhook_url: '',
+      webhook_enabled: false,
+      smtp_host: 'smtp.office365.com',
+      smtp_port: 587,
+      smtp_encryption: 'STARTTLS',
+      smtp_user: 'support@echoaipro.com',
+      smtp_password: '',
+      resend_api_key: '',
+      sendgrid_api_key: '',
     }
-    const result = await this.adminUserAction({ action: 'get-ticket-notification-config' })
-    return result?.config
+
+    if (!isSupabaseConfigured) {
+      return defaultConfig
+    }
+
+    try {
+      const result = await this.adminUserAction({ action: 'get-ticket-notification-config' })
+      if (result?.config) return result.config
+    } catch {
+      // Fallback to direct table select
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('support_ticket_notifications')
+        .select('*')
+        .eq('id', 'default')
+        .maybeSingle()
+
+      if (data && !error) return data
+    } catch {
+      // Table fallback
+    }
+
+    return defaultConfig
   },
 
   async updateTicketNotificationConfig(config) {
     if (!isSupabaseConfigured) {
       return config
     }
-    const result = await this.adminUserAction({
-      action: 'update-ticket-notification-config',
-      ...config,
-    })
-    return result?.config
+
+    try {
+      const result = await this.adminUserAction({
+        action: 'update-ticket-notification-config',
+        ...config,
+      })
+      if (result?.config) return result.config
+    } catch (edgeError) {
+      // Fallback: direct update via Supabase RLS client
+      const updatePayload = {
+        id: 'default',
+        enabled: config.enabled !== false,
+        recipient_email: config.recipientEmail || config.recipient_email || 'support@echoaipro.com',
+        secondary_email: config.secondaryEmail || config.secondary_email || '',
+        sender_name: config.senderName || config.sender_name || 'EchoAI Support System',
+        subject_prefix: config.subjectPrefix || config.subject_prefix || '[EchoAI Support]',
+        include_full_description: config.includeFullDescription !== false,
+        notify_on_landing_tickets: config.notifyOnLandingTickets !== false,
+        notify_on_app_tickets: config.notifyOnAppTickets !== false,
+        notify_on_company_requests: config.notifyOnCompanyRequests !== false,
+        webhook_url: config.webhookUrl || config.webhook_url || '',
+        webhook_enabled: config.webhookEnabled === true || config.webhook_enabled === true,
+        smtp_host: config.smtpHost || config.smtp_host || 'smtp.office365.com',
+        smtp_port: Number(config.smtpPort || config.smtp_port) || 587,
+        smtp_encryption: config.smtpEncryption || config.smtp_encryption || 'STARTTLS',
+        smtp_user: config.smtpUser || config.smtp_user || 'support@echoaipro.com',
+        updated_at: new Date().toISOString(),
+      }
+      if (config.smtpPassword || config.smtp_password) {
+        updatePayload.smtp_password = config.smtpPassword || config.smtp_password
+      }
+      if (typeof config.resendApiKey === 'string') {
+        updatePayload.resend_api_key = config.resendApiKey
+      }
+      if (typeof config.sendgridApiKey === 'string') {
+        updatePayload.sendgrid_api_key = config.sendgridApiKey
+      }
+
+      const { data, error } = await supabase
+        .from('support_ticket_notifications')
+        .upsert(updatePayload, { onConflict: 'id' })
+        .select('*')
+        .single()
+
+      if (error) {
+        throw new Error(edgeError.message || error.message, { cause: edgeError })
+      }
+      return data
+    }
   },
 
   async testTicketNotification(payload = {}) {
