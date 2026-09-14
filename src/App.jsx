@@ -2034,6 +2034,7 @@ function App() {
           storageQuotaMb: result.profile.storage_quota_mb,
           trademarkEditAccess: result.profile.trademark_edit_access === true,
           developerAppEditAccess: result.profile.developer_app_edit_access === true,
+          companyEmailEditAccess: result.profile.company_email_edit_access === true,
           profitSharePercent: Number(result.profile.profit_share_percent || 0),
           isBoardMember: result.profile.is_board_member === true || result.profile.role === 'board_member',
         },
@@ -2050,6 +2051,12 @@ function App() {
     if (action === 'set-developer-app-edit-access' && result?.profile) {
       setTeamMembers((prev) => prev.map((member) => (
         member.id === userId ? { ...member, developerAppEditAccess: result.profile.developer_app_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-company-email-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, companyEmailEditAccess: result.profile.company_email_edit_access === true } : member
       )))
     }
 

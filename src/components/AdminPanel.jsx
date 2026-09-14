@@ -1523,6 +1523,24 @@ export function AdminPanel({
                               <small className="muted">Only grant this to a trusted provider-credentials specialist.</small>
                             </div>}
 
+                            {isFullAdmin && ['it', 'manager'].includes(member.role) && <div className="it-user-detail-group">
+                              <span className="it-user-detail-label">Company Email &amp; SMTP editing</span>
+                              <button
+                                type="button"
+                                className={member.companyEmailEditAccess ? 'primary-button' : 'ghost-button'}
+                                onClick={async () => {
+                                  try {
+                                    await onAdminUserAction({ action: 'set-company-email-edit-access', userId: member.id, email: member.email, enabled: !member.companyEmailEditAccess })
+                                  } catch (error) {
+                                    setNewUserStatus({ saving: false, message: '', error: error.message })
+                                  }
+                                }}
+                              >
+                                {member.companyEmailEditAccess ? 'Email editing granted' : 'Grant email editing access'}
+                              </button>
+                              <small className="muted">Allows this technician or manager to modify Microsoft 365 passwords, SMTP server routing, and ticket alert parameters.</small>
+                            </div>}
+
                             {isFullAdmin && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Role</span>
                               {USER_ROLES.map((role) => (

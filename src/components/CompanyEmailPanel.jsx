@@ -76,6 +76,8 @@ export function CompanyEmailPanel({
   const [testStatus, setTestStatus] = useState({ running: false, message: '', error: '' })
 
   const isFullAdmin = currentUser?.role === 'admin'
+  const hasGrantedAccess = currentUser?.companyEmailEditAccess === true
+  const canEdit = isFullAdmin || hasGrantedAccess
   const staffRoles = ['admin', 'manager', 'it', 'accountant', 'board_member']
   const staffMembers = teamMembers.filter((member) => staffRoles.includes(member.role))
   const assignedSeatsCount = companySeats.filter((seat) => seat.status !== 'revoked').length
@@ -341,6 +343,9 @@ export function CompanyEmailPanel({
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+          <span className={`company-email-badge ${isFullAdmin ? 'info' : hasGrantedAccess ? 'success' : 'warning'}`}>
+            {isFullAdmin ? '🛡️ Super Admin' : hasGrantedAccess ? '✓ Email Editing Granted' : '🔒 View Only (Locked)'}
+          </span>
           <span className={`company-email-badge ${hasExistingPassword || notifyConfig.smtp_password ? 'success' : 'warning'}`}>
             {hasExistingPassword || notifyConfig.smtp_password ? '● Password Configured' : '○ Password Needed'}
           </span>
@@ -403,6 +408,13 @@ export function CompanyEmailPanel({
             Enter your Microsoft 365 Essential mailbox password or App Password below. This allows all outbound support emails, password resets, and ticket replies to be sent directly through <strong>{notifyConfig.smtp_user || 'support@echoaipro.com'}</strong>.
           </p>
 
+          {!canEdit && (
+            <div className="company-email-locked-banner">
+              <strong>🔒 Editing Access Locked</strong>
+              <p>Modifying Microsoft 365 passwords, SMTP server routing, and API credentials requires Super Admin authorization. You can view the current settings, but saving changes is restricted.</p>
+            </div>
+          )}
+
           <form onSubmit={handleSaveSmtpCredentials}>
             <div className="company-email-form-grid">
               <label>
@@ -410,6 +422,7 @@ export function CompanyEmailPanel({
                 <input
                   type="email"
                   required
+                  disabled={!canEdit}
                   value={notifyConfig.smtp_user}
                   onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_user: e.target.value }))}
                   placeholder="support@echoaipro.com"
@@ -422,6 +435,7 @@ export function CompanyEmailPanel({
                 <div className="company-email-password-input-wrap">
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    disabled={!canEdit}
                     value={notifyConfig.smtp_password}
                     onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_password: e.target.value }))}
                     placeholder={hasExistingPassword ? '•••••••••••• (password saved)' : 'Enter mailbox password'}
@@ -429,6 +443,7 @@ export function CompanyEmailPanel({
                   />
                   <button
                     type="button"
+                    disabled={!canEdit}
                     className="company-email-password-toggle"
                     onClick={() => setShowPassword((prev) => !prev)}
                   >
@@ -447,6 +462,7 @@ export function CompanyEmailPanel({
                 <input
                   type="text"
                   required
+                  disabled={!canEdit}
                   value={notifyConfig.smtp_host}
                   onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_host: e.target.value }))}
                   placeholder="smtp.office365.com"
@@ -459,6 +475,7 @@ export function CompanyEmailPanel({
                 <input
                   type="number"
                   required
+                  disabled={!canEdit}
                   value={notifyConfig.smtp_port}
                   onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_port: Number(e.target.value) || 587 }))}
                   placeholder="587"
@@ -469,6 +486,7 @@ export function CompanyEmailPanel({
               <label>
                 Encryption Protocol
                 <select
+                  disabled={!canEdit}
                   value={notifyConfig.smtp_encryption}
                   onChange={(e) => setNotifyConfig((prev) => ({ ...prev, smtp_encryption: e.target.value }))}
                 >
@@ -490,12 +508,14 @@ export function CompanyEmailPanel({
                   <div className="company-email-password-input-wrap">
                     <input
                       type={showApiKey ? 'text' : 'password'}
+                      disabled={!canEdit}
                       value={notifyConfig.resend_api_key}
                       onChange={(e) => setNotifyConfig((prev) => ({ ...prev, resend_api_key: e.target.value }))}
                       placeholder="re_123456789..."
                     />
                     <button
                       type="button"
+                      disabled={!canEdit}
                       className="company-email-password-toggle"
                       onClick={() => setShowApiKey((prev) => !prev)}
                     >
@@ -508,6 +528,7 @@ export function CompanyEmailPanel({
                   SendGrid API Key (Optional)
                   <input
                     type="password"
+                    disabled={!canEdit}
                     value={notifyConfig.sendgrid_api_key}
                     onChange={(e) => setNotifyConfig((prev) => ({ ...prev, sendgrid_api_key: e.target.value }))}
                     placeholder="SG.123456789..."
@@ -517,12 +538,12 @@ export function CompanyEmailPanel({
             </div>
 
             <div className="company-email-security-note">
-              🔒 <strong>Security Guarantee:</strong> Credentials are encrypted and stored with restricted Row-Level Security policies. Only technicians and administrators can view or update these settings.
+              🔒 <strong>Security Guarantee:</strong> Credentials are encrypted and stored with restricted Row-Level Security policies. Only authorized administrators and granted technicians can update these settings.
             </div>
 
             <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <button type="submit" className="primary-button" disabled={smtpStatus.saving || notifyLoading}>
-                {smtpStatus.saving ? 'Saving credentials…' : 'Save Email Password & Credentials'}
+              <button type="submit" className="primary-button" disabled={!canEdit || smtpStatus.saving || notifyLoading}>
+                {smtpStatus.saving ? 'Saving credentials…' : canEdit ? 'Save Email Password & Credentials' : '🔒 Locked (Permission Required)'}
               </button>
               <button
                 type="button"
@@ -549,6 +570,13 @@ export function CompanyEmailPanel({
             Configure automatic email notifications and alerts whenever customer support tickets, password help requests, or company package inquiries are submitted.
           </p>
 
+          {!canEdit && (
+            <div className="company-email-locked-banner">
+              <strong>🔒 Editing Access Locked</strong>
+              <p>Modifying notification routing rules, recipient emails, and webhook targets requires Super Admin authorization. You can view the current rules, but saving changes is restricted.</p>
+            </div>
+          )}
+
           <form onSubmit={handleSaveNotifyConfig}>
             <div className="company-email-toggle-row">
               <div className="company-email-toggle-info">
@@ -562,6 +590,7 @@ export function CompanyEmailPanel({
               <label className="company-email-switch-label">
                 <input
                   type="checkbox"
+                  disabled={!canEdit}
                   checked={notifyConfig.enabled}
                   onChange={(e) => setNotifyConfig((prev) => ({ ...prev, enabled: e.target.checked }))}
                 />
@@ -575,6 +604,7 @@ export function CompanyEmailPanel({
                 <input
                   type="email"
                   required
+                  disabled={!canEdit}
                   value={notifyConfig.recipient_email}
                   onChange={(e) => setNotifyConfig((prev) => ({ ...prev, recipient_email: e.target.value }))}
                   placeholder="support@echoaipro.com"
@@ -586,6 +616,7 @@ export function CompanyEmailPanel({
                 Secondary / Technician Email(s)
                 <input
                   type="text"
+                  disabled={!canEdit}
                   value={notifyConfig.secondary_email}
                   onChange={(e) => setNotifyConfig((prev) => ({ ...prev, secondary_email: e.target.value }))}
                   placeholder="tech@echoaipro.com, it-alerts@echoaipro.com"
@@ -597,6 +628,7 @@ export function CompanyEmailPanel({
                 Sender Display Name
                 <input
                   type="text"
+                  disabled={!canEdit}
                   value={notifyConfig.sender_name}
                   onChange={(e) => setNotifyConfig((prev) => ({ ...prev, sender_name: e.target.value }))}
                   placeholder="EchoAI Support System"
@@ -607,6 +639,7 @@ export function CompanyEmailPanel({
                 Subject Line Prefix
                 <input
                   type="text"
+                  disabled={!canEdit}
                   value={notifyConfig.subject_prefix}
                   onChange={(e) => setNotifyConfig((prev) => ({ ...prev, subject_prefix: e.target.value }))}
                   placeholder="[EchoAI Support]"
@@ -620,6 +653,7 @@ export function CompanyEmailPanel({
                 <label>
                   <input
                     type="checkbox"
+                    disabled={!canEdit}
                     checked={notifyConfig.notify_on_landing_tickets}
                     onChange={(e) => setNotifyConfig((prev) => ({ ...prev, notify_on_landing_tickets: e.target.checked }))}
                   />
@@ -628,6 +662,7 @@ export function CompanyEmailPanel({
                 <label>
                   <input
                     type="checkbox"
+                    disabled={!canEdit}
                     checked={notifyConfig.notify_on_app_tickets}
                     onChange={(e) => setNotifyConfig((prev) => ({ ...prev, notify_on_app_tickets: e.target.checked }))}
                   />
@@ -636,6 +671,7 @@ export function CompanyEmailPanel({
                 <label>
                   <input
                     type="checkbox"
+                    disabled={!canEdit}
                     checked={notifyConfig.notify_on_company_requests}
                     onChange={(e) => setNotifyConfig((prev) => ({ ...prev, notify_on_company_requests: e.target.checked }))}
                   />
@@ -644,6 +680,7 @@ export function CompanyEmailPanel({
                 <label>
                   <input
                     type="checkbox"
+                    disabled={!canEdit}
                     checked={notifyConfig.include_full_description}
                     onChange={(e) => setNotifyConfig((prev) => ({ ...prev, include_full_description: e.target.checked }))}
                   />
@@ -658,6 +695,7 @@ export function CompanyEmailPanel({
                 <label>
                   <input
                     type="checkbox"
+                    disabled={!canEdit}
                     checked={notifyConfig.webhook_enabled}
                     onChange={(e) => setNotifyConfig((prev) => ({ ...prev, webhook_enabled: e.target.checked }))}
                   />
@@ -668,6 +706,7 @@ export function CompanyEmailPanel({
                     Webhook URL
                     <input
                       type="url"
+                      disabled={!canEdit}
                       style={{ width: '100%', marginTop: '0.25rem' }}
                       value={notifyConfig.webhook_url}
                       onChange={(e) => setNotifyConfig((prev) => ({ ...prev, webhook_url: e.target.value }))}
@@ -679,8 +718,8 @@ export function CompanyEmailPanel({
             </div>
 
             <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-              <button type="submit" className="primary-button" disabled={notifySaving || notifyLoading}>
-                {notifySaving ? 'Saving parameters…' : 'Save notification parameters'}
+              <button type="submit" className="primary-button" disabled={!canEdit || notifySaving || notifyLoading}>
+                {notifySaving ? 'Saving parameters…' : canEdit ? 'Save notification parameters' : '🔒 Locked (Requires Permission)'}
               </button>
               {notifyStatus.message && <span className="muted" style={{ color: '#166534', fontWeight: 600 }}>✓ {notifyStatus.message}</span>}
               {notifyStatus.error && <span className="auth-message auth-error">{notifyStatus.error}</span>}
@@ -1068,6 +1107,7 @@ export function CompanyEmailPanel({
                   <th>Email</th>
                   <th>Role</th>
                   <th>Status</th>
+                  <th>Email &amp; SMTP Permissions</th>
                   <th>Direct Setup / Reset Action</th>
                 </tr>
               </thead>
@@ -1081,6 +1121,33 @@ export function CompanyEmailPanel({
                       <span className={`company-email-badge ${member.accessStatus === 'active' ? 'success' : 'warning'}`}>
                         {member.accessStatus || 'active'}
                       </span>
+                    </td>
+                    <td>
+                      {isFullAdmin ? (
+                        <button
+                          type="button"
+                          className={member.companyEmailEditAccess ? 'primary-button' : 'ghost-button'}
+                          style={{ fontSize: '0.78rem', padding: '0.25rem 0.55rem' }}
+                          onClick={async () => {
+                            try {
+                              await onAdminUserAction({
+                                action: 'set-company-email-edit-access',
+                                userId: member.id,
+                                email: member.email,
+                                enabled: !member.companyEmailEditAccess,
+                              })
+                            } catch (err) {
+                              setLinkErrors((prev) => ({ ...prev, [member.id]: err.message }))
+                            }
+                          }}
+                        >
+                          {member.companyEmailEditAccess ? '✓ Editing Granted' : 'Grant Editing Access'}
+                        </button>
+                      ) : (
+                        <span className={`company-email-badge ${member.companyEmailEditAccess ? 'success' : 'warning'}`}>
+                          {member.companyEmailEditAccess ? 'Granted' : 'Locked'}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <button
@@ -1122,7 +1189,7 @@ export function CompanyEmailPanel({
                 ))}
                 {staffMembers.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="muted" style={{ textAlign: 'center', padding: '1.5rem' }}>
+                    <td colSpan={6} className="muted" style={{ textAlign: 'center', padding: '1.5rem' }}>
                       No staff accounts found. Create one above to get started.
                     </td>
                   </tr>
