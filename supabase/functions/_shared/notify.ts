@@ -334,7 +334,7 @@ https://echoaipro.com/
   // 3. Webhook (e.g. Teams / Slack / Zapier webhook)
   if (config.webhook_enabled && config.webhook_url) {
     try {
-      await fetch(config.webhook_url, {
+      const webhookResponse = await fetch(config.webhook_url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -346,8 +346,28 @@ https://echoaipro.com/
           payload,
         }),
       })
+      if (webhookResponse.ok) {
+        sent = true
+        providerUsed = 'webhook'
+      } else {
+        return {
+          success: false,
+          provider: 'webhook',
+          recipients,
+          error: `Webhook rejected notification with HTTP ${webhookResponse.status}.`,
+        }
+      }
     } catch (err) {
-      console.error('Failed sending via webhook:', err)
+      return { success: false, provider: 'webhook', recipients, error: (err as Error).message }
+    }
+  }
+
+  if (!sent) {
+    return {
+      success: false,
+      provider: 'none',
+      recipients,
+      error: 'No email provider is configured. Add a Resend or SendGrid API key, or enable a working webhook, then save the settings.',
     }
   }
 
