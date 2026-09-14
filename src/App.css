@@ -4441,19 +4441,19 @@ main {
 
 .it-ticket-msg-meta strong {
   font-size: 0.85rem;
-  color: #c9d1d9;
+  color: #172033;
 }
 
 .it-ticket-msg-meta span {
   font-size: 0.78rem;
-  color: #8b949e;
+  color: #526176;
 }
 
 .it-ticket-msg p {
   margin: 0;
   font-size: 0.9rem;
   line-height: 1.6;
-  color: #adbac7;
+  color: #26364d;
 }
 
 .it-ticket-reply {
@@ -4463,13 +4463,20 @@ main {
 }
 
 .it-ticket-reply textarea {
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04);
-  color: #f1f5f9;
+  border: 1px solid #aebbd0;
+  background: #ffffff;
+  color: #172033;
+  caret-color: #172033;
   padding: 0.7rem;
   border-radius: 0.5rem;
   font-size: 0.9rem;
+  font-weight: 500;
   resize: vertical;
+}
+
+.it-ticket-reply textarea::placeholder {
+  color: #64748b;
+  opacity: 1;
 }
 
 .it-ticket-reply textarea:focus {
@@ -4479,7 +4486,7 @@ main {
 
 .it-ticket-closed-notice {
   font-size: 0.9rem;
-  color: #8b949e;
+  color: #526176;
   display: flex;
   align-items: center;
   gap: 0.8rem;
