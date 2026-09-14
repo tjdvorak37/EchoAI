@@ -210,6 +210,10 @@ Deno.serve(async (request) => {
         return json({ error: testResult.error }, 400, request)
       }
 
+      if (!testResult.success) {
+        return json({ error: testResult.error || 'The notification provider did not accept the test email.' }, 502, request)
+      }
+
       return json({
         ok: true,
         result: testResult,
