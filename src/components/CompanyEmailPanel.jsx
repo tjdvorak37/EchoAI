@@ -415,6 +415,33 @@ export function CompanyEmailPanel({
             </div>
           )}
 
+          <div className="company-email-guide-box" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', marginBottom: '1.25rem' }}>
+            <h4 style={{ margin: '0 0 0.35rem 0', color: '#1e40af', fontSize: '0.95rem' }}>💡 Using Microsoft 365 with 2FA / MFA enabled?</h4>
+            <p className="muted" style={{ margin: 0, fontSize: '0.86rem', lineHeight: 1.55 }}>
+              If Two-Factor Authentication (2FA) is turned on for <code>support@echoaipro.com</code>, Microsoft will block normal password sign-ins over SMTP. You have two easy options:
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.85rem', marginTop: '0.65rem' }}>
+              <div style={{ background: '#ffffff', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>Option 1: Microsoft 365 App Password (Recommended)</strong>
+                <ol style={{ margin: '0.4rem 0 0 1.1rem', padding: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
+                  <li>Go to <a href="https://mysignins.microsoft.com/security-info" target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 600 }}>Microsoft Security Info</a>.</li>
+                  <li>Click <strong>Add sign-in method</strong> → select <strong>App password</strong>.</li>
+                  <li>Name it <em>EchoAI Support</em> and copy the generated 16-character code.</li>
+                  <li>Paste that code into the <strong>Email Password</strong> field below.</li>
+                </ol>
+              </div>
+              <div style={{ background: '#ffffff', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>Option 2: Free Resend API Key (Instant Delivery)</strong>
+                <ol style={{ margin: '0.4rem 0 0 1.1rem', padding: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
+                  <li>Sign up for free at <a href="https://resend.com" target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 600 }}>resend.com</a> (3,000 free emails/mo).</li>
+                  <li>Click <strong>API Keys</strong> → <strong>Create API Key</strong>.</li>
+                  <li>Copy your key (starts with <code>re_...</code>).</li>
+                  <li>Paste it into the <strong>Resend API Key</strong> field below.</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
           <form onSubmit={handleSaveSmtpCredentials}>
             <div className="company-email-form-grid">
               <label>
