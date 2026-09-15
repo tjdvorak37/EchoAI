@@ -4566,9 +4566,28 @@ main {
 
 /* Project board workspace */
 .project-workspace-page {
+  --project-bg: #13253b;
+  --project-surface: #1a304b;
+  --project-surface-2: #213955;
+  --project-line: #3e5c7e;
+  --project-text: #e7eef8;
+  --project-muted: #aebbd0;
   display: grid;
   gap: 0.65rem;
   min-height: calc(100vh - 180px);
+}
+
+.sms-project-workspace {
+  padding: 0.4rem;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #0f1d30, var(--project-bg));
+  color: var(--project-text);
+}
+
+.sms-project-workspace .workspace-feedback {
+  background: var(--project-surface);
+  border-color: var(--project-line);
+  color: var(--project-text);
 }
 
 .workspace-feedback {
@@ -4582,6 +4601,10 @@ main {
 .project-workspace-shell {
   display: grid;
   gap: 0.45rem;
+  min-height: calc(100vh - 215px);
+}
+
+.sms-project-workspace .project-workspace-shell {
   min-height: calc(100vh - 215px);
 }
 
@@ -4611,6 +4634,22 @@ main {
   color: var(--primary);
 }
 
+.sms-project-workspace .workspace-tab,
+.sms-project-workspace .workspace-reset-btn {
+  border-color: var(--project-line);
+  background: var(--project-surface);
+  color: var(--project-text);
+}
+
+.sms-project-workspace .workspace-tab-active {
+  background: rgba(81, 158, 255, 0.16);
+  color: #58a6ff;
+}
+
+.sms-project-workspace .workspace-reset-btn {
+  color: var(--project-muted);
+}
+
 .workspace-reset-btn {
   margin-left: auto;
   color: var(--text-soft);
@@ -4618,9 +4657,155 @@ main {
 
 .project-workspace-body {
   display: grid;
-  grid-template-columns: minmax(220px, 0.7fr) minmax(420px, 1.7fr) minmax(280px, 0.85fr);
+  grid-template-columns: minmax(240px, 0.75fr) minmax(520px, 2.1fr) minmax(300px, 0.9fr);
   gap: 0.55rem;
   min-height: calc(100vh - 260px);
+}
+
+.sms-project-workspace .workspace-pane {
+  border-color: var(--project-line);
+  background: var(--project-surface);
+}
+
+.sms-project-workspace .workspace-pane-header {
+  border-color: var(--project-line);
+  background: linear-gradient(180deg, var(--project-surface-2), var(--project-surface));
+  color: var(--project-text);
+}
+
+.sms-project-workspace .workspace-block,
+.sms-project-workspace .workspace-conversation-head,
+.sms-project-workspace .project-kanban-column,
+.sms-project-workspace .task-note-item {
+  border-color: var(--project-line);
+  background: rgba(15, 29, 48, 0.42);
+}
+
+.sms-project-workspace .workspace-field-grid label,
+.sms-project-workspace .muted,
+.sms-project-workspace .project-detail-head p,
+.sms-project-workspace .project-task-card span,
+.sms-project-workspace .task-note-item small,
+.sms-project-workspace .task-note-item p {
+  color: var(--project-muted);
+}
+
+.sms-project-workspace select,
+.sms-project-workspace input,
+.sms-project-workspace textarea {
+  border-color: #56759a;
+  background: #162a43;
+  color: var(--project-text);
+}
+
+.sms-project-workspace .workspace-table-wrap {
+  border: 1px solid var(--project-line);
+  border-radius: 10px;
+  background: var(--project-surface);
+  overflow: auto;
+}
+
+.sms-project-workspace table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.sms-project-workspace th,
+.sms-project-workspace td {
+  border-bottom: 1px solid var(--project-line);
+  padding: 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.84rem;
+}
+
+.sms-project-workspace th {
+  background: var(--project-surface-2);
+  color: var(--project-text);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.sms-project-workspace tbody tr {
+  cursor: pointer;
+}
+
+.sms-project-workspace tbody tr:hover,
+.sms-project-workspace .workspace-row-selected {
+  background: rgba(81, 158, 255, 0.1);
+}
+
+.sms-project-workspace td span,
+.sms-project-workspace td em {
+  display: block;
+  color: var(--project-muted);
+  font-style: normal;
+  margin-top: 0.18rem;
+}
+
+.project-filter-stat,
+.project-snapshot-grid div {
+  border: 1px solid var(--project-line);
+  border-radius: 8px;
+  padding: 0.65rem;
+  background: rgba(20, 38, 62, 0.8);
+  display: grid;
+  gap: 0.18rem;
+}
+
+.project-filter-stat span,
+.project-snapshot-grid span {
+  color: var(--project-muted);
+}
+
+.project-filter-stat strong,
+.project-snapshot-grid strong {
+  color: var(--project-text);
+  font-size: 1.05rem;
+}
+
+.project-snapshot-card p {
+  margin: 0;
+}
+
+.project-snapshot-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.45rem;
+}
+
+.project-status-pill {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #86efac;
+  background: #dcfce7;
+  color: #166534;
+  padding: 0.18rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.project-status-planned {
+  border-color: #bfdbfe;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.project-status-review {
+  border-color: #fed7aa;
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.project-status-done {
+  border-color: #ddd6fe;
+  background: #ede9fe;
+  color: #6d28d9;
 }
 
 .workspace-pane {
