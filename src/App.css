@@ -4198,18 +4198,18 @@ main {
 
 /* Ticket layout */
 .ticket-workspace-page {
-  --ticket-bg: #13253b;
-  --ticket-surface: #1a304b;
-  --ticket-surface-2: #213955;
-  --ticket-line: #3e5c7e;
-  --ticket-text: #e7eef8;
-  --ticket-muted: #aebbd0;
+  --ticket-bg: #f4f7fb;
+  --ticket-surface: #ffffff;
+  --ticket-surface-2: #f8fbff;
+  --ticket-line: #dbe5f3;
+  --ticket-text: #0f172a;
+  --ticket-muted: #64748b;
   display: grid;
   gap: 0.55rem;
   min-height: calc(100vh - 180px);
   padding: 0.4rem;
   border-radius: 12px;
-  background: linear-gradient(180deg, #0f1d30, var(--ticket-bg));
+  background: linear-gradient(180deg, #f8fbff, var(--ticket-bg));
   color: var(--ticket-text);
 }
 
@@ -4244,8 +4244,8 @@ main {
 }
 
 .ticket-workspace-page .workspace-tab-active {
-  background: rgba(81, 158, 255, 0.16);
-  color: #58a6ff;
+  background: rgba(35, 87, 214, 0.12);
+  color: var(--primary);
 }
 
 .ticket-workspace-page .workspace-tab-close {
@@ -4284,6 +4284,7 @@ main {
   padding: 0.5rem 0.65rem;
   border-bottom: 1px solid var(--ticket-line);
   background: linear-gradient(180deg, var(--ticket-surface-2), var(--ticket-surface));
+  color: var(--ticket-text);
 }
 
 .ticket-workspace-page .workspace-pane-content {
@@ -4305,7 +4306,7 @@ main {
   border: 1px solid var(--ticket-line);
   border-radius: 10px;
   padding: 0.65rem;
-  background: rgba(15, 29, 48, 0.42);
+  background: var(--ticket-surface-2);
 }
 
 .ticket-workspace-page .workspace-block h2,
@@ -4331,9 +4332,9 @@ main {
 .ticket-workspace-page input,
 .ticket-workspace-page textarea {
   width: 100%;
-  border: 1px solid #56759a;
+  border: 1px solid var(--ticket-line);
   border-radius: 10px;
-  background: #162a43;
+  background: var(--ticket-surface);
   color: var(--ticket-text);
   padding: 0.55rem 0.7rem;
 }
@@ -4343,7 +4344,7 @@ main {
   border: 1px solid var(--ticket-line);
   border-radius: 8px;
   padding: 0.55rem;
-  background: rgba(20, 38, 62, 0.8);
+  background: var(--ticket-surface);
 }
 
 .ticket-control-card {
@@ -4407,7 +4408,7 @@ main {
 
 .ticket-workspace-page tbody tr:hover,
 .ticket-workspace-page .workspace-row-selected {
-  background: rgba(81, 158, 255, 0.1);
+  background: rgba(35, 87, 214, 0.08);
 }
 
 .ticket-workspace-page td span {
@@ -4428,7 +4429,7 @@ main {
 .ticket-workspace-page .workspace-conversation-compose {
   border: 1px solid var(--ticket-line);
   border-radius: 10px;
-  background: rgba(15, 29, 48, 0.42);
+  background: var(--ticket-surface-2);
   padding: 0.65rem;
 }
 
@@ -4566,12 +4567,12 @@ main {
 
 /* Project board workspace */
 .project-workspace-page {
-  --project-bg: #13253b;
-  --project-surface: #1a304b;
-  --project-surface-2: #213955;
-  --project-line: #3e5c7e;
-  --project-text: #e7eef8;
-  --project-muted: #aebbd0;
+  --project-bg: #f4f7fb;
+  --project-surface: #ffffff;
+  --project-surface-2: #f8fbff;
+  --project-line: #dbe5f3;
+  --project-text: #0f172a;
+  --project-muted: #64748b;
   display: grid;
   gap: 0.65rem;
   min-height: calc(100vh - 180px);
@@ -4580,7 +4581,7 @@ main {
 .sms-project-workspace {
   padding: 0.4rem;
   border-radius: 12px;
-  background: linear-gradient(180deg, #0f1d30, var(--project-bg));
+  background: linear-gradient(180deg, #f8fbff, var(--project-bg));
   color: var(--project-text);
 }
 
@@ -4642,8 +4643,8 @@ main {
 }
 
 .sms-project-workspace .workspace-tab-active {
-  background: rgba(81, 158, 255, 0.16);
-  color: #58a6ff;
+  background: rgba(35, 87, 214, 0.12);
+  color: var(--primary);
 }
 
 .sms-project-workspace .workspace-reset-btn {
@@ -4678,7 +4679,7 @@ main {
 .sms-project-workspace .project-kanban-column,
 .sms-project-workspace .task-note-item {
   border-color: var(--project-line);
-  background: rgba(15, 29, 48, 0.42);
+  background: var(--project-surface-2);
 }
 
 .sms-project-workspace .workspace-field-grid label,
@@ -4693,8 +4694,8 @@ main {
 .sms-project-workspace select,
 .sms-project-workspace input,
 .sms-project-workspace textarea {
-  border-color: #56759a;
-  background: #162a43;
+  border-color: var(--project-line);
+  background: var(--project-surface);
   color: var(--project-text);
 }
 
@@ -4734,7 +4735,7 @@ main {
 
 .sms-project-workspace tbody tr:hover,
 .sms-project-workspace .workspace-row-selected {
-  background: rgba(81, 158, 255, 0.1);
+  background: rgba(35, 87, 214, 0.08);
 }
 
 .sms-project-workspace td span,
@@ -4750,7 +4751,7 @@ main {
   border: 1px solid var(--project-line);
   border-radius: 8px;
   padding: 0.65rem;
-  background: rgba(20, 38, 62, 0.8);
+  background: var(--project-surface);
   display: grid;
   gap: 0.18rem;
 }
