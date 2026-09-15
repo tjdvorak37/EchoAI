@@ -6,6 +6,7 @@ import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
 import { AiOperationsPanel } from './AiOperationsPanel'
 import { PricingProfitabilityPanel } from './PricingProfitabilityPanel'
 import { CompanyEmailPanel } from './CompanyEmailPanel'
+import { AnalyticsPanel } from './AnalyticsPanel'
 import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
 const USERS_PER_PAGE = 25
@@ -449,6 +450,7 @@ export function AdminPanel({
       group: 'Support',
       tabs: [
         { id: 'overview', label: '📊 Overview', hint: 'Snapshot of open tickets, plan mix, and system health' },
+        { id: 'analytics', label: '📈 Analytics', hint: 'User retention, tool usage, navigation, and churn signals' },
         { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}`, hint: 'Respond to and manage customer support tickets' },
       ],
     },
@@ -478,6 +480,7 @@ export function AdminPanel({
       group: 'Support',
       tabs: [
         { id: 'overview', label: '📊 Service overview', hint: 'Snapshot of open tickets and account health' },
+        { id: 'analytics', label: '📈 Analytics', hint: 'User retention, tool usage, navigation, and churn signals' },
         { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}`, hint: 'Respond to and manage customer support tickets' },
       ],
     },
@@ -815,6 +818,8 @@ export function AdminPanel({
             </Section>
           </div>
         )}
+
+        {itTab === 'analytics' && <AnalyticsPanel tickets={tickets} />}
 
         {itTab === 'licenses' && (
           <div>
