@@ -8,6 +8,7 @@ import { PricingProfitabilityPanel } from './PricingProfitabilityPanel'
 import { CompanyEmailPanel } from './CompanyEmailPanel'
 import { AnalyticsPanel } from './AnalyticsPanel'
 import { InternalForumPanel } from './InternalForumPanel'
+import { internalForumService } from '../services/internalForumService'
 import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
 const USERS_PER_PAGE = 25
@@ -203,6 +204,7 @@ export function AdminPanel({
   const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
   const [profitShareDraft, setProfitShareDraft] = useState({ userId: '', value: '', saving: false, error: '' })
   const [betaAiDraft, setBetaAiDraft] = useState({ userId: '', isBetaTester: false, enabled: false, note: '', saving: false, error: '' })
+  const [forumUnreadCount, setForumUnreadCount] = useState(0)
 
   const openUserDetail = (member) => {
     const nextId = expandedUserId === member.id ? null : member.id
@@ -443,6 +445,7 @@ export function AdminPanel({
 
   const isFullAdmin = currentUser?.role === 'admin'
   const canManageAiAccess = ['admin', 'manager', 'it'].includes(currentUser?.role)
+  const forumTabLabel = `💬 Company Forum${forumUnreadCount > 0 ? ` (${forumUnreadCount})` : ''}`
   const visiblePlatformTabs = isFullAdmin
     ? PLATFORM_TABS
     : PLATFORM_TABS.filter((tab) => currentUser?.[tab.permission] === true)
@@ -452,7 +455,7 @@ export function AdminPanel({
       tabs: [
         { id: 'overview', label: '📊 Overview', hint: 'Snapshot of open tickets, plan mix, and system health' },
         { id: 'analytics', label: '📈 Analytics', hint: 'User retention, tool usage, navigation, and churn signals' },
-        { id: 'forum', label: '💬 Company Forum', hint: 'Training documents, company updates, and staff chat' },
+        { id: 'forum', label: forumTabLabel, hint: 'Training documents, company updates, and staff chat' },
         { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}`, hint: 'Respond to and manage customer support tickets' },
       ],
     },
@@ -483,7 +486,7 @@ export function AdminPanel({
       tabs: [
         { id: 'overview', label: '📊 Service overview', hint: 'Snapshot of open tickets and account health' },
         { id: 'analytics', label: '📈 Analytics', hint: 'User retention, tool usage, navigation, and churn signals' },
-        { id: 'forum', label: '💬 Company Forum', hint: 'Training documents, company updates, and staff chat' },
+        { id: 'forum', label: forumTabLabel, hint: 'Training documents, company updates, and staff chat' },
         { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}`, hint: 'Respond to and manage customer support tickets' },
       ],
     },
@@ -636,6 +639,18 @@ export function AdminPanel({
     }, 30000)
     return () => window.clearInterval(intervalId)
   }, [itTab, handleRefreshSupportTickets])
+
+  useEffect(() => {
+    if (!currentUser?.id) return undefined
+    const refreshUnread = () => {
+      internalForumService.getUnreadMessageCount(currentUser.id)
+        .then(setForumUnreadCount)
+        .catch(() => {})
+    }
+    refreshUnread()
+    const intervalId = window.setInterval(refreshUnread, 30000)
+    return () => window.clearInterval(intervalId)
+  }, [currentUser?.id])
 
   useEffect(() => {
     if (!openTabGroup) return undefined
@@ -824,7 +839,7 @@ export function AdminPanel({
 
         {itTab === 'analytics' && <AnalyticsPanel tickets={tickets} />}
 
-  {itTab === 'forum' && <InternalForumPanel currentUser={currentUser} teamMembers={teamMembers} />}
+  {itTab === 'forum' && <InternalForumPanel currentUser={currentUser} teamMembers={teamMembers} onUnreadChange={setForumUnreadCount} />}
 
         {itTab === 'licenses' && (
           <div>

@@ -28,6 +28,25 @@ const getCurrentUser = async () => {
   return data.user
 }
 
+const getReadMarkerKey = (userId) => `echoai-forum-chat-read-${userId}`
+
+const getLastReadAt = (userId) => {
+  if (!userId) return ''
+  return localStorage.getItem(getReadMarkerKey(userId)) || ''
+}
+
+const isVisibleMessage = (message, userId) => (
+  message.channelType === 'group'
+    || message.senderId === userId
+    || message.recipientId === userId
+)
+
+const isUnreadMessage = (message, userId, lastReadAt) => {
+  if (!userId || message.senderId === userId || !isVisibleMessage(message, userId)) return false
+  if (!lastReadAt) return true
+  return new Date(message.createdAt).getTime() > new Date(lastReadAt).getTime()
+}
+
 export const internalForumService = {
   async list() {
     if (!isSupabaseConfigured) return { posts: [], messages: [] }
@@ -121,5 +140,21 @@ export const internalForumService = {
 
     if (error) throw new Error(error.message)
     return normalizeMessage(data)
+  },
+
+  getUnreadCount(messages = [], userId) {
+    const lastReadAt = getLastReadAt(userId)
+    return messages.filter((message) => isUnreadMessage(message, userId, lastReadAt)).length
+  },
+
+  markMessagesRead(userId) {
+    if (!userId) return
+    localStorage.setItem(getReadMarkerKey(userId), new Date().toISOString())
+  },
+
+  async getUnreadMessageCount(userId) {
+    if (!userId) return 0
+    const { messages } = await this.list()
+    return this.getUnreadCount(messages, userId)
   },
 }
