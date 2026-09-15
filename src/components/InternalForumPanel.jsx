@@ -3,13 +3,14 @@ import { internalForumService } from '../services/internalForumService'
 
 const STAFF_ROLES = ['admin', 'manager', 'it', 'accountant', 'board_member']
 
-export function InternalForumPanel({ currentUser, teamMembers = [] }) {
+export function InternalForumPanel({ currentUser, teamMembers = [], onUnreadChange }) {
   const [activeView, setActiveView] = useState('posts')
   const [posts, setPosts] = useState([])
   const [messages, setMessages] = useState([])
   const [postDraft, setPostDraft] = useState({ title: '', body: '', category: 'Training', documentUrl: '' })
   const [messageDraft, setMessageDraft] = useState({ body: '', channelType: 'group', recipientId: '' })
   const [status, setStatus] = useState({ loading: true, saving: false, error: '', message: '' })
+  const [, setReadMarker] = useState(0)
 
   const staffMembers = teamMembers.filter((member) => STAFF_ROLES.includes(member.role) && member.id !== currentUser?.id)
   const visibleMessages = messages.filter((message) => (
@@ -24,12 +25,26 @@ export function InternalForumPanel({ currentUser, teamMembers = [] }) {
       if (!active) return
       setPosts(result.posts)
       setMessages(result.messages)
+      onUnreadChange?.(internalForumService.getUnreadCount(result.messages, currentUser?.id))
       setStatus({ loading: false, saving: false, error: '', message: '' })
     }).catch((error) => {
       if (active) setStatus({ loading: false, saving: false, error: error.message, message: '' })
     })
     return () => { active = false }
-  }, [])
+  }, [currentUser?.id, onUnreadChange])
+
+  const unreadCount = internalForumService.getUnreadCount(messages, currentUser?.id)
+
+  useEffect(() => {
+    onUnreadChange?.(unreadCount)
+  }, [onUnreadChange, unreadCount])
+
+  useEffect(() => {
+    if (activeView !== 'chat') return
+    internalForumService.markMessagesRead(currentUser?.id)
+    setReadMarker((current) => current + 1)
+    onUnreadChange?.(0)
+  }, [activeView, currentUser?.id, messages.length, onUnreadChange])
 
   const submitPost = async (event) => {
     event.preventDefault()
@@ -63,7 +78,9 @@ export function InternalForumPanel({ currentUser, teamMembers = [] }) {
     <div className="it-overview">
       <div className="it-ticket-view-tabs" role="tablist" aria-label="Company forum views">
         <button type="button" className={activeView === 'posts' ? 'active' : ''} onClick={() => setActiveView('posts')}>Forum & docs</button>
-        <button type="button" className={activeView === 'chat' ? 'active' : ''} onClick={() => setActiveView('chat')}>Staff chat</button>
+        <button type="button" className={activeView === 'chat' ? 'active' : ''} onClick={() => setActiveView('chat')}>
+          Staff chat{unreadCount > 0 ? ` (${unreadCount} new)` : ''}
+        </button>
       </div>
 
       {status.error && <p className="auth-message auth-error">{status.error}</p>}
