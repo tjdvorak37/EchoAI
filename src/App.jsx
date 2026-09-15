@@ -3543,8 +3543,8 @@ function App() {
         ))}
       </nav>
 
-      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${isAssetPanelOpen ? '' : 'asset-drawer-collapsed'}`}>
-        {activeTab !== 'help' && (
+      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${activeTab === 'admin' ? 'management-workspace-layout' : ''} ${isAssetPanelOpen && activeTab !== 'admin' ? '' : 'asset-drawer-collapsed'}`}>
+        {activeTab !== 'help' && activeTab !== 'admin' && (
         <aside
           className={`asset-drawer ${activeTab === 'photo' ? 'photo-workspace-drawer' : ''} ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
           onDragEnter={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); setDrawerDragActive(true) } }}
