@@ -372,6 +372,7 @@ button[type='submit']:hover {
 .app-main {
   margin-top: 1rem;
   display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
   gap: 1rem;
   grid-template-rows: auto auto auto;
   align-content: start;
