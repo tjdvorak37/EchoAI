@@ -550,9 +550,13 @@ export function AdminPanel({
 
   const ticketAssignees = ['Unassigned', ...new Set(tickets.map((ticket) => ticket.assignee).filter(Boolean))]
   const ticketQueues = ['all', ...new Set(tickets.map((ticket) => ticket.queue).filter(Boolean))]
+  const myOpenTickets = tickets.filter((ticket) => ticket.assigneeId === currentUser?.id && isTicketActionable(ticket.status)).length
+  const newTickets = tickets.filter((ticket) => ticket.status === 'new').length
   const filteredTickets = tickets.filter((ticket) => {
     const isHistoryTicket = ticket.status === 'closed'
     if (ticketView === 'active' && isHistoryTicket) return false
+    if (ticketView === 'new' && ticket.status !== 'new') return false
+    if (ticketView === 'mine' && (ticket.assigneeId !== currentUser?.id || isHistoryTicket)) return false
     if (ticketView === 'history' && !isHistoryTicket) return false
     const searchTerm = ticketFilter.search.trim().toLowerCase()
     const matchesSearch = !searchTerm || [
@@ -588,8 +592,23 @@ export function AdminPanel({
       const updated = await handleUpdateSupportTicket({ ticketId, ...patch })
       setTicketOpen((current) => current?.id === ticketId ? { ...current, ...updated } : current)
       setSeatError('')
+      return updated
     } catch (error) {
       setSeatError(error.message)
+      return null
+    }
+  }
+
+  const takeOverTicket = async (ticket) => {
+    if (!currentUser?.id) {
+      setSeatError('Your staff profile could not be identified for ticket assignment.')
+      return
+    }
+    const nextStatus = ['new', 'open'].includes(ticket.status) ? 'in_progress' : ticket.status
+    const updated = await updateTicketField(ticket.id, { assigneeId: currentUser.id, status: nextStatus })
+    if (updated) {
+      setTicketView('mine')
+      setTicketFilter((prev) => ({ ...prev, assignee: 'all', status: 'all' }))
     }
   }
 
@@ -1037,7 +1056,29 @@ export function AdminPanel({
                         setTicketOpen(null)
                       }}
                     >
-                      Active queue
+                      All active
+                    </button>
+                    <button
+                      type="button"
+                      className={ticketView === 'new' ? 'active' : ''}
+                      onClick={() => {
+                        setTicketView('new')
+                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
+                        setTicketOpen(null)
+                      }}
+                    >
+                      New ({newTickets})
+                    </button>
+                    <button
+                      type="button"
+                      className={ticketView === 'mine' ? 'active' : ''}
+                      onClick={() => {
+                        setTicketView('mine')
+                        setTicketFilter((prev) => ({ ...prev, assignee: 'all', status: 'all' }))
+                        setTicketOpen(null)
+                      }}
+                    >
+                      My queue ({myOpenTickets})
                     </button>
                     <button
                       type="button"
@@ -1098,9 +1139,9 @@ export function AdminPanel({
                 <div className="it-ticket-stats">
                   {[
                     { label: 'Open', value: tickets.filter((t) => ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated'].includes(t.status)).length },
+                    { label: 'Mine', value: myOpenTickets },
                     { label: 'Critical', value: tickets.filter((t) => t.priority === 'critical').length },
                     { label: 'Waiting', value: tickets.filter((t) => t.status === 'waiting_customer').length },
-                    { label: 'Resolved', value: tickets.filter((t) => t.status === 'resolved').length },
                   ].map((stat) => (
                     <div key={stat.label} className="it-ticket-stat">
                       <strong>{stat.value}</strong>
@@ -1119,7 +1160,7 @@ export function AdminPanel({
                     <div>
                       <p style={{ fontWeight: 600 }}>{t.subject}</p>
                       <span>
-                        {t.userFullName} • {t.category} • {t.queue || 'unassigned queue'} • {new Date(t.createdAt).toLocaleDateString()}
+                        {t.userFullName} • {t.category} • {t.queue || 'unassigned queue'} • {t.assignee || 'Unassigned'} • {new Date(t.createdAt).toLocaleDateString()}
                       </span>
                       {t.tags?.length > 0 && (
                         <div className="it-ticket-tags">
@@ -1130,6 +1171,19 @@ export function AdminPanel({
                     <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       <StatusBadge value={t.priority} />
                       <StatusBadge value={t.status} />
+                      {isTicketActionable(t.status) && t.assigneeId !== currentUser?.id && (
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            takeOverTicket(t)
+                          }}
+                        >
+                          Take over
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1167,6 +1221,11 @@ export function AdminPanel({
                 </div>
 
                 <div className="it-ticket-actions-inline">
+                  {isTicketActionable(ticketOpen.status) && ticketOpen.assigneeId !== currentUser?.id && (
+                    <button type="button" className="primary-button" onClick={() => takeOverTicket(ticketOpen)}>
+                      Take over ticket
+                    </button>
+                  )}
                   <select
                     value={ticketOpen.status}
                     onChange={(event) => updateTicketField(ticketOpen.id, { status: event.target.value })}
