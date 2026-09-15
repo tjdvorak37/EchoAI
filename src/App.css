@@ -4261,6 +4261,336 @@ main {
 
 .it-ticket-stat {
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.84), rgba(15, 23, 42, 0.74));
+
+/* Project board workspace */
+.project-workspace-page {
+  display: grid;
+  gap: 0.65rem;
+  min-height: calc(100vh - 180px);
+}
+
+.workspace-feedback {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--text);
+}
+
+.project-workspace-shell {
+  display: grid;
+  gap: 0.45rem;
+  min-height: calc(100vh - 215px);
+}
+
+.workspace-tabs,
+.project-workspace-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  overflow-x: auto;
+}
+
+.workspace-tab,
+.workspace-reset-btn {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-height: 34px;
+  padding: 0.35rem 0.65rem;
+  background: var(--bg-surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.workspace-tab-active {
+  background: rgba(35, 87, 214, 0.12);
+  color: var(--primary);
+}
+
+.workspace-reset-btn {
+  margin-left: auto;
+  color: var(--text-soft);
+}
+
+.project-workspace-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(420px, 1.7fr) minmax(280px, 0.85fr);
+  gap: 0.55rem;
+  min-height: calc(100vh - 260px);
+}
+
+.workspace-pane {
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border-radius: 10px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.workspace-pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg-surface-alt), var(--bg-surface));
+  padding: 0.5rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+.workspace-pane-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.55rem;
+}
+
+.workspace-pane-content-center {
+  overflow: auto;
+}
+
+.workspace-block-stack {
+  display: grid;
+  gap: 0.55rem;
+  align-content: start;
+}
+
+.workspace-block {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem;
+  background: var(--bg-surface-alt);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.workspace-block h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.workspace-field-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.workspace-field-grid label {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.workspace-field-grid input,
+.workspace-field-grid select,
+.workspace-field-grid textarea,
+.project-quick-actions select,
+.project-task-card select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text);
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.project-metric-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.project-inline-chip,
+.metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.18rem 0.55rem;
+  background: rgba(35, 87, 214, 0.08);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.metric-chip {
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 145px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--text);
+  padding: 0.55rem 0.7rem;
+}
+
+.metric-chip small {
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.project-queue-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.project-queue-item {
+  display: grid;
+  gap: 0.18rem;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem;
+  background: var(--bg-surface);
+  color: var(--text);
+  text-align: left;
+  box-shadow: none;
+}
+
+.project-queue-item.active,
+.project-queue-item:hover {
+  border-color: rgba(35, 87, 214, 0.45);
+  background: rgba(35, 87, 214, 0.08);
+  transform: none;
+}
+
+.project-queue-item span {
+  font-weight: 800;
+}
+
+.project-queue-item small,
+.project-queue-item em {
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  font-style: normal;
+}
+
+.project-detail-workspace {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.project-detail-head {
+  align-items: flex-start;
+}
+
+.project-detail-head h2,
+.project-detail-head p {
+  margin: 0;
+}
+
+.project-detail-head p {
+  color: var(--text-soft);
+  margin-top: 0.25rem;
+}
+
+.project-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.project-kanban-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 0.55rem;
+  min-height: 360px;
+}
+
+.project-kanban-column {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-surface-alt);
+  padding: 0.55rem;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.project-kanban-column header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.project-kanban-column header span {
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 0.05rem 0.45rem;
+  color: var(--text-soft);
+}
+
+.project-task-stack {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+}
+
+.project-task-card {
+  border-radius: 10px;
+  padding: 0.6rem;
+  background: var(--bg-surface);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.project-task-card span,
+.task-note-item small {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.task-notes-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.task-note-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem;
+  background: var(--bg-surface);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.task-note-item p {
+  margin: 0;
+  color: var(--text-soft);
+  white-space: pre-wrap;
+}
+
+.project-empty-state {
+  padding: 2rem;
+}
+
+@media (max-width: 1150px) {
+  .project-workspace-body {
+    grid-template-columns: 1fr;
+  }
+
+  .project-kanban-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .project-kanban-grid {
+    grid-template-columns: 1fr;
+  }
+}
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 0.6rem;
   padding: 0.8rem 0.7rem;
