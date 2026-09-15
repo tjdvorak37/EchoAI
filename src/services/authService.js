@@ -96,6 +96,10 @@ const normalizeMember = (record) => ({
   trademarkEditAccess: record.trademark_edit_access === true,
   developerAppEditAccess: record.developer_app_edit_access === true,
   companyEmailEditAccess: record.company_email_edit_access === true || record.companyEmailEditAccess === true,
+  licenseEditAccess: record.license_edit_access === true || record.licenseEditAccess === true,
+  integrationsEditAccess: record.integrations_edit_access === true || record.integrationsEditAccess === true,
+  aiOperationsEditAccess: record.ai_operations_edit_access === true || record.aiOperationsEditAccess === true,
+  siteControlsEditAccess: record.site_controls_edit_access === true || record.siteControlsEditAccess === true,
   profitSharePercent: Number(record.profit_share_percent ?? record.profitSharePercent ?? 0),
   isBoardMember: record.is_board_member === true || record.role === 'board_member',
   seatManager: record.seat_manager === true,
@@ -208,6 +212,10 @@ export const authService = {
       trademarkEditAccess: profile.trademark_edit_access === true,
       developerAppEditAccess: profile.developer_app_edit_access === true,
       companyEmailEditAccess: profile.company_email_edit_access === true,
+      licenseEditAccess: profile.license_edit_access === true,
+      integrationsEditAccess: profile.integrations_edit_access === true,
+      aiOperationsEditAccess: profile.ai_operations_edit_access === true,
+      siteControlsEditAccess: profile.site_controls_edit_access === true,
     }
   },
 
@@ -276,6 +284,10 @@ export const authService = {
           trademarkEditAccess: profile?.trademark_edit_access === true,
           developerAppEditAccess: profile?.developer_app_edit_access === true,
           companyEmailEditAccess: profile?.company_email_edit_access === true,
+          licenseEditAccess: profile?.license_edit_access === true,
+          integrationsEditAccess: profile?.integrations_edit_access === true,
+          aiOperationsEditAccess: profile?.ai_operations_edit_access === true,
+          siteControlsEditAccess: profile?.site_controls_edit_access === true,
         },
       }
     }
@@ -343,6 +355,10 @@ export const authService = {
         trademarkEditAccess: profile?.trademark_edit_access === true,
         developerAppEditAccess: profile?.developer_app_edit_access === true,
         companyEmailEditAccess: profile?.company_email_edit_access === true,
+        licenseEditAccess: profile?.license_edit_access === true,
+        integrationsEditAccess: profile?.integrations_edit_access === true,
+        aiOperationsEditAccess: profile?.ai_operations_edit_access === true,
+        siteControlsEditAccess: profile?.site_controls_edit_access === true,
       },
     }
   },

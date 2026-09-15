@@ -14,6 +14,18 @@ const PRIVILEGED_ROLES = new Set([
   'board_member',
 ])
 
+const PROFILE_ADMIN_FIELDS = 'id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, license_edit_access, integrations_edit_access, ai_operations_edit_access, site_controls_edit_access, created_at'
+const PROFILE_CREATE_FIELDS = 'id, full_name, email, company, role, profit_share_percent, access_status, storage_quota_mb, trademark_edit_access, developer_app_edit_access, company_email_edit_access, license_edit_access, integrations_edit_access, ai_operations_edit_access, site_controls_edit_access'
+const PLATFORM_ACCESS_ACTIONS: Record<string, { column: string, label: string }> = {
+  'set-trademark-edit-access': { column: 'trademark_edit_access', label: 'Trademark & Legal' },
+  'set-developer-app-edit-access': { column: 'developer_app_edit_access', label: 'Developer Apps' },
+  'set-company-email-edit-access': { column: 'company_email_edit_access', label: 'Company Email & SMTP' },
+  'set-license-edit-access': { column: 'license_edit_access', label: 'Licenses' },
+  'set-integrations-edit-access': { column: 'integrations_edit_access', label: 'Integrations' },
+  'set-ai-operations-edit-access': { column: 'ai_operations_edit_access', label: 'Echo AI operations' },
+  'set-site-controls-edit-access': { column: 'site_controls_edit_access', label: 'Site Controls' },
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: getCorsHeaders(request) })
@@ -290,7 +302,7 @@ Deno.serve(async (request) => {
       const { data: profile, error: profileError } = await adminClient
         .from('profiles')
         .upsert({ id: invitedUser.id, email, full_name: newFullName, company: newCompany, role, profit_share_percent: role === 'board_member' ? profitSharePercent : 0, access_status: 'active' }, { onConflict: 'id' })
-        .select('id, full_name, email, company, role, profit_share_percent, access_status, storage_quota_mb, trademark_edit_access, developer_app_edit_access, company_email_edit_access')
+        .select(PROFILE_CREATE_FIELDS)
         .single()
       if (profileError) return json({ error: 'User was invited but the profile could not be configured.' }, 500, request)
 
@@ -316,7 +328,7 @@ Deno.serve(async (request) => {
 
     const { data: targetById } = await adminClient
       .from('profiles')
-      .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, created_at')
+      .select(PROFILE_ADMIN_FIELDS)
       .eq('id', lookupUserId)
       .maybeSingle()
 
@@ -324,13 +336,13 @@ Deno.serve(async (request) => {
     if (!target && typeof targetEmail === 'string' && targetEmail.trim()) {
       const { data: targetByEmail } = await adminClient
         .from('profiles')
-        .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, created_at')
+        .select(PROFILE_ADMIN_FIELDS)
         .ilike('email', targetEmail.trim())
         .maybeSingle()
       target = targetByEmail
     }
 
-    if (!target && ['set-trademark-edit-access', 'set-developer-app-edit-access', 'set-company-email-edit-access'].includes(action)) {
+    if (!target && PLATFORM_ACCESS_ACTIONS[action]) {
       let authTarget = userId ? (await adminClient.auth.admin.getUserById(userId)).data.user : null
       if (!authTarget && typeof targetEmail === 'string' && targetEmail.trim()) {
         const { data: users } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 })
@@ -348,7 +360,7 @@ Deno.serve(async (request) => {
             role: 'it',
             access_status: 'active',
           }, { onConflict: 'id' })
-          .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, created_at')
+          .select(PROFILE_ADMIN_FIELDS)
           .single()
         target = repairedProfile
       }
@@ -513,51 +525,20 @@ Deno.serve(async (request) => {
       return json({ profile: updated }, 200, request)
     }
 
-    if (action === 'set-trademark-edit-access') {
+    if (PLATFORM_ACCESS_ACTIONS[action]) {
       if (!isSuperAdmin) {
-        return json({ error: 'Super Admin access is required to grant trademark editing.' }, 403, request)
+        return json({ error: `Super Admin access is required to grant ${PLATFORM_ACCESS_ACTIONS[action].label} access.` }, 403, request)
       }
       const enabled = body.enabled === true
+      const column = PLATFORM_ACCESS_ACTIONS[action].column
       const { data: updated, error: updateError } = await adminClient
         .from('profiles')
-        .update({ trademark_edit_access: enabled })
+        .update({ [column]: enabled })
         .eq('id', target.id)
-        .select('id, trademark_edit_access')
+        .select(`id, ${column}`)
         .single()
-      if (updateError) return json({ error: 'Could not update trademark editing access.' }, 500, request)
-      await recordAudit('updated_profile', { trademark_edit_access: enabled })
-      return json({ profile: updated }, 200, request)
-    }
-
-    if (action === 'set-developer-app-edit-access') {
-      if (!isSuperAdmin) {
-        return json({ error: 'Super Admin access is required to grant Developer Apps editing.' }, 403, request)
-      }
-      const enabled = body.enabled === true
-      const { data: updated, error: updateError } = await adminClient
-        .from('profiles')
-        .update({ developer_app_edit_access: enabled })
-        .eq('id', target.id)
-        .select('id, developer_app_edit_access')
-        .single()
-      if (updateError) return json({ error: 'Could not update Developer Apps editing access.' }, 500, request)
-      await recordAudit('updated_profile', { developer_app_edit_access: enabled })
-      return json({ profile: updated }, 200, request)
-    }
-
-    if (action === 'set-company-email-edit-access') {
-      if (!isSuperAdmin) {
-        return json({ error: 'Super Admin access is required to grant Company Email & SMTP editing.' }, 403, request)
-      }
-      const enabled = body.enabled === true
-      const { data: updated, error: updateError } = await adminClient
-        .from('profiles')
-        .update({ company_email_edit_access: enabled })
-        .eq('id', target.id)
-        .select('id, company_email_edit_access')
-        .single()
-      if (updateError) return json({ error: 'Could not update Company Email editing access.' }, 500, request)
-      await recordAudit('updated_profile', { company_email_edit_access: enabled })
+      if (updateError) return json({ error: `Could not update ${PLATFORM_ACCESS_ACTIONS[action].label} access.` }, 500, request)
+      await recordAudit('updated_profile', { [column]: enabled })
       return json({ profile: updated }, 200, request)
     }
 

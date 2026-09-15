@@ -13,6 +13,26 @@ const TICKETS_PER_PAGE = 50
 const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
 const USER_STATUSES = ['active', 'pending', 'deactivated', 'approved', 'denied']
 
+const PLATFORM_TABS = [
+  { id: 'company-email', label: '📧 Company Email & SMTP', hint: 'Manage outbound support email, Microsoft 365, and mail routing', permission: 'companyEmailEditAccess' },
+  { id: 'licenses', label: '🔑 Licenses', hint: 'Manage company seat licenses', permission: 'licenseEditAccess' },
+  { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents', permission: 'trademarkEditAccess' },
+  { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration', permission: 'developerAppEditAccess' },
+  { id: 'integrations', label: '🔌 Integrations', hint: 'Third-party and platform integrations', permission: 'integrationsEditAccess' },
+  { id: 'ai-operations', label: '🤖 Echo AI operations', hint: 'AI provider routing, usage, and cost controls', permission: 'aiOperationsEditAccess' },
+  { id: 'controls', label: '⚙️ Site Controls', hint: 'Feature flags and site-wide notices', permission: 'siteControlsEditAccess' },
+]
+
+const PLATFORM_ACCESS_CONTROLS = [
+  { field: 'companyEmailEditAccess', action: 'set-company-email-edit-access', label: 'Company Email & SMTP', roles: ['it', 'manager'] },
+  { field: 'licenseEditAccess', action: 'set-license-edit-access', label: 'Licenses', roles: ['it', 'manager', 'accountant'] },
+  { field: 'trademarkEditAccess', action: 'set-trademark-edit-access', label: 'Trademark & Legal', roles: ['it', 'manager'] },
+  { field: 'developerAppEditAccess', action: 'set-developer-app-edit-access', label: 'Developer Apps', roles: ['it'] },
+  { field: 'integrationsEditAccess', action: 'set-integrations-edit-access', label: 'Integrations', roles: ['it', 'manager'] },
+  { field: 'aiOperationsEditAccess', action: 'set-ai-operations-edit-access', label: 'Echo AI operations', roles: ['it', 'manager'] },
+  { field: 'siteControlsEditAccess', action: 'set-site-controls-edit-access', label: 'Site Controls', roles: ['it', 'manager'] },
+]
+
 const formatDateTime = (value) => (value ? new Date(value).toLocaleString() : 'Never')
 
 const STATUS_COLORS = {
@@ -421,6 +441,9 @@ export function AdminPanel({
 
   const isFullAdmin = currentUser?.role === 'admin'
   const canManageAiAccess = ['admin', 'manager', 'it'].includes(currentUser?.role)
+  const visiblePlatformTabs = isFullAdmin
+    ? PLATFORM_TABS
+    : PLATFORM_TABS.filter((tab) => currentUser?.[tab.permission] === true)
   const TAB_GROUPS = isFullAdmin ? [
     {
       group: 'Support',
@@ -448,15 +471,7 @@ export function AdminPanel({
     },
     {
       group: 'Platform',
-      tabs: [
-        { id: 'company-email', label: '📧 Company Email & SMTP', hint: 'Manage outbound support email, Microsoft 365, and mail routing' },
-        { id: 'licenses', label: '🔑 Licenses', hint: 'Manage company seat licenses' },
-        { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents' },
-        { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration' },
-        { id: 'integrations', label: '🔌 Integrations', hint: 'Third-party and platform integrations' },
-        { id: 'ai-operations', label: '🤖 Echo AI operations', hint: 'AI provider routing, usage, and cost controls' },
-        { id: 'controls', label: '⚙️ Site Controls', hint: 'Feature flags and site-wide notices' },
-      ],
+      tabs: visiblePlatformTabs,
     },
   ] : [
     {
@@ -481,16 +496,17 @@ export function AdminPanel({
     },
     {
       group: 'Platform',
-      tabs: [
-        { id: 'company-email', label: '📧 Company Email & SMTP', hint: 'Manage outbound support email, Microsoft 365, and mail routing' },
-        { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents' },
-        { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration' },
-        { id: 'integrations', label: '🔌 Integrations', hint: 'Third-party and platform integrations' },
-        { id: 'ai-operations', label: '🤖 Echo AI operations', hint: 'AI provider routing, usage, and cost controls' },
-        { id: 'controls', label: '⚙️ Notices', hint: 'Site-wide notices and announcements' },
-      ],
+      tabs: visiblePlatformTabs,
     },
-  ]
+  ].filter((section) => section.tabs.length > 0)
+  const activeTabAllowed = TAB_GROUPS.some((section) => section.tabs.some((tab) => tab.id === itTab))
+  const fallbackTabId = TAB_GROUPS[0]?.tabs[0]?.id || 'overview'
+
+  useEffect(() => {
+    if (activeTabAllowed) return
+    setItTab(fallbackTabId)
+    setOpenTabGroup(null)
+  }, [activeTabAllowed, fallbackTabId])
 
   const employeeRoles = ['admin', 'manager', 'it', 'accountant', 'board_member']
   const filteredDirectoryMembers = itTab === 'employees'
@@ -1519,22 +1535,27 @@ export function AdminPanel({
                               {betaAiDraft.error && <small className="field-error">{betaAiDraft.error}</small>}
                             </div>}
 
-                            {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">
-                              <span className="it-user-detail-label">Trademark specialist</span>
-                              <button
-                                type="button"
-                                className={member.trademarkEditAccess ? 'primary-button' : 'ghost-button'}
-                                onClick={async () => {
-                                  try {
-                                    await onAdminUserAction({ action: 'set-trademark-edit-access', userId: member.id, email: member.email, enabled: !member.trademarkEditAccess })
-                                  } catch (error) {
-                                    setNewUserStatus({ saving: false, message: '', error: error.message })
-                                  }
-                                }}
-                              >
-                                {member.trademarkEditAccess ? 'Editing granted' : 'Grant editing access'}
-                              </button>
-                              <small className="muted">Only grant this to a trained trademark/legal specialist.</small>
+                            {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group it-user-detail-stack">
+                              <span className="it-user-detail-label">Platform category permissions</span>
+                              <div className="chip-row">
+                                {PLATFORM_ACCESS_CONTROLS.filter((control) => control.roles.includes(member.role)).map((control) => (
+                                  <button
+                                    key={control.field}
+                                    type="button"
+                                    className={member[control.field] ? 'primary-button' : 'ghost-button'}
+                                    onClick={async () => {
+                                      try {
+                                        await onAdminUserAction({ action: control.action, userId: member.id, email: member.email, enabled: !member[control.field] })
+                                      } catch (error) {
+                                        setNewUserStatus({ saving: false, message: '', error: error.message })
+                                      }
+                                    }}
+                                  >
+                                    {member[control.field] ? `${control.label} granted` : `Grant ${control.label}`}
+                                  </button>
+                                ))}
+                              </div>
+                              <small className="muted">Grant only the Platform categories this staff member needs for their work. They must sign out and back in after a permission change.</small>
                             </div>}
 
                             {isFullAdmin && (member.isBoardMember || member.role === 'board_member' || member.id === currentUser?.id) && <div className="it-user-detail-group">
@@ -1589,42 +1610,6 @@ export function AdminPanel({
                                 {member.isBoardMember ? 'Board Member enabled' : 'Add Board Member role'}
                               </button>
                               <small className="muted">Board Membership can coexist with Admin and payroll. Set the percentage above after enabling.</small>
-                            </div>}
-
-                            {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">
-                              <span className="it-user-detail-label">Developer Apps specialist</span>
-                              <button
-                                type="button"
-                                className={member.developerAppEditAccess ? 'primary-button' : 'ghost-button'}
-                                onClick={async () => {
-                                  try {
-                                    await onAdminUserAction({ action: 'set-developer-app-edit-access', userId: member.id, email: member.email, enabled: !member.developerAppEditAccess })
-                                  } catch (error) {
-                                    setNewUserStatus({ saving: false, message: '', error: error.message })
-                                  }
-                                }}
-                              >
-                                {member.developerAppEditAccess ? 'Editing granted' : 'Grant editing access'}
-                              </button>
-                              <small className="muted">Only grant this to a trusted provider-credentials specialist.</small>
-                            </div>}
-
-                            {isFullAdmin && ['it', 'manager'].includes(member.role) && <div className="it-user-detail-group">
-                              <span className="it-user-detail-label">Company Email &amp; SMTP editing</span>
-                              <button
-                                type="button"
-                                className={member.companyEmailEditAccess ? 'primary-button' : 'ghost-button'}
-                                onClick={async () => {
-                                  try {
-                                    await onAdminUserAction({ action: 'set-company-email-edit-access', userId: member.id, email: member.email, enabled: !member.companyEmailEditAccess })
-                                  } catch (error) {
-                                    setNewUserStatus({ saving: false, message: '', error: error.message })
-                                  }
-                                }}
-                              >
-                                {member.companyEmailEditAccess ? 'Email editing granted' : 'Grant email editing access'}
-                              </button>
-                              <small className="muted">Allows this technician or manager to modify Microsoft 365 passwords, SMTP server routing, and ticket alert parameters.</small>
                             </div>}
 
                             {isFullAdmin && <div className="it-user-detail-group">

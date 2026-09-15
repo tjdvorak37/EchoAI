@@ -2063,6 +2063,10 @@ function App() {
           trademarkEditAccess: result.profile.trademark_edit_access === true,
           developerAppEditAccess: result.profile.developer_app_edit_access === true,
           companyEmailEditAccess: result.profile.company_email_edit_access === true,
+          licenseEditAccess: result.profile.license_edit_access === true,
+          integrationsEditAccess: result.profile.integrations_edit_access === true,
+          aiOperationsEditAccess: result.profile.ai_operations_edit_access === true,
+          siteControlsEditAccess: result.profile.site_controls_edit_access === true,
           profitSharePercent: Number(result.profile.profit_share_percent || 0),
           isBoardMember: result.profile.is_board_member === true || result.profile.role === 'board_member',
         },
@@ -2085,6 +2089,30 @@ function App() {
     if (action === 'set-company-email-edit-access' && result?.profile) {
       setTeamMembers((prev) => prev.map((member) => (
         member.id === userId ? { ...member, companyEmailEditAccess: result.profile.company_email_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-license-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, licenseEditAccess: result.profile.license_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-integrations-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, integrationsEditAccess: result.profile.integrations_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-ai-operations-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, aiOperationsEditAccess: result.profile.ai_operations_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-site-controls-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, siteControlsEditAccess: result.profile.site_controls_edit_access === true } : member
       )))
     }
 
