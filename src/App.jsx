@@ -12,6 +12,7 @@ import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
 import { socialIntegrationService } from './services/socialIntegrationService'
 import { financeService } from './services/financeService'
+import { analyticsService } from './services/analyticsService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import echoMascot from './assets/echo-mascot.svg'
 import { CalendarDays } from 'lucide-react'
@@ -1879,6 +1880,10 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    analyticsService.trackEvent({ session, eventType: 'navigation', eventName: activeTab, route: activeTab }).catch(() => {})
+  }, [activeTab, session])
+
   const handleAssetFileDrop = async (event) => {
     event.preventDefault()
     event.stopPropagation()
@@ -2058,6 +2063,7 @@ function App() {
 
   const openSupportModal = () => {
     if (supportCloseTimerRef.current) window.clearTimeout(supportCloseTimerRef.current)
+    analyticsService.trackEvent({ session, eventType: 'support', eventName: 'opened_support_modal', route: activeTab }).catch(() => {})
     setSupportError('')
     setSupportSuccess('')
     setSupportTicket({
