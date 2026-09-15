@@ -1535,6 +1535,38 @@ function App() {
     }
   }
 
+  const handleRepostNow = async (post) => {
+    setSchedulerError('')
+    const channels = post.channels || []
+    if (!channels.length) {
+      setSchedulerError('Select at least one connected channel before reposting.')
+      return
+    }
+
+    const invalidSelectedChannels = channels.filter((channel) => {
+      const linkedAccount = connectedAccounts.find((account) => account.platform.toLowerCase() === channel)
+      return !linkedAccount || linkedAccount.status !== 'healthy'
+    })
+
+    if (invalidSelectedChannels.length) {
+      setSchedulerError(`Complete OAuth for ${invalidSelectedChannels.join(', ')} before reposting.`)
+      return
+    }
+
+    try {
+      const repost = await platformService.postNow({
+        campaign: post.campaign ? `Repost: ${post.campaign}` : 'Repost',
+        message: post.message || '',
+        imageIdea: post.imageIdea || '',
+        channels,
+        media: post.media || [],
+      })
+      setScheduledPosts((prev) => [repost, ...prev])
+    } catch (error) {
+      setSchedulerError(error.message)
+    }
+  }
+
   const handleGenerateAi = async () => {
     if (!aiInput.trim()) {
       return
@@ -4098,6 +4130,7 @@ function App() {
               handleComposerChange={handleComposerChange}
               handleSchedulePost={handleSchedulePost}
               handlePostNow={handlePostNow}
+              handleRepostNow={handleRepostNow}
               handleDeleteScheduledPost={handleDeleteScheduledPost}
               scheduledPosts={scheduledPosts}
               connectedAccounts={connectedAccounts}
