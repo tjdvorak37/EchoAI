@@ -8,6 +8,7 @@ import { PricingProfitabilityPanel } from './PricingProfitabilityPanel'
 import { CompanyEmailPanel } from './CompanyEmailPanel'
 import { AnalyticsPanel } from './AnalyticsPanel'
 import { InternalForumPanel } from './InternalForumPanel'
+import { ProjectBoardPanel } from './ProjectBoardPanel'
 import { internalForumService } from '../services/internalForumService'
 import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
@@ -456,6 +457,7 @@ export function AdminPanel({
         { id: 'overview', label: '📊 Overview', hint: 'Snapshot of open tickets, plan mix, and system health' },
         { id: 'analytics', label: '📈 Analytics', hint: 'User retention, tool usage, navigation, and churn signals' },
         { id: 'forum', label: forumTabLabel, hint: 'Training documents, company updates, and staff chat' },
+        { id: 'projects', label: '🗂️ Project Board', hint: 'Internal projects, tasks, owners, and completion review' },
         { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}`, hint: 'Respond to and manage customer support tickets' },
       ],
     },
@@ -487,6 +489,7 @@ export function AdminPanel({
         { id: 'overview', label: '📊 Service overview', hint: 'Snapshot of open tickets and account health' },
         { id: 'analytics', label: '📈 Analytics', hint: 'User retention, tool usage, navigation, and churn signals' },
         { id: 'forum', label: forumTabLabel, hint: 'Training documents, company updates, and staff chat' },
+        { id: 'projects', label: '🗂️ Project Board', hint: 'Internal projects, tasks, owners, and completion review' },
         { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}`, hint: 'Respond to and manage customer support tickets' },
       ],
     },
@@ -840,6 +843,8 @@ export function AdminPanel({
         {itTab === 'analytics' && <AnalyticsPanel tickets={tickets} />}
 
   {itTab === 'forum' && <InternalForumPanel currentUser={currentUser} teamMembers={teamMembers} onUnreadChange={setForumUnreadCount} />}
+
+  {itTab === 'projects' && <ProjectBoardPanel currentUser={currentUser} teamMembers={teamMembers} />}
 
         {itTab === 'licenses' && (
           <div>
