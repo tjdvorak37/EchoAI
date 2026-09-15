@@ -179,6 +179,7 @@ export function AdminPanel({
   const [openTabGroup, setOpenTabGroup] = useState(null)
   const tabNavRef = useRef(null)
   const [ticketOpen, setTicketOpen] = useState(null)
+  const [openTicketIds, setOpenTicketIds] = useState([])
   const [replyDraft, setReplyDraft] = useState('')
   const [licenseNote, setLicenseNote] = useState({})
   const [quoteTicketId, setQuoteTicketId] = useState('')
@@ -623,6 +624,31 @@ export function AdminPanel({
       setTicketFilter((prev) => ({ ...prev, assignee: 'all', status: 'all' }))
     }
   }
+
+  const openTicketWorkspace = (ticket) => {
+    if (!ticket) return
+    setOpenTicketIds((current) => current.includes(ticket.id) ? current : [...current, ticket.id])
+    setTicketOpen(ticket)
+    setReplyDraft('')
+  }
+
+  const closeTicketWorkspace = (ticketId) => {
+    setOpenTicketIds((current) => {
+      const next = current.filter((id) => id !== ticketId)
+      if (ticketOpen?.id === ticketId) {
+        const nextTicket = tickets.find((ticket) => ticket.id === next[next.length - 1]) || null
+        setTicketOpen(nextTicket)
+        setReplyDraft('')
+      }
+      return next
+    })
+  }
+
+  const selectedCustomerInfo = ticketOpen ? [
+    ticketOpen.userFullName,
+    ticketOpen.userEmail,
+    ticketOpen.companyName,
+  ].filter(Boolean) : []
 
   const refreshTickets = async () => {
     setTicketRefresh({ loading: true, error: '' })
@@ -1071,285 +1097,149 @@ export function AdminPanel({
         )}
 
         {itTab === 'tickets' && (
-          <div className="it-tickets-layout">
-            <div className="it-ticket-list">
-              <Section title="Support tickets">
-                <div className="it-ticket-filters">
-                  <div className="it-ticket-toolbar">
-                  <div className="it-ticket-view-tabs" role="tablist" aria-label="Ticket views">
-                    <button
-                      type="button"
-                      className={ticketView === 'active' ? 'active' : ''}
-                      onClick={() => {
-                        setTicketView('active')
-                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
-                        setTicketOpen(null)
-                      }}
-                    >
-                      All active
+          <div className="ticket-workspace-page">
+            <div className="workspace-tabs ticket-workspace-tabs">
+              <button type="button" className={`workspace-tab ${!ticketOpen ? 'workspace-tab-active' : ''}`} onClick={() => { setTicketOpen(null); setReplyDraft('') }}>Queue</button>
+              {openTicketIds.map((ticketId) => {
+                const tabTicket = tickets.find((ticket) => ticket.id === ticketId)
+                if (!tabTicket) return null
+                return (
+                  <span key={ticketId} className="workspace-tab-wrap">
+                    <button type="button" className={`workspace-tab ${ticketOpen?.id === ticketId ? 'workspace-tab-active' : ''}`} onClick={() => { setTicketOpen(tabTicket); setReplyDraft('') }}>
+                      {tabTicket.subject || ticketId}
                     </button>
-                    <button
-                      type="button"
-                      className={ticketView === 'new' ? 'active' : ''}
-                      onClick={() => {
-                        setTicketView('new')
-                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
-                        setTicketOpen(null)
-                      }}
-                    >
-                      New ({newTickets})
-                    </button>
-                    <button
-                      type="button"
-                      className={ticketView === 'mine' ? 'active' : ''}
-                      onClick={() => {
-                        setTicketView('mine')
-                        setTicketFilter((prev) => ({ ...prev, assignee: 'all', status: 'all' }))
-                        setTicketOpen(null)
-                      }}
-                    >
-                      My queue ({myOpenTickets})
-                    </button>
-                    <button
-                      type="button"
-                      className={ticketView === 'history' ? 'active' : ''}
-                      onClick={() => {
-                        setTicketView('history')
-                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
-                        setTicketOpen(null)
-                      }}
-                    >
-                      History ({tickets.filter((ticket) => ticket.status === 'closed').length})
-                    </button>
-                  </div>
-                    <button type="button" className="ghost-button" onClick={refreshTickets} disabled={ticketRefresh.loading}>
-                      {ticketRefresh.loading ? 'Refreshing...' : 'Refresh tickets'}
-                    </button>
-                  </div>
-                  {ticketRefresh.error && <p className="auth-message auth-error">{ticketRefresh.error}</p>}
-                  <input
-                    type="text"
-                    value={ticketFilter.search}
-                    onChange={(event) => setTicketFilter((prev) => ({ ...prev, search: event.target.value }))}
-                    placeholder="Search tickets, people, tags..."
-                  />
-                  <div className="it-ticket-filter-row">
-                    <select value={ticketFilter.status} onChange={(event) => setTicketFilter((prev) => ({ ...prev, status: event.target.value }))}>
-                      <option value="all">All statuses</option>
-                      <option value="new">New</option>
-                      <option value="triage">In triage</option>
-                      <option value="in_progress">In progress</option>
-                      <option value="waiting_customer">Waiting on customer</option>
-                      <option value="escalated">Escalated</option>
-                      {ticketView === 'active' && <option value="resolved">Resolved</option>}
-                      {ticketView === 'history' && <option value="closed">Closed</option>}
-                    </select>
-                    <select value={ticketFilter.priority} onChange={(event) => setTicketFilter((prev) => ({ ...prev, priority: event.target.value }))}>
-                      <option value="all">All priorities</option>
-                      <option value="critical">Critical</option>
-                      <option value="high">High</option>
-                      <option value="medium">Medium</option>
-                      <option value="low">Low</option>
-                    </select>
-                    <select value={ticketFilter.queue} onChange={(event) => setTicketFilter((prev) => ({ ...prev, queue: event.target.value }))}>
-                      <option value="all">All queues</option>
-                      {ticketQueues.filter((queue) => queue !== 'all').map((queue) => (
-                        <option key={queue} value={queue}>{queue}</option>
-                      ))}
-                    </select>
-                    <select value={ticketFilter.assignee} onChange={(event) => setTicketFilter((prev) => ({ ...prev, assignee: event.target.value }))}>
-                      <option value="all">All assignees</option>
-                      {ticketAssignees.map((assignee) => (
-                        <option key={assignee} value={assignee}>{assignee}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="it-ticket-stats">
-                  {[
-                    { label: 'Open', value: tickets.filter((t) => ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated'].includes(t.status)).length },
-                    { label: 'Mine', value: myOpenTickets },
-                    { label: 'Critical', value: tickets.filter((t) => t.priority === 'critical').length },
-                    { label: 'Waiting', value: tickets.filter((t) => t.status === 'waiting_customer').length },
-                  ].map((stat) => (
-                    <div key={stat.label} className="it-ticket-stat">
-                      <strong>{stat.value}</strong>
-                      <span>{stat.label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {visibleTickets.map((t) => (
-                  <div
-                    key={t.id}
-                    className={`it-row it-ticket-row ${ticketOpen?.id === t.id ? 'active' : ''}`}
-                    onClick={() => setTicketOpen(tickets.find((tk) => tk.id === t.id))}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div>
-                      <p style={{ fontWeight: 600 }}>{t.subject}</p>
-                      <span>
-                        {t.userFullName} • {t.category} • {t.queue || 'unassigned queue'} • {t.assignee || 'Unassigned'} • {new Date(t.createdAt).toLocaleDateString()}
-                      </span>
-                      {t.tags?.length > 0 && (
-                        <div className="it-ticket-tags">
-                          {t.tags.map((tag) => <span key={`${t.id}-${tag}`} className="it-tag">{tag}</span>)}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      <StatusBadge value={t.priority} />
-                      <StatusBadge value={t.status} />
-                      {isTicketActionable(t.status) && t.assigneeId !== currentUser?.id && (
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            takeOverTicket(t)
-                          }}
-                        >
-                          Take over
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {filteredTickets.length === 0 && <p className="muted">No tickets match this filter.</p>}
-                {filteredTickets.length > TICKETS_PER_PAGE && (
-                  <div className="it-ticket-pagination">
-                    <span>Showing {(safeTicketPage - 1) * TICKETS_PER_PAGE + 1}-{Math.min(safeTicketPage * TICKETS_PER_PAGE, filteredTickets.length)} of {filteredTickets.length}</span>
-                    <div>
-                      <button type="button" className="ghost-button" disabled={safeTicketPage === 1} onClick={() => setTicketPage((page) => Math.max(1, page - 1))}>Previous</button>
-                      <button type="button" className="ghost-button" disabled={safeTicketPage === ticketPageCount} onClick={() => setTicketPage((page) => Math.min(ticketPageCount, page + 1))}>Next</button>
-                    </div>
-                  </div>
-                )}
-              </Section>
+                    <button type="button" className="workspace-tab-close" onClick={() => closeTicketWorkspace(ticketId)} aria-label={`Close ${tabTicket.subject}`}>×</button>
+                  </span>
+                )
+              })}
+              <button type="button" className="workspace-reset-btn" onClick={() => { setOpenTicketIds([]); setTicketOpen(null); setReplyDraft('') }}>Reset Workspace</button>
             </div>
 
-            {ticketOpen && (
-              <div className="it-ticket-detail">
-                <div className="it-ticket-detail-header">
-                  <div>
-                    <h4>{ticketOpen.subject}</h4>
-                    <span>{ticketOpen.userFullName} ({ticketOpen.userEmail}) • {ticketOpen.category} • {ticketOpen.queue || 'unassigned queue'}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <StatusBadge value={ticketOpen.priority} />
-                    <StatusBadge value={ticketOpen.status} />
-                  </div>
-                </div>
+            {ticketRefresh.error && <p className="auth-message auth-error">{ticketRefresh.error}</p>}
 
-                <div className="it-ticket-meta-grid">
-                  <div><span>Owner</span><strong>{ticketOpen.assignee || 'Unassigned'}</strong></div>
-                  <div><span>Customer</span><strong>{ticketOpen.customerTier || 'standard'}</strong></div>
-                  <div><span>Due</span><strong>{ticketOpen.dueAt ? new Date(ticketOpen.dueAt).toLocaleDateString() : 'No due date'}</strong></div>
-                  <div><span>Updated</span><strong>{new Date(ticketOpen.updatedAt || ticketOpen.createdAt).toLocaleString()}</strong></div>
-                </div>
-
-                <div className="it-ticket-actions-inline">
-                  {isTicketActionable(ticketOpen.status) && ticketOpen.assigneeId !== currentUser?.id && (
-                    <button type="button" className="primary-button" onClick={() => takeOverTicket(ticketOpen)}>
-                      Take over ticket
-                    </button>
+            <div className="ticket-workspace-body">
+              <aside className="workspace-pane ticket-workspace-left">
+                <div className="workspace-pane-header"><strong>{ticketOpen ? 'Ticket Controls' : 'Views'}</strong></div>
+                <div className="workspace-pane-content workspace-block-stack">
+                  {!ticketOpen && (
+                    <>
+                      <section className="workspace-block">
+                        <h2>Queue</h2>
+                        <div className="workspace-field-grid">
+                          <label>View<select value={ticketView} onChange={(event) => { setTicketView(event.target.value); setTicketOpen(null) }}><option value="active">All active</option><option value="new">New tickets</option><option value="mine">My queue</option><option value="history">History</option></select></label>
+                          <label>Status<select value={ticketFilter.status} onChange={(event) => setTicketFilter((prev) => ({ ...prev, status: event.target.value }))}><option value="all">All statuses</option><option value="new">New</option><option value="triage">In triage</option><option value="in_progress">In progress</option><option value="waiting_customer">Waiting on customer</option><option value="escalated">Escalated</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
+                          <label>Queue<select value={ticketFilter.queue} onChange={(event) => setTicketFilter((prev) => ({ ...prev, queue: event.target.value }))}><option value="all">All queues</option>{ticketQueues.filter((queue) => queue !== 'all').map((queue) => <option key={queue} value={queue}>{queue}</option>)}</select></label>
+                          <label>Assigned to<select value={ticketFilter.assignee} onChange={(event) => setTicketFilter((prev) => ({ ...prev, assignee: event.target.value }))}><option value="all">All assignees</option>{ticketAssignees.map((assignee) => <option key={assignee} value={assignee}>{assignee}</option>)}</select></label>
+                        </div>
+                      </section>
+                      <section className="workspace-block">
+                        <div className="ticket-control-row"><span>Open</span><strong>{tickets.filter((t) => ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated'].includes(t.status)).length}</strong></div>
+                        <div className="ticket-control-row"><span>New</span><strong>{newTickets}</strong></div>
+                        <div className="ticket-control-row"><span>Mine</span><strong>{myOpenTickets}</strong></div>
+                        <button type="button" className="primary-button" onClick={refreshTickets} disabled={ticketRefresh.loading}>{ticketRefresh.loading ? 'Refreshing...' : 'Refresh tickets'}</button>
+                      </section>
+                    </>
                   )}
-                  <select
-                    value={ticketOpen.status}
-                    onChange={(event) => updateTicketField(ticketOpen.id, { status: event.target.value })}
-                  >
-                    <option value="new">New</option>
-                    <option value="triage">In triage</option>
-                    <option value="in_progress">In progress</option>
-                    <option value="waiting_customer">Waiting on customer</option>
-                    <option value="escalated">Escalated</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                  <select
-                    value={ticketOpen.priority}
-                    onChange={(event) => updateTicketField(ticketOpen.id, { priority: event.target.value })}
-                  >
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                  <select
-                    value={ticketOpen.assigneeId || ''}
-                    onChange={(event) => updateTicketField(ticketOpen.id, { assigneeId: event.target.value })}
-                  >
-                    <option value="">Unassigned</option>
-                    {teamMembers.filter((member) => ['admin', 'manager', 'it'].includes(member.role)).map((member) => (
-                      <option key={member.id} value={member.id}>{member.fullName || member.email}</option>
-                    ))}
-                  </select>
+
+                  {ticketOpen && (
+                    <>
+                      <section className="workspace-block">
+                        <h2>{ticketOpen.id}</h2>
+                        <div className="ticket-control-card">
+                          <strong>{ticketOpen.assignee || 'Unassigned'}</strong>
+                          <span>{ticketOpen.category} / {ticketOpen.queue || 'general'}</span>
+                        </div>
+                        <div className="workspace-field-grid">
+                          <label>Status<select value={ticketOpen.status} onChange={(event) => updateTicketField(ticketOpen.id, { status: event.target.value })}><option value="new">New</option><option value="triage">In triage</option><option value="in_progress">In progress</option><option value="waiting_customer">Waiting on customer</option><option value="escalated">Escalated</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
+                          <label>Priority<select value={ticketOpen.priority} onChange={(event) => updateTicketField(ticketOpen.id, { priority: event.target.value })}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+                          <label>Assignee<select value={ticketOpen.assigneeId || ''} onChange={(event) => updateTicketField(ticketOpen.id, { assigneeId: event.target.value })}><option value="">Unassigned</option>{teamMembers.filter((member) => ['admin', 'manager', 'it'].includes(member.role)).map((member) => <option key={member.id} value={member.id}>{member.fullName || member.email}</option>)}</select></label>
+                        </div>
+                        {isTicketActionable(ticketOpen.status) && ticketOpen.assigneeId !== currentUser?.id && <button type="button" className="primary-button" onClick={() => takeOverTicket(ticketOpen)}>Take over ticket</button>}
+                        <button type="button" className="ghost-button" onClick={() => closeTicket(ticketOpen.id)}>Close ticket</button>
+                      </section>
+                      <section className="workspace-block">
+                        <h2>Tags</h2>
+                        <input value={(ticketOpen.tags || []).join(', ')} onChange={(event) => setTicketOpen((current) => ({ ...current, tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) }))} onBlur={() => updateTicketField(ticketOpen.id, { tags: ticketOpen.tags || [] })} placeholder="billing, login, security" />
+                      </section>
+                    </>
+                  )}
                 </div>
+              </aside>
 
-                <label className="it-ticket-tag-editor">
-                  Tags
-                  <input
-                    value={(ticketOpen.tags || []).join(', ')}
-                    onChange={(event) => setTicketOpen((current) => ({ ...current, tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) }))}
-                    onBlur={() => updateTicketField(ticketOpen.id, { tags: ticketOpen.tags || [] })}
-                    placeholder="billing, login, security"
-                  />
-                </label>
-
-                <div className="it-ticket-messages">
-                  {ticketOpen.messages.map((msg) => (
-                    <div key={msg.id} className={`it-ticket-msg ${msg.role === 'admin' ? 'admin' : 'user'}`}>
-                      <div className="it-ticket-msg-meta">
-                        <strong>{msg.author}</strong>
-                        <span>{new Date(msg.sentAt).toLocaleString()}</span>
+              <main className="workspace-pane ticket-workspace-center">
+                <div className="workspace-pane-header">
+                  <strong>{ticketOpen ? ticketOpen.subject : 'Main Ticket List'}</strong>
+                  <span>{ticketOpen ? ticketOpen.status : `${filteredTickets.length} tickets`}</span>
+                </div>
+                <div className="workspace-pane-content workspace-pane-content-center">
+                  {!ticketOpen && (
+                    <div className="ticket-main-list">
+                      <input className="ticket-workspace-search" type="text" value={ticketFilter.search} onChange={(event) => setTicketFilter((prev) => ({ ...prev, search: event.target.value }))} placeholder="Search tickets, people, tags..." />
+                      <div className="workspace-table-wrap">
+                        <table>
+                          <thead><tr><th>Status</th><th>Subject</th><th>Requester</th><th>Requested</th><th>Priority</th><th>Tech</th><th>Actions</th></tr></thead>
+                          <tbody>
+                            {visibleTickets.map((ticket) => (
+                              <tr key={ticket.id} className={ticketOpen?.id === ticket.id ? 'workspace-row-selected' : ''} onClick={() => openTicketWorkspace(ticket)}>
+                                <td><StatusBadge value={ticket.status} /></td>
+                                <td><strong>{ticket.subject}</strong><span>{ticket.id}</span></td>
+                                <td>{ticket.userFullName || 'No Customer'}</td>
+                                <td>{new Date(ticket.createdAt).toLocaleString()}</td>
+                                <td>{ticket.priority}</td>
+                                <td>{ticket.assignee || 'Unassigned'}</td>
+                                <td><button type="button" className="primary-button" onClick={(event) => { event.stopPropagation(); openTicketWorkspace(ticket) }}>Open</button></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                      <p>{msg.body}</p>
+                      {filteredTickets.length === 0 && <p className="muted">No tickets match this filter.</p>}
+                      {filteredTickets.length > TICKETS_PER_PAGE && <div className="it-ticket-pagination"><span>Showing {(safeTicketPage - 1) * TICKETS_PER_PAGE + 1}-{Math.min(safeTicketPage * TICKETS_PER_PAGE, filteredTickets.length)} of {filteredTickets.length}</span><div><button type="button" className="ghost-button" disabled={safeTicketPage === 1} onClick={() => setTicketPage((page) => Math.max(1, page - 1))}>Previous</button><button type="button" className="ghost-button" disabled={safeTicketPage === ticketPageCount} onClick={() => setTicketPage((page) => Math.min(ticketPageCount, page + 1))}>Next</button></div></div>}
                     </div>
-                  ))}
+                  )}
+
+                  {ticketOpen && (
+                    <div className="ticket-conversation-workspace">
+                      <section className="workspace-conversation-head">
+                        <div><h2>{ticketOpen.subject}</h2><p>{ticketOpen.id} / {ticketOpen.priority}</p></div>
+                        <StatusBadge value={ticketOpen.status} />
+                      </section>
+                      <div className="workspace-conversation-history">
+                        {ticketOpen.messages.map((msg) => <div key={msg.id} className={`it-ticket-msg ${msg.role === 'admin' ? 'admin' : 'user'}`}><div className="it-ticket-msg-meta"><strong>{msg.author}</strong><span>{new Date(msg.sentAt).toLocaleString()}</span></div><p>{msg.body}</p></div>)}
+                      </div>
+                      {isTicketActionable(ticketOpen.status) ? (
+                        <div className="workspace-conversation-compose">
+                          <h3>New Message</h3>
+                          <textarea value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder="Type your message..." rows={4} />
+                          <div className="project-quick-actions"><button type="button" className="primary-button" onClick={() => sendReply(ticketOpen.id)}>Send reply</button><button type="button" className="ghost-button" onClick={() => resolveTicket(ticketOpen.id)}>Mark resolved</button></div>
+                        </div>
+                      ) : (
+                        <div className="it-ticket-closed-notice">This ticket is {ticketOpen.status}. <button type="button" className="text-button" onClick={() => updateTicketStatus(ticketOpen.id, 'open')}>Reopen</button></div>
+                      )}
+                    </div>
+                  )}
                 </div>
+              </main>
 
-                {isTicketActionable(ticketOpen.status) && (
-                  <div className="it-ticket-reply">
-                    <textarea
-                      value={replyDraft}
-                      onChange={(e) => setReplyDraft(e.target.value)}
-                      placeholder="Type your reply..."
-                      rows={3}
-                    />
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <button type="button" className="primary-button" onClick={() => sendReply(ticketOpen.id)}>
-                        Send reply
-                      </button>
-                      <button type="button" className="ghost-button" onClick={() => resolveTicket(ticketOpen.id)}>
-                        Mark resolved
-                      </button>
-                      <button type="button" className="ghost-button" style={{ color: '#ef4444' }} onClick={() => closeTicket(ticketOpen.id)}>
-                        Close ticket
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {!isTicketActionable(ticketOpen.status) && (
-                  <div className="it-ticket-closed-notice">
-                    This ticket is {ticketOpen.status}.
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => {
-                        setTicketView('active')
-                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
-                        updateTicketStatus(ticketOpen.id, 'open')
-                      }}
-                    >
-                      Reopen
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+              <aside className="workspace-pane ticket-workspace-right">
+                <div className="workspace-pane-header"><strong>{ticketOpen ? 'Customer Information' : 'Customer Snapshot'}</strong></div>
+                <div className="workspace-pane-content workspace-block-stack">
+                  {ticketOpen ? (
+                    <section className="workspace-block">
+                      <h2>{ticketOpen.userFullName || 'No customer contact'}</h2>
+                      {selectedCustomerInfo.length === 0 ? <p className="muted">No customer contacts linked yet.</p> : selectedCustomerInfo.map((item) => <p key={item} className="muted">{item}</p>)}
+                      <div className="ticket-control-row"><span>Created</span><strong>{new Date(ticketOpen.createdAt).toLocaleString()}</strong></div>
+                      <div className="ticket-control-row"><span>Assigned</span><strong>{ticketOpen.assignee || 'Unassigned'}</strong></div>
+                    </section>
+                  ) : (
+                    <section className="workspace-block">
+                      <h2>{visibleTickets[0]?.subject || 'No ticket selected'}</h2>
+                      <p className="muted">{visibleTickets[0]?.userFullName || 'Open a ticket to view customer information.'}</p>
+                    </section>
+                  )}
+                </div>
+              </aside>
+            </div>
           </div>
         )}
 
