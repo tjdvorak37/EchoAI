@@ -380,8 +380,29 @@ main {
   margin-top: 1rem;
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
-  align-items: start;
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  min-height: 0;
+}
+
+.ticket-meta-strip,
+.project-meta-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px solid var(--ticket-line);
+  border-radius: 10px;
+  background: var(--ticket-surface-2);
+  padding: 0.55rem 0.65rem;
+  color: var(--ticket-muted);
+  font-size: 0.82rem;
+}
+
+.ticket-meta-strip span,
+.project-meta-strip span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .app-main.photo-workspace-layout {
@@ -4480,6 +4501,8 @@ main {
 
 .ticket-workspace-page .workspace-conversation-history {
   overflow: auto;
+  min-height: 120px;
+  max-height: clamp(180px, 34vh, 340px);
 }
 
 .ticket-workspace-page .workspace-conversation-compose {
@@ -5026,7 +5049,8 @@ main {
   display: grid;
   grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 0.55rem;
-  min-height: 360px;
+  align-items: start;
+  min-height: 0;
 }
 
 .project-kanban-column {
@@ -5059,6 +5083,13 @@ main {
   display: grid;
   gap: 0.45rem;
   align-content: start;
+  align-content: start;
+
+.sms-project-workspace .project-meta-strip {
+  border-color: var(--project-line);
+  background: var(--project-surface-2);
+  color: var(--project-muted);
+}
 }
 
 .project-task-card {

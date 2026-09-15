@@ -223,7 +223,7 @@ export function ProjectBoardPanel({ currentUser, teamMembers = [] }) {
               </div>}
 
               {workspaceOpen && workspaceProject && <div className="project-detail-workspace">
-                <section className="workspace-conversation-head project-detail-head"><div><h2>{workspaceProject.title}</h2><p>{brief(workspaceProject.summary, 180)}</p></div><StatusPill value={workspaceProject.status} /></section>
+                <div className="project-meta-strip"><span>{brief(workspaceProject.summary, 180)}</span><StatusPill value={workspaceProject.status} /></div>
                 <div className="project-kanban-grid">{TASK_COLUMNS.map((column) => <section key={column.id} className="project-kanban-column"><header><strong>{column.label}</strong><span>{activeProjectTasks.filter((task) => task.status === column.id).length}</span></header><div className="project-task-stack">{activeProjectTasks.filter((task) => task.status === column.id).map((task) => <article key={task.id} className="task-card project-task-card"><div className="task-head"><strong>{task.title}</strong></div><span>{task.assigneeName || 'Unassigned'}</span><select value={task.status} onChange={(event) => updateTask(task.id, { status: event.target.value })}>{TASK_COLUMNS.map((taskColumn) => <option key={taskColumn.id} value={taskColumn.id}>{taskColumn.label}</option>)}</select></article>)}</div></section>)}</div>
               </div>}
             </div>

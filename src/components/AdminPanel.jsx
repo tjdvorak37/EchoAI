@@ -1200,10 +1200,11 @@ export function AdminPanel({
 
                   {ticketOpen && (
                     <div className="ticket-conversation-workspace">
-                      <section className="workspace-conversation-head">
-                        <div><h2>{ticketOpen.subject}</h2><p>{ticketOpen.id} / {ticketOpen.priority}</p></div>
-                        <StatusBadge value={ticketOpen.status} />
-                      </section>
+                      <div className="ticket-meta-strip">
+                        <span>{ticketOpen.id}</span>
+                        <span>{ticketOpen.priority}</span>
+                        <span>{ticketOpen.assignee || 'Unassigned'}</span>
+                      </div>
                       <div className="workspace-conversation-history">
                         {ticketOpen.messages.map((msg) => <div key={msg.id} className={`it-ticket-msg ${msg.role === 'admin' ? 'admin' : 'user'}`}><div className="it-ticket-msg-meta"><strong>{msg.author}</strong><span>{new Date(msg.sentAt).toLocaleString()}</span></div><p>{msg.body}</p></div>)}
                       </div>
