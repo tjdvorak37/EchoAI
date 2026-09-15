@@ -51,6 +51,7 @@ export function PostSchedulerPanel({
   handleComposerChange,
   handleSchedulePost,
   handlePostNow,
+  handleRepostNow,
   handleDeleteScheduledPost,
   scheduledPosts = [],
   connectedAccounts = [],
@@ -60,7 +61,7 @@ export function PostSchedulerPanel({
   getStatusBadgeClass,
   schedulerError,
 }) {
-  const [activeTab, setActiveTab] = useState('composer') // 'composer' | 'queue' | 'templates'
+  const [activeTab, setActiveTab] = useState('composer') // 'composer' | 'queue' | 'reposts' | 'templates'
   const [previewPlatform, setPreviewPlatform] = useState('instagram')
   const [showPreflightModal, setShowPreflightModal] = useState(false)
   const [queueSearch, setQueueSearch] = useState('')
@@ -108,6 +109,19 @@ export function PostSchedulerPanel({
   }, [scheduledPosts, queueSearch, queueStatusFilter, queuePlatformFilter])
 
   const pendingQueueCount = scheduledPosts.filter((p) => p.status === 'scheduled' || p.status === 'pending').length
+  const repostablePosts = scheduledPosts.filter((post) => post.status === 'posted' || post.status === 'published')
+
+  const handleScheduleRepost = (post) => {
+    setComposer({
+      campaign: post.campaign ? `Repost: ${post.campaign}` : 'Repost',
+      message: post.message || '',
+      imageIdea: post.imageIdea || '',
+      scheduledAt: '',
+      channels: post.channels || [],
+      mediaAssetIds: post.media ? post.media.map((mediaItem) => mediaItem.id).filter(Boolean) : [],
+    })
+    setActiveTab('composer')
+  }
 
   const handleApplyTemplate = (template) => {
     setComposer((prev) => ({
@@ -238,6 +252,7 @@ export function PostSchedulerPanel({
           {[
             ['composer', '✏️ Post Composer & Live Preview'],
             ['queue', `📋 Scheduled Queue (${pendingQueueCount})`],
+            ['reposts', `🔁 Published/Repost Queue (${repostablePosts.length})`],
             ['templates', '💡 Quick Post Templates'],
           ].map(([key, label]) => (
             <button
@@ -719,6 +734,97 @@ export function PostSchedulerPanel({
                               🗑️ Delete
                             </button>
                           )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'reposts' && (
+          <div style={{ display: 'grid', gap: '1.15rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Published Repost Queue</h3>
+                <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.84rem' }}>
+                  Reuse previous flyers, posts, and published content without rebuilding the campaign from scratch.
+                </p>
+              </div>
+              <span className="badge info">{repostablePosts.length} repost-ready</span>
+            </div>
+
+            {repostablePosts.length === 0 ? (
+              <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '2.5rem', textAlign: 'center', color: '#64748b' }}>
+                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>🔁</span>
+                <strong>No Published Posts Ready for Repost</strong>
+                <p style={{ margin: '0.3rem 0 0', fontSize: '0.85rem' }}>Posts appear here after they are published from the scheduler.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: '0.85rem' }}>
+                {repostablePosts.map((post) => {
+                  const mediaItem = post.media && post.media.length > 0 ? post.media[0] : null
+
+                  return (
+                    <div key={post.id} className="scheduled-card">
+                      <div className="scheduled-card-header">
+                        <div>
+                          <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>{post.campaign || 'Published Post'}</strong>
+                          <small style={{ color: '#64748b', marginTop: '0.2rem', display: 'block' }}>
+                            Published: {formatScheduleTime(post.scheduledAt)}
+                          </small>
+                        </div>
+                        <span className={getStatusBadgeClass(post.status)}>{post.status.toUpperCase()}</span>
+                      </div>
+
+                      <div className="scheduled-card-body">
+                        {mediaItem && (
+                          <div className="scheduled-card-media-preview">
+                            {mediaItem.type === 'video' ? (
+                              <video src={mediaItem.previewUrl} />
+                            ) : (
+                              <img src={mediaItem.previewUrl} alt="Repost media" />
+                            )}
+                          </div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <p style={{ margin: 0, fontSize: '0.9rem', color: '#1e293b', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                            {post.message || 'Media-only post'}
+                          </p>
+                          {post.imageIdea && (
+                            <small style={{ color: '#64748b', display: 'block', marginTop: '0.35rem' }}>
+                              Visual Brief: {post.imageIdea}
+                            </small>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="scheduled-card-footer">
+                        <div className="chip-row">
+                          {(post.channels || []).map((ch) => (
+                            <span key={ch} className="badge info">{getPlatformMeta(ch)?.label || ch}</span>
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="primary-button"
+                            onClick={() => handleRepostNow?.(post)}
+                            style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }}
+                          >
+                            ⚡ Repost now
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => handleScheduleRepost(post)}
+                            style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }}
+                          >
+                            📅 Schedule repost
+                          </button>
                         </div>
                       </div>
                     </div>
