@@ -664,7 +664,9 @@ export function AdminPanel({
   useEffect(() => {
     if (itTab !== 'tickets') return undefined
     const intervalId = window.setInterval(() => {
-      handleRefreshSupportTickets().catch(() => {})
+      handleRefreshSupportTickets()
+        .then((refreshed) => setTicketOpen((current) => current ? refreshed.find((ticket) => ticket.id === current.id) || null : null))
+        .catch(() => {})
     }, 30000)
     return () => window.clearInterval(intervalId)
   }, [itTab, handleRefreshSupportTickets])

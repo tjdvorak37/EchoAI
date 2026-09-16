@@ -79,6 +79,15 @@ Deno.serve(async (request) => {
     .single()
   if (updateError) return json({ error: 'The email was sent, but the ticket could not be updated. Refresh before replying again.' }, 500, request)
 
+  const { error: messageError } = await adminClient.from('support_ticket_messages').insert({
+    ticket_id: ticket.id,
+    direction: 'staff',
+    sender_name: 'EchoAI Support',
+    sender_email: Deno.env.get('MAIL_FROM_EMAIL') || 'support@echoaipro.com',
+    body: cleanResponse,
+  })
+  if (messageError) return json({ error: 'The email was sent and the ticket updated, but its conversation history could not be saved.' }, 500, request)
+
   return json({
     id: updated.id,
     status: updated.status,

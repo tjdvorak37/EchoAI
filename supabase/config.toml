@@ -59,6 +59,10 @@ verify_jwt = false
 [functions.support-ticket-reply]
 verify_jwt = true
 
+[functions.support-ticket-inbound]
+# Microsoft 365 / Power Automate authenticates with SUPPORT_INBOUND_WEBHOOK_SECRET.
+verify_jwt = false
+
 [functions.password-reset-request]
 # Password recovery is public, but the function uses generic responses and hashed throttling.
 verify_jwt = false
