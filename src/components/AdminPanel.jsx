@@ -1213,6 +1213,19 @@ export function AdminPanel({
                       </div>
                       <div className="workspace-conversation-history">
                         {ticketOpen.messages.map((msg) => <div key={msg.id} className={`it-ticket-msg ${msg.role === 'admin' ? 'admin' : 'user'}`}><div className="it-ticket-msg-meta"><strong>{msg.author}</strong><span>{new Date(msg.sentAt).toLocaleString()}</span></div><p>{msg.body}</p></div>)}
+                        {ticketOpen.attachments?.length > 0 && (
+                          <section className="ticket-attachment-gallery" aria-label="Ticket image attachments">
+                            <h3>Attached images</h3>
+                            {ticketOpen.attachments.map((attachment) => attachment.url ? (
+                              <figure key={attachment.path}>
+                                <img src={attachment.url} alt={`Support ticket attachment: ${attachment.name}`} loading="lazy" />
+                                <figcaption>{attachment.name}</figcaption>
+                              </figure>
+                            ) : (
+                              <p key={attachment.path} className="field-error">Preview unavailable for {attachment.name}. Refresh tickets to try again.</p>
+                            ))}
+                          </section>
+                        )}
                       </div>
                       {isTicketActionable(ticketOpen.status) ? (
                         <div className="workspace-conversation-compose">
@@ -1234,7 +1247,7 @@ export function AdminPanel({
                   {ticketOpen ? (
                     <section className="workspace-block">
                       <h2>{ticketOpen.userFullName || 'No customer contact'}</h2>
-                      {selectedCustomerInfo.length === 0 ? <p className="muted">No customer contacts linked yet.</p> : selectedCustomerInfo.map((item) => <p key={item} className="muted">{item}</p>)}
+                      {selectedCustomerInfo.length === 0 ? <p className="muted">No customer contacts linked yet.</p> : selectedCustomerInfo.slice(1).map((item) => <p key={item} className="muted">{item}</p>)}
                       <div className="ticket-control-row"><span>Created</span><strong>{new Date(ticketOpen.createdAt).toLocaleString()}</strong></div>
                       <div className="ticket-control-row"><span>Assigned</span><strong>{ticketOpen.assignee || 'Unassigned'}</strong></div>
                     </section>
