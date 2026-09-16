@@ -439,7 +439,7 @@ export const sendSupportReplyEmail = async (
   const ticketReference = payload.ticketId.slice(0, 8).toUpperCase()
   const safeName = (payload.requesterName || 'there').replace(/[<>]/g, '')
   const safeResponse = payload.response.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const subject = `Re: ${payload.subject || `EchoAI support request (${ticketReference})`}`
+  const subject = `Re: [Ticket ${payload.ticketId}] ${payload.subject || 'EchoAI support request'}`
   const text = `Hi ${safeName},\n\n${payload.response}\n\nReference: ${ticketReference}\n\nEchoAI Support`
   const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:600px;margin:auto"><p>Hi ${safeName},</p><div style="white-space:pre-wrap">${safeResponse}</div><p style="color:#64748b;font-size:13px">Reference: ${ticketReference}</p><p>EchoAI Support</p></div>`
 

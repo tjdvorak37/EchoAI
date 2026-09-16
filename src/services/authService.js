@@ -1416,6 +1416,27 @@ export const authService = {
 
     if (error) throw new Error(error.message)
 
+    const ticketIds = (tickets ?? []).map((ticket) => ticket.id)
+    const messagesByTicketId = new Map()
+    if (ticketIds.length) {
+      const { data: ticketMessages } = await supabase
+        .from('support_ticket_messages')
+        .select('id, ticket_id, direction, sender_name, sender_email, body, created_at')
+        .in('ticket_id', ticketIds)
+        .order('created_at', { ascending: true })
+      for (const message of ticketMessages ?? []) {
+        const messages = messagesByTicketId.get(message.ticket_id) || []
+        messages.push({
+          id: message.id,
+          author: message.sender_name || message.sender_email || (message.direction === 'staff' ? 'EchoAI Support' : 'Requester'),
+          role: message.direction === 'staff' ? 'admin' : 'user',
+          body: message.body,
+          sentAt: message.created_at,
+        })
+        messagesByTicketId.set(message.ticket_id, messages)
+      }
+    }
+
     const profileIds = [...new Set((tickets ?? []).flatMap((ticket) => [ticket.assigned_to, ticket.user_id]).filter(Boolean))]
     let profilesById = new Map()
     if (profileIds.length) {
@@ -1466,7 +1487,7 @@ export const authService = {
       assignee: assignee?.full_name || assignee?.email || '',
       createdAt: ticket.created_at,
       updatedAt: ticket.updated_at,
-      messages: [{
+      messages: messagesByTicketId.get(ticket.id) || [{
         id: `${ticket.id}-initial`,
         author: requesterName || requesterEmail || 'Requester',
         role: 'user',
