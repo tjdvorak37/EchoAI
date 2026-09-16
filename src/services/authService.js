@@ -1416,29 +1416,48 @@ export const authService = {
 
     if (error) throw new Error(error.message)
 
-    const assigneeIds = [...new Set((tickets ?? []).map((ticket) => ticket.assigned_to).filter(Boolean))]
-    let assigneesById = new Map()
-    if (assigneeIds.length) {
-      const { data: assignees } = await supabase
+    const profileIds = [...new Set((tickets ?? []).flatMap((ticket) => [ticket.assigned_to, ticket.user_id]).filter(Boolean))]
+    let profilesById = new Map()
+    if (profileIds.length) {
+      const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
-        .in('id', assigneeIds)
-      assigneesById = new Map((assignees ?? []).map((assignee) => [assignee.id, assignee]))
+        .select('id, full_name, email, company')
+        .in('id', profileIds)
+      profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
+    }
+
+    const attachmentPaths = [...new Set((tickets ?? []).flatMap((ticket) => ticket.attachment_paths || []))]
+    let attachmentUrlsByPath = new Map()
+    if (attachmentPaths.length) {
+      const { data: signedAttachments } = await supabase.storage
+        .from('ticket-attachments')
+        .createSignedUrls(attachmentPaths, 60 * 60)
+      attachmentUrlsByPath = new Map(
+        (signedAttachments ?? []).filter((attachment) => attachment.signedUrl).map((attachment) => [attachment.path, attachment.signedUrl]),
+      )
     }
 
     return (tickets ?? []).map((ticket) => {
-      const assignee = assigneesById.get(ticket.assigned_to)
+      const assignee = profilesById.get(ticket.assigned_to)
+      const requester = profilesById.get(ticket.user_id)
+      const requesterName = ticket.requester_name || ticket.contact_name || requester?.full_name || ''
+      const requesterEmail = ticket.requester_email || ticket.contact_email || requester?.email || ''
       return {
       id: ticket.id,
       subject: ticket.subject || ticket.category,
       category: ticket.category,
       details: ticket.details,
-      userFullName: ticket.requester_name || ticket.contact_name || (ticket.user_id ? 'Authenticated user' : 'Signed-out visitor'),
-      userEmail: ticket.requester_email || ticket.contact_email || '',
-      requesterEmail: ticket.requester_email || ticket.contact_email || '',
-      companyName: ticket.company_name || '',
+      userFullName: requesterName || (ticket.user_id ? 'Authenticated user' : 'Signed-out visitor'),
+      userEmail: requesterEmail,
+      requesterEmail,
+      companyName: ticket.company_name || requester?.company || '',
       source: ticket.source || 'app',
       attachmentPaths: ticket.attachment_paths || [],
+      attachments: (ticket.attachment_paths || []).map((path) => ({
+        path,
+        name: path.split('/').pop() || 'Ticket attachment',
+        url: attachmentUrlsByPath.get(path) || '',
+      })),
       status: ticket.status === 'open' ? 'new' : ticket.status,
       priority: ticket.priority || 'medium',
       queue: ticket.queue || 'general',
@@ -1449,7 +1468,7 @@ export const authService = {
       updatedAt: ticket.updated_at,
       messages: [{
         id: `${ticket.id}-initial`,
-        author: ticket.requester_name || ticket.contact_name || ticket.requester_email || ticket.contact_email || 'Requester',
+        author: requesterName || requesterEmail || 'Requester',
         role: 'user',
         body: ticket.details,
         sentAt: ticket.created_at,
