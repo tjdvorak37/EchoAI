@@ -107,6 +107,7 @@ Deno.serve(async (request) => {
     .select('id, user_id, requester_email, contact_email, status, created_at')
     .order('created_at', { ascending: false })
     .limit(50)
+
   if (fullReference) ticketQuery = ticketQuery.eq('id', fullReference)
 
   const { data: candidates, error: ticketError } = await ticketQuery
@@ -114,11 +115,18 @@ Deno.serve(async (request) => {
 
   const matchesSender = (ticket: Record<string, unknown>) => {
     const ticketEmail = normalizeEmail(ticket.requester_email || ticket.contact_email)
-    return ticketEmail === senderEmail || (senderProfile?.id && ticket.user_id === senderProfile.id)
+    const sameUser = senderProfile?.id && ticket.user_id === senderProfile.id
+    return ticketEmail === senderEmail || sameUser
   }
-  const ticket = (candidates || []).find((candidate) =>
-    matchesSender(candidate) && (!shortReference || String(candidate.id).toLowerCase().startsWith(shortReference)),
-  )
+
+  const referenceMatches = (candidates || []).filter((candidate) => {
+    if (!shortReference) return true
+    return String(candidate.id).toLowerCase().startsWith(shortReference)
+  })
+
+  const ticket = referenceMatches.find((candidate) => matchesSender(candidate))
+    ?? (referenceMatches.length === 1 ? referenceMatches[0] : null)
+
   if (!ticket) return json({ error: 'No support ticket matched this sender and reference.' }, 404, request)
 
   const { error: insertError } = await adminClient.from('support_ticket_messages').insert({
