@@ -2,18 +2,15 @@
 
 Customer email replies reach the `support@echoaipro.com` Microsoft 365 mailbox. A Power Automate flow must forward those messages to EchoAI so they can be added to the matching ticket.
 
-## 1. Configure the webhook secret
+## 1. Configure inbound settings in EchoAI
 
-Choose a new random secret and enter it directly in the terminal. Do not commit it or place it in client-side environment variables.
+1. Sign in to EchoAI as Super Admin or a technician with **Company Email & SMTP** editing access.
+2. Open **IT / Admin Backend > Platform > Company Email & SMTP > Mailbox & Email Password**.
+3. In **Inbound Ticket Replies**, enter the Microsoft 365 support mailbox address.
+4. Enter a new random webhook key containing at least 24 characters.
+5. Enable **Accept customer email replies into support tickets** and save.
 
-```bash
-read -rsp "Inbound webhook secret: " SUPPORT_INBOUND_WEBHOOK_SECRET
-echo
-supabase secrets set SUPPORT_INBOUND_WEBHOOK_SECRET="$SUPPORT_INBOUND_WEBHOOK_SECRET"
-unset SUPPORT_INBOUND_WEBHOOK_SECRET
-```
-
-Use the same value in the Power Automate HTTP action's `x-webhook-secret` header.
+The key is stored as a one-way hash and cannot be displayed after saving. Use the same value in the Power Automate HTTP action's `x-webhook-secret` header. When rotating it later, update the panel and Power Automate together.
 
 ## 2. Create the Power Automate flow
 

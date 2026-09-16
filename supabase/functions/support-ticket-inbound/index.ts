@@ -35,15 +35,32 @@ const secureEquals = (left: string, right: string) => {
   return mismatch === 0
 }
 
+const sha256 = async (value: string) => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
 Deno.serve(async (request) => {
   if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405, request)
 
-  const expectedSecret = Deno.env.get('SUPPORT_INBOUND_WEBHOOK_SECRET') || ''
+  const adminClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    { auth: { persistSession: false } },
+  )
+  const { data: inboundConfig } = await adminClient
+    .from('support_inbound_config')
+    .select('enabled, webhook_secret_hash')
+    .eq('id', 'default')
+    .maybeSingle()
+  if (inboundConfig?.enabled !== true) return json({ error: 'Inbound support email is disabled.' }, 503, request)
+
+  const expectedSecretHash = inboundConfig?.webhook_secret_hash || ''
   const suppliedSecret = request.headers.get('x-webhook-secret')
     || request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')
     || ''
-  if (!expectedSecret) return json({ error: 'Inbound support email is not configured.' }, 503, request)
-  if (!secureEquals(suppliedSecret, expectedSecret)) return json({ error: 'Invalid webhook credentials.' }, 401, request)
+  if (!expectedSecretHash) return json({ error: 'Inbound support email is not configured.' }, 503, request)
+  if (!secureEquals(await sha256(suppliedSecret), expectedSecretHash)) return json({ error: 'Invalid webhook credentials.' }, 401, request)
 
   const payload = await request.json().catch(() => null) as Record<string, unknown> | null
   if (!payload) return json({ error: 'A JSON email payload is required.' }, 400, request)
@@ -64,12 +81,6 @@ Deno.serve(async (request) => {
   const body = trimQuotedReply(rawBody.trim() || stripHtml(htmlBody) || String(payload.bodyPreview || ''))
   const providerMessageId = String(payload.messageId || payload.internetMessageId || payload.id || '').trim().slice(0, 500) || null
   if (!senderEmail || !body) return json({ error: 'Sender email and message body are required.' }, 400, request)
-
-  const adminClient = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    { auth: { persistSession: false } },
-  )
 
   if (providerMessageId) {
     const { data: existing } = await adminClient

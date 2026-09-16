@@ -102,6 +102,41 @@
   line-height: 1.5;
 }
 
+.company-email-inbound-settings {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.company-email-inbound-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #172033;
+  font-weight: 600;
+}
+
+.company-email-inbound-toggle input {
+  width: 18px;
+  height: 18px;
+}
+
+.company-email-inbound-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.company-email-success {
+  color: #166534;
+  font-weight: 600;
+}
+
 .company-email-guide-step {
   display: flex;
   gap: 0.75rem;

@@ -93,6 +93,8 @@ Deno.serve(async (request) => {
       'update-ticket-notification-config',
       'test-ticket-notification',
       'notify-ticket-created',
+      'get-ticket-inbound-config',
+      'update-ticket-inbound-config',
     ])
     if (!action || (!globalActions.has(action) && !userId)) {
       return json({ error: 'An action and userId are required.' }, 400, request)
@@ -101,6 +103,77 @@ Deno.serve(async (request) => {
     if (action === 'get-ticket-notification-config') {
       const config = await getNotificationConfig(adminClient)
       return json({ config, canEdit: canEditEmail }, 200, request)
+    }
+
+    if (action === 'get-ticket-inbound-config') {
+      if (!canEditEmail) {
+        return json({ error: 'Company Email editing access is required to view inbound mailbox settings.' }, 403, request)
+      }
+      const { data: inboundConfig, error: inboundError } = await adminClient
+        .from('support_inbound_config')
+        .select('inbound_email, enabled, webhook_secret_hash')
+        .eq('id', 'default')
+        .maybeSingle()
+      if (inboundError) return json({ error: inboundError.message }, 500, request)
+      return json({
+        config: {
+          inboundEmail: inboundConfig?.inbound_email || 'support@echoaipro.com',
+          inboundEnabled: inboundConfig?.enabled === true,
+          hasInboundWebhookSecret: Boolean(inboundConfig?.webhook_secret_hash),
+        },
+        canEdit: canEditEmail,
+      }, 200, request)
+    }
+
+    if (action === 'update-ticket-inbound-config') {
+      if (!canEditEmail) {
+        return json({ error: 'Super Admin permission or granted Company Email editing access is required to modify inbound mailbox settings.' }, 403, request)
+      }
+
+      const inboundEmail = String(body.inboundEmail || '').trim().toLowerCase()
+      const inboundWebhookSecret = typeof body.inboundWebhookSecret === 'string' ? body.inboundWebhookSecret.trim() : ''
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inboundEmail)) {
+        return json({ error: 'Enter a valid inbound support mailbox address.' }, 400, request)
+      }
+      if (inboundWebhookSecret && inboundWebhookSecret.length < 24) {
+        return json({ error: 'The inbound webhook key must be at least 24 characters.' }, 400, request)
+      }
+
+      const updateData: Record<string, unknown> = {
+        inbound_email: inboundEmail,
+        enabled: body.inboundEnabled === true,
+        updated_by: caller.user.id,
+        updated_at: new Date().toISOString(),
+      }
+      if (inboundWebhookSecret) {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inboundWebhookSecret))
+        updateData.webhook_secret_hash = Array.from(new Uint8Array(digest))
+          .map((value) => value.toString(16).padStart(2, '0'))
+          .join('')
+      }
+
+      const { data: saved, error: saveError } = await adminClient
+        .from('support_inbound_config')
+        .update(updateData)
+        .eq('id', 'default')
+        .select('inbound_email, enabled, webhook_secret_hash')
+        .single()
+      if (saveError) return json({ error: saveError.message }, 500, request)
+
+      await adminClient.from('admin_user_audit').insert({
+        actor_id: caller.user.id,
+        target_user_id: null,
+        action: inboundWebhookSecret ? 'rotated_support_inbound_key' : 'updated_support_inbound_config',
+        detail: { inbound_email: saved.inbound_email, inbound_enabled: saved.enabled },
+      })
+
+      return json({
+        config: {
+          inboundEmail: saved.inbound_email,
+          inboundEnabled: saved.enabled,
+          hasInboundWebhookSecret: Boolean(saved.webhook_secret_hash),
+        },
+      }, 200, request)
     }
 
     if (action === 'update-ticket-notification-config') {
