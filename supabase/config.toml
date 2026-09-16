@@ -56,6 +56,9 @@ verify_jwt = false
 # Public support intake validates and rate-limits requests inside the function.
 verify_jwt = false
 
+[functions.support-ticket-reply]
+verify_jwt = true
+
 [functions.password-reset-request]
 # Password recovery is public, but the function uses generic responses and hashed throttling.
 verify_jwt = false

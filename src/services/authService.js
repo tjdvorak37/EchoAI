@@ -1453,7 +1453,13 @@ export const authService = {
         role: 'user',
         body: ticket.details,
         sentAt: ticket.created_at,
-      }],
+      }, ...(ticket.admin_response ? [{
+        id: `${ticket.id}-response`,
+        author: 'EchoAI Support',
+        role: 'admin',
+        body: ticket.admin_response,
+        sentAt: ticket.responded_at || ticket.updated_at,
+      }] : [])],
       adminResponse: ticket.admin_response || '',
       }
     })
@@ -1461,17 +1467,17 @@ export const authService = {
 
   async respondToSupportTicket({ ticketId, response }) {
     if (!ticketId || !response?.trim()) throw new Error('A ticket response is required.')
-    if (!isSupabaseConfigured) return { id: ticketId, status: 'in_progress', adminResponse: response.trim() }
+    if (!isSupabaseConfigured) return { id: ticketId, status: 'waiting_customer', adminResponse: response.trim() }
 
-    const { data, error } = await supabase
-      .from('support_tickets')
-      .update({ admin_response: response.trim(), responded_at: new Date().toISOString(), status: 'in_progress' })
-      .eq('id', ticketId)
-      .select('*')
-      .single()
+    const { data, error } = await supabase.functions.invoke('support-ticket-reply', {
+      body: { ticketId, response: response.trim() },
+    })
 
-    if (error) throw new Error(error.message)
-    return { id: data.id, status: data.status, adminResponse: data.admin_response }
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message)
+    }
+    return data
   },
 
   async updateSupportTicket({ ticketId, status, priority, queue, tags, assigneeId }) {
