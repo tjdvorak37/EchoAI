@@ -1326,6 +1326,34 @@ export const authService = {
     return updatePayload
   },
 
+  async getTicketInboundConfig() {
+    const defaults = {
+      inboundEmail: 'support@echoaipro.com',
+      inboundEnabled: false,
+      hasInboundWebhookSecret: false,
+    }
+    if (!isSupabaseConfigured) return defaults
+    const result = await this.adminUserAction({ action: 'get-ticket-inbound-config' })
+    return { ...defaults, ...(result?.config || {}) }
+  },
+
+  async updateTicketInboundConfig(config) {
+    if (!isSupabaseConfigured) {
+      return {
+        inboundEmail: config.inboundEmail,
+        inboundEnabled: config.inboundEnabled === true,
+        hasInboundWebhookSecret: Boolean(config.inboundWebhookSecret),
+      }
+    }
+    const result = await this.adminUserAction({
+      action: 'update-ticket-inbound-config',
+      inboundEmail: config.inboundEmail,
+      inboundEnabled: config.inboundEnabled === true,
+      inboundWebhookSecret: config.inboundWebhookSecret,
+    })
+    return result?.config
+  },
+
   async testTicketNotification(payload = {}) {
     const config = await this.getTicketNotificationConfig()
     const testCategory = payload.category || 'Technical issue'
