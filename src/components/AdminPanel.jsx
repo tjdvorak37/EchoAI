@@ -1193,7 +1193,13 @@ export function AdminPanel({
                           </tbody>
                         </table>
                       </div>
-                      {filteredTickets.length === 0 && <p className="muted">No tickets match this filter.</p>}
+                      {filteredTickets.length === 0 && ticketView === 'mine' && openTickets > 0 && (
+                        <p className="muted">
+                          No tickets are assigned to you.{' '}
+                          <button type="button" className="text-button" onClick={() => setTicketView('active')}>View all active tickets</button>
+                        </p>
+                      )}
+                      {filteredTickets.length === 0 && !(ticketView === 'mine' && openTickets > 0) && <p className="muted">No tickets match this filter.</p>}
                       {filteredTickets.length > TICKETS_PER_PAGE && <div className="it-ticket-pagination"><span>Showing {(safeTicketPage - 1) * TICKETS_PER_PAGE + 1}-{Math.min(safeTicketPage * TICKETS_PER_PAGE, filteredTickets.length)} of {filteredTickets.length}</span><div><button type="button" className="ghost-button" disabled={safeTicketPage === 1} onClick={() => setTicketPage((page) => Math.max(1, page - 1))}>Previous</button><button type="button" className="ghost-button" disabled={safeTicketPage === ticketPageCount} onClick={() => setTicketPage((page) => Math.min(ticketPageCount, page + 1))}>Next</button></div></div>}
                     </div>
                   )}

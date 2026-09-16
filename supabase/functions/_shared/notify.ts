@@ -36,6 +36,14 @@ export interface NotificationConfig {
   sendgrid_api_key?: string
 }
 
+export interface SupportReplyPayload {
+  requesterName?: string
+  requesterEmail: string
+  ticketId: string
+  subject?: string
+  response: string
+}
+
 export const getNotificationConfig = async (adminClient?: any): Promise<NotificationConfig> => {
   const client = adminClient || createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
@@ -417,6 +425,60 @@ export const sendSupportAcknowledgmentEmail = async (
   }
 
   return { success: false, provider: 'none', error: 'No configured email provider accepted the acknowledgment.' }
+}
+
+export const sendSupportReplyEmail = async (
+  payload: SupportReplyPayload,
+  adminClient?: any,
+): Promise<{ success: boolean; provider?: string; error?: string }> => {
+  const config = await getNotificationConfig(adminClient)
+  const resendApiKey = config.resend_api_key || Deno.env.get('RESEND_API_KEY')
+  const sendgridApiKey = config.sendgrid_api_key || Deno.env.get('SENDGRID_API_KEY')
+  const fromEmail = Deno.env.get('MAIL_FROM_EMAIL') || 'support@echoaipro.com'
+  const fromName = config.sender_name || 'EchoAI Support'
+  const ticketReference = payload.ticketId.slice(0, 8).toUpperCase()
+  const safeName = (payload.requesterName || 'there').replace(/[<>]/g, '')
+  const safeResponse = payload.response.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const subject = `Re: ${payload.subject || `EchoAI support request (${ticketReference})`}`
+  const text = `Hi ${safeName},\n\n${payload.response}\n\nReference: ${ticketReference}\n\nEchoAI Support`
+  const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:600px;margin:auto"><p>Hi ${safeName},</p><div style="white-space:pre-wrap">${safeResponse}</div><p style="color:#64748b;font-size:13px">Reference: ${ticketReference}</p><p>EchoAI Support</p></div>`
+
+  if (resendApiKey) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [payload.requesterEmail], reply_to: fromEmail, subject, text, html }),
+      })
+      if (response.ok) return { success: true, provider: 'resend' }
+      const detail = await response.json().catch(() => ({}))
+      return { success: false, provider: 'resend', error: detail.message || `Resend rejected the reply with HTTP ${response.status}.` }
+    } catch (error) {
+      return { success: false, provider: 'resend', error: (error as Error).message }
+    }
+  }
+
+  if (sendgridApiKey) {
+    try {
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${sendgridApiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: payload.requesterEmail }] }],
+          from: { email: fromEmail, name: fromName },
+          reply_to: { email: fromEmail },
+          subject,
+          content: [{ type: 'text/plain', value: text }, { type: 'text/html', value: html }],
+        }),
+      })
+      if (response.ok || response.status === 202) return { success: true, provider: 'sendgrid' }
+      return { success: false, provider: 'sendgrid', error: `SendGrid rejected the reply with HTTP ${response.status}.` }
+    } catch (error) {
+      return { success: false, provider: 'sendgrid', error: (error as Error).message }
+    }
+  }
+
+  return { success: false, provider: 'none', error: 'No email provider is configured for support replies.' }
 }
 
 export const sendPasswordResetEmail = async (
