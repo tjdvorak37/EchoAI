@@ -1,23 +1,18 @@
 import { useState } from 'react'
 import {
   BarChart3,
-  Bird,
   BriefcaseBusiness,
   CalendarDays,
   Check,
   ChevronDown,
   CirclePlay,
-  Coffee,
   Image,
   Layers3,
-  Leaf,
   Menu,
-  Monitor,
   Send,
   ShieldCheck,
   Sparkles,
   Store,
-  Trees,
   Users,
   Video,
   WandSparkles,
@@ -313,27 +308,20 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
               <span><Check size={15} /> Free account available</span>
               <span><Check size={15} /> Upgrade anytime</span>
             </div>
-            <div className="landing-rest-message"><Leaf size={20} /><span><strong>Finish today&apos;s content.</strong> Take back the rest of your week.</span></div>
           </div>
 
           <div className="landing-hero-visual landing-mascot-scene" aria-label="EchoAI creative workspace illustration">
-            <div className="landing-wildlife" aria-hidden="true">
-              <Bird className="landing-bird bird-one" size={34} />
-              <Bird className="landing-bird bird-two" size={25} />
-              <span className="landing-butterfly butterfly-one"><i /><i /></span>
-              <span className="landing-butterfly butterfly-two"><i /><i /></span>
-              <span className="landing-butterfly butterfly-three"><i /><i /></span>
+            <div className="landing-scene-label">Ideas<br />into impact! <span>↘</span></div>
+            <div className="landing-social-stack" aria-hidden="true">
+              <span className="scene-badge badge-ig">IG</span>
+              <span className="scene-badge badge-tt">TT</span>
+              <span className="scene-badge badge-yt">YT</span>
+              <span className="scene-badge badge-x">X</span>
             </div>
-            <div className="landing-idea-note">Ideas<br />into impact! <span>↘</span></div>
-            <div className="landing-social-float landing-float-instagram">IG</div>
-            <div className="landing-social-float landing-float-tiktok">TT</div>
-            <div className="landing-social-float landing-float-youtube">YT</div>
-            <div className="landing-social-float landing-float-linkedin">in</div>
-            <div className="landing-social-float landing-float-x">X</div>
             <img className="landing-scene-mascot" src={echoMascot} alt="Echo, the EchoAI creative assistant" />
-            <div className="landing-forest-workstation">
+            <div className="landing-scene-workstation">
               <div className="landing-workstation-monitor">
-                <div><Monitor size={18} /><span>Campaign day</span></div>
+                <div className="monitor-title"><Sparkles size={16} /><span>Campaign day</span></div>
                 <strong>Everything scheduled</strong>
                 <ul>
                   <li><Check size={12} /> Content created</li>
@@ -342,8 +330,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
                 </ul>
               </div>
               <div className="landing-workstation-laptop"><Sparkles size={20} /><span>EchoAI</span></div>
-              <div className="landing-workstation-cup"><Coffee size={20} /><span>Slow morning</span></div>
-              <div className="landing-workstation-note"><Trees size={18} /><span><strong>4 of 4 done</strong>Rest of week: yours</span></div>
+              <div className="landing-workstation-note"><Check size={16} /><span><strong>4 of 4 done</strong>Rest of week: yours</span></div>
             </div>
           </div>
         </section>
