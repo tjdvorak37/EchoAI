@@ -17,7 +17,6 @@ import {
   PenTool,
   ScanSearch,
   SmilePlus,
-  Sparkles,
   Square,
   Triangle,
   Type,
@@ -25,7 +24,6 @@ import {
   ZoomIn,
 } from 'lucide-react'
 import './PhotoEditor.css'
-import { generatePhotoConcept } from '../services/photoAiService'
 
 const ASPECT_RATIOS = {
   '1:1': { label: 'Square', canvasWidth: 1200, canvasHeight: 1200, css: '1 / 1' },
@@ -266,44 +264,6 @@ const slugify = (value) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 48) || 'echoai-photo'
-
-const classifyPrompt = (prompt) => {
-  const value = prompt.toLowerCase()
-
-  if (/(portrait|editorial|fashion|luxury|premium|chrome)/.test(value)) {
-    return {
-      preset: 'chrome',
-      headline: 'Premium portrait with a polished edge',
-      subcopy: 'Use crisp contrast, cool lighting, and minimal copy to keep the focus on the subject.',
-      sticker: '💎',
-    }
-  }
-
-  if (/(sunset|warm|lifestyle|travel|food|golden)/.test(value)) {
-    return {
-      preset: 'sunset',
-      headline: 'Warm story art with a cinematic glow',
-      subcopy: 'Layer soft color, bold typography, and a sunset palette for a relaxed social post.',
-      sticker: '🌙',
-    }
-  }
-
-  if (/(launch|product|drop|hype|music|neon|night)/.test(value)) {
-    return {
-      preset: 'aurora',
-      headline: 'Neon launch concept built to stop the scroll',
-      subcopy: 'Use bright accents, punchy type, and motion-heavy contrast for high-energy campaigns.',
-      sticker: '⚡',
-    }
-  }
-
-  return {
-    preset: 'editorial',
-    headline: 'Clean editorial frame with strong hierarchy',
-    subcopy: 'Works well for hero images, announcements, and reusable social cover templates.',
-    sticker: '✨',
-  }
-}
 
 const wrapText = (ctx, text, maxWidth) => {
   const words = text.split(/\s+/).filter(Boolean)
@@ -772,16 +732,11 @@ const renderComposition = async ({
   return canvas.toDataURL('image/png')
 }
 
-export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, brandKit, initialProject }) {
+export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [uploadedImage, setUploadedImage] = useState('')
   const [generatedImageSrc, setGeneratedImageSrc] = useState(initialProject?.imageSrc || '')
-  const [generatedImageMeta, setGeneratedImageMeta] = useState(initialProject ? { source: initialProject.imageSource || initialProject.source, palette: 'editorial' } : null)
-  const [aiImagePrompt, setAiImagePrompt] = useState(initialProject?.visualPrompt || DEFAULT_PROMPT)
-  const [aiImageStyle, setAiImageStyle] = useState('aurora')
-  const [aiImageLoading, setAiImageLoading] = useState(false)
-  const [aiImageError, setAiImageError] = useState('')
   const [prompt, setPrompt] = useState(initialProject?.visualPrompt || DEFAULT_PROMPT)
   const [presetId, setPresetId] = useState('aurora')
   const [aspectRatio, setAspectRatio] = useState(initialProject?.outputType === 'image' ? '1:1' : '4:5')
@@ -1864,58 +1819,8 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
     window.addEventListener('pointercancel', endCropDrag)
   }
 
-  const handleGenerateImage = async () => {
-    if (!aiImagePrompt.trim()) {
-      setAiImageError('Describe the image you want to generate.')
-      return
-    }
-
-    setAiImageLoading(true)
-    setAiImageError('')
-
-    try {
-      const result = await generatePhotoConcept({
-        prompt: aiImagePrompt,
-        style: aiImageStyle,
-        aspectRatio,
-        referenceImageSrc: selectedImageSrc,
-        agentConfig,
-      })
-
-      setGeneratedImageSrc(result.imageSrc)
-      setGeneratedImageMeta(result)
-      setSelectedAssetId('')
-      setUploadedImage('')
-      setActiveTool('crop')
-      setNotice(`Generated ${result.source === 'api' ? 'AI' : 'local'} concept image. Crop and retouch the image before adding final text layers.`)
-      onGeneratedAsset?.({
-        name: `AI-${slugify(aiImagePrompt)}-${Date.now()}.png`,
-        type: 'image',
-        mime: 'image/png',
-        size: Math.max(300000, Math.round(result.imageSrc.length * 0.72)),
-        previewUrl: result.imageSrc,
-        summary: `AI-generated Photo Creator image • ${result.source} • Saved automatically in AI Generations`,
-      })
-      if (result.headline) setHeadline(result.headline)
-      if (result.caption) setSubcopy(result.caption)
-      if (result.palette && STYLE_PRESETS[result.palette]) setPresetId(result.palette)
-      setLayers((prev) =>
-        prev.map((layer) => {
-          if (layer.id === 'headline') return { ...layer, value: result.headline || layer.value }
-          if (layer.id === 'subcopy') return { ...layer, value: result.caption || layer.value }
-          return layer
-        }),
-      )
-    } catch (error) {
-      setAiImageError(error.message)
-    } finally {
-      setAiImageLoading(false)
-    }
-  }
-
   const clearBaseImage = () => {
     setGeneratedImageSrc('')
-    setGeneratedImageMeta(null)
     setUploadedImage('')
     setSelectedAssetId('')
     setActiveTool('select')
@@ -1948,24 +1853,6 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
     event.target.value = ''
   }
 
-  const applyPrompt = () => {
-    const concept = classifyPrompt(aiImagePrompt)
-    setPresetId(concept.preset)
-    setHeadline(concept.headline)
-    setSubcopy(concept.subcopy)
-    setLayers((prev) =>
-      prev.map((layer) => {
-        if (layer.id === 'headline') return { ...layer, value: concept.headline }
-        if (layer.id === 'subcopy') return { ...layer, value: concept.subcopy }
-        if (layer.id === 'sticker') return { ...layer, value: concept.sticker }
-        return layer
-      }),
-    )
-    setActiveLayerId('headline')
-    setPrompt(aiImagePrompt)
-    setNotice(`AI concept generated from: ${aiImagePrompt}`)
-  }
-
   const resetEditor = () => {
     commitHistory()
     setPrompt('')
@@ -1974,7 +1861,6 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
     setHeadline('')
     setSubcopy('')
     setGeneratedImageSrc('')
-    setGeneratedImageMeta(null)
     setUploadedImage('')
     setSelectedAssetId('')
     setFilters(DEFAULT_FILTERS)
@@ -2124,7 +2010,7 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
         <div>
           <p className="small-title">Photo Creator</p>
           <h2>Professional image editor</h2>
-          <p className="panel-note">Upload a photo or generate one with AI, add text/graphics from the left toolbar, then export.</p>
+          <p className="panel-note">Upload a photo, add text and graphics, retouch it, then export.</p>
         </div>
         <div className="photo-creator-actions">
           {/* Quick Access - Only essential buttons */}
@@ -2177,28 +2063,13 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
           </label>
         </div>
 
-        <div className="option-group ai-options">
-          <input
-            type="text"
-            value={aiImagePrompt}
-            onChange={(event) => {
-              setAiImagePrompt(event.target.value)
-              setPrompt(event.target.value)
-            }}
-            aria-label="AI image prompt"
-            placeholder="Describe an image..."
-          />
-          <select value={aiImageStyle} onChange={(event) => setAiImageStyle(event.target.value)} aria-label="AI image style">
-            {Object.entries(STYLE_PRESETS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
-          </select>
-          <button type="button" onClick={applyPrompt} title="Apply prompt to text layers">Apply</button>
+        <div className="option-group editor-actions">
           <button type="button" onClick={useLibraryImage}>Library</button>
           <button type="button" onClick={clearBaseImage}>Clear image</button>
           <button type="button" onClick={resetEditor}>New canvas</button>
           <button type="button" onClick={() => setCompactMode((value) => !value)} aria-pressed={compactMode}>
             {compactMode ? 'Comfortable' : 'Compact'}
           </button>
-          {generatedImageMeta && <span className="generation-source" title="Image generation source">{generatedImageMeta.source === 'api' ? 'AI' : 'Local'}</span>}
         </div>
       </div>
 
@@ -2429,11 +2300,6 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
                   <span>Upload</span>
                   <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleUpload} />
                 </label>
-                <button type="button" className="dock-action-button" onClick={handleGenerateImage} disabled={aiImageLoading} title="Generate image from the current prompt">
-                  <Sparkles size={17} aria-hidden="true" />
-                  <span>{aiImageLoading ? 'Working' : 'Generate'}</span>
-                </button>
-                {aiImageError && <p className="auth-message auth-error">{aiImageError}</p>}
               </div>
             </>
           )}
@@ -2500,17 +2366,14 @@ export function PhotoEditor({ assets, onExport, onGeneratedAsset, agentConfig, b
                 />
               ) : layers.length === 0 && brushStrokes.length === 0 ? (
                 <div className="photo-stage-empty photo-stage-onboarding">
-                  <p className="small-title">Let's make something</p>
+                  <p className="small-title">Start with your own media</p>
                   <ol>
-                    <li><strong>Add a photo</strong> — upload your own or generate one with AI below.</li>
+                    <li><strong>Add a photo</strong> — upload an image from your device.</li>
                     <li><strong>Add text, stickers, or shapes</strong> — use the toolbar on the left.</li>
                     <li><strong>Export</strong> when it looks right, using the button in the top right.</li>
                   </ol>
                   <div className="photo-stage-onboarding-actions">
                     <button type="button" className="primary-button" onClick={() => uploadInputRef.current?.click()}>Upload a photo</button>
-                    <button type="button" className="ghost-button" onClick={handleGenerateImage} disabled={aiImageLoading}>
-                      {aiImageLoading ? 'Generating...' : 'Generate with AI'}
-                    </button>
                   </div>
                 </div>
               ) : null}

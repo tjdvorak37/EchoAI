@@ -15,7 +15,6 @@ import {
   Store,
   Users,
   Video,
-  WandSparkles,
   X,
 } from 'lucide-react'
 import demoPosterImage from '../assets/demo-poster.svg'
@@ -38,7 +37,7 @@ const SUPPORT_CATEGORIES = [
 const PRODUCT_LINKS = [
   ['AI Content Studio', '#tools'],
   ['Photo Creator', '#tools'],
-  ['Video Studio', '#tools'],
+  ['Video Editor', '#tools'],
   ['Post Scheduler', '#workflow'],
   ['Social Listening', '#tools'],
   ['Brand & Cloud Workspace', '#tools'],
@@ -46,7 +45,6 @@ const PRODUCT_LINKS = [
 
 const toolRibbon = [
   ['social', Send, 'Social Media'],
-  ['ai', Sparkles, 'AI Tools'],
   ['photo', Image, 'Photo Editor'],
   ['video', Video, 'Video Editor'],
   ['schedule', CalendarDays, 'Scheduler'],
@@ -54,7 +52,6 @@ const toolRibbon = [
 ]
 
 const showcaseFeatures = [
-  [WandSparkles, 'AI-powered content creation', 'Turn a brief into campaign copy, images, and reusable ideas.'],
   [Layers3, 'Advanced photo and video editors', 'Refine layers, timelines, text, audio, and brand styling.'],
   [CalendarDays, 'Multi-platform scheduling', 'Plan approved posts and keep every connected channel in view.'],
   [Users, 'Team collaboration', 'Share assets, coordinate reposts, and keep work organized.'],
@@ -62,20 +59,16 @@ const showcaseFeatures = [
 ]
 
 const audiences = [
-  [WandSparkles, 'Content creators', ['Create faster with AI', 'Edit in one workspace', 'Keep your account for free'], 'violet'],
-  [Store, 'Small businesses', ['Plan consistently', 'Keep brand assets together', 'Add tokens when needed'], 'blue'],
+  [Image, 'Content creators', ['Edit your own media', 'Publish consistently', 'Keep your account for free'], 'violet'],
+  [Store, 'Small businesses', ['Plan consistently', 'Keep brand assets together', 'Share work easily'], 'blue'],
   [Users, 'Marketing teams', ['Collaborate around campaigns', 'Manage multiple channels', 'Streamline approvals'], 'green'],
   [BriefcaseBusiness, 'Agencies', ['Organize client work', 'Build repeatable workflows', 'Scale paid tools when ready'], 'coral'],
 ]
 
 const FEATURE_FAQS = [
   {
-    q: 'How do monthly plan tokens vs purchased rollover tokens work?',
-    a: 'Paid access can include a monthly AI token allowance that refreshes each billing cycle. Additional token top-ups are stored in a separate rollover balance that does not expire and is used after the monthly allowance.',
-  },
-  {
-    q: 'Can I connect my company’s private AI keys or custom models?',
-    a: 'Yes! EchoAI provides full backend and frontend management for OpenAI, Runway ML, Anthropic Claude, Replicate, Google Gemini, and custom AI router gateways with live 1-click credential testing.',
+    q: 'Can I use my own images and videos?',
+    a: 'Yes. Upload your own media, refine it in the photo or video editor, organize it in your workspace, and schedule it across your connected channels.',
   },
   {
     q: 'Which social media channels can I publish to?',
@@ -296,6 +289,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
             <h1 className="landing-headline">Create. Plan.<br />Edit. Post. <em>Grow.</em></h1>
             <p className="landing-subhead">
               Bring your content, team, and AI tools together in one bright, practical workspace. Create campaign ideas, edit photos and videos, schedule across your channels, and follow what resonates.
+                Bring your content and team together in one bright, practical workspace. Edit photos and videos, schedule across your channels, and follow what resonates.
             </p>
             <div className="landing-hero-actions">
               <button type="button" className="landing-primary-action landing-hero-btn" onClick={onCreateAccount}>
@@ -361,7 +355,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
                   <div className="landing-media-swatch swatch-coral" />
                   <div className="landing-media-swatch swatch-blue" />
                 </div>
-                <div className="landing-ai-prompt"><WandSparkles size={20} /><div><strong>AI assistant</strong><span>Turn your ideas into campaign-ready content...</span></div><i aria-hidden="true">→</i></div>
+                  <div className="landing-ai-prompt"><Layers3 size={20} /><div><strong>Campaign workspace</strong><span>Keep your media, edits, and schedule together...</span></div><i aria-hidden="true">→</i></div>
                 <div className="landing-editor-row">
                   <div><Image size={24} /><strong>Photo editor</strong><span>Layers · color · type</span></div>
                   <div><Video size={24} /><strong>Video editor</strong><span>Timeline · audio · export</span></div>
@@ -385,7 +379,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
 
         <section className="landing-color-cta" id="get-started">
           <img src={echoMascot} alt="" />
-          <div><h2>Let Echo do the heavy lifting.</h2><p>More creativity. Less busy work. Add extra AI tokens whenever you need them.</p></div>
+          <div><h2>Let Echo do the heavy lifting.</h2><p>More creativity. Less busy work. Get your campaign ready, then enjoy the rest of your day.</p></div>
           <button type="button" className="landing-color-cta-button" onClick={onCreateAccount}>Start creating free <span>→</span></button>
         </section>
 
