@@ -182,6 +182,30 @@
   margin-top: 4.5rem;
 }
 
+.landing-price-panel.is-free {
+  border-color: #8fb9ad;
+  background: #f4fbf8;
+}
+
+.landing-price-panel.is-free .landing-price-topline span:last-child,
+.landing-free-access strong {
+  color: #08725b;
+}
+
+.landing-price-panel .landing-free-access {
+  background: #e4f6f0;
+}
+
+.landing-free-features {
+  min-height: 112px;
+}
+
+@media (min-width: 981px) {
+  .landing-pricing-grid > .landing-price-panel:nth-child(4) {
+    grid-column: span 2;
+  }
+}
+
 .landing-menu-toggle {
   width: 42px;
   height: 42px;
