@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PUBLISHING_PLATFORMS } from '../data/socialPlatforms'
 import './RepostHubPanel.css'
 
 export function RepostHubPanel({
@@ -472,8 +473,8 @@ export function RepostHubPanel({
                       value={newAccountDraft.platform}
                       onChange={(e) => setNewAccountDraft((p) => ({ ...p, platform: e.target.value }))}
                     >
-                      {['Instagram', 'Facebook', 'TikTok', 'X', 'LinkedIn', 'YouTube'].map((pl) => (
-                        <option key={pl} value={pl}>{pl}</option>
+                      {PUBLISHING_PLATFORMS.map((platform) => (
+                        <option key={platform.key} value={platform.label}>{platform.label}</option>
                       ))}
                     </select>
                   </label>
@@ -572,14 +573,14 @@ export function RepostHubPanel({
                 <div>
                   <p className="small-title">Suggested Target Channels</p>
                   <div className="chip-row">
-                    {['instagram', 'facebook', 'tiktok', 'linkedin', 'x', 'youtube'].map((ch) => (
+                    {PUBLISHING_PLATFORMS.map((platform) => (
                       <button
-                        key={ch}
+                        key={platform.key}
                         type="button"
-                        className={`chip ${newPostDraft.channels.includes(ch) ? 'active' : ''}`}
-                        onClick={() => toggleAdminChannel(ch)}
+                        className={`chip ${newPostDraft.channels.includes(platform.key) ? 'active' : ''}`}
+                        onClick={() => toggleAdminChannel(platform.key)}
                       >
-                        {ch}
+                        {platform.label}
                       </button>
                     ))}
                   </div>
@@ -724,14 +725,14 @@ export function RepostHubPanel({
               <div>
                 <p className="small-title">Publish to Your Personal Connected Channels</p>
                 <div className="chip-row">
-                  {['instagram', 'facebook', 'tiktok', 'linkedin', 'x', 'youtube'].map((ch) => (
+                  {PUBLISHING_PLATFORMS.map((platform) => (
                     <button
-                      key={ch}
+                      key={platform.key}
                       type="button"
-                      className={`chip ${customDraft.selectedChannels.includes(ch) ? 'active' : ''}`}
-                      onClick={() => toggleChannel(ch)}
+                      className={`chip ${customDraft.selectedChannels.includes(platform.key) ? 'active' : ''}`}
+                      onClick={() => toggleChannel(platform.key)}
                     >
-                      {ch}
+                      {platform.label}
                     </button>
                   ))}
                 </div>

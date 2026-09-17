@@ -8,6 +8,7 @@ import { billingService } from './services/billingService'
 import { brandService, createEmptyBrandKit, loadBrandFonts, MAX_LOGO_BYTES } from './services/brandService'
 import { CLOUD_PROVIDERS, cloudDriveService, toLinkedAsset } from './services/cloudDriveService'
 import { getPlan, getStorageMb } from './data/plans'
+import { PUBLISHING_PLATFORMS, SOCIAL_PLATFORMS, getSocialPlatform } from './data/socialPlatforms'
 import { platformService } from './services/platformService'
 import { repostService } from './services/repostService'
 import { socialIntegrationService } from './services/socialIntegrationService'
@@ -52,19 +53,7 @@ const readUserData = (userId) => {
   try { return JSON.parse(localStorage.getItem(getUserKey(userId))) } catch { return null }
 }
 
-const PLATFORM_META = {
-  instagram: { label: 'Instagram', icon: 'IG', color: '#E1306C', bg: 'rgba(225,48,108,0.12)', border: 'rgba(225,48,108,0.35)' },
-  facebook:  { label: 'Facebook',  icon: 'FB', color: '#1877F2', bg: 'rgba(24,119,242,0.12)', border: 'rgba(24,119,242,0.35)' },
-  tiktok:    { label: 'TikTok',    icon: 'TT', color: '#FE2C55', bg: 'rgba(254,44,85,0.12)',  border: 'rgba(254,44,85,0.35)' },
-  snapchat:  { label: 'Snapchat',  icon: '👻', color: '#F7C600', bg: 'rgba(247,198,0,0.12)',  border: 'rgba(247,198,0,0.35)' },
-  x:         { label: 'X',         icon: '𝕏',  color: '#e2e8f0', bg: 'rgba(226,232,240,0.1)', border: 'rgba(226,232,240,0.3)' },
-  youtube:   { label: 'YouTube',   icon: '▶',  color: '#FF0000', bg: 'rgba(255,0,0,0.12)',    border: 'rgba(255,0,0,0.35)' },
-  linkedin:  { label: 'LinkedIn',  icon: 'in', color: '#0A66C2', bg: 'rgba(10,102,194,0.12)', border: 'rgba(10,102,194,0.35)' },
-}
-
-const getPlatformMeta = (platformName) =>
-  PLATFORM_META[platformName?.toLowerCase()] ??
-  { label: platformName, icon: '🔗', color: '#64748b', bg: 'rgba(100,116,139,0.1)', border: 'rgba(100,116,139,0.25)' }
+const getPlatformMeta = getSocialPlatform
 
 const SOCIAL_PUBLISHING_SCOPES = ['posts', 'images', 'videos', 'comments', 'analytics']
 
@@ -4749,14 +4738,7 @@ function App() {
                   <div>
                     <p className="small-title">Choose providers</p>
                     <div className="quick-connect-providers">
-                      {[
-                        { key: 'instagram', available: true },
-                        { key: 'facebook', available: true },
-                        { key: 'youtube', available: true },
-                        { key: 'tiktok', available: true },
-                        { key: 'x', available: true },
-                        { key: 'linkedin', available: true },
-                      ].map(({ key, available }) => {
+                      {PUBLISHING_PLATFORMS.map(({ key }) => {
                         const meta = getPlatformMeta(key)
                         const connected = connectedAccounts.some((account) => account.platform.toLowerCase() === key && account.status === 'healthy')
                         const selected = quickConnectSelected.includes(key)
@@ -4765,12 +4747,11 @@ function App() {
                             key={key}
                             type="button"
                             className={`quick-connect-provider ${selected ? 'selected' : ''}`}
-                            disabled={!available}
                             onClick={() => setQuickConnectSelected((prev) => selected ? prev.filter((item) => item !== key) : [...prev, key])}
                           >
                             <span className="quick-connect-provider-icon" style={{ color: meta.color }}>{meta.icon}</span>
                             <span>{meta.label}</span>
-                            <small>{connected ? 'Connected' : available ? 'Available' : 'Coming soon'}</small>
+                            <small>{connected ? 'Connected' : 'Available'}</small>
                           </button>
                         )
                       })}
@@ -4788,16 +4769,9 @@ function App() {
               )}
             </article>
             <div className="integration-grid">
-              {[
-                { key: 'instagram', accountPlaceholder: '@youraccount', desc: 'Publish posts, stories, and reels. Read insights and story metrics.' },
-                { key: 'facebook',  accountPlaceholder: 'Your page name', desc: 'Schedule posts, publish to pages, and track ad-level reach.' },
-                { key: 'tiktok',    accountPlaceholder: '@youraccount', desc: 'Queue short-form videos, read performance data and comment trends.' },
-                { key: 'snapchat',  accountPlaceholder: 'Your Snapchat', desc: 'Upload creative content and track Snap campaign metrics.' },
-                { key: 'x',         accountPlaceholder: '@youraccount', desc: 'Post to X (formerly Twitter), schedule threads, and monitor mentions.' },
-                { key: 'youtube',   accountPlaceholder: 'Your channel', desc: 'Upload videos, schedule premieres, and read subscriber analytics.' },
-                { key: 'linkedin',  accountPlaceholder: 'Your profile / page', desc: 'Publish professional content and read engagement metrics.' },
-              ].map(({ key, accountPlaceholder, desc }) => {
+              {SOCIAL_PLATFORMS.map(({ key, accountPlaceholder, description, releaseStatus }) => {
                 const meta = getPlatformMeta(key)
+                const available = releaseStatus === 'available'
                 const linked = connectedAccounts.find((a) => a.platform.toLowerCase() === key)
                 const inputValue = accountHandleDrafts[key] ?? linked?.accountName ?? accountPlaceholder
                 const selectedScopes = accountScopeDrafts[key] ?? linked?.publishingScopes ?? ['posts']
@@ -4818,9 +4792,10 @@ function App() {
                           {linked.status === 'healthy' ? '● OAuth connected' : 'OAuth access required'}
                         </span>
                       )}
+                      {!available && <span className="integration-status-badge warn">Planned</span>}
                     </div>
                     <div className="integration-platform-body">
-                      <p>{desc}</p>
+                      <p>{description}</p>
                       {linked ? (
                         <>
                           <label className="field-label">
@@ -4830,6 +4805,7 @@ function App() {
                               value={inputValue}
                               onChange={(event) => setAccountHandleDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
                               placeholder={accountPlaceholder}
+                              disabled={!available}
                             />
                           </label>
                         </>
@@ -4842,6 +4818,7 @@ function App() {
                               value={inputValue}
                               onChange={(event) => setAccountHandleDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
                               placeholder={accountPlaceholder}
+                              disabled={!available}
                             />
                           </label>
                         </>
@@ -4856,6 +4833,7 @@ function App() {
                                 key={scope}
                                 type="button"
                                 className={selected ? 'chip active' : 'chip'}
+                                disabled={!available}
                                 onClick={() => setAccountScopeDrafts((prev) => ({
                                   ...prev,
                                   [key]: selected
@@ -4869,9 +4847,13 @@ function App() {
                           })}
                         </div>
                       </div>
-                      <p className="muted">Your account profile and access preferences are private. Publishing stays disabled until this account completes OAuth authorization.</p>
+                      <p className="muted">
+                        {available
+                          ? 'Your account profile and access preferences are private. Publishing stays disabled until this account completes OAuth authorization.'
+                          : 'This provider is on the EchoAI integration roadmap. Account connection will open after its OAuth and publishing review is complete.'}
+                      </p>
                       <div className="integration-actions">
-                        <button
+                        {available && <button
                           type="button"
                           className="primary-button"
                           style={{ background: meta.color, borderColor: meta.color }}
@@ -4882,8 +4864,8 @@ function App() {
                           })}
                         >
                           Save account profile
-                        </button>
-                        {['instagram', 'facebook', 'youtube', 'tiktok', 'x', 'linkedin'].includes(key) && (
+                        </button>}
+                        {available && (
                           <button
                             type="button"
                             className="ghost-button"

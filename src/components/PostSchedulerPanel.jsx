@@ -1,14 +1,10 @@
 import { useState, useMemo } from 'react'
+import { PUBLISHING_PLATFORMS, PUBLISHING_PLATFORM_KEYS } from '../data/socialPlatforms'
 import './PostSchedulerPanel.css'
 
-const PLATFORM_LIMITS = {
-  instagram: 2200,
-  facebook: 63206,
-  x: 280,
-  tiktok: 2200,
-  linkedin: 3000,
-  youtube: 5000,
-}
+const PLATFORM_LIMITS = Object.fromEntries(
+  PUBLISHING_PLATFORMS.map((platform) => [platform.key, platform.characterLimit]),
+)
 
 const SCHEDULER_TEMPLATES = [
   {
@@ -69,7 +65,9 @@ export function PostSchedulerPanel({
   const [queuePlatformFilter, setQueuePlatformFilter] = useState('all')
 
   const connectedPlatforms = useMemo(
-    () => connectedAccounts.map((a) => a.platform.toLowerCase()),
+    () => connectedAccounts
+      .map((account) => account.platform.toLowerCase())
+      .filter((platform) => PUBLISHING_PLATFORM_KEYS.includes(platform)),
     [connectedAccounts]
   )
 
@@ -523,14 +521,14 @@ export function PostSchedulerPanel({
               </div>
 
               <div className="preview-platform-selector">
-                {['instagram', 'facebook', 'x', 'tiktok', 'linkedin', 'youtube'].map((p) => (
+                {PUBLISHING_PLATFORMS.map((platform) => (
                   <button
-                    key={p}
+                    key={platform.key}
                     type="button"
-                    className={`preview-platform-btn ${previewPlatform === p ? 'active' : ''}`}
-                    onClick={() => setPreviewPlatform(p)}
+                    className={`preview-platform-btn ${previewPlatform === platform.key ? 'active' : ''}`}
+                    onClick={() => setPreviewPlatform(platform.key)}
                   >
-                    {getPlatformMeta(p)?.icon} {getPlatformMeta(p)?.label}
+                    {platform.icon} {platform.label}
                   </button>
                 ))}
               </div>

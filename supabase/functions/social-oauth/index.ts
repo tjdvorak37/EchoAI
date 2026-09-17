@@ -404,15 +404,21 @@ Deno.serve(async (request) => {
             oauthImplemented: true,
             publishing: `${platform} text and media publishing`,
           })),
-          {
-            platform: 'snapchat',
-            provider: 'snapchat',
+          ...[
+            ['threads', 'Threads publishing API integration is planned'],
+            ['twitch', 'Twitch channel publishing target is being evaluated'],
+            ['google_business', 'Google Business Profile publishing integration is planned'],
+            ['bluesky', 'Bluesky AT Protocol publishing integration is planned'],
+            ['pinterest', 'Pinterest content publishing integration is planned'],
+          ].map(([platform, publishing]) => ({
+            platform,
+            provider: platform,
             oauthConfigured: false,
             oauthImplemented: false,
-            publishing: 'Snapchat Public Profile API target is not selected',
-          },
+            publishing,
+          })),
         ].map(async (entry) => {
-          if (entry.provider === 'snapchat') return entry
+          if (!entry.oauthImplemented) return entry
           const config = await providerConfig(entry.provider as keyof typeof PROVIDERS)
           return { ...entry, oauthConfigured: Boolean(config.clientId && config.clientSecret) }
         }),
