@@ -18,7 +18,6 @@ import {
   X,
 } from 'lucide-react'
 import demoPosterImage from '../assets/demo-poster.svg'
-import echoMascot from '../assets/echo-mascot.svg'
 import echoModern from '../assets/echo-poses/echo-modern-friendly.png'
 import echoTech from '../assets/echo-poses/echo-tech-assistant.png'
 import echoCreator from '../assets/echo-poses/echo-creator-mode.png'
@@ -92,7 +91,7 @@ const FEATURE_FAQS = [
 
 const Brand = () => (
   <span className="landing-brand-lockup">
-    <img src={echoMascot} alt="" />
+    <img src={echoModern} alt="" />
     <span>EchoAI</span>
   </span>
 )
@@ -320,6 +319,11 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
                 <span className="scene-badge badge-tt">TT</span>
                 <span className="scene-badge badge-yt">YT</span>
                 <span className="scene-badge badge-x">X</span>
+                <span className="scene-badge badge-fb">f</span>
+                <span className="scene-badge badge-in">in</span>
+                <span className="scene-badge badge-pin">P</span>
+                <span className="scene-badge badge-threads">@</span>
+                <span className="scene-badge badge-gbp">GB</span>
               </div>
               <div className="landing-hero-mascot-row">
                 <span className="landing-scene-label">Ideas into impact! <span aria-hidden="true">↘</span></span>
@@ -434,7 +438,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
             </div>
             <div className="landing-closing-proof"><span><Check size={14} /> No card required</span><span><Check size={14} /> Free account available</span><span><Check size={14} /> Upgrade anytime</span></div>
           </div>
-          <img src={echoMascot} alt="Echo celebrating a finished campaign" />
+          <img src={echoModern} alt="Echo celebrating a finished campaign" />
         </section>
 
         {/* FAQ Section */}
