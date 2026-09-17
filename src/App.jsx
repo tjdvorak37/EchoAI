@@ -89,6 +89,7 @@ const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it', 'accountant', 'board_member']
 const STAFF_PLAN = 'creator'
 const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCase())
+const aiGenerationEnabled = () => false
 const FREE_ACCOUNT_TABS = new Set(['dashboard', 'credits', 'account', 'help'])
 const TAB_LABELS = {
   listening: 'Social Listening',
@@ -3942,7 +3943,7 @@ function App() {
               </article>
             </div>
 
-            <article className="sub-panel dashboard-ai-hub">
+            {aiGenerationEnabled() && <article className="sub-panel dashboard-ai-hub">
               <div className="dashboard-section-heading">
                 <div>
                   <p className="section-label">Echo AI</p>
@@ -4060,7 +4061,7 @@ function App() {
                   ))}
                 </div>
               )}
-            </article>
+            </article>}
 
             <div className="split">
               <article className="sub-panel tone-ocean">
@@ -4193,7 +4194,7 @@ function App() {
           </Suspense>
         )}
 
-        {activeTab === 'assistant' && (
+        {aiGenerationEnabled() && activeTab === 'assistant' && (
           <section className="panel panel-assistant">
             <div className="create-hub-heading">
               <div>
@@ -4326,7 +4327,7 @@ function App() {
           </Suspense>
         )}
 
-        {activeTab === 'credits' && (
+        {aiGenerationEnabled() && activeTab === 'credits' && (
           <Suspense fallback={loadingPanel}>
             <CreditPurchasePanel
               isModal={false}
@@ -4357,7 +4358,6 @@ function App() {
               <a href="#integrations-referral" className="chip">Refer &amp; earn</a>
               {session?.seatManager && companySeatPackage && <a href="#integrations-team" className="chip">Team seats</a>}
               <a href="#integrations-social" className="chip">Social accounts</a>
-              <a href="#integrations-ai" className="chip">AI providers &amp; keys</a>
               {canViewManagementBoard && <a href="#integrations-tools" className="chip">Third-party tools</a>}
             </nav>
 
@@ -4893,8 +4893,8 @@ function App() {
             </div>
             {integrationError && <span className="field-error">{integrationError}</span>}
 
-            <h3 className="section-label" id="integrations-ai">AI providers &amp; API keys</h3>
-            <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
+            {aiGenerationEnabled() && <h3 className="section-label" id="integrations-ai">AI providers &amp; API keys</h3>}
+            {aiGenerationEnabled() && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <div className="inhouse-engine-heading">
                 <div><h3>EchoAI hosted AI</h3><p className="muted">EchoAI Pro provides the AI accounts and keeps provider credentials on the backend. Your team uses Echo Credits instead of connecting personal AI accounts.</p></div>
                 <button type="button" className="primary-button" onClick={() => setCreditPurchaseModalOpen(true)}>⚡ Purchase Tokens (500–5,000)</button>
@@ -4903,9 +4903,9 @@ function App() {
                 <strong>Account status</strong>
                 <p>Provider setup, model routing, cost controls, rate limits, and emergency shutdowns are managed by IT and Management.</p>
               </div>
-            </article>
+            </article>}
 
-            {aiAgentConfig.provider === '__legacy_customer_connection__' && typeof window === 'undefined' && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
+            {aiGenerationEnabled() && aiAgentConfig.provider === '__legacy_customer_connection__' && typeof window === 'undefined' && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <div className="inhouse-engine-heading">
                 <div><h3>In-house AI engine</h3><p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p></div>
                 <button type="button" className="openai-guide-button" onClick={() => setOpenAiGuideOpen(true)}>OpenAI connection guide <span aria-hidden="true">↗</span></button>
