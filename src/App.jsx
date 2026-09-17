@@ -2989,6 +2989,7 @@ function App() {
           <LandingPage
             announcement={announcements.landing}
             onSignIn={() => setAuthView('signin')}
+            onCreateAccount={() => setAuthView('signup')}
             onCompanyPackageRequest={() => setCompanyPackageRequested(false)}
             onPurchase={(planKey) => {
               if (planKey) setPurchasePlan(planKey)

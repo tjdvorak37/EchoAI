@@ -1,10 +1,13 @@
 import { useState } from 'react'
+import { Check, ChevronDown, Menu, ShieldCheck, X } from 'lucide-react'
 import demoPosterImage from '../assets/demo-poster.svg'
 import echoMascot from '../assets/echo-mascot.svg'
 import { PLAN_ORDER, PLANS, getAnnualSavings } from '../data/plans'
 import { authService } from '../services/authService'
+import { PRIVACY_STORAGE_KEY } from '../services/analyticsService'
 import { AnnouncementBanner } from './AnnouncementBanner'
 import './LandingPage.css'
+import './LandingPageRefresh.css'
 
 const SUPPORT_CATEGORIES = [
   'Cannot sign in',
@@ -12,6 +15,29 @@ const SUPPORT_CATEGORIES = [
   'Billing question',
   'Account access',
   'Something else',
+]
+
+const SOCIAL_CHANNELS = [
+  'Instagram',
+  'TikTok',
+  'YouTube',
+  'Threads',
+  'X',
+  'Twitch',
+  'Google Business Profile',
+  'Bluesky',
+  'Facebook',
+  'Pinterest',
+  'LinkedIn',
+]
+
+const PRODUCT_LINKS = [
+  ['AI Content Studio', '#tools'],
+  ['Photo Creator', '#tools'],
+  ['Video Studio', '#tools'],
+  ['Post Scheduler', '#workflow'],
+  ['Social Listening', '#tools'],
+  ['Brand & Cloud Workspace', '#tools'],
 ]
 
 const workflow = [
@@ -55,6 +81,90 @@ const Brand = () => (
     <span>EchoAI</span>
   </span>
 )
+
+function NavDropdown({ label, children, wide = false }) {
+  return (
+    <details className={`landing-nav-dropdown ${wide ? 'is-wide' : ''}`}>
+      <summary>{label}<ChevronDown size={15} aria-hidden="true" /></summary>
+      <div className="landing-nav-menu">{children}</div>
+    </details>
+  )
+}
+
+function PrivacyChoices() {
+  const [choices, setChoices] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(PRIVACY_STORAGE_KEY)
+      return saved ? JSON.parse(saved) : null
+    } catch {
+      return null
+    }
+  })
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [analyticsAllowed, setAnalyticsAllowed] = useState(choices?.analytics ?? false)
+
+  const saveChoices = (analytics) => {
+    const nextChoices = { necessary: true, analytics, savedAt: new Date().toISOString() }
+    try {
+      window.localStorage.setItem(PRIVACY_STORAGE_KEY, JSON.stringify(nextChoices))
+    } catch {
+      // The choice still applies for this page view when storage is unavailable.
+    }
+    setChoices(nextChoices)
+    setAnalyticsAllowed(analytics)
+    setPanelOpen(false)
+  }
+
+  return (
+    <>
+      {!choices && !panelOpen && (
+        <aside className="landing-privacy-prompt" aria-labelledby="privacy-prompt-title">
+          <ShieldCheck size={22} aria-hidden="true" />
+          <div>
+            <strong id="privacy-prompt-title">Your privacy choices</strong>
+            <p>Choose whether EchoAI may use optional analytics. Essential storage keeps your account and preferences working.</p>
+            <a href="/privacy-policy">Read our privacy policy</a>
+          </div>
+          <div className="landing-privacy-actions">
+            <button type="button" className="landing-secondary-action" onClick={() => saveChoices(false)}>Decline optional</button>
+            <button type="button" className="landing-primary-action" onClick={() => saveChoices(true)}>Accept all</button>
+            <button type="button" className="landing-privacy-manage" onClick={() => setPanelOpen(true)}>Manage choices</button>
+          </div>
+        </aside>
+      )}
+
+      {panelOpen && (
+        <div className="landing-privacy-backdrop" role="dialog" aria-modal="true" aria-labelledby="privacy-panel-title">
+          <section className="landing-privacy-panel">
+            <div className="landing-privacy-panel-header">
+              <div><span>Privacy center</span><h2 id="privacy-panel-title">Control your data choices</h2></div>
+              <button type="button" onClick={() => setPanelOpen(false)} aria-label="Close privacy choices"><X size={20} /></button>
+            </div>
+            <p>Essential technologies are always active because they support security, authentication, and saved preferences.</p>
+            <div className="landing-privacy-option">
+              <div><strong>Essential</strong><span>Required for account security and core site operation.</span></div>
+              <span className="landing-privacy-required"><Check size={14} /> Always active</span>
+            </div>
+            <label className="landing-privacy-option">
+              <div><strong>Optional analytics</strong><span>Helps us understand feature usage and improve EchoAI.</span></div>
+              <input type="checkbox" checked={analyticsAllowed} onChange={(event) => setAnalyticsAllowed(event.target.checked)} />
+            </label>
+            <div className="landing-privacy-panel-actions">
+              <a href="/privacy-policy">Full privacy policy</a>
+              <button type="button" className="landing-primary-action" onClick={() => saveChoices(analyticsAllowed)}>Save choices</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {choices && !panelOpen && (
+        <button type="button" className="landing-privacy-launcher" onClick={() => setPanelOpen(true)} aria-label="Open privacy choices">
+          <ShieldCheck size={18} /> Privacy
+        </button>
+      )}
+    </>
+  )
+}
 
 function SupportDialog({ onClose }) {
   const [form, setForm] = useState({ name: '', email: '', category: SUPPORT_CATEGORIES[0], details: '' })
@@ -125,9 +235,10 @@ function SupportDialog({ onClose }) {
   )
 }
 
-export function LandingPage({ announcement, onSignIn, onPurchase, children }) {
+export function LandingPage({ announcement, onSignIn, onCreateAccount, onPurchase, children }) {
   const [supportOpen, setSupportOpen] = useState(() => new URLSearchParams(window.location.search).get('support') === 'privacy')
   const [openFaqIndex, setOpenFaqIndex] = useState(0)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
     <div className="landing-page" id="top">
@@ -138,18 +249,31 @@ export function LandingPage({ announcement, onSignIn, onPurchase, children }) {
       />
       <header className="landing-nav">
         <a href="#top" aria-label="EchoAI home"><Brand /></a>
-        <nav className="landing-nav-links" aria-label="Landing page">
-          <a href="#workflow">How it works</a>
-          <a href="#tools">Features</a>
-          <a href="#pricing">Pricing &amp; Tokens</a>
-          <a href="#faq">FAQ</a>
+        <nav className={`landing-nav-links ${mobileMenuOpen ? 'is-open' : ''}`} aria-label="Landing page">
+          <NavDropdown label="Product">
+            <div className="landing-product-links">
+              {PRODUCT_LINKS.map(([label, href]) => <a href={href} key={label} onClick={() => setMobileMenuOpen(false)}>{label}<span>Explore</span></a>)}
+            </div>
+          </NavDropdown>
+          <NavDropdown label="Social media" wide>
+            <div className="landing-social-links">
+              {SOCIAL_CHANNELS.map((channel) => <a href="#workflow" key={channel} onClick={() => setMobileMenuOpen(false)}>{channel}</a>)}
+            </div>
+            <p className="landing-menu-note">One calendar for your connected channels. New integrations are released as provider access becomes available.</p>
+          </NavDropdown>
+          <a href="#pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
+          <NavDropdown label="Resources">
+            <a href="#workflow" onClick={() => setMobileMenuOpen(false)}>How it works</a>
+            <a href="#faq" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
+            <button type="button" onClick={() => { setSupportOpen(true); setMobileMenuOpen(false) }}>Contact support</button>
+          </NavDropdown>
         </nav>
         <div className="landing-nav-actions">
-          <button type="button" className="landing-support-link" onClick={() => setSupportOpen(true)}>
-            Need help signing in?
-          </button>
           <button type="button" className="landing-login" onClick={onSignIn}>Sign in</button>
-          <button type="button" className="landing-primary-action" onClick={onPurchase}>Get started</button>
+          <button type="button" className="landing-primary-action" onClick={onCreateAccount}>Create free account</button>
+          <button type="button" className="landing-menu-toggle" onClick={() => setMobileMenuOpen((open) => !open)} aria-label="Toggle navigation" aria-expanded={mobileMenuOpen}>
+            {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
         </div>
       </header>
 
@@ -158,23 +282,20 @@ export function LandingPage({ announcement, onSignIn, onPurchase, children }) {
         <section className="landing-hero">
           <div className="landing-hero-content">
             <div className="landing-badge"><span /> AI Marketing &amp; Creative Operating System</div>
-            <h1 className="landing-headline">Create, edit, publish, and listen in one connected AI workspace.</h1>
+            <h1 className="landing-headline">Your content, team, and creative tools in one connected workspace.</h1>
             <p className="landing-subhead">
-              Transform raw documents, presentations, and brand files into campaign-ready creative. Refine in non-destructive photo and timeline video editors, schedule across major social channels, and track real-time audience sentiment.
+              Create, refine, schedule, and measure campaigns without losing the thread between tools. Start with a free EchoAI account and upgrade when you need paid capabilities.
             </p>
             <div className="landing-hero-actions">
-              <button type="button" className="landing-primary-action landing-hero-btn" onClick={onPurchase}>
-                Start free trial / Create project <span aria-hidden="true">→</span>
+              <button type="button" className="landing-primary-action landing-hero-btn" onClick={onCreateAccount}>
+                Create your free account <span aria-hidden="true">→</span>
               </button>
-              <a href="#pricing" className="landing-secondary-action landing-hero-btn" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                View pricing ($29–$129)
-              </a>
             </div>
             <div className="landing-proof-row" aria-label="Plan highlights">
-              <span><strong>$29/mo</strong> starting tier</span>
+              <span><strong>Free</strong> account access</span>
               <span><strong>500–7,500</strong> monthly tokens</span>
               <span><strong>Permanent</strong> token rollover</span>
-              <span><strong>Complete</strong> creative suite</span>
+              <span><strong>11</strong> social destinations</span>
             </div>
           </div>
 
@@ -387,6 +508,7 @@ export function LandingPage({ announcement, onSignIn, onPurchase, children }) {
       </footer>
 
       {supportOpen && <SupportDialog onClose={() => setSupportOpen(false)} />}
+      <PrivacyChoices />
     </div>
   )
 }

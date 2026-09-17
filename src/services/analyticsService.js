@@ -1,6 +1,16 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const DAYS_MS = 24 * 60 * 60 * 1000
+export const PRIVACY_STORAGE_KEY = 'echoai-privacy-choices-v1'
+
+export const hasAnalyticsConsent = () => {
+  try {
+    const choices = JSON.parse(window.localStorage.getItem(PRIVACY_STORAGE_KEY))
+    return choices?.analytics === true
+  } catch {
+    return false
+  }
+}
 
 const normalizeEvent = (record) => ({
   id: record.id,
@@ -32,7 +42,7 @@ const averageDays = (values) => {
 
 export const analyticsService = {
   async trackEvent({ session, eventType, eventName, route = '', metadata = {} }) {
-    if (!isSupabaseConfigured || !session?.id || !eventType || !eventName) return
+    if (!hasAnalyticsConsent() || !isSupabaseConfigured || !session?.id || !eventType || !eventName) return
 
     await supabase.from('app_analytics_events').insert({
       user_id: session.id,
