@@ -310,27 +310,31 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
             </div>
           </div>
 
-          <div className="landing-hero-visual landing-mascot-scene" aria-label="EchoAI creative workspace illustration">
-            <div className="landing-scene-label">Ideas<br />into impact! <span>↘</span></div>
-            <div className="landing-social-stack" aria-hidden="true">
-              <span className="scene-badge badge-ig">IG</span>
-              <span className="scene-badge badge-tt">TT</span>
-              <span className="scene-badge badge-yt">YT</span>
-              <span className="scene-badge badge-x">X</span>
-            </div>
-            <img className="landing-scene-mascot" src={echoMascot} alt="Echo, the EchoAI creative assistant" />
-            <div className="landing-scene-workstation">
-              <div className="landing-workstation-monitor">
-                <div className="monitor-title"><Sparkles size={16} /><span>Campaign day</span></div>
-                <strong>Everything scheduled</strong>
-                <ul>
-                  <li><Check size={12} /> Content created</li>
-                  <li><Check size={12} /> Media polished</li>
-                  <li><Check size={12} /> Posts queued</li>
-                </ul>
+          <div className="landing-hero-visual" aria-label="EchoAI creative workspace illustration">
+            <div className="landing-hero-card">
+              <div className="landing-hero-platforms" aria-hidden="true">
+                <span className="scene-badge badge-ig">IG</span>
+                <span className="scene-badge badge-tt">TT</span>
+                <span className="scene-badge badge-yt">YT</span>
+                <span className="scene-badge badge-x">X</span>
               </div>
-              <div className="landing-workstation-laptop"><Sparkles size={20} /><span>EchoAI</span></div>
-              <div className="landing-workstation-note"><Check size={16} /><span><strong>4 of 4 done</strong>Rest of week: yours</span></div>
+              <div className="landing-hero-mascot-row">
+                <span className="landing-scene-label">Ideas into impact! <span aria-hidden="true">↘</span></span>
+                <img className="landing-scene-mascot" src={echoMascot} alt="Echo, the EchoAI creative assistant" />
+              </div>
+              <div className="landing-hero-desk">
+                <div className="landing-workstation-laptop"><Sparkles size={16} /><span>EchoAI</span></div>
+                <div className="landing-workstation-monitor">
+                  <div className="monitor-title"><Sparkles size={13} /><span>Campaign day</span></div>
+                  <strong>Everything scheduled</strong>
+                  <ul>
+                    <li><Check size={11} /> Content created</li>
+                    <li><Check size={11} /> Media polished</li>
+                    <li><Check size={11} /> Posts queued</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="landing-hero-footnote"><Check size={13} /><span><strong>4 of 4 done</strong> — rest of week is yours</span></div>
             </div>
           </div>
         </section>
