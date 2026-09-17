@@ -11,7 +11,7 @@ const assertAccountCanAccess = (accessStatus, role = 'user') => {
     return
   }
 
-  if (!accessStatus || accessStatus === 'active' || accessStatus === 'approved') {
+  if (!accessStatus || accessStatus === 'active' || accessStatus === 'approved' || accessStatus === 'pending') {
     return
   }
 
@@ -22,9 +22,8 @@ const assertAccountCanAccess = (accessStatus, role = 'user') => {
 }
 
 const BLOCKED_STATUS_MESSAGES = {
-  pending: 'Your account is not active yet. Complete your subscription to unlock access.',
   denied: 'Your account request was denied. Contact Management or IT for help.',
-  deactivated: 'Your access is inactive. This usually means a subscription lapsed or a payment failed — renew to restore it instantly.',
+  deactivated: 'Your account has been deactivated. Contact Management or IT for help.',
 }
 
 const normalizeRequest = (record) => ({
@@ -394,7 +393,7 @@ export const authService = {
         reviewedAt: null,
       })
 
-      return { ok: true }
+      return { ok: true, activated: true, freeAccount: true }
     }
 
     const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://echoaipro.com'
