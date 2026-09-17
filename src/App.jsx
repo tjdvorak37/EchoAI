@@ -19,6 +19,7 @@ import { CalendarDays } from 'lucide-react'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
+import { UpgradeDialog } from './components/UpgradeDialog'
 
 const AI_PROMPT_IDEAS = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
@@ -99,6 +100,16 @@ const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it', 'accountant', 'board_member']
 const STAFF_PLAN = 'creator'
 const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCase())
+const FREE_ACCOUNT_TABS = new Set(['dashboard', 'credits', 'account', 'help'])
+const TAB_LABELS = {
+  listening: 'Social Listening',
+  repost: 'Repost Hub',
+  scheduler: 'Scheduler',
+  assistant: 'Create',
+  photo: 'Photo Creator',
+  studio: 'Video Studio',
+  integrations: 'Integrations',
+}
 
 function App() {
   const [authView, setAuthView] = useState(() =>
@@ -303,6 +314,9 @@ function App() {
     () => new URLSearchParams(window.location.search).get('checkout') || '',
   )
   const [myEntitlement, setMyEntitlement] = useState(null)
+  const [upgradePrompt, setUpgradePrompt] = useState('')
+  const [upgradePlanLoading, setUpgradePlanLoading] = useState('')
+  const [upgradeError, setUpgradeError] = useState('')
   const [aiDashboard, setAiDashboard] = useState(null)
   const [creditPurchaseModalOpen, setCreditPurchaseModalOpen] = useState(false)
   const [selectedCreditPackKey, setSelectedCreditPackKey] = useState('')
@@ -327,6 +341,33 @@ function App() {
   const [incomingReferralCode] = useState(
     () => new URLSearchParams(window.location.search).get('ref') || '',
   )
+  const hasPaidAccess = isStaffRole(session?.role) || myEntitlement?.entitled !== false
+
+  const requestWorkspaceTab = (tab) => {
+    if (hasPaidAccess || FREE_ACCOUNT_TABS.has(tab)) {
+      setActiveTab(tab)
+      return
+    }
+    setUpgradeError('')
+    setUpgradePrompt(TAB_LABELS[tab] || 'This feature')
+  }
+
+  const handleChooseUpgradePlan = async (planKey) => {
+    setUpgradeError('')
+    setUpgradePlanLoading(planKey)
+    try {
+      await billingService.startCheckout({
+        plan: planKey,
+        billingInterval: 'monthly',
+        email: session?.email,
+        fullName: contactCard?.fullName || session?.user_metadata?.full_name || '',
+        referralCode: incomingReferralCode,
+      })
+    } catch (error) {
+      setUpgradeError(error.message)
+      setUpgradePlanLoading('')
+    }
+  }
 
   const refreshAiBalance = async (addedAmount = null) => {
     try {
@@ -890,8 +931,8 @@ function App() {
         result?.activated
           ? result.seatActivated
             ? 'Account created and your company seat is assigned. Check your inbox to verify your email, then sign in.'
-            : 'Account created and your subscription is attached. Check your inbox to verify your email, then sign in.'
-          : 'Account request submitted. Check your inbox to verify your email. Access unlocks once your subscription is active or a manager approves you.',
+            : 'Your free account is ready. Check your inbox to verify your email, then sign in.'
+          : 'Your free account is ready. Check your inbox to verify your email, then sign in.',
       )
       setAuthView('signin')
     } catch (error) {
@@ -2754,8 +2795,13 @@ function App() {
     }
   }
 
-  // Continuously enforce billing entitlement. If a renewal fails or a plan
-  // lapses while someone is signed in, their session ends without intervention.
+  const returnToFreeWorkspace = useEffectEvent(() => {
+    if (FREE_ACCOUNT_TABS.has(activeTab)) return
+    setActiveTab('dashboard')
+    setUpgradePrompt(TAB_LABELS[activeTab] || 'This feature')
+  })
+
+  // Refresh paid capability without ending the permanent free account session.
   useEffect(() => {
     if (!isSupabaseConfigured || !session?.id) return undefined
 
@@ -2764,7 +2810,7 @@ function App() {
     const enforceEntitlement = async () => {
       // Staff run the site itself and are never billed, so entitlement never gates them.
       if (isStaffRole(session?.role)) {
-        setMyEntitlement({ entitled: true, status: 'employee', plan: STAFF_PLAN, provider: 'internal', role: session.role })
+        setMyEntitlement({ entitled: true, accessLevel: 'paid', status: 'employee', plan: STAFF_PLAN, provider: 'internal', role: session.role })
         return
       }
 
@@ -2780,11 +2826,7 @@ function App() {
       setMyEntitlement(entitlement)
 
       if (entitlement?.entitled !== false) return
-
-      await authService.signOut()
-      if (cancelled) return
-      setSession(null)
-      setAuthError('Your subscription is no longer active. Renew to restore access.')
+      returnToFreeWorkspace()
     }
     enforceEntitlement()
     const timer = setInterval(enforceEntitlement, 5 * 60 * 1000)
@@ -2816,6 +2858,8 @@ function App() {
     setAiSuggestions([])
     setAiAgentConfig(createDefaultAiAgentConfig())
     setAiAgentDraft(createDefaultAiAgentConfig())
+    setMyEntitlement(null)
+    setUpgradePrompt('')
   }
 
   const isTemporaryPasswordChange = session?.mustChangePassword === true || session?.app_metadata?.must_change_password === true
@@ -3145,7 +3189,7 @@ function App() {
                     className="text-button"
                     onClick={() => setShowPurchase(true)}
                   >
-                    Don&apos;t have access? Purchase a license →
+                    Need paid tools? View plans →
                   </button>
                 </form>
               )}
@@ -3237,6 +3281,18 @@ function App() {
         audience="application"
         dismissalScope={session.id}
       />
+      {upgradePrompt && (
+        <UpgradeDialog
+          feature={upgradePrompt}
+          loadingPlan={upgradePlanLoading}
+          error={upgradeError}
+          onChoosePlan={handleChooseUpgradePlan}
+          onClose={() => {
+            setUpgradePrompt('')
+            setUpgradeError('')
+          }}
+        />
+      )}
       <Suspense fallback={null}>
         <CalendarPopout
           open={calendarOpen}
@@ -3536,16 +3592,16 @@ function App() {
           <button
             key={key}
             type="button"
-            className={activeTab === key ? 'nav-link active' : 'nav-link'}
-            onClick={() => setActiveTab(key)}
+            className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
+            onClick={() => requestWorkspaceTab(key)}
           >
-            {label}
+            {label}{!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? ' · Paid' : ''}
           </button>
         ))}
       </nav>
 
-      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${activeTab === 'admin' ? 'management-workspace-layout' : ''} ${isAssetPanelOpen && activeTab !== 'admin' ? '' : 'asset-drawer-collapsed'}`}>
-        {activeTab !== 'help' && activeTab !== 'admin' && (
+      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${activeTab === 'admin' ? 'management-workspace-layout' : ''} ${hasPaidAccess && isAssetPanelOpen && activeTab !== 'admin' ? '' : 'asset-drawer-collapsed'}`}>
+        {hasPaidAccess && activeTab !== 'help' && activeTab !== 'admin' && (
         <aside
           className={`asset-drawer ${activeTab === 'photo' ? 'photo-workspace-drawer' : ''} ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
           onDragEnter={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); setDrawerDragActive(true) } }}
@@ -3914,7 +3970,7 @@ function App() {
                   >
                     ⚡ Purchase additional tokens
                   </button>
-                  <button type="button" className="ghost-button" onClick={() => setActiveTab('assistant')}>Create with AI</button>
+                  <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('assistant')}>Create with AI</button>
                 </div>
               </div>
               <div className="dashboard-ai-summary">
@@ -4048,13 +4104,13 @@ function App() {
               <article className="sub-panel tone-sun">
                 <h3>Quick actions</h3>
                 <div className="action-row">
-                  <button type="button" className="primary-button" onClick={() => setActiveTab('photo')}>
+                  <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('photo')}>
                     Open photo creator
                   </button>
-                  <button type="button" className="primary-button" onClick={() => setActiveTab('studio')}>
+                  <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('studio')}>
                     Open video studio
                   </button>
-                  <button type="button" className="ghost-button" onClick={() => setActiveTab('scheduler')}>
+                  <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('scheduler')}>
                     Open scheduler
                   </button>
                 </div>
@@ -5101,11 +5157,20 @@ function App() {
             <h3 className="section-label">Subscription and payments</h3>
             <div className="list-row">
               <div>
-                <p>{myEntitlement?.plan ? `${getPlan(myEntitlement.plan).label} plan` : 'Your EchoAI subscription'}</p>
-                <span className="muted">Update payment method, upgrade, downgrade, or cancel your subscription.</span>
+                <p>{myEntitlement?.entitled === false ? 'Free account' : myEntitlement?.plan ? `${getPlan(myEntitlement.plan).label} plan` : 'Your EchoAI subscription'}</p>
+                <span className="muted">
+                  {myEntitlement?.entitled === false
+                    ? 'Your account remains available. Choose a plan whenever you need paid tools.'
+                    : 'Update payment method, upgrade, downgrade, or cancel your subscription.'}
+                </span>
               </div>
-              <button type="button" className="ghost-button" disabled={billingPortalLoading || !isSupabaseConfigured} onClick={handleOpenBillingPortal}>
-                {billingPortalLoading ? 'Opening...' : 'Manage billing'}
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={billingPortalLoading || !isSupabaseConfigured}
+                onClick={myEntitlement?.entitled === false ? () => setUpgradePrompt('paid EchoAI tools') : handleOpenBillingPortal}
+              >
+                {billingPortalLoading ? 'Opening...' : myEntitlement?.entitled === false ? 'Choose a plan' : 'Manage billing'}
               </button>
             </div>
             {billingPortalError && <span className="field-error">{billingPortalError}</span>}
