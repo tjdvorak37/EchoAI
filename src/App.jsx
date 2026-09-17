@@ -21,6 +21,7 @@ import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAge
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
 import { UpgradeDialog } from './components/UpgradeDialog'
+import { InPageEchoAssistant } from './components/InPageEchoAssistant'
 
 const AI_PROMPT_IDEAS = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
@@ -3588,6 +3589,8 @@ function App() {
           </button>
         ))}
       </nav>
+
+      <InPageEchoAssistant activeTab={activeTab} />
 
       <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${activeTab === 'admin' ? 'management-workspace-layout' : ''} ${hasPaidAccess && isAssetPanelOpen && activeTab !== 'admin' ? '' : 'asset-drawer-collapsed'}`}>
         {hasPaidAccess && activeTab !== 'help' && activeTab !== 'admin' && (
