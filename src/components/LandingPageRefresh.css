@@ -13,10 +13,7 @@
   --pop-violet: #8b5cf6;
   --pop-green: #20b981;
   background:
-    linear-gradient(90deg, rgba(49, 94, 231, 0.035) 1px, transparent 1px),
-    linear-gradient(rgba(49, 94, 231, 0.035) 1px, transparent 1px),
-    #fbfcff;
-  background-size: 48px 48px;
+    linear-gradient(180deg, #f5fbf5 0%, #f7fbff 34%, #fff8fc 67%, #f4faf7 100%);
 }
 
 .landing-nav {
@@ -169,15 +166,18 @@
 }
 
 .landing-page .landing-showcase-hero {
+  /* Forest source: Unsplash photo-1441974231531-c6227db76b6e, used under the Unsplash License. */
   min-height: calc(100vh - 76px);
-  max-width: 1500px;
+  max-width: none;
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(520px, 1.1fr);
   gap: clamp(2rem, 5vw, 6rem);
   align-items: center;
   padding: clamp(3.5rem, 7vh, 6rem) clamp(1.25rem, 5vw, 5.5rem) clamp(3.5rem, 6vh, 5rem);
   background:
-    linear-gradient(145deg, rgba(239, 244, 255, 0.9), rgba(255, 247, 253, 0.78) 58%, rgba(237, 252, 249, 0.82));
+    linear-gradient(90deg, rgba(249, 253, 249, 0.98) 0%, rgba(249, 253, 249, 0.93) 36%, rgba(245, 252, 248, 0.48) 59%, rgba(14, 50, 39, 0.12) 100%),
+    linear-gradient(0deg, rgba(23, 76, 61, 0.26), transparent 38%),
+    url('../assets/echo-wilderness.webp') center / cover no-repeat;
 }
 
 .landing-showcase-hero .landing-hero-content {
@@ -251,6 +251,27 @@
   stroke-width: 3;
 }
 
+.landing-rest-message {
+  max-width: 500px;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 1.25rem;
+  padding: 0.75rem 0;
+  color: #315c4d;
+  border-top: 1px solid rgba(37, 116, 88, 0.2);
+  font-size: 0.92rem;
+}
+
+.landing-rest-message > svg {
+  flex: 0 0 auto;
+  color: #15966c;
+}
+
+.landing-rest-message strong {
+  color: #174c3a;
+}
+
 .landing-page .landing-mascot-scene {
   position: relative;
   width: 100%;
@@ -263,36 +284,306 @@
 .landing-mascot-scene::before {
   content: '';
   position: absolute;
-  inset: 8% 2% 2%;
+  left: -4%;
+  right: -3%;
+  bottom: 0;
+  height: 31%;
   z-index: -2;
-  background:
-    linear-gradient(135deg, rgba(194, 213, 255, 0.62), rgba(255, 222, 242, 0.62)),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.54) 0 2px, transparent 2px 76px);
-  border: 1px solid rgba(133, 159, 220, 0.22);
-  border-radius: 8px;
-  transform: rotate(-1.5deg);
+  background: linear-gradient(180deg, rgba(55, 127, 75, 0), rgba(25, 76, 49, 0.72) 54%, rgba(13, 48, 34, 0.92));
+  clip-path: polygon(0 42%, 10% 20%, 24% 35%, 37% 12%, 52% 30%, 66% 8%, 81% 31%, 100% 16%, 100% 100%, 0 100%);
 }
 
 .landing-mascot-scene::after {
   content: '';
   position: absolute;
-  left: 8%;
-  right: 1%;
-  bottom: 2%;
-  height: 21%;
+  left: -2%;
+  right: -1%;
+  bottom: 0;
+  height: 15%;
   z-index: -1;
-  background: linear-gradient(100deg, #f7a87b, #ffcadb 40%, #87d9c9 82%);
-  border-radius: 8px;
-  box-shadow: 0 25px 45px rgba(50, 59, 104, 0.16);
+  background: linear-gradient(100deg, rgba(38, 94, 57, 0.96), rgba(74, 130, 74, 0.92) 45%, rgba(22, 78, 57, 0.98));
+  border-radius: 50% 50% 0 0 / 45% 45% 0 0;
+  box-shadow: inset 0 12px 24px rgba(173, 222, 144, 0.18);
 }
 
 .landing-scene-mascot {
   position: absolute;
-  left: 8%;
-  bottom: 13%;
-  width: min(58%, 440px);
-  filter: drop-shadow(0 22px 22px rgba(52, 39, 99, 0.22));
+  left: 0;
+  bottom: 7%;
+  width: min(45%, 340px);
+  filter: drop-shadow(0 22px 22px rgba(10, 37, 28, 0.3));
   animation: echo-float 5.2s ease-in-out infinite;
+}
+
+.landing-wildlife {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.landing-bird {
+  position: absolute;
+  z-index: 2;
+  color: #173e3b;
+  filter: drop-shadow(0 4px 3px rgba(255, 255, 255, 0.35));
+  animation: landing-bird-glide 7s ease-in-out infinite;
+}
+
+.landing-bird.bird-one {
+  top: 7%;
+  left: 22%;
+}
+
+.landing-bird.bird-two {
+  top: 16%;
+  left: 38%;
+  color: #d94886;
+  animation-delay: -3s;
+}
+
+.landing-butterfly {
+  position: absolute;
+  z-index: 5;
+  width: 30px;
+  height: 20px;
+  animation: landing-butterfly-drift 5s ease-in-out infinite;
+}
+
+.landing-butterfly i {
+  position: absolute;
+  top: 2px;
+  width: 15px;
+  height: 18px;
+  background: var(--butterfly-color);
+  border: 2px solid rgba(255, 255, 255, 0.65);
+}
+
+.landing-butterfly i:first-child {
+  left: 1px;
+  border-radius: 90% 35% 70% 30%;
+  transform: rotate(-22deg);
+}
+
+.landing-butterfly i:last-child {
+  right: 1px;
+  border-radius: 35% 90% 30% 70%;
+  transform: rotate(22deg);
+}
+
+.butterfly-one { --butterfly-color: #f553a7; top: 35%; left: 16%; }
+.butterfly-two { --butterfly-color: #3ad8d0; top: 28%; right: 12%; animation-delay: -1.7s; }
+.butterfly-three { --butterfly-color: #ffc94d; top: 48%; right: 35%; animation-delay: -3.2s; transform: scale(.8); }
+
+.landing-river {
+  position: absolute;
+  right: -16%;
+  bottom: 0;
+  z-index: -1;
+  width: 72%;
+  height: 24%;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(93, 233, 225, 0.9), rgba(42, 158, 210, 0.94) 48%, rgba(80, 93, 198, 0.9));
+  border: 3px solid rgba(204, 255, 244, 0.64);
+  border-radius: 70% 0 0 10% / 100% 0 0 20%;
+  transform: rotate(-5deg);
+  box-shadow: 0 -8px 24px rgba(88, 235, 218, 0.16);
+}
+
+.landing-river span {
+  position: absolute;
+  left: 12%;
+  width: 64%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+}
+
+.landing-river span:first-child { top: 34%; }
+.landing-river span:last-child { top: 61%; left: 32%; width: 45%; }
+
+.landing-forest-workstation {
+  position: absolute;
+  right: 0;
+  bottom: 8%;
+  z-index: 3;
+  width: 59%;
+  height: 315px;
+}
+
+.landing-forest-workstation::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 54px;
+  height: 20px;
+  background: linear-gradient(180deg, #b46c42, #774329);
+  border: 2px solid rgba(74, 41, 25, 0.44);
+  border-radius: 7px;
+  box-shadow: 0 10px 18px rgba(28, 45, 30, 0.3);
+}
+
+.landing-forest-workstation::after {
+  content: '';
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 0;
+  height: 63px;
+  background: linear-gradient(90deg, transparent 0 7%, #623923 7% 11%, transparent 11% 89%, #623923 89% 93%, transparent 93%);
+}
+
+.landing-workstation-monitor {
+  position: absolute;
+  right: 7%;
+  bottom: 72px;
+  width: min(72%, 280px);
+  min-height: 205px;
+  padding: 0.85rem;
+  color: #dffcf5;
+  background: linear-gradient(145deg, rgba(19, 35, 64, 0.96), rgba(34, 54, 98, 0.96));
+  border: 7px solid #17213f;
+  border-bottom-width: 13px;
+  border-radius: 8px;
+  box-shadow: 0 16px 28px rgba(12, 31, 23, 0.35);
+}
+
+.landing-workstation-monitor::after {
+  content: '';
+  position: absolute;
+  left: 45%;
+  bottom: -42px;
+  width: 26%;
+  height: 32px;
+  background: linear-gradient(90deg, #17213f 0 18%, #44557e 18% 82%, #17213f 82%);
+  clip-path: polygon(38% 0, 62% 0, 67% 72%, 100% 88%, 100% 100%, 0 100%, 0 88%, 33% 72%);
+}
+
+.landing-workstation-monitor > div {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #71e2e0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.landing-workstation-monitor > strong {
+  display: block;
+  margin: 0.8rem 0;
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.landing-workstation-monitor ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-workstation-monitor li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.5rem;
+  color: #c7d8eb;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  font-size: 0.72rem;
+}
+
+.landing-workstation-monitor li svg {
+  color: #4ee0a7;
+  stroke-width: 3;
+}
+
+.landing-workstation-laptop {
+  position: absolute;
+  left: 0;
+  bottom: 73px;
+  width: 120px;
+  height: 85px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.3rem;
+  color: #8ff3eb;
+  background: linear-gradient(145deg, #243566, #101a39);
+  border: 4px solid #6b7da8;
+  border-radius: 7px 7px 2px 2px;
+  box-shadow: 0 12px 20px rgba(16, 34, 27, 0.28);
+  transform: perspective(250px) rotateY(8deg);
+}
+
+.landing-workstation-laptop::after {
+  content: '';
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  bottom: -10px;
+  height: 9px;
+  background: #a8b3ca;
+  border-radius: 1px 1px 6px 6px;
+}
+
+.landing-workstation-laptop span {
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.landing-workstation-cup {
+  position: absolute;
+  left: 35%;
+  bottom: 74px;
+  width: 72px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.2rem;
+  color: #ca4e76;
+  background: #fff5ec;
+  border: 3px solid #e6c5aa;
+  border-radius: 5px 5px 18px 18px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.landing-workstation-note {
+  position: absolute;
+  right: 1%;
+  top: -3%;
+  min-width: 175px;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  color: #174c3a;
+  background: rgba(247, 255, 244, 0.94);
+  border: 1px solid rgba(103, 158, 95, 0.5);
+  border-radius: 7px;
+  box-shadow: 0 10px 20px rgba(14, 48, 33, 0.2);
+  transform: rotate(3deg);
+}
+
+.landing-workstation-note > svg {
+  color: #15966c;
+}
+
+.landing-workstation-note span {
+  display: grid;
+  color: #547263;
+  font-size: 0.68rem;
+}
+
+.landing-workstation-note strong {
+  color: #174c3a;
+  font-size: 0.78rem;
 }
 
 .landing-scene-desk {
@@ -351,13 +642,13 @@
 
 .landing-idea-note {
   position: absolute;
-  top: 13%;
-  left: 7%;
+  top: 18%;
+  left: 0;
   z-index: 3;
   padding: 0.8rem 1rem;
   color: #6d40d8;
-  background: #fff;
-  border: 1px solid #d5c9ff;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(213, 201, 255, 0.8);
   border-radius: 50%;
   box-shadow: 0 10px 22px rgba(66, 48, 130, 0.12);
   font-size: 1.05rem;
@@ -387,11 +678,11 @@
   font-weight: 800;
 }
 
-.landing-float-instagram { top: 8%; right: 34%; background: linear-gradient(135deg, #7c3aed, #f43f7f, #ff9b42); transform: rotate(10deg); }
-.landing-float-tiktok { top: 17%; right: 18%; background: #111827; transform: rotate(-7deg); }
-.landing-float-youtube { top: 5%; right: 3%; background: #f20c22; transform: rotate(9deg); }
-.landing-float-linkedin { top: 35%; right: 2%; background: #0a66c2; transform: rotate(7deg); }
-.landing-float-x { top: 24%; right: 1%; background: #111827; transform: translateX(-80px) rotate(-5deg); }
+.landing-float-instagram { top: 8%; right: 35%; background: linear-gradient(135deg, #7c3aed, #f43f7f, #ff9b42); transform: rotate(10deg); }
+.landing-float-tiktok { top: 18%; right: 19%; background: #111827; transform: rotate(-7deg); }
+.landing-float-youtube { top: 7%; right: 3%; background: #f20c22; transform: rotate(9deg); }
+.landing-float-linkedin { top: 40%; right: 1%; background: #0a66c2; transform: rotate(7deg); }
+.landing-float-x { top: 27%; right: 1%; background: #111827; transform: translateX(-80px) rotate(-5deg); }
 
 .landing-tool-ribbon {
   position: relative;
@@ -647,6 +938,24 @@
 .landing-closing-proof { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1.5rem; color: #b9c5dc; font-size: 0.76rem; }
 .landing-closing-proof span { display: flex; align-items: center; gap: 0.3rem; }
 .landing-closing-proof svg { color: #34d399; }
+
+@keyframes landing-bird-glide {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-4deg); }
+  50% { transform: translate3d(18px, -8px, 0) rotate(4deg); }
+}
+
+@keyframes landing-butterfly-drift {
+  0%, 100% { translate: 0 0; rotate: -4deg; }
+  35% { translate: 10px -12px; rotate: 8deg; }
+  70% { translate: -5px -5px; rotate: -8deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-bird,
+  .landing-butterfly {
+    animation: none;
+  }
+}
 
 .landing-hero-content {
   max-width: 980px;
@@ -962,6 +1271,9 @@
     grid-template-columns: 1fr;
     gap: 2rem;
     padding-top: 4.5rem;
+    background:
+      linear-gradient(180deg, rgba(249, 253, 249, 0.97) 0%, rgba(249, 253, 249, 0.88) 44%, rgba(28, 75, 57, 0.16) 72%, rgba(16, 56, 40, 0.28) 100%),
+      url('../assets/echo-wilderness.webp') center / cover no-repeat;
   }
 
   .landing-showcase-hero .landing-hero-content {
@@ -975,6 +1287,16 @@
   .landing-page .landing-mascot-scene {
     min-height: 510px;
     max-width: 760px;
+  }
+
+  .landing-scene-mascot {
+    left: 3%;
+    width: min(40%, 300px);
+  }
+
+  .landing-forest-workstation {
+    right: 3%;
+    width: 58%;
   }
 
   .landing-tool-ribbon {
@@ -1061,6 +1383,9 @@
 
   .landing-page .landing-showcase-hero {
     padding: 3rem 1rem 2.5rem;
+    background:
+      linear-gradient(180deg, rgba(249, 253, 249, 0.98) 0%, rgba(249, 253, 249, 0.9) 51%, rgba(28, 75, 57, 0.15) 75%, rgba(16, 56, 40, 0.3) 100%),
+      url('../assets/echo-wilderness.webp') 42% center / cover no-repeat;
   }
 
   .landing-showcase-hero .landing-headline {
@@ -1091,30 +1416,53 @@
   }
 
   .landing-page .landing-mascot-scene {
-    min-height: 390px;
+    min-height: 470px;
   }
 
   .landing-mascot-scene::before {
-    inset: 12% 0 2%;
+    left: -5%;
+    right: -5%;
+    bottom: 0;
+    height: 29%;
   }
 
   .landing-scene-mascot {
-    left: 0;
-    bottom: 12%;
-    width: 62%;
+    left: -2%;
+    bottom: 5%;
+    width: 46%;
   }
 
-  .landing-scene-desk {
-    right: 0;
+  .landing-forest-workstation {
+    right: -4%;
     bottom: 5%;
-    width: 56%;
-    transform: scale(0.78);
+    width: 68%;
+    transform: scale(0.68);
     transform-origin: bottom right;
   }
 
+  .landing-river {
+    right: -28%;
+    width: 82%;
+    height: 19%;
+  }
+
+  .landing-bird.bird-one {
+    top: 8%;
+    left: 18%;
+  }
+
+  .landing-bird.bird-two {
+    top: 17%;
+    left: 42%;
+  }
+
+  .butterfly-one { top: 39%; left: 8%; }
+  .butterfly-two { top: 31%; right: 5%; }
+  .butterfly-three { top: 51%; right: 34%; }
+
   .landing-idea-note {
-    top: 14%;
-    left: 1%;
+    top: 23%;
+    left: 0;
     font-size: 0.78rem;
   }
 
