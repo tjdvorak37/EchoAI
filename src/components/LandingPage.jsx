@@ -3,6 +3,7 @@ import { Check, ChevronDown, Menu, ShieldCheck, X } from 'lucide-react'
 import demoPosterImage from '../assets/demo-poster.svg'
 import echoMascot from '../assets/echo-mascot.svg'
 import { PLAN_ORDER, PLANS, getAnnualSavings } from '../data/plans'
+import { SOCIAL_PLATFORMS } from '../data/socialPlatforms'
 import { authService } from '../services/authService'
 import { PRIVACY_STORAGE_KEY } from '../services/analyticsService'
 import { AnnouncementBanner } from './AnnouncementBanner'
@@ -15,20 +16,6 @@ const SUPPORT_CATEGORIES = [
   'Billing question',
   'Account access',
   'Something else',
-]
-
-const SOCIAL_CHANNELS = [
-  'Instagram',
-  'TikTok',
-  'YouTube',
-  'Threads',
-  'X',
-  'Twitch',
-  'Google Business Profile',
-  'Bluesky',
-  'Facebook',
-  'Pinterest',
-  'LinkedIn',
 ]
 
 const PRODUCT_LINKS = [
@@ -67,7 +54,7 @@ const FEATURE_FAQS = [
   },
   {
     q: 'Which social media channels can I publish to?',
-    a: 'EchoAI natively connects to Instagram, Facebook, TikTok, YouTube, X (Twitter), LinkedIn, and Snapchat with multi-channel queueing, scheduled deployments, and company repost syndication.',
+    a: 'EchoAI currently publishes to Instagram, Facebook, TikTok, YouTube, X, and LinkedIn. Threads, Twitch, Google Business Profile, Bluesky, and Pinterest are visible on our integration roadmap and will open as each provider connection is completed.',
   },
   {
     q: 'Are payments secure and can I cancel anytime?',
@@ -257,7 +244,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount, onPurchas
           </NavDropdown>
           <NavDropdown label="Social media" wide>
             <div className="landing-social-links">
-              {SOCIAL_CHANNELS.map((channel) => <a href="#workflow" key={channel} onClick={() => setMobileMenuOpen(false)}>{channel}</a>)}
+              {SOCIAL_PLATFORMS.map((platform) => <a href="#workflow" key={platform.key} onClick={() => setMobileMenuOpen(false)}>{platform.label}</a>)}
             </div>
             <p className="landing-menu-note">One calendar for your connected channels. New integrations are released as provider access becomes available.</p>
           </NavDropdown>
