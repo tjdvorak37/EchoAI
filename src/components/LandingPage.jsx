@@ -19,6 +19,15 @@ import {
 } from 'lucide-react'
 import demoPosterImage from '../assets/demo-poster.svg'
 import echoMascot from '../assets/echo-mascot.svg'
+import echoModern from '../assets/echo-poses/echo-modern-friendly.png'
+import echoTech from '../assets/echo-poses/echo-tech-assistant.png'
+import echoCreator from '../assets/echo-poses/echo-creator-mode.png'
+import echoSocial from '../assets/echo-poses/echo-social-media.png'
+import echoAiTools from '../assets/echo-poses/echo-ai-tools.png'
+import echoPhoto from '../assets/echo-poses/echo-photo-editor.png'
+import echoVideo from '../assets/echo-poses/echo-video-editor.png'
+import echoScheduler from '../assets/echo-poses/echo-scheduler.png'
+import echoAnalytics from '../assets/echo-poses/echo-analytics.png'
 import { SOCIAL_PLATFORMS } from '../data/socialPlatforms'
 import { authService } from '../services/authService'
 import { PRIVACY_STORAGE_KEY } from '../services/analyticsService'
@@ -35,7 +44,7 @@ const SUPPORT_CATEGORIES = [
 ]
 
 const PRODUCT_LINKS = [
-  ['AI Content Studio', '#tools'],
+  ['Workspace files', '#tools'],
   ['Photo Creator', '#tools'],
   ['Video Editor', '#tools'],
   ['Post Scheduler', '#workflow'],
@@ -44,15 +53,16 @@ const PRODUCT_LINKS = [
 ]
 
 const toolRibbon = [
-  ['social', Send, 'Social Media'],
-  ['photo', Image, 'Photo Editor'],
-  ['video', Video, 'Video Editor'],
-  ['schedule', CalendarDays, 'Scheduler'],
-  ['analytics', BarChart3, 'Analytics'],
+  ['social', Send, 'Social Media', echoSocial],
+  ['workspace', Layers3, 'Workspace', echoAiTools],
+  ['photo', Image, 'Photo Editor', echoPhoto],
+  ['video', Video, 'Video Editor', echoVideo],
+  ['schedule', CalendarDays, 'Scheduler', echoScheduler],
+  ['analytics', BarChart3, 'Analytics', echoAnalytics],
 ]
 
 const showcaseFeatures = [
-  [Layers3, 'Advanced photo and video editors', 'Refine layers, timelines, text, audio, and brand styling.'],
+  [Layers3, 'Advanced photo and video editors', 'Refine layers, timelines, text, audio, and brand styling.', echoPhoto],
   [CalendarDays, 'Multi-platform scheduling', 'Plan approved posts and keep every connected channel in view.'],
   [Users, 'Team collaboration', 'Share assets, coordinate reposts, and keep work organized.'],
   [BarChart3, 'Analytics and insights', 'Follow performance, listening signals, and campaign activity.'],
@@ -288,8 +298,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
             <div className="landing-badge"><Sparkles size={14} /> All-in-one creator workspace</div>
             <h1 className="landing-headline">Create. Plan.<br />Edit. Post. <em>Grow.</em></h1>
             <p className="landing-subhead">
-              Bring your content, team, and AI tools together in one bright, practical workspace. Create campaign ideas, edit photos and videos, schedule across your channels, and follow what resonates.
-                Bring your content and team together in one bright, practical workspace. Edit photos and videos, schedule across your channels, and follow what resonates.
+              Bring your content and team together in one bright, practical workspace. Edit photos and videos, schedule across your channels, and follow what resonates.
             </p>
             <div className="landing-hero-actions">
               <button type="button" className="landing-primary-action landing-hero-btn" onClick={onCreateAccount}>
@@ -314,7 +323,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
               </div>
               <div className="landing-hero-mascot-row">
                 <span className="landing-scene-label">Ideas into impact! <span aria-hidden="true">↘</span></span>
-                <img className="landing-scene-mascot" src={echoMascot} alt="Echo, the EchoAI creative assistant" />
+                <img className="landing-scene-mascot" src={echoModern} alt="Echo, the EchoAI creative assistant" />
               </div>
               <div className="landing-hero-desk">
                 <div className="landing-workstation-laptop"><Sparkles size={16} /><span>EchoAI</span></div>
@@ -334,10 +343,10 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
         </section>
 
         <nav className="landing-tool-ribbon" aria-label="EchoAI tools">
-          {toolRibbon.map(([key, Icon, label]) => (
+          {toolRibbon.map(([key, Icon, label, pose]) => (
             <a href="#tools" className={`landing-tool-tile tone-${key}`} key={key}>
-              <Icon size={27} />
-              <span>{label}</span>
+              <img src={pose} alt="" />
+              <span><Icon size={18} />{label}</span>
             </a>
           ))}
         </nav>
@@ -347,9 +356,10 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
             <div className="landing-workspace-topbar"><span><i /> Your creative workspace</span><Sparkles size={16} /></div>
             <div className="landing-workspace-body">
               <aside>
-                {['Home', 'Create', 'Media', 'Schedule', 'Analytics', 'AI tools', 'Team'].map((item, index) => <span className={index === 0 ? 'active' : ''} key={item}>{item}</span>)}
+                {['Home', 'Media', 'Photo', 'Video', 'Schedule', 'Analytics', 'Team'].map((item, index) => <span className={index === 0 ? 'active' : ''} key={item}>{item}</span>)}
               </aside>
               <div className="landing-workspace-canvas">
+                <img className="landing-tech-pose" src={echoTech} alt="Echo helping organize a campaign workspace" />
                 <div className="landing-media-row">
                   <img src={demoPosterImage} alt="Campaign artwork inside EchoAI" />
                   <div className="landing-media-swatch swatch-coral" />
@@ -368,9 +378,10 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
             <h2>One place to <em>create</em> and <span>grow.</span></h2>
             <p>Move from source material to finished content without losing time between disconnected apps.</p>
             <div className="landing-showcase-list">
-              {showcaseFeatures.map(([Icon, title, description], index) => (
+              {showcaseFeatures.map(([Icon, title, description, pose], index) => (
                 <div key={title} style={{ '--feature-index': index }}>
                   <span><Icon size={20} /></span><p><strong>{title}</strong><small>{description}</small></p>
+                  {pose && <img className="landing-feature-pose" src={pose} alt="" />}
                 </div>
               ))}
             </div>
@@ -378,7 +389,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
         </section>
 
         <section className="landing-color-cta" id="get-started">
-          <img src={echoMascot} alt="" />
+          <img src={echoCreator} alt="Echo in creator mode" />
           <div><h2>Let Echo do the heavy lifting.</h2><p>More creativity. Less busy work. Get your campaign ready, then enjoy the rest of your day.</p></div>
           <button type="button" className="landing-color-cta-button" onClick={onCreateAccount}>Start creating free <span>→</span></button>
         </section>
@@ -468,7 +479,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
 
       <footer className="landing-footer">
         <a href="#top"><Brand /></a>
-        <span>AI content creation, editing, publishing, and listening in one workspace.</span>
+        <span>Editing, publishing, analytics, and collaboration in one workspace.</span>
         <div className="landing-footer-actions">
           <button type="button" className="landing-support-link" onClick={() => setSupportOpen(true)}>
             Contact support

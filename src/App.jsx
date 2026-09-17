@@ -308,8 +308,6 @@ function App() {
   const [upgradePlanLoading, setUpgradePlanLoading] = useState('')
   const [upgradeError, setUpgradeError] = useState('')
   const [aiDashboard, setAiDashboard] = useState(null)
-  const [creditPurchaseModalOpen, setCreditPurchaseModalOpen] = useState(false)
-  const [selectedCreditPackKey, setSelectedCreditPackKey] = useState('')
   const [creditsCheckoutNotice, setCreditsCheckoutNotice] = useState(() => {
     const status = new URLSearchParams(window.location.search).get('credits')
     const tokens = new URLSearchParams(window.location.search).get('tokens')
@@ -3954,7 +3952,6 @@ function App() {
                   <button
                     type="button"
                     className="primary-button"
-                    onClick={() => setCreditPurchaseModalOpen(true)}
                   >
                     ⚡ Purchase additional tokens
                   </button>
@@ -3996,7 +3993,6 @@ function App() {
                     type="button"
                     className="primary-button"
                     style={{ marginTop: '0.45rem', fontSize: '0.84rem', padding: '0.48rem 0.85rem' }}
-                    onClick={() => setCreditPurchaseModalOpen(true)}
                   >
                     + Add Rollover Tokens
                   </button>
@@ -4036,10 +4032,6 @@ function App() {
                       key={pkg.key}
                       type="button"
                       className={`dashboard-token-quick-card ${pkg.popular ? 'popular' : ''} ${pkg.bestValue ? 'best-value' : ''}`}
-                      onClick={() => {
-                        setSelectedCreditPackKey(pkg.key)
-                        setCreditPurchaseModalOpen(true)
-                      }}
                     >
                       {pkg.popular && <span className="quick-badge popular">Popular</span>}
                       {pkg.bestValue && <span className="quick-badge best-value">Best Value</span>}
@@ -4897,7 +4889,6 @@ function App() {
             {aiGenerationEnabled() && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <div className="inhouse-engine-heading">
                 <div><h3>EchoAI hosted AI</h3><p className="muted">EchoAI Pro provides the AI accounts and keeps provider credentials on the backend. Your team uses Echo Credits instead of connecting personal AI accounts.</p></div>
-                <button type="button" className="primary-button" onClick={() => setCreditPurchaseModalOpen(true)}>⚡ Purchase Tokens (500–5,000)</button>
               </div>
               <div className="agent-connection-note">
                 <strong>Account status</strong>
@@ -5344,20 +5335,6 @@ function App() {
         </div>
       )}
 
-      {creditPurchaseModalOpen && (
-        <Suspense fallback={null}>
-          <CreditPurchasePanel
-            isModal={true}
-            initialSelectedKey={selectedCreditPackKey}
-            onClose={() => {
-              setCreditPurchaseModalOpen(false)
-              setSelectedCreditPackKey('')
-            }}
-            aiDashboard={aiDashboard}
-            onRefreshBalance={refreshAiBalance}
-          />
-        </Suspense>
-      )}
     </div>
   )
 }

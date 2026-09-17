@@ -434,6 +434,38 @@
   transition: transform 180ms ease, box-shadow 180ms ease;
 }
 
+.landing-tool-tile > img {
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 8px rgba(43, 48, 96, 0.12));
+}
+
+.landing-tool-tile > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.landing-tech-pose {
+  position: absolute;
+  right: 0.8rem;
+  top: 0.7rem;
+  z-index: 2;
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  filter: drop-shadow(0 7px 8px rgba(41, 50, 105, 0.16));
+}
+
+.landing-feature-pose {
+  width: 64px;
+  height: 64px;
+  margin-left: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 7px 8px rgba(41, 50, 105, 0.12));
+}
+
 .landing-tool-tile:hover { transform: translateY(-5px); box-shadow: 0 18px 30px rgba(44, 53, 91, 0.14); }
 .landing-tool-tile.tone-social { --tile-color: #0896cf; --tile-bg: #eaf8ff; }
 .landing-tool-tile.tone-ai { --tile-color: #7c3aed; --tile-bg: #f3efff; }
@@ -1162,6 +1194,20 @@
   .landing-tool-tile {
     min-height: 92px;
     font-size: 0.82rem;
+  }
+
+  .landing-tool-tile > img {
+    width: 52px;
+    height: 52px;
+  }
+
+  .landing-tech-pose {
+    width: 64px;
+    height: 64px;
+  }
+
+  .landing-feature-pose {
+    display: none;
   }
 
   .landing-product-showcase,
