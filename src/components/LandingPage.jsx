@@ -324,7 +324,6 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
               <span className="landing-butterfly butterfly-two"><i /><i /></span>
               <span className="landing-butterfly butterfly-three"><i /><i /></span>
             </div>
-            <div className="landing-river" aria-hidden="true"><span /><span /></div>
             <div className="landing-idea-note">Ideas<br />into impact! <span>↘</span></div>
             <div className="landing-social-float landing-float-instagram">IG</div>
             <div className="landing-social-float landing-float-tiktok">TT</div>

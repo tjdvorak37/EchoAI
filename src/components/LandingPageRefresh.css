@@ -173,11 +173,34 @@
   grid-template-columns: minmax(0, 0.9fr) minmax(520px, 1.1fr);
   gap: clamp(2rem, 5vw, 6rem);
   align-items: center;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   padding: clamp(3.5rem, 7vh, 6rem) clamp(1.25rem, 5vw, 5.5rem) clamp(3.5rem, 6vh, 5rem);
   background:
     linear-gradient(90deg, rgba(249, 253, 249, 0.98) 0%, rgba(249, 253, 249, 0.93) 36%, rgba(245, 252, 248, 0.48) 59%, rgba(14, 50, 39, 0.12) 100%),
     linear-gradient(0deg, rgba(23, 76, 61, 0.26), transparent 38%),
     url('../assets/echo-wilderness.webp') center / cover no-repeat;
+}
+
+.landing-page .landing-showcase-hero::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: clamp(100px, 14vw, 190px);
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(230, 242, 232, 0.14) 26%, rgba(240, 248, 243, 0.75) 70%, #f5fbf5 100%),
+    radial-gradient(ellipse at 12% 100%, rgba(45, 107, 65, 0.28), transparent 45%),
+    radial-gradient(ellipse at 83% 108%, rgba(53, 119, 76, 0.24), transparent 42%);
+}
+
+.landing-showcase-hero > * {
+  position: relative;
+  z-index: 2;
 }
 
 .landing-showcase-hero .landing-hero-content {
@@ -284,26 +307,25 @@
 .landing-mascot-scene::before {
   content: '';
   position: absolute;
-  left: -4%;
-  right: -3%;
-  bottom: 0;
-  height: 31%;
-  z-index: -2;
-  background: linear-gradient(180deg, rgba(55, 127, 75, 0), rgba(25, 76, 49, 0.72) 54%, rgba(13, 48, 34, 0.92));
-  clip-path: polygon(0 42%, 10% 20%, 24% 35%, 37% 12%, 52% 30%, 66% 8%, 81% 31%, 100% 16%, 100% 100%, 0 100%);
+  left: 2%;
+  bottom: 4%;
+  width: 42%;
+  height: 8%;
+  z-index: -1;
+  background: radial-gradient(ellipse, rgba(12, 37, 25, 0.42), rgba(24, 62, 39, 0.12) 58%, transparent 76%);
+  filter: blur(5px);
 }
 
 .landing-mascot-scene::after {
   content: '';
   position: absolute;
-  left: -2%;
-  right: -1%;
-  bottom: 0;
-  height: 15%;
+  right: -4%;
+  bottom: 2%;
+  width: 64%;
+  height: 12%;
   z-index: -1;
-  background: linear-gradient(100deg, rgba(38, 94, 57, 0.96), rgba(74, 130, 74, 0.92) 45%, rgba(22, 78, 57, 0.98));
-  border-radius: 50% 50% 0 0 / 45% 45% 0 0;
-  box-shadow: inset 0 12px 24px rgba(173, 222, 144, 0.18);
+  background: radial-gradient(ellipse, rgba(11, 34, 23, 0.4), rgba(35, 70, 43, 0.1) 60%, transparent 78%);
+  filter: blur(7px);
 }
 
 .landing-scene-mascot {
@@ -374,33 +396,6 @@
 .butterfly-two { --butterfly-color: #3ad8d0; top: 28%; right: 12%; animation-delay: -1.7s; }
 .butterfly-three { --butterfly-color: #ffc94d; top: 48%; right: 35%; animation-delay: -3.2s; transform: scale(.8); }
 
-.landing-river {
-  position: absolute;
-  right: -16%;
-  bottom: 0;
-  z-index: -1;
-  width: 72%;
-  height: 24%;
-  overflow: hidden;
-  background: linear-gradient(145deg, rgba(93, 233, 225, 0.9), rgba(42, 158, 210, 0.94) 48%, rgba(80, 93, 198, 0.9));
-  border: 3px solid rgba(204, 255, 244, 0.64);
-  border-radius: 70% 0 0 10% / 100% 0 0 20%;
-  transform: rotate(-5deg);
-  box-shadow: 0 -8px 24px rgba(88, 235, 218, 0.16);
-}
-
-.landing-river span {
-  position: absolute;
-  left: 12%;
-  width: 64%;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.55);
-  border-radius: 50%;
-}
-
-.landing-river span:first-child { top: 34%; }
-.landing-river span:last-child { top: 61%; left: 32%; width: 45%; }
-
 .landing-forest-workstation {
   position: absolute;
   right: 0;
@@ -408,6 +403,7 @@
   z-index: 3;
   width: 59%;
   height: 315px;
+  filter: drop-shadow(0 16px 16px rgba(16, 36, 25, 0.2));
 }
 
 .landing-forest-workstation::before {
@@ -417,7 +413,9 @@
   right: 0;
   bottom: 54px;
   height: 20px;
-  background: linear-gradient(180deg, #b46c42, #774329);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 35%),
+    linear-gradient(90deg, #7b492e, #b8794c 28%, #8f5634 64%, #6e3f29);
   border: 2px solid rgba(74, 41, 25, 0.44);
   border-radius: 7px;
   box-shadow: 0 10px 18px rgba(28, 45, 30, 0.3);
@@ -430,7 +428,7 @@
   right: 8%;
   bottom: 0;
   height: 63px;
-  background: linear-gradient(90deg, transparent 0 7%, #623923 7% 11%, transparent 11% 89%, #623923 89% 93%, transparent 93%);
+  background: linear-gradient(90deg, transparent 0 7%, #51311f 7% 11%, transparent 11% 89%, #51311f 89% 93%, transparent 93%);
 }
 
 .landing-workstation-monitor {
