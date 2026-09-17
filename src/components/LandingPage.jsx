@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Check, ChevronDown, Menu, ShieldCheck, X } from 'lucide-react'
 import demoPosterImage from '../assets/demo-poster.svg'
 import echoMascot from '../assets/echo-mascot.svg'
-import { PLAN_ORDER, PLANS, getAnnualSavings } from '../data/plans'
+import { FREE_ACCOUNT, PLAN_ORDER, PLANS, getAnnualSavings } from '../data/plans'
 import { SOCIAL_PLATFORMS } from '../data/socialPlatforms'
 import { authService } from '../services/authService'
 import { PRIVACY_STORAGE_KEY } from '../services/analyticsService'
@@ -358,11 +358,31 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount, onPurchas
         {/* Pricing Tiers */}
         <section className="landing-pricing" id="pricing">
           <div className="landing-pricing-copy">
-            <p>Predictable subscription tiers</p>
-            <h2>Choose the right workspace for your scale.</h2>
-            <span>Every package includes the complete EchoAI creative suite, social listening, and monthly token allocations.</span>
+            <p>Start free, upgrade when ready</p>
+            <h2>Keep your workspace. Add paid tools when you need them.</h2>
+            <span>Your free account never expires. Paid plans unlock creation, publishing, listening, storage, and monthly token allocations.</span>
           </div>
           <div className="landing-pricing-grid">
+            <article className="landing-price-panel is-free" key={FREE_ACCOUNT.key}>
+              <div className="landing-price-topline">
+                <span>{FREE_ACCOUNT.label}</span>
+                <span>Always available</span>
+              </div>
+              <div className="landing-price">
+                <strong>$0</strong><span>forever</span>
+              </div>
+              <div className="landing-annual-price landing-free-access">
+                <strong>No card required</strong>
+                <span>Your account remains open after cancellation</span>
+              </div>
+              <p>{FREE_ACCOUNT.tagline}</p>
+              <ul className="landing-free-features">
+                {FREE_ACCOUNT.features.map((feature) => <li key={feature}>{feature}</li>)}
+              </ul>
+              <button type="button" className="landing-secondary-action" onClick={onCreateAccount}>
+                Create free account
+              </button>
+            </article>
             {PLAN_ORDER.map((planKey) => {
               const plan = PLANS[planKey]
               const savings = getAnnualSavings(planKey)

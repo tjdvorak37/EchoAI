@@ -4,6 +4,16 @@
 
 export const ANNUAL_DISCOUNT = 0.15
 
+export const FREE_ACCOUNT = {
+  key: 'free',
+  label: 'Free',
+  monthlyPrice: 0,
+  includedAiCredits: 0,
+  storageGb: 0,
+  tagline: 'Keep your EchoAI account, explore every tool, and upgrade only when you are ready to create or publish.',
+  features: ['Permanent account access', 'Full tool discovery', 'Help center and account controls'],
+}
+
 export const PLANS = {
   standard: {
     key: 'standard',
