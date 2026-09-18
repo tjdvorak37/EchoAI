@@ -13,7 +13,7 @@ import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerS
 
 const USERS_PER_PAGE = 25
 const TICKETS_PER_PAGE = 50
-const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
+const USER_ROLES = ['admin', 'it', 'accountant', 'user']
 const USER_STATUSES = ['active', 'pending', 'deactivated', 'approved', 'denied']
 
 const PLATFORM_TABS = [
@@ -26,12 +26,12 @@ const PLATFORM_TABS = [
 ]
 
 const PLATFORM_ACCESS_CONTROLS = [
-  { field: 'companyEmailEditAccess', action: 'set-company-email-edit-access', label: 'Company Email & SMTP', roles: ['it', 'manager'] },
-  { field: 'licenseEditAccess', action: 'set-license-edit-access', label: 'Licenses', roles: ['it', 'manager', 'accountant'] },
-  { field: 'trademarkEditAccess', action: 'set-trademark-edit-access', label: 'Trademark & Legal', roles: ['it', 'manager'] },
+  { field: 'companyEmailEditAccess', action: 'set-company-email-edit-access', label: 'Company Email & SMTP', roles: ['it'] },
+  { field: 'licenseEditAccess', action: 'set-license-edit-access', label: 'Licenses', roles: ['it', 'accountant'] },
+  { field: 'trademarkEditAccess', action: 'set-trademark-edit-access', label: 'Trademark & Legal', roles: ['it'] },
   { field: 'developerAppEditAccess', action: 'set-developer-app-edit-access', label: 'Developer Apps', roles: ['it'] },
-  { field: 'integrationsEditAccess', action: 'set-integrations-edit-access', label: 'Integrations', roles: ['it', 'manager'] },
-  { field: 'siteControlsEditAccess', action: 'set-site-controls-edit-access', label: 'Site Controls', roles: ['it', 'manager'] },
+  { field: 'integrationsEditAccess', action: 'set-integrations-edit-access', label: 'Integrations', roles: ['it'] },
+  { field: 'siteControlsEditAccess', action: 'set-site-controls-edit-access', label: 'Site Controls', roles: ['it'] },
 ]
 
 const formatDateTime = (value) => (value ? new Date(value).toLocaleString() : 'Never')
@@ -157,9 +157,7 @@ export function AdminPanel({
   taxRecords, setTaxRecords,
   refunds, setRefunds,
   financialTasks, setFinancialTasks,
-  quotaEditingUserId, setQuotaEditingUserId,
-  quotaDraftMb, setQuotaDraftMb,
-  handleQuotaUpdate, handleToggleUserAccess, handleUpdateUserRole, handleReviewAccessRequest,
+  handleToggleUserAccess, handleUpdateUserRole, handleReviewAccessRequest,
   companySeatPackage, companySeats,
   handleCreateCompanySeatPackage, handleUpdateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
   handleProvisionCompanySeatsForCustomer,
@@ -202,7 +200,7 @@ export function AdminPanel({
   const [newUserDraft, setNewUserDraft] = useState({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
   const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
   const [profitShareDraft, setProfitShareDraft] = useState({ userId: '', value: '', saving: false, error: '' })
-  const [betaAiDraft, setBetaAiDraft] = useState({ userId: '', isBetaTester: false, enabled: false, note: '', saving: false, error: '' })
+  const [betaAiDraft, setBetaAiDraft] = useState({ userId: '', isBetaTester: false, saving: false, error: '' })
   const [forumUnreadCount, setForumUnreadCount] = useState(0)
 
   const openUserDetail = (member) => {
@@ -213,7 +211,7 @@ export function AdminPanel({
     setTemporaryPassword({ userId: nextId, value: '', saving: false, message: '', error: '' })
     setProfileDraft({ fullName: member.fullName || '', company: member.company || '', saving: false, error: '' })
     setProfitShareDraft({ userId: member.id, value: String(member.profitSharePercent || ''), saving: false, error: '' })
-    setBetaAiDraft({ userId: member.id, isBetaTester: member.isBetaTester === true, enabled: member.aiEnabled !== false, note: member.aiAccessNote || '', saving: false, error: '' })
+    setBetaAiDraft({ userId: member.id, isBetaTester: member.isBetaTester === true, saving: false, error: '' })
   }
 
   const loadVerification = async (member) => {
@@ -443,7 +441,6 @@ export function AdminPanel({
   }
 
   const isFullAdmin = currentUser?.role === 'admin'
-  const canManageAiAccess = ['admin', 'manager', 'it'].includes(currentUser?.role)
   const forumTabLabel = `💬 Company Forum${forumUnreadCount > 0 ? ` (${forumUnreadCount})` : ''}`
   const visiblePlatformTabs = isFullAdmin
     ? PLATFORM_TABS
@@ -518,7 +515,7 @@ export function AdminPanel({
     setOpenTabGroup(null)
   }, [activeTabAllowed, fallbackTabId])
 
-  const employeeRoles = ['admin', 'manager', 'it', 'accountant', 'board_member']
+  const employeeRoles = ['admin', 'it', 'accountant', 'board_member']
   const filteredDirectoryMembers = itTab === 'employees'
     ? teamMembers.filter((member) => employeeRoles.includes(member.role))
     : teamMembers.filter((member) => !employeeRoles.includes(member.role))
@@ -541,8 +538,6 @@ export function AdminPanel({
         return (left.email || '').localeCompare(right.email || '')
       case 'company-asc':
         return (left.company || '').localeCompare(right.company || '')
-      case 'quota-desc':
-        return (right.storageQuotaMb ?? 0) - (left.storageQuotaMb ?? 0)
       default:
         return (left.fullName || '').localeCompare(right.fullName || '')
     }
@@ -754,7 +749,7 @@ export function AdminPanel({
       <div className="it-header">
         <div>
           <h2>IT / Management</h2>
-          <p className="it-header-sub">Restricted staff workspace • {currentUser?.role === 'admin' ? 'Super Admin' : currentUser?.role === 'manager' ? 'Manager' : 'IT staff'}</p>
+          <p className="it-header-sub">Restricted staff workspace • {currentUser?.role === 'admin' ? 'Super Admin' : 'IT staff'}</p>
         </div>
       </div>
 
@@ -1151,7 +1146,7 @@ export function AdminPanel({
                         <div className="workspace-field-grid">
                           <label>Status<select value={ticketOpen.status} onChange={(event) => updateTicketField(ticketOpen.id, { status: event.target.value })}><option value="new">New</option><option value="triage">In triage</option><option value="in_progress">In progress</option><option value="waiting_customer">Waiting on customer</option><option value="escalated">Escalated</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
                           <label>Priority<select value={ticketOpen.priority} onChange={(event) => updateTicketField(ticketOpen.id, { priority: event.target.value })}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
-                          <label>Assignee<select value={ticketOpen.assigneeId || ''} onChange={(event) => updateTicketField(ticketOpen.id, { assigneeId: event.target.value })}><option value="">Unassigned</option>{teamMembers.filter((member) => ['admin', 'manager', 'it'].includes(member.role)).map((member) => <option key={member.id} value={member.id}>{member.fullName || member.email}</option>)}</select></label>
+                          <label>Assignee<select value={ticketOpen.assigneeId || ''} onChange={(event) => updateTicketField(ticketOpen.id, { assigneeId: event.target.value })}><option value="">Unassigned</option>{teamMembers.filter((member) => ['admin', 'it'].includes(member.role)).map((member) => <option key={member.id} value={member.id}>{member.fullName || member.email}</option>)}</select></label>
                         </div>
                         {isTicketActionable(ticketOpen.status) && ticketOpen.assigneeId !== currentUser?.id && <button type="button" className="primary-button" onClick={() => takeOverTicket(ticketOpen)}>Take over ticket</button>}
                         <button type="button" className="ghost-button" onClick={() => closeTicket(ticketOpen.id)}>Close ticket</button>
@@ -1403,8 +1398,7 @@ export function AdminPanel({
                   <label>Full name<input required value={newUserDraft.fullName} onChange={(event) => setNewUserDraft((current) => ({ ...current, fullName: event.target.value }))} /></label>
                   <label>Email<input required type="email" value={newUserDraft.email} onChange={(event) => setNewUserDraft((current) => ({ ...current, email: event.target.value }))} /></label>
                   <label>Company<input required value={newUserDraft.company} onChange={(event) => setNewUserDraft((current) => ({ ...current, company: event.target.value }))} /></label>
-                  <label>Role<select value={newUserDraft.role} onChange={(event) => setNewUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="it">Technician</option><option value="accountant">Accounting</option><option value="board_member">Board Member</option><option value="manager">Manager</option><option value="user">Standard user</option></select></label>
-                  {newUserDraft.role === 'board_member' && <label>Profit share percentage (1-50%)<input required type="number" min="1" max="50" step="0.01" value={newUserDraft.profitSharePercent || ''} onChange={(event) => setNewUserDraft((current) => ({ ...current, profitSharePercent: event.target.value }))} /></label>}
+                  <label>Role<select value={newUserDraft.role} onChange={(event) => setNewUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="it">IT</option><option value="accountant">Accountant</option><option value="user">User</option></select></label>
                   <div className="action-row"><button type="submit" className="primary-button" disabled={newUserStatus.saving}>{newUserStatus.saving ? 'Sending invitation...' : 'Create and invite user'}</button></div>
                   {newUserStatus.message && <p className="auth-message">{newUserStatus.message}</p>}
                   {newUserStatus.error && <p className="auth-message auth-error">{newUserStatus.error}</p>}
@@ -1452,7 +1446,6 @@ export function AdminPanel({
                     <option value="name-desc">Name Z–A</option>
                     <option value="email-asc">Email A–Z</option>
                     <option value="company-asc">Company A–Z</option>
-                    <option value="quota-desc">Largest quota</option>
                   </select>
                 </label>
               </div>
@@ -1495,17 +1488,10 @@ export function AdminPanel({
                           <p className="muted">Administrator accounts cannot be modified here.</p>
                         ) : (
                           <>
-                            {canManageAiAccess && member.id !== currentUser?.id && <div className="it-user-detail-group">
+                            {member.id !== currentUser?.id && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Access</span>
                               <button type="button" className="ghost-button" onClick={() => handleToggleUserAccess(member)} disabled={adminLoading}>
                                 {member.accessStatus === 'deactivated' ? 'Reactivate' : 'Deactivate'}
-                              </button>
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                onClick={() => { setQuotaEditingUserId(member.id); setQuotaDraftMb(String(member.storageQuotaMb ?? 500)) }}
-                              >
-                                Quota: {member.storageQuotaMb ?? 500} MB
                               </button>
                             </div>}
 
@@ -1515,16 +1501,11 @@ export function AdminPanel({
                                 <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.isBetaTester : member.isBetaTester === true} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, isBetaTester: event.target.checked }))} />
                                 Beta tester account
                               </label>
-                              <small className="muted">Beta testers receive Premium access at no charge. Keep AI disabled until you are comfortable with their access.</small>
-                              <label className="toggle-row">
-                                <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.enabled : member.aiEnabled !== false} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, enabled: event.target.checked }))} />
-                                Allow AI generation
-                              </label>
-                              <textarea rows="2" value={betaAiDraft.userId === member.id ? betaAiDraft.note : member.aiAccessNote || ''} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, note: event.target.value }))} placeholder="Note shown when AI is disabled for this beta tester." />
+                              <small className="muted">Beta testers receive Premium access at no charge. Premium status is managed by this flag, not by their user role.</small>
                               <button type="button" className="primary-button" disabled={betaAiDraft.saving} onClick={async () => {
                                 setBetaAiDraft((current) => ({ ...current, saving: true, error: '' }))
                                 try {
-                                  await onAdminUserAction({ action: 'set-beta-ai-access', userId: member.id, email: member.email, isBetaTester: betaAiDraft.isBetaTester, enabled: betaAiDraft.enabled, note: betaAiDraft.note })
+                                  await onAdminUserAction({ action: 'set-beta-ai-access', userId: member.id, email: member.email, isBetaTester: betaAiDraft.isBetaTester, enabled: true, note: '' })
                                   setBetaAiDraft((current) => ({ ...current, saving: false }))
                                 } catch (error) {
                                   setBetaAiDraft((current) => ({ ...current, saving: false, error: error.message }))
@@ -1787,23 +1768,6 @@ export function AdminPanel({
               ))}
             </Section>}
 
-            {quotaEditingUserId && (
-              <Section title="Edit storage quota">
-                <label>
-                  Quota (MB) for {teamMembers.find((m) => m.id === quotaEditingUserId)?.fullName}
-                  <input
-                    type="number"
-                    min="1"
-                    value={quotaDraftMb}
-                    onChange={(e) => setQuotaDraftMb(e.target.value)}
-                  />
-                </label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button type="button" className="primary-button" onClick={() => { const m = teamMembers.find((item) => item.id === quotaEditingUserId); if (m) handleQuotaUpdate(m) }}>Save quota</button>
-                  <button type="button" className="ghost-button" onClick={() => setQuotaEditingUserId('')}>Cancel</button>
-                </div>
-              </Section>
-            )}
           </div>
         )}
 

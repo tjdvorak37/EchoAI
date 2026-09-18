@@ -336,11 +336,8 @@ Deno.serve(async (request) => {
       const newCompany = typeof body.company === 'string' ? body.company.trim().slice(0, 120) : ''
       const role = typeof body.role === 'string' ? body.role : 'it'
       const profitSharePercent = Number(body.profitSharePercent || 0)
-      if (!email || !newFullName || !newCompany || !['it', 'accountant', 'board_member', 'manager', 'user'].includes(role)) {
-        return json({ error: 'Name, email, company, and a valid staff role are required.' }, 400, request)
-      }
-      if (role === 'board_member' && (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 50)) {
-        return json({ error: 'Board Member profit share must be between 1% and 50%.' }, 400, request)
+      if (!email || !newFullName || !newCompany || !['it', 'accountant', 'user'].includes(role)) {
+        return json({ error: 'Name, email, company, and a valid role are required.' }, 400, request)
       }
 
       const rawAppUrl = Deno.env.get('APP_URL') ?? ''
@@ -448,7 +445,7 @@ Deno.serve(async (request) => {
       return json({ error: 'Administrator accounts cannot be managed here.' }, 403, request)
     }
 
-    if (['admin', 'manager', 'it', 'accountant'].includes(target.role) && !isSuperAdmin) {
+    if (['admin', 'it', 'accountant'].includes(target.role) && !isSuperAdmin) {
       return json({ error: 'Only Super Admins can view or manage employee accounts.' }, 403, request)
     }
 
@@ -581,7 +578,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'set-beta-ai-access') {
-      if (!['admin', 'manager', 'it'].includes(effectiveCallerProfile.role)) {
+      if (!['admin', 'it'].includes(effectiveCallerProfile.role)) {
         return json({ error: 'IT or Management access is required to change beta AI access.' }, 403, request)
       }
       const isBetaTester = body.isBetaTester === true

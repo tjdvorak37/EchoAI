@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { projectBoardService } from '../services/projectBoardService'
 
-const STAFF_ROLES = ['admin', 'manager', 'it', 'accountant', 'board_member']
+const STAFF_ROLES = ['admin', 'it', 'accountant']
 const PROJECT_COLUMNS = [
   { id: 'planned', label: 'Planned' },
   { id: 'working', label: 'Working' },
@@ -41,7 +41,7 @@ export function ProjectBoardPanel({ currentUser, teamMembers = [] }) {
   const [status, setStatus] = useState({ loading: true, saving: false, error: '', message: '' })
 
   const staffMembers = teamMembers.filter((member) => STAFF_ROLES.includes(member.role))
-  const canApproveCompletion = ['admin', 'manager'].includes(currentUser?.role)
+  const canApproveCompletion = currentUser?.role === 'admin'
   const workspaceOpen = Boolean(workspaceProjectId)
 
   const getMemberName = (memberId) => {

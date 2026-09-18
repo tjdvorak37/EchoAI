@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { internalForumService } from '../services/internalForumService'
 
-const STAFF_ROLES = ['admin', 'manager', 'it', 'accountant', 'board_member']
+const STAFF_ROLES = ['admin', 'it', 'accountant']
 
 export function InternalForumPanel({ currentUser, teamMembers = [], onUnreadChange }) {
   const [activeView, setActiveView] = useState('posts')

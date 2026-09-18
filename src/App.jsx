@@ -106,7 +106,7 @@ const hydrateWorkspaceAssets = (assets) =>
 const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 
 // Staff accounts run the platform, so they get the top plan without paying for it.
-const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it', 'accountant', 'board_member']
+const STAFF_ROLES = ['admin', 'super_admin', 'it', 'accountant']
 const STAFF_PLAN = 'creator'
 const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCase())
 const aiGenerationEnabled = () => false
@@ -324,8 +324,6 @@ function App() {
   const [editingName, setEditingName] = useState('')
   const [isAssetPanelOpen, setIsAssetPanelOpen] = useState(() => window.innerWidth > 768)
   const [drawerDragActive, setDrawerDragActive] = useState(false)
-  const [quotaEditingUserId, setQuotaEditingUserId] = useState('')
-  const [quotaDraftMb, setQuotaDraftMb] = useState('2048')
   const [licenses, setLicenses] = useState([])
   const [tickets, setTickets] = useState([])
   const [purchaseHistory, setPurchaseHistory] = useState([])
@@ -673,8 +671,8 @@ function App() {
   }
 
   const isAdminUser = session?.role === 'admin'
-  const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant', 'board_member'].includes(session?.role || '') || session?.isBoardMember === true
-  const canManageBrandKit = ['admin', 'manager'].includes(session?.role || '')
+  const canViewManagementBoard = ['admin', 'it', 'accountant'].includes(session?.role || '') || session?.isBoardMember === true
+  const canManageBrandKit = session?.role === 'admin'
 
   async function loadAdminData(user = session) {
     setAdminError('')
@@ -844,7 +842,7 @@ function App() {
 
       setSession(restoredUser)
       await applyUserData(restoredUser)
-      if (['admin', 'manager', 'it', 'accountant', 'board_member'].includes(restoredUser.role)) {
+      if (['admin', 'it', 'accountant'].includes(restoredUser.role) || restoredUser.isBoardMember) {
         await loadAdminData(restoredUser)
       }
     } catch {
@@ -1421,7 +1419,7 @@ function App() {
       await loadRepostWorkspace()
       await loadBrandKit()
       await loadCloudConnections()
-      if (['admin', 'manager', 'it', 'accountant', 'board_member'].includes(result.user?.role)) {
+      if (['admin', 'it', 'accountant'].includes(result.user?.role) || result.user?.isBoardMember) {
         await loadAdminData(result.user)
       }
       setMfaPending(false)
@@ -2163,32 +2161,6 @@ function App() {
 
   const handleAssetDragStart = () => {}
 
-  const handleQuotaUpdate = async (member) => {
-    const nextQuota = Number(quotaDraftMb)
-    if (!Number.isFinite(nextQuota) || nextQuota <= 0) {
-      setAdminError('Storage quota must be a positive number.')
-      return
-    }
-
-    try {
-      const updatedMember = await authService.updateUserStorageQuota({
-        userId: member.id,
-        storageQuotaMb: nextQuota,
-      })
-
-      setTeamMembers((prev) =>
-        prev.map((item) => (item.id === updatedMember.id ? { ...item, ...updatedMember } : item)),
-      )
-      if (session?.id === updatedMember.id) {
-        setSession((prev) => ({ ...prev, storageQuotaMb: updatedMember.storageQuotaMb }))
-      }
-      setQuotaEditingUserId('')
-      setQuotaDraftMb('2048')
-      setAdminError('')
-    } catch (error) {
-      setAdminError(error.message)
-    }
-  }
   const handleUpdateUserRole = async (member, nextRole) => {
     setAdminError('')
     setAdminLoading(true)
@@ -2206,7 +2178,7 @@ function App() {
 
       if (session?.id === updatedMember.id) {
         setSession((prev) => ({ ...prev, role: updatedMember.role }))
-        if (!['admin', 'manager', 'it'].includes(updatedMember.role)) {
+        if (!['admin', 'it'].includes(updatedMember.role)) {
           setActiveTab('dashboard')
         }
       }
@@ -5509,7 +5481,7 @@ function App() {
           </section>
         )}
 
-        {activeTab === 'admin' && ['admin', 'manager', 'it'].includes(session?.role || '') && (
+        {activeTab === 'admin' && ['admin', 'it'].includes(session?.role || '') && (
           <Suspense fallback={loadingPanel}>
             <AdminPanel
               teamMembers={teamMembers}
@@ -5544,11 +5516,6 @@ function App() {
               boardMembers={teamMembers.filter((member) => member.role === 'board_member')}
               company={session.company}
               currentUser={session}
-              quotaEditingUserId={quotaEditingUserId}
-              setQuotaEditingUserId={setQuotaEditingUserId}
-              quotaDraftMb={quotaDraftMb}
-              setQuotaDraftMb={setQuotaDraftMb}
-              handleQuotaUpdate={handleQuotaUpdate}
               handleToggleUserAccess={handleToggleUserAccess}
               handleUpdateUserRole={handleUpdateUserRole}
               handleReviewAccessRequest={handleReviewAccessRequest}

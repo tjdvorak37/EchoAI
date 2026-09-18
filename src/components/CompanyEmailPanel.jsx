@@ -86,7 +86,7 @@ export function CompanyEmailPanel({
   const isFullAdmin = currentUser?.role === 'admin'
   const hasGrantedAccess = currentUser?.companyEmailEditAccess === true
   const canEdit = isFullAdmin || hasGrantedAccess
-  const staffRoles = ['admin', 'manager', 'it', 'accountant', 'board_member']
+  const staffRoles = ['admin', 'it', 'accountant']
   const staffMembers = teamMembers.filter((member) => staffRoles.includes(member.role))
   const assignedSeatsCount = companySeats.filter((seat) => seat.status !== 'revoked').length
 
@@ -1153,9 +1153,7 @@ export function CompanyEmailPanel({
                       onChange={(e) => setNewStaff((prev) => ({ ...prev, role: e.target.value }))}
                     >
                       <option value="it">Technician (IT)</option>
-                      <option value="manager">Manager</option>
                       <option value="accountant">Accounting</option>
-                      <option value="board_member">Board Member</option>
                       <option value="user">Standard user</option>
                     </select>
                   </label>
