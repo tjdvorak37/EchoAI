@@ -159,10 +159,10 @@ export function RepostHubPanel({
         <div className="repost-hero-bar">
           <div>
             <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.45rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <span>📢</span> Repost Hub &amp; Brand Syndication
+              <span>📢</span> Broadcast Hub
             </h2>
             <p className="panel-note" style={{ margin: 0, fontSize: '0.86rem' }}>
-              Monitor company content, customize copy with your personal handle/promo code, and rebrand posts directly to your personal channels.
+              Pick up approved company stories, make them yours, and send them to the channels you manage.
             </p>
           </div>
 
@@ -173,7 +173,7 @@ export function RepostHubPanel({
               onClick={onToggleAutoApproval}
               style={{ fontSize: '0.85rem' }}
             >
-              {autoApproveCompanyPosts ? '⚡ Auto-Repost: ON' : '⚙️ Auto-Repost: OFF'}
+              {autoApproveCompanyPosts ? '⚡ Auto-share: ON' : '⚙️ Auto-share: OFF'}
             </button>
             {isAdminUser && (
               <button
@@ -182,7 +182,7 @@ export function RepostHubPanel({
                 onClick={() => setActiveTab('admin-publish')}
                 style={{ fontSize: '0.85rem' }}
               >
-                ➕ Create Company Broadcast
+                ➕ Start a company story
               </button>
             )}
           </div>

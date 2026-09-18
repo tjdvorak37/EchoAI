@@ -1038,7 +1038,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   return (
     <div className="video-editor">
       <div className="video-editor-intro">
-        <p className="small-title">Video Studio</p>
+        <p className="small-title">Motion Lab</p>
         <p className="panel-note">Upload clips, arrange them on the timeline, add text and effects, then export.</p>
       </div>
       {brief && (

@@ -8,7 +8,7 @@ const ECHO_CONTEXT = {
     pose: 'modern',
     title: 'Your command center is ready.',
     prompts: ['What should I do first?', 'How do I save time today?'],
-    answer: 'Start with Create to turn an idea into a campaign, then use Scheduler to queue the finished work across your connected channels.',
+    answer: 'Start in the Create Desk to turn an idea into a campaign, then use Queue Studio to place the finished work on your channel timeline.',
   },
   listening: {
     pose: 'tech',

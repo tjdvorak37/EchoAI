@@ -104,13 +104,13 @@ const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCas
 const aiGenerationEnabled = () => false
 const FREE_ACCOUNT_TABS = new Set(['dashboard', 'credits', 'account', 'help'])
 const TAB_LABELS = {
-  listening: 'Social Listening',
-  repost: 'Repost Hub',
-  scheduler: 'Scheduler',
-  assistant: 'Create',
-  photo: 'Photo Creator',
-  studio: 'Video Studio',
-  integrations: 'Integrations',
+  listening: 'Signal Watch',
+  repost: 'Broadcast Hub',
+  scheduler: 'Queue Studio',
+  assistant: 'Create Desk',
+  photo: 'Image Lab',
+  studio: 'Motion Lab',
+  integrations: 'Connections',
 }
 
 function App() {
@@ -3780,9 +3780,9 @@ function App() {
         <div className="main-nav-group">
           <span className="main-nav-label">Plan</span>
           {[
-            ['dashboard', 'Dashboard', LayoutDashboard],
-            ['scheduler', 'Scheduler', CalendarDays],
-            ['repost', 'Repost Hub', Repeat2],
+            ['dashboard', 'Home Base', LayoutDashboard],
+            ['scheduler', 'Queue Studio', CalendarDays],
+            ['repost', 'Broadcast Hub', Repeat2],
           ].map(([key, label, Icon]) => (
             <button
               key={key}
@@ -3797,9 +3797,9 @@ function App() {
         <div className="main-nav-group">
           <span className="main-nav-label">Create &amp; measure</span>
           {[
-            ['photo', 'Photo Creator', ImagePlus],
-            ['studio', 'Video Studio', Video],
-            ['listening', 'Social Listening', ChartNoAxesCombined],
+            ['photo', 'Image Lab', ImagePlus],
+            ['studio', 'Motion Lab', Video],
+            ['listening', 'Signal Watch', ChartNoAxesCombined],
           ].map(([key, label, Icon]) => (
             <button
               key={key}
@@ -3814,9 +3814,9 @@ function App() {
         <div className="main-nav-group main-nav-group-secondary">
           <span className="main-nav-label">Workspace</span>
           {[
-            ['integrations', 'Integrations', Link2],
-            ['account', 'Manage account', Settings2],
-            ['help', 'Help center', LifeBuoy],
+            ['integrations', 'Connections', Link2],
+            ['account', 'Account', Settings2],
+            ['help', 'Help desk', LifeBuoy],
             ...(canViewManagementBoard ? [['admin', 'IT / Management', BarChart3]] : []),
           ].map(([key, label, Icon]) => (
             <button
@@ -3835,12 +3835,12 @@ function App() {
       <div className="workspace-content">
       <nav className="workspace-top-nav" aria-label="Primary workspace areas">
         {[
-          ['listening', 'Analytics', ChartNoAxesCombined],
-          ['dashboard', 'Reporting', BarChart3],
-          ['repost', 'Inbox', Repeat2],
-          ['scheduler', 'Planning', CalendarDays],
-          ['integrations', 'SmartLinks', Link2],
-          ['credits', 'Ads', ImagePlus],
+          ['listening', 'Signal Desk', ChartNoAxesCombined],
+          ['dashboard', 'Pulse Reports', BarChart3],
+          ['repost', 'Reply Room', Repeat2],
+          ['scheduler', 'Campaign Flow', CalendarDays],
+          ['integrations', 'Link Studio', Link2],
+          ['credits', 'Promote Lab', ImagePlus],
         ].map(([key, label, Icon]) => (
           <button key={key} type="button" className={`workspace-top-link ${activeTab === key ? 'active' : ''}`} onClick={() => requestWorkspaceTab(key)}>
             <Icon size={17} aria-hidden="true" />{label}
@@ -4192,9 +4192,9 @@ function App() {
                 <p className="panel-note">See what is moving, then take the next useful action.</p>
               </div>
               <div className="dashboard-command-actions">
-                <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('scheduler')}><FilePlus2 size={17} /> Create a post</button>
-                <button type="button" className="ghost-button" onClick={() => setCalendarOpen(true)}><CalendarDays size={17} /> Open calendar</button>
-                <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('integrations')}><Link2 size={17} /> Connect a channel</button>
+                <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('scheduler')}><FilePlus2 size={17} /> Start a draft</button>
+                <button type="button" className="ghost-button" onClick={() => setCalendarOpen(true)}><CalendarDays size={17} /> View timeline</button>
+                <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('integrations')}><Link2 size={17} /> Add a channel</button>
               </div>
             </div>
 
@@ -4354,14 +4354,14 @@ function App() {
               <article className="sub-panel tone-sun">
                 <h3>Quick actions</h3>
                 <div className="action-row">
-                  <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('photo')}>
-                    Open photo creator
+                    <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('photo')}>
+                    Open Image Lab
                   </button>
-                  <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('studio')}>
-                    Open video studio
+                    <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('studio')}>
+                    Open Motion Lab
                   </button>
-                  <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('scheduler')}>
-                    Open scheduler
+                    <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('scheduler')}>
+                    Open Queue Studio
                   </button>
                 </div>
                 {canViewManagementBoard && (

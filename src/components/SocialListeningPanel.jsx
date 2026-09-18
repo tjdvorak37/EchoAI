@@ -406,10 +406,10 @@ export function SocialListeningPanel({
         <div className="listening-header-hero">
           <div>
             <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <span>📡</span> Social Listening &amp; Market Intelligence
+              <span>📡</span> Signal Watch
             </h2>
             <p className="panel-note" style={{ margin: 0, fontSize: '0.86rem' }}>
-              Google Analytics-style intelligence tracking mentions, sentiment shifts, competitor share of voice, and AI search presence.
+              Track audience signals, sentiment shifts, market movement, and the conversations shaping your next move.
             </p>
           </div>
 
@@ -424,7 +424,7 @@ export function SocialListeningPanel({
               disabled={scanLoading}
               style={{ padding: '0.45rem 0.95rem', fontSize: '0.86rem' }}
             >
-              {scanLoading ? '🔄 Scanning...' : '🔄 Live Scan'}
+              {scanLoading ? '🔄 Reading signals...' : '🔄 Refresh signals'}
             </button>
             <button
               type="button"
@@ -432,7 +432,7 @@ export function SocialListeningPanel({
               onClick={handleCopyMemo}
               style={{ fontSize: '0.84rem' }}
             >
-              📋 Copy Memo
+              📋 Copy brief
             </button>
             <button
               type="button"
@@ -440,7 +440,7 @@ export function SocialListeningPanel({
               onClick={handleExportCsv}
               style={{ fontSize: '0.84rem' }}
             >
-              📥 Export CSV
+              📥 Download data
             </button>
           </div>
         </div>
@@ -448,7 +448,7 @@ export function SocialListeningPanel({
         {/* Quick Industry Presets Bar */}
         <div className="listening-presets-bar">
           <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Quick Setup Presets:
+            Fast-start views:
           </span>
           {INDUSTRY_PRESETS.map((preset) => (
             <button

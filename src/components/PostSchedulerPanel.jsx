@@ -189,10 +189,10 @@ export function PostSchedulerPanel({
         <div className="scheduler-hero-bar">
           <div>
             <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.45rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <span>🗓️</span> Multi-Channel Post Scheduler
+              <span>🗓️</span> Queue Studio
             </h2>
             <p className="panel-note" style={{ margin: 0, fontSize: '0.86rem' }}>
-              Compose once, attach workspace media, preview live platform mockups, and schedule across all your connected channels.
+              Shape one piece of content, tailor it by channel, and place it on your campaign timeline.
             </p>
           </div>
 
@@ -203,7 +203,7 @@ export function PostSchedulerPanel({
               onClick={() => setActiveTab('composer')}
               style={{ fontSize: '0.85rem' }}
             >
-              ✏️ New Post Draft
+              ✏️ Start a draft
             </button>
             <button
               type="button"
@@ -211,7 +211,7 @@ export function PostSchedulerPanel({
               onClick={() => setActiveTab('templates')}
               style={{ fontSize: '0.85rem' }}
             >
-              💡 Quick Templates
+              💡 Draft starters
             </button>
           </div>
         </div>
