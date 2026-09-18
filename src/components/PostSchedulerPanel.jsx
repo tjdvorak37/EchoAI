@@ -321,15 +321,15 @@ export function PostSchedulerPanel({
 
         {/* KPI Scorecards Bar */}
         <div className="scheduler-kpi-grid">
-          <div className="scheduler-kpi-card" style={{ borderColor: pendingQueueCount > 0 ? '#fdba74' : '#e2e8f0' }}>
+          <div className="scheduler-kpi-card" style={{ borderColor: pendingQueueCount > 0 ? 'rgba(49, 94, 231, 0.25)' : 'var(--border)' }}>
             <span>Queued Posts</span>
-            <strong style={{ color: pendingQueueCount > 0 ? '#c2410c' : '#0f172a' }}>{pendingQueueCount}</strong>
+            <strong style={{ color: pendingQueueCount > 0 ? 'var(--primary-strong)' : 'var(--text)' }}>{pendingQueueCount}</strong>
             <small>Pending auto-deployment</small>
           </div>
 
           <div className="scheduler-kpi-card">
             <span>Published Posts</span>
-            <strong style={{ color: '#16a34a' }}>
+            <strong style={{ color: 'var(--success)' }}>
               {scheduledPosts.filter((p) => p.status === 'posted' || p.status === 'published').length}
             </strong>
             <small>Delivered to social feeds</small>
@@ -337,13 +337,13 @@ export function PostSchedulerPanel({
 
           <div className="scheduler-kpi-card">
             <span>Connected Social Accounts</span>
-            <strong style={{ color: '#2563eb' }}>{connectedAccounts.length}</strong>
+            <strong style={{ color: 'var(--primary)' }}>{connectedAccounts.length}</strong>
             <small>Active publishing channels</small>
           </div>
 
           <div className="scheduler-kpi-card">
             <span>Workspace Media Assets</span>
-            <strong style={{ color: '#7c3aed' }}>{availableMediaAssets.length}</strong>
+            <strong style={{ color: 'var(--secondary)' }}>{availableMediaAssets.length}</strong>
             <small>Photos &amp; videos available</small>
           </div>
         </div>
@@ -611,7 +611,7 @@ export function PostSchedulerPanel({
                   type="button"
                   className="primary-button"
                   onClick={handleSchedulePost}
-                  style={{ padding: '0.65rem 1.25rem', fontSize: '0.92rem', background: '#ea580c' }}
+                  style={{ padding: '0.65rem 1.25rem', fontSize: '0.92rem', background: 'linear-gradient(90deg, #f97316 0%, #fb7185 100%)' }}
                 >
                   📅 Queue Post
                 </button>

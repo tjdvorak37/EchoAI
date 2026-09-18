@@ -15,7 +15,15 @@ import { socialIntegrationService } from './services/socialIntegrationService'
 import { financeService } from './services/financeService'
 import { analyticsService } from './services/analyticsService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import echoMascot from './assets/echo-mascot.svg'
+import echoModern from './assets/echo-poses/echo-modern-friendly.png'
+import echoTech from './assets/echo-poses/echo-tech-assistant.png'
+import echoCreator from './assets/echo-poses/echo-creator-mode.png'
+import echoSocial from './assets/echo-poses/echo-social-media.png'
+import echoAiTools from './assets/echo-poses/echo-ai-tools.png'
+import echoPhoto from './assets/echo-poses/echo-photo-editor.png'
+import echoVideo from './assets/echo-poses/echo-video-editor.png'
+import echoScheduler from './assets/echo-poses/echo-scheduler.png'
+import echoAnalytics from './assets/echo-poses/echo-analytics.png'
 import {
   BarChart3,
   CalendarDays,
@@ -117,6 +125,19 @@ function App() {
   const [authView, setAuthView] = useState(() =>
     new URLSearchParams(window.location.search).get('checkout') === 'success' ? 'signup' : 'landing',
   )
+  const [headerMascotIndex, setHeaderMascotIndex] = useState(0)
+  const headerMascotImages = useMemo(
+    () => [echoTech, echoModern, echoCreator, echoSocial, echoAiTools, echoPhoto, echoVideo, echoScheduler, echoAnalytics],
+    [],
+  )
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setHeaderMascotIndex((current) => (current + 1) % headerMascotImages.length)
+    }, 60000)
+
+    return () => window.clearInterval(timer)
+  }, [headerMascotImages])
   const [authState, setAuthState] = useState({
     email: '',
     password: '',
@@ -3752,7 +3773,7 @@ function App() {
 
       <header className="top-bar">
         <div className="app-brand-heading">
-          <img src={echoMascot} alt="EchoAI mascot" />
+          <img src={headerMascotImages[headerMascotIndex]} alt="EchoAI mascot" />
           <div>
           <p className="brand">EchoAI</p>
           <h1>Campaign command center</h1>
