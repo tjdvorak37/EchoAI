@@ -245,6 +245,7 @@ function App() {
     imageIdea: '',
     scheduledAt: '',
     channels: [],
+    channelAccounts: {},
     mediaAssetIds: [],
   })
   const [schedulerError, setSchedulerError] = useState('')
@@ -1439,8 +1440,12 @@ function App() {
         status: 'oauth required',
         connectionStatus: 'profile_saved',
       }
+      // Update the matching account by id when editing, and only replace an
+      // unconnected placeholder for this platform — never a different,
+      // already-connected account for the same platform.
       setConnectedAccounts((prev) => [
-        ...prev.filter((account) => account.platform.toLowerCase() !== normalizedPlatform),
+        ...prev.filter((account) => account.id !== nextAccount.id
+          && !(account.platform.toLowerCase() === normalizedPlatform && account.status !== 'healthy')),
         nextAccount,
       ])
       setAccountHandleDrafts((prev) => ({ ...prev, [normalizedPlatform]: normalizedName }))
@@ -1448,6 +1453,7 @@ function App() {
       setIntegrationError(error.message)
     }
   }
+
 
   const removeSocialAccount = async (account) => {
     setIntegrationError('')
@@ -1541,6 +1547,17 @@ function App() {
     }
   }
 
+  // Resolves which connected account a channel targets: the account chosen in
+  // channelAccounts when set (needed once a platform has more than one
+  // connected account), otherwise the first connected account for that platform.
+  const resolveChannelAccount = (channel, channelAccounts) => {
+    const requestedAccountId = channelAccounts?.[channel]
+    if (requestedAccountId) {
+      return connectedAccounts.find((account) => account.id === requestedAccountId)
+    }
+    return connectedAccounts.find((account) => account.platform.toLowerCase() === channel)
+  }
+
   const handleSchedulePost = async (event) => {
     event.preventDefault()
     setSchedulerError('')
@@ -1551,7 +1568,7 @@ function App() {
     }
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
-      const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
+      const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
       return !linkedAccount || linkedAccount.status !== 'healthy'
     })
 
@@ -1568,6 +1585,7 @@ function App() {
       imageIdea: composer.imageIdea,
       scheduledAt: composer.scheduledAt,
       channels: composer.channels,
+      channelAccounts: composer.channelAccounts,
       media: workspaceAssets
         .filter((asset) => composer.mediaAssetIds.includes(asset.id))
         .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl }) => ({
@@ -1583,6 +1601,7 @@ function App() {
       imageIdea: '',
       scheduledAt: '',
       channels: [],
+      channelAccounts: {},
       mediaAssetIds: [],
     })
   }
@@ -1597,7 +1616,7 @@ function App() {
     }
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
-      const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
+      const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
       return !linkedAccount || linkedAccount.status !== 'healthy'
     })
 
@@ -1614,6 +1633,7 @@ function App() {
         message: composer.message,
         imageIdea: composer.imageIdea,
         channels: composer.channels,
+        channelAccounts: composer.channelAccounts,
         media: workspaceAssets
           .filter((asset) => composer.mediaAssetIds.includes(asset.id))
           .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl }) => ({
@@ -1628,6 +1648,7 @@ function App() {
         imageIdea: '',
         scheduledAt: '',
         channels: [],
+        channelAccounts: {},
         mediaAssetIds: [],
       })
     } catch (error) {
@@ -1644,7 +1665,7 @@ function App() {
     }
 
     const invalidSelectedChannels = channels.filter((channel) => {
-      const linkedAccount = connectedAccounts.find((account) => account.platform.toLowerCase() === channel)
+      const linkedAccount = resolveChannelAccount(channel, post.channelAccounts)
       return !linkedAccount || linkedAccount.status !== 'healthy'
     })
 
@@ -1659,6 +1680,7 @@ function App() {
         message: post.message || '',
         imageIdea: post.imageIdea || '',
         channels,
+        channelAccounts: post.channelAccounts,
         media: post.media || [],
       })
       setScheduledPosts((prev) => [repost, ...prev])
@@ -1690,6 +1712,18 @@ function App() {
     try {
       await platformService.deleteScheduledPost(post.id)
       setScheduledPosts((prev) => prev.filter((item) => item.id !== post.id))
+    } catch (error) {
+      setSchedulerError(error.message)
+    }
+  }
+
+  // Used by the calendar's drag-and-drop day cells to move a queued post to a new date.
+  const handleReschedulePost = async (post, scheduledAtIso) => {
+    if (post.status !== 'scheduled') return
+    setSchedulerError('')
+    try {
+      const result = await platformService.reschedulePost(post.id, scheduledAtIso)
+      setScheduledPosts((prev) => prev.map((item) => (item.id === post.id ? { ...item, scheduledAt: result.scheduledAt } : item)))
     } catch (error) {
       setSchedulerError(error.message)
     }
@@ -2912,7 +2946,7 @@ function App() {
     setWorkspaceFolders([])
     setWorkspaceAssets([])
     setAiDashboard(null)
-    setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: [], mediaAssetIds: [] })
+    setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: [], channelAccounts: {}, mediaAssetIds: [] })
     setAiSuggestions([])
     setAiAgentConfig(createDefaultAiAgentConfig())
     setAiAgentDraft(createDefaultAiAgentConfig())
@@ -4399,6 +4433,7 @@ function App() {
                   imageIdea: `Create a helpful social response visual addressing ${mention.keyword || 'this customer conversation'}.`,
                   scheduledAt: '',
                   channels: [],
+                  channelAccounts: {},
                   mediaAssetIds: [],
                 })
                 setActiveTab('scheduler')
@@ -4445,6 +4480,7 @@ function App() {
               handlePostNow={handlePostNow}
               handleRepostNow={handleRepostNow}
               handleDeleteScheduledPost={handleDeleteScheduledPost}
+              handleReschedulePost={handleReschedulePost}
               scheduledPosts={scheduledPosts}
               connectedAccounts={connectedAccounts}
               workspaceAssets={workspaceAssets}
@@ -5032,9 +5068,13 @@ function App() {
               {SOCIAL_PLATFORMS.map(({ key, accountPlaceholder, description, releaseStatus }) => {
                 const meta = getPlatformMeta(key)
                 const available = releaseStatus === 'available'
-                const linked = connectedAccounts.find((a) => a.platform.toLowerCase() === key)
-                const inputValue = accountHandleDrafts[key] ?? linked?.accountName ?? accountPlaceholder
-                const selectedScopes = accountScopeDrafts[key] ?? linked?.publishingScopes ?? ['posts']
+                // A platform can have several connected accounts at once — for
+                // example managing more than one client's Facebook Page.
+                const linkedAccounts = connectedAccounts.filter((a) => a.platform.toLowerCase() === key)
+                const hasConnectedAccount = linkedAccounts.some((account) => account.status === 'healthy')
+                const placeholder = linkedAccounts.find((account) => account.status !== 'healthy')
+                const inputValue = accountHandleDrafts[key] ?? placeholder?.accountName ?? accountPlaceholder
+                const selectedScopes = accountScopeDrafts[key] ?? placeholder?.publishingScopes ?? ['posts']
                 return (
                   <div
                     key={key}
@@ -5045,18 +5085,50 @@ function App() {
                       <span className="integration-platform-icon" style={{ color: meta.color }}>{meta.icon}</span>
                       <div>
                         <strong style={{ color: meta.color }}>{meta.label}</strong>
-                        {linked && <span className="integration-linked-handle">{linked.accountName}</span>}
+                        {linkedAccounts.length > 0 && (
+                          <span className="integration-linked-handle">
+                            {linkedAccounts.length === 1 ? linkedAccounts[0].accountName : `${linkedAccounts.length} accounts connected`}
+                          </span>
+                        )}
                       </div>
-                      {linked && (
-                        <span className={`integration-status-badge ${linked.status === 'healthy' ? 'good' : 'warn'}`}>
-                          {linked.status === 'healthy' ? '● OAuth connected' : 'OAuth access required'}
-                        </span>
-                      )}
                       {!available && <span className="integration-status-badge warn">Planned</span>}
                     </div>
                     <div className="integration-platform-body">
                       <p>{description}</p>
-                      {linked ? (
+
+                      {linkedAccounts.length > 0 && (
+                        <div className="integration-linked-accounts">
+                          {linkedAccounts.map((account) => (
+                            <div key={account.id} className="integration-linked-account-row">
+                              <span className={`integration-status-badge ${account.status === 'healthy' ? 'good' : 'warn'}`}>
+                                {account.status === 'healthy' ? '● OAuth connected' : 'OAuth access required'}
+                              </span>
+                              <strong>{account.accountName}</strong>
+                                              <div className="integration-actions">
+                                {available && (
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    onClick={() => connectSocialAccount({ platform: key, requestedScopes: account.publishingScopes ?? ['posts'] })}
+                                  >
+                                    {account.status === 'healthy' ? 'Reconnect OAuth' : `Authorize ${meta.label}`}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="ghost-button"
+                                  style={{ color: '#ef4444' }}
+                                  onClick={() => removeSocialAccount(account)}
+                                >
+                                  Remove account
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {(!hasConnectedAccount || !available) && (
                         <>
                           <label className="field-label">
                             Handle / profile name
@@ -5068,86 +5140,75 @@ function App() {
                               disabled={!available}
                             />
                           </label>
-                        </>
-                      ) : (
-                        <>
-                          <label className="field-label">
-                            Handle / profile name
-                            <input
-                              type="text"
-                              value={inputValue}
-                              onChange={(event) => setAccountHandleDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
-                              placeholder={accountPlaceholder}
-                              disabled={!available}
-                            />
-                          </label>
+                          <div>
+                            <p className="small-title">Requested access</p>
+                            <div className="chip-row">
+                              {SOCIAL_PUBLISHING_SCOPES.map((scope) => {
+                                const selected = selectedScopes.includes(scope)
+                                return (
+                                  <button
+                                    key={scope}
+                                    type="button"
+                                    className={selected ? 'chip active' : 'chip'}
+                                    disabled={!available}
+                                    onClick={() => setAccountScopeDrafts((prev) => ({
+                                      ...prev,
+                                      [key]: selected
+                                        ? selectedScopes.filter((item) => item !== scope)
+                                        : [...selectedScopes, scope],
+                                    }))}
+                                  >
+                                    {scope}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                          <p className="muted">
+                            {available
+                              ? 'Your account profile and access preferences are private. Publishing stays disabled until this account completes OAuth authorization.'
+                              : 'This provider is on the EchoAI integration roadmap. Account connection will open after its OAuth and publishing review is complete.'}
+                          </p>
+                          <div className="integration-actions">
+                            {available && <button
+                              type="button"
+                              className="primary-button"
+                              style={{ background: meta.color, borderColor: meta.color }}
+                              onClick={() => saveSocialAccount({
+                                platform: key,
+                                accountName: inputValue,
+                                publishingScopes: selectedScopes,
+                              })}
+                            >
+                              Save account profile
+                            </button>}
+                            {available && (
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() => connectSocialAccount({
+                                  platform: key,
+                                  requestedScopes: selectedScopes,
+                                })}
+                              >
+                                {placeholder ? `Authorize ${meta.label}` : `Connect ${meta.label}`}
+                              </button>
+                            )}
+                          </div>
                         </>
                       )}
-                      <div>
-                        <p className="small-title">Requested access</p>
-                        <div className="chip-row">
-                          {SOCIAL_PUBLISHING_SCOPES.map((scope) => {
-                            const selected = selectedScopes.includes(scope)
-                            return (
-                              <button
-                                key={scope}
-                                type="button"
-                                className={selected ? 'chip active' : 'chip'}
-                                disabled={!available}
-                                onClick={() => setAccountScopeDrafts((prev) => ({
-                                  ...prev,
-                                  [key]: selected
-                                    ? selectedScopes.filter((item) => item !== scope)
-                                    : [...selectedScopes, scope],
-                                }))}
-                              >
-                                {scope}
-                              </button>
-                            )
-                          })}
+
+                      {hasConnectedAccount && available && (
+                        <div className="integration-actions">
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => connectSocialAccount({ platform: key, requestedScopes: ['posts', 'images', 'videos', 'analytics'] })}
+                          >
+                            + Connect another {meta.label} account
+                          </button>
                         </div>
-                      </div>
-                      <p className="muted">
-                        {available
-                          ? 'Your account profile and access preferences are private. Publishing stays disabled until this account completes OAuth authorization.'
-                          : 'This provider is on the EchoAI integration roadmap. Account connection will open after its OAuth and publishing review is complete.'}
-                      </p>
-                      <div className="integration-actions">
-                        {available && <button
-                          type="button"
-                          className="primary-button"
-                          style={{ background: meta.color, borderColor: meta.color }}
-                          onClick={() => saveSocialAccount({
-                            platform: key,
-                            accountName: inputValue,
-                            publishingScopes: selectedScopes,
-                          })}
-                        >
-                          Save account profile
-                        </button>}
-                        {available && (
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => connectSocialAccount({
-                              platform: key,
-                              requestedScopes: selectedScopes,
-                            })}
-                          >
-                            {linked?.status === 'healthy' ? 'Reconnect OAuth' : `Authorize ${meta.label}`}
-                          </button>
-                        )}
-                        {linked && (
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            style={{ color: '#ef4444' }}
-                            onClick={() => removeSocialAccount(linked)}
-                          >
-                            Remove account
-                          </button>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 )

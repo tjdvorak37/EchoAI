@@ -6,6 +6,7 @@ type ScheduledPost = {
   user_id: string
   message: string
   channels: string[]
+  channel_accounts?: Record<string, string>
   media: Array<{ type?: string; mime?: string; name?: string; storagePath?: string; webUrl?: string }>
 }
 
@@ -297,7 +298,7 @@ const refreshCredential = async (credential: Credential, userId: string) => {
     refresh_token: tokenData.refresh_token ?? credential.refresh_token,
     expires_at: new Date(Date.now() + Number(tokenData.expires_in || 3600) * 1000).toISOString(),
   }
-  await admin().from('social_oauth_credentials').update({ access_token: refreshed.access_token, refresh_token: refreshed.refresh_token, expires_at: refreshed.expires_at, updated_at: new Date().toISOString() }).eq('user_id', userId).eq('platform', credential.platform)
+  await admin().from('social_oauth_credentials').update({ access_token: refreshed.access_token, refresh_token: refreshed.refresh_token, expires_at: refreshed.expires_at, updated_at: new Date().toISOString() }).eq('user_id', userId).eq('platform', credential.platform).eq('external_account_id', credential.external_account_id)
   return refreshed
 }
 
@@ -315,27 +316,40 @@ const publishPost = async (post: ScheduledPost) => {
   const db = admin()
   const providerPostIds: Record<string, string> = {}
   const failures: string[] = []
+  const channelAccounts = (post.channel_accounts ?? {}) as Record<string, string>
 
   for (const rawChannel of post.channels ?? []) {
     const channel = String(rawChannel).toLowerCase()
-    const { data: account } = await db
+    // A post can target a specific connected account when more than one is
+    // authorized for the same platform (e.g. two Facebook Pages). Without a
+    // selection, fall back to the most recently connected account.
+    const requestedAccountId = channelAccounts[channel]
+    let accountQuery = db
       .from('user_social_accounts')
-      .select('connection_status')
+      .select('id, external_account_id, connection_status')
       .eq('user_id', post.user_id)
       .eq('platform', channel)
-      .maybeSingle()
+
+    accountQuery = requestedAccountId
+      ? accountQuery.eq('id', requestedAccountId)
+      : accountQuery.order('connected_at', { ascending: false }).limit(1)
+
+    const { data: accounts } = await accountQuery
+    const account = accounts?.[0]
 
     if (account?.connection_status !== 'oauth_connected') {
       failures.push(`${channel}: account authorization is required`)
       continue
     }
 
-    const { data: credential } = await db
+    const { data: credentials } = await db
       .from('social_oauth_credentials')
       .select('platform, external_account_id, access_token, refresh_token, expires_at')
       .eq('user_id', post.user_id)
       .eq('platform', channel)
-      .maybeSingle<Credential>()
+      .eq('external_account_id', account.external_account_id ?? '')
+
+    const credential = credentials?.[0] as Credential | undefined
 
     if (!credential) {
       failures.push(`${channel}: credential is missing`)
@@ -354,6 +368,7 @@ const publishPost = async (post: ScheduledPost) => {
         .update({ connection_status: 'reauth_required', updated_at: new Date().toISOString() })
         .eq('user_id', post.user_id)
         .eq('platform', channel)
+        .eq('external_account_id', account.external_account_id ?? '')
       failures.push(`${channel}: authorization expired`)
       continue
     }

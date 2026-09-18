@@ -317,11 +317,15 @@ Deno.serve(async (request) => {
         ? new Date(Date.now() + Number(expiresIn) * 1000).toISOString()
         : null
 
+      // Each connected account is keyed by its own external_account_id, so a
+      // second Facebook Page or Instagram account can be authorized without
+      // overwriting the first one.
       const { data: existingCredential } = await db
         .from('social_oauth_credentials')
         .select('refresh_token')
         .eq('user_id', pending.user_id)
         .eq('platform', platform)
+        .eq('external_account_id', account.id)
         .maybeSingle()
 
       const credentialResult = await db.from('social_oauth_credentials').upsert({
@@ -333,8 +337,17 @@ Deno.serve(async (request) => {
         expires_at: expiresAt,
         scope: tokenData.scope ?? oauthScopes.join(' '),
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,platform' })
+      }, { onConflict: 'user_id,platform,external_account_id' })
       if (credentialResult.error) throw credentialResult.error
+
+      // Drop the unconnected "profile saved" placeholder for this platform, if
+      // any, now that a real connected account exists in its place.
+      await db
+        .from('user_social_accounts')
+        .delete()
+        .eq('user_id', pending.user_id)
+        .eq('platform', platform)
+        .eq('external_account_id', '')
 
       const accountResult = await db.from('user_social_accounts').upsert({
         user_id: pending.user_id,
@@ -347,7 +360,7 @@ Deno.serve(async (request) => {
         connection_status: 'oauth_connected',
         connected_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,platform' })
+      }, { onConflict: 'user_id,platform,external_account_id' })
       if (accountResult.error) throw accountResult.error
 
       return redirect('connected', platform)

@@ -49,6 +49,7 @@ export function PostSchedulerPanel({
   handlePostNow,
   handleRepostNow,
   handleDeleteScheduledPost,
+  handleReschedulePost,
   scheduledPosts = [],
   connectedAccounts = [],
   workspaceAssets = [],
@@ -57,12 +58,17 @@ export function PostSchedulerPanel({
   getStatusBadgeClass,
   schedulerError,
 }) {
-  const [activeTab, setActiveTab] = useState('composer') // 'composer' | 'queue' | 'reposts' | 'templates'
+  const [activeTab, setActiveTab] = useState('composer') // 'composer' | 'calendar' | 'queue' | 'reposts' | 'templates'
   const [previewPlatform, setPreviewPlatform] = useState('instagram')
   const [showPreflightModal, setShowPreflightModal] = useState(false)
   const [queueSearch, setQueueSearch] = useState('')
   const [queueStatusFilter, setQueueStatusFilter] = useState('all')
   const [queuePlatformFilter, setQueuePlatformFilter] = useState('all')
+  const [calendarMonth, setCalendarMonth] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1) })
+  const [calendarFilterPlatform, setCalendarFilterPlatform] = useState('all')
+  const [calendarFilterAccountId, setCalendarFilterAccountId] = useState('all')
+  const [calendarSelectedDay, setCalendarSelectedDay] = useState('')
+  const [dragPostId, setDragPostId] = useState('')
 
   const connectedPlatforms = useMemo(
     () => connectedAccounts
@@ -70,6 +76,84 @@ export function PostSchedulerPanel({
       .filter((platform) => PUBLISHING_PLATFORM_KEYS.includes(platform)),
     [connectedAccounts]
   )
+
+  // Distinct platforms available for the "Facebook only / TikTok only / all socials" filter.
+  const calendarPlatformOptions = useMemo(
+    () => [...new Set(connectedPlatforms)],
+    [connectedPlatforms]
+  )
+
+  // Accounts for the currently selected platform filter, used for the secondary
+  // account picker when a platform has more than one connected account.
+  const calendarAccountOptions = useMemo(
+    () => calendarFilterPlatform === 'all'
+      ? []
+      : connectedAccounts.filter((account) => account.platform.toLowerCase() === calendarFilterPlatform),
+    [connectedAccounts, calendarFilterPlatform]
+  )
+
+  const dayKey = (value) => {
+    const date = value instanceof Date ? value : new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  }
+
+  // One occurrence per matching channel so a multi-channel post can show a
+  // colored chip for each platform it targets, and so single-platform filters
+  // only surface the channel that matches.
+  const calendarOccurrences = useMemo(() => {
+    const resolvePostAccountId = (post, channel) =>
+      post.channelAccounts?.[channel]
+      ?? connectedAccounts.find((account) => account.platform.toLowerCase() === channel)?.id
+      ?? ''
+
+    const occurrences = []
+    scheduledPosts.forEach((post) => {
+      if (!post.scheduledAt) return
+      const channels = post.channels ?? []
+      channels.forEach((channel) => {
+        const key = channel.toLowerCase()
+        if (calendarFilterPlatform !== 'all' && key !== calendarFilterPlatform) return
+        const accountId = resolvePostAccountId(post, key)
+        if (calendarFilterPlatform !== 'all' && calendarFilterAccountId !== 'all' && accountId !== calendarFilterAccountId) return
+        occurrences.push({ id: `${post.id}-${key}`, post, channel: key, accountId })
+      })
+    })
+    return occurrences
+  }, [scheduledPosts, calendarFilterPlatform, calendarFilterAccountId, connectedAccounts])
+
+  const calendarByDay = useMemo(() => {
+    const map = new Map()
+    calendarOccurrences.forEach((occurrence) => {
+      const key = dayKey(occurrence.post.scheduledAt)
+      if (!key) return
+      map.set(key, [...(map.get(key) ?? []), occurrence])
+    })
+    return map
+  }, [calendarOccurrences])
+
+  const calendarGrid = useMemo(() => {
+    const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1)
+    const cursor = new Date(first)
+    cursor.setDate(cursor.getDate() - cursor.getDay())
+    return Array.from({ length: 42 }, (_, index) => {
+      const date = new Date(cursor)
+      date.setDate(cursor.getDate() + index)
+      return date
+    })
+  }, [calendarMonth])
+
+  const handleCalendarDrop = (targetDate) => {
+    if (!dragPostId) return
+    const post = scheduledPosts.find((item) => item.id === dragPostId)
+    setDragPostId('')
+    if (!post || post.status !== 'scheduled') return
+    const original = new Date(post.scheduledAt)
+    if (Number.isNaN(original.getTime())) return
+    const next = new Date(targetDate)
+    next.setHours(original.getHours(), original.getMinutes(), original.getSeconds(), 0)
+    handleReschedulePost?.(post, next.toISOString())
+  }
 
   const charLimit = PLATFORM_LIMITS[previewPlatform] || 2200
   const charCount = composer.message.length
@@ -116,6 +200,7 @@ export function PostSchedulerPanel({
       imageIdea: post.imageIdea || '',
       scheduledAt: '',
       channels: post.channels || [],
+      channelAccounts: post.channelAccounts || {},
       mediaAssetIds: post.media ? post.media.map((mediaItem) => mediaItem.id).filter(Boolean) : [],
     })
     setActiveTab('composer')
@@ -140,14 +225,31 @@ export function PostSchedulerPanel({
     handleComposerChange('scheduledAt', localIso)
   }
 
-  const toggleChannel = (channelKey) => {
+  const toggleChannel = (channelKey, accountId) => {
     setComposer((prev) => {
       const exists = prev.channels.includes(channelKey)
+      const currentAccountId = prev.channelAccounts?.[channelKey]
+      const switchingAccount = accountId && currentAccountId && currentAccountId !== accountId
+
+      // Clicking a different account chip for an already-selected platform
+      // switches which connected account that platform targets, rather than
+      // turning the platform off.
+      if (exists && !switchingAccount) {
+        const nextAccounts = { ...(prev.channelAccounts || {}) }
+        delete nextAccounts[channelKey]
+        return {
+          ...prev,
+          channels: prev.channels.filter((c) => c !== channelKey),
+          channelAccounts: nextAccounts,
+        }
+      }
+
       return {
         ...prev,
-        channels: exists
-          ? prev.channels.filter((c) => c !== channelKey)
-          : [...prev.channels, channelKey],
+        channels: exists ? prev.channels : [...prev.channels, channelKey],
+        channelAccounts: accountId
+          ? { ...(prev.channelAccounts || {}), [channelKey]: accountId }
+          : (prev.channelAccounts || {}),
       }
     })
   }
@@ -166,6 +268,7 @@ export function PostSchedulerPanel({
       imageIdea: '',
       scheduledAt: '',
       channels: [],
+      channelAccounts: {},
       mediaAssetIds: [],
     })
   }
@@ -249,6 +352,7 @@ export function PostSchedulerPanel({
         <nav className="scheduler-nav-tabs">
           {[
             ['composer', '✏️ Post Composer & Live Preview'],
+            ['calendar', '🗓️ Content Calendar'],
             ['queue', `📋 Scheduled Queue (${pendingQueueCount})`],
             ['reposts', `🔁 Published/Repost Queue (${repostablePosts.length})`],
             ['templates', '💡 Quick Post Templates'],
@@ -437,14 +541,18 @@ export function PostSchedulerPanel({
                     {connectedAccounts.map((account) => {
                       const meta = getPlatformMeta(account.platform)
                       const key = account.platform.toLowerCase()
+                      // When several accounts share a platform (managing more than one
+                      // brand/client), only the chip for the currently targeted account
+                      // shows as active; clicking another account's chip retargets it.
                       const active = composer.channels.includes(key)
+                        && (composer.channelAccounts?.[key] ?? account.id) === account.id
                       return (
                         <button
                           key={account.id}
                           type="button"
                           className={`chip ${active ? 'active' : ''}`}
                           style={active ? { borderColor: meta.color, color: meta.color, background: meta.bg } : {}}
-                          onClick={() => toggleChannel(key)}
+                          onClick={() => toggleChannel(key, account.id)}
                         >
                           <span>{meta.icon}</span> {meta.label} ({account.accountName})
                         </button>
@@ -596,6 +704,149 @@ export function PostSchedulerPanel({
           </div>
         )}
 
+        {/* ── TAB: FULL-SIZE CONTENT CALENDAR ── */}
+        {activeTab === 'calendar' && (
+          <div className="calendar-tab">
+            <div className="calendar-tab-toolbar">
+              <div className="calendar-tab-nav">
+                <button type="button" className="ghost-button" onClick={() => setCalendarMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))} aria-label="Previous month">‹</button>
+                <h3>{calendarMonth.toLocaleString(undefined, { month: 'long' })} {calendarMonth.getFullYear()}</h3>
+                <button type="button" className="ghost-button" onClick={() => setCalendarMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))} aria-label="Next month">›</button>
+                <button type="button" className="text-button" onClick={() => setCalendarMonth(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1) })}>Today</button>
+              </div>
+
+              <div className="calendar-tab-filters">
+                <div className="chip-row">
+                  <button
+                    type="button"
+                    className={`chip ${calendarFilterPlatform === 'all' ? 'active' : ''}`}
+                    onClick={() => { setCalendarFilterPlatform('all'); setCalendarFilterAccountId('all') }}
+                  >
+                    All socials
+                  </button>
+                  {calendarPlatformOptions.map((platform) => {
+                    const meta = getPlatformMeta(platform)
+                    const active = calendarFilterPlatform === platform
+                    return (
+                      <button
+                        key={platform}
+                        type="button"
+                        className={`chip ${active ? 'active' : ''}`}
+                        style={active ? { borderColor: meta.color, color: meta.color, background: meta.bg } : {}}
+                        onClick={() => { setCalendarFilterPlatform(platform); setCalendarFilterAccountId('all') }}
+                      >
+                        <span>{meta.icon}</span> {meta.label} only
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {calendarAccountOptions.length > 1 && (
+                  <label className="calendar-account-filter">
+                    Account
+                    <select value={calendarFilterAccountId} onChange={(event) => setCalendarFilterAccountId(event.target.value)}>
+                      <option value="all">All {getPlatformMeta(calendarFilterPlatform).label} accounts</option>
+                      {calendarAccountOptions.map((account) => (
+                        <option key={account.id} value={account.id}>{account.accountName}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div className="calendar-tab-weekdays">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <span key={day}>{day}</span>)}
+            </div>
+
+            <div className="calendar-tab-grid">
+              {calendarGrid.map((date) => {
+                const key = dayKey(date)
+                const occurrences = calendarByDay.get(key) ?? []
+                const outside = date.getMonth() !== calendarMonth.getMonth()
+                const isToday = key === dayKey(new Date())
+                return (
+                  <div
+                    key={key}
+                    className={`calendar-tab-day ${outside ? 'is-outside' : ''} ${isToday ? 'is-today' : ''} ${calendarSelectedDay === key ? 'is-selected' : ''}`}
+                    onClick={() => setCalendarSelectedDay(key)}
+                    onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }}
+                    onDrop={(event) => { event.preventDefault(); handleCalendarDrop(date) }}
+                  >
+                    <span className="calendar-tab-day-number">{date.getDate()}</span>
+                    <div className="calendar-tab-day-events">
+                      {occurrences.slice(0, 4).map((occurrence) => {
+                        const meta = getPlatformMeta(occurrence.channel)
+                        return (
+                          <div
+                            key={occurrence.id}
+                            className="calendar-tab-event"
+                            style={{ background: meta.bg, color: meta.color, borderLeftColor: meta.color }}
+                            draggable={occurrence.post.status === 'scheduled'}
+                            onDragStart={(event) => { event.stopPropagation(); setDragPostId(occurrence.post.id) }}
+                            onClick={(event) => event.stopPropagation()}
+                            title={`${occurrence.post.campaign || occurrence.post.message || 'Post'} · ${meta.label}`}
+                          >
+                            <span className="calendar-tab-event-time">
+                              {new Date(occurrence.post.scheduledAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                            <span className="calendar-tab-event-title">{meta.icon} {occurrence.post.campaign || occurrence.post.message || 'Post'}</span>
+                          </div>
+                        )
+                      })}
+                      {occurrences.length > 4 && <span className="calendar-tab-more">+{occurrences.length - 4} more</span>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {calendarSelectedDay && (
+              <div className="calendar-tab-agenda">
+                <h4>
+                  {new Date(`${calendarSelectedDay}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+                </h4>
+                {(calendarByDay.get(calendarSelectedDay) ?? []).length === 0 ? (
+                  <p className="muted">Nothing scheduled. Drag a post here or create one in the composer.</p>
+                ) : (
+                  (calendarByDay.get(calendarSelectedDay) ?? []).map((occurrence) => {
+                    const meta = getPlatformMeta(occurrence.channel)
+                    return (
+                      <div key={occurrence.id} className="calendar-tab-agenda-row" style={{ borderLeftColor: meta.color }}>
+                        <span className="calendar-tab-event-time">
+                          {new Date(occurrence.post.scheduledAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                        </span>
+                        <div>
+                          <strong>{occurrence.post.campaign || 'Post'}</strong>
+                          <small>{meta.icon} {meta.label}{occurrence.post.channelAccounts?.[occurrence.channel] ? ` · ${connectedAccounts.find((a) => a.id === occurrence.accountId)?.accountName ?? ''}` : ''}</small>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() => {
+                            setComposer({
+                              campaign: occurrence.post.campaign || '',
+                              message: occurrence.post.message || '',
+                              imageIdea: occurrence.post.imageIdea || '',
+                              scheduledAt: occurrence.post.scheduledAt || '',
+                              channels: occurrence.post.channels || [],
+                              channelAccounts: occurrence.post.channelAccounts || {},
+                              mediaAssetIds: occurrence.post.media ? occurrence.post.media.map((m) => m.id) : [],
+                            })
+                            setActiveTab('composer')
+                          }}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── TAB 2: SCHEDULED QUEUE STREAM ── */}
         {activeTab === 'queue' && (
           <div style={{ display: 'grid', gap: '1.15rem' }}>
@@ -713,6 +964,7 @@ export function PostSchedulerPanel({
                                 imageIdea: post.imageIdea || '',
                                 scheduledAt: post.scheduledAt || '',
                                 channels: post.channels || [],
+                                channelAccounts: post.channelAccounts || {},
                                 mediaAssetIds: post.media ? post.media.map((m) => m.id) : [],
                               })
                               setActiveTab('composer')
