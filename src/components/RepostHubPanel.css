@@ -93,8 +93,8 @@
 }
 
 .repost-tab-btn.active {
-  background: #eff6ff;
-  color: #2563eb;
+  background: rgba(49, 94, 231, 0.08);
+  color: var(--primary-strong);
 }
 
 /* Monitored Accounts Cards */
@@ -149,8 +149,8 @@
 }
 
 .repost-post-card:hover {
-  border-color: #93c5fd;
-  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.08);
+  border-color: rgba(49, 94, 231, 0.35);
+  box-shadow: 0 6px 18px rgba(49, 94, 231, 0.08);
 }
 
 .repost-post-card-header {
@@ -259,9 +259,9 @@
 }
 
 .repost-quick-btn:hover {
-  background: #eff6ff;
-  border-color: #3b82f6;
-  color: #1d4ed8;
+  background: rgba(49, 94, 231, 0.06);
+  border-color: var(--primary);
+  color: var(--primary-strong);
 }
 
 @media (max-width: 768px) {
