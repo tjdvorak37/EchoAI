@@ -611,7 +611,7 @@ export function PostSchedulerPanel({
                   type="button"
                   className="primary-button"
                   onClick={handleSchedulePost}
-                  style={{ padding: '0.65rem 1.25rem', fontSize: '0.92rem', background: 'linear-gradient(90deg, #f97316 0%, #fb7185 100%)' }}
+                  style={{ padding: '0.65rem 1.25rem', fontSize: '0.92rem', background: 'linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%)' }}
                 >
                   📅 Queue Post
                 </button>
@@ -1205,7 +1205,7 @@ export function PostSchedulerPanel({
                       </div>
                     ) : (
                       <div>
-                        <strong style={{ fontSize: '1.05rem', color: '#2563eb', display: 'block' }}>
+                        <strong style={{ fontSize: '1.05rem', color: 'var(--primary)', display: 'block' }}>
                           ⚡ Instant Post Now
                         </strong>
                         <small style={{ color: '#64748b' }}>Will dispatch immediately upon confirmation</small>
@@ -1241,7 +1241,7 @@ export function PostSchedulerPanel({
                     }
                   }}
                   disabled={!composer.channels.length}
-                  style={{ padding: '0.65rem 1.35rem', fontSize: '0.92rem', background: composer.scheduledAt ? '#ea580c' : '#2563eb' }}
+                  style={{ padding: '0.65rem 1.35rem', fontSize: '0.92rem', background: composer.scheduledAt ? 'var(--primary)' : 'var(--primary)' }}
                 >
                   {composer.scheduledAt ? '📅 Confirm & Queue Post' : '⚡ Confirm & Post Now'}
                 </button>
