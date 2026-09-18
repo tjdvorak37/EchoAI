@@ -153,7 +153,10 @@ button[type='submit']:hover {
 .app-shell {
   min-height: 100vh;
   padding: 1.4rem;
-  background: var(--bg-page);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(32, 185, 129, 0.08), transparent 27%),
+    radial-gradient(circle at 92% 4%, rgba(139, 92, 246, 0.08), transparent 29%),
+    linear-gradient(180deg, #f5fbf5 0%, #f7fbff 44%, #fff8fc 100%);
 }
 
 .top-bar {
@@ -356,9 +359,37 @@ button[type='submit']:hover {
   display: flex;
   gap: 0.55rem;
   flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.main-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  padding-right: 0.7rem;
+  border-right: 1px solid #dbe3ee;
+}
+
+.main-nav-group:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.main-nav-label {
+  flex-basis: 100%;
+  padding-left: 0.25rem;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   background: rgba(255, 255, 255, 0.95);
   color: #334155;
   border: 1px solid #dbeafe;
@@ -423,6 +454,36 @@ button[type='submit']:hover {
 
 .panel-dashboard {
   background: linear-gradient(180deg, #f8fbff, #ffffff);
+}
+
+.dashboard-command-bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 0.35rem 0 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dashboard-command-bar h2 {
+  margin: 0.2rem 0 0;
+}
+
+.dashboard-command-bar .panel-note {
+  margin-bottom: 0;
+}
+
+.dashboard-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.dashboard-command-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .panel-repost {
