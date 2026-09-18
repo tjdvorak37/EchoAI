@@ -96,12 +96,19 @@ const Brand = () => (
   </span>
 )
 
-function NavDropdown({ label, children, wide = false }) {
+function NavDropdown({ label, children, wide = false, isOpen, onOpenChange }) {
   return (
-    <details className={`landing-nav-dropdown ${wide ? 'is-wide' : ''}`}>
-      <summary>{label}<ChevronDown size={15} aria-hidden="true" /></summary>
-      <div className="landing-nav-menu">{children}</div>
-    </details>
+    <div
+      className={`landing-nav-dropdown ${wide ? 'is-wide' : ''} ${isOpen ? 'is-open' : ''}`}
+      onMouseEnter={() => onOpenChange(true)}
+      onMouseLeave={() => onOpenChange(false)}
+      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) onOpenChange(false) }}
+    >
+      <button type="button" className="landing-nav-dropdown-trigger" onClick={() => onOpenChange(!isOpen)} aria-expanded={isOpen}>
+        {label}<ChevronDown size={15} aria-hidden="true" />
+      </button>
+      <div className="landing-nav-menu" onClick={() => onOpenChange(false)}>{children}</div>
+    </div>
   )
 }
 
@@ -253,6 +260,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
   const [supportOpen, setSupportOpen] = useState(() => new URLSearchParams(window.location.search).get('support') === 'privacy')
   const [openFaqIndex, setOpenFaqIndex] = useState(0)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [openDropdown, setOpenDropdown] = useState('')
 
   return (
     <div className="landing-page" id="top">
@@ -264,19 +272,19 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
       <header className="landing-nav">
         <a href="#top" aria-label="EchoAI home"><Brand /></a>
         <nav className={`landing-nav-links ${mobileMenuOpen ? 'is-open' : ''}`} aria-label="Landing page">
-          <NavDropdown label="Product">
+          <NavDropdown label="Product" isOpen={openDropdown === 'product'} onOpenChange={(open) => setOpenDropdown(open ? 'product' : '')}>
             <div className="landing-product-links">
               {PRODUCT_LINKS.map(([label, href]) => <a href={href} key={label} onClick={() => setMobileMenuOpen(false)}>{label}<span>Explore</span></a>)}
             </div>
           </NavDropdown>
-          <NavDropdown label="Social media" wide>
+          <NavDropdown label="Social media" wide isOpen={openDropdown === 'social'} onOpenChange={(open) => setOpenDropdown(open ? 'social' : '')}>
             <div className="landing-social-links">
               {SOCIAL_PLATFORMS.map((platform) => <a href="#workflow" key={platform.key} onClick={() => setMobileMenuOpen(false)}>{platform.label}</a>)}
             </div>
             <p className="landing-menu-note">One calendar for your connected channels. New integrations are released as provider access becomes available.</p>
           </NavDropdown>
           <a href="#get-started" onClick={() => setMobileMenuOpen(false)}>Plans</a>
-          <NavDropdown label="Resources">
+          <NavDropdown label="Resources" isOpen={openDropdown === 'resources'} onOpenChange={(open) => setOpenDropdown(open ? 'resources' : '')}>
             <a href="#workflow" onClick={() => setMobileMenuOpen(false)}>How it works</a>
             <a href="#faq" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
             <button type="button" onClick={() => { setSupportOpen(true); setMobileMenuOpen(false) }}>Contact support</button>
@@ -295,7 +303,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
         <section className="landing-hero landing-showcase-hero">
           <div className="landing-hero-content">
             <div className="landing-badge"><Sparkles size={14} /> All-in-one creator workspace</div>
-            <h1 className="landing-headline">Create. Plan.<br />Edit. Post. <em>Grow.</em></h1>
+            <h1 className="landing-headline">Create. Plan.<br />Edit. Post.<br /><em>Grow</em></h1>
             <p className="landing-subhead">
               Bring your content and team together in one bright, practical workspace. Edit photos and videos, schedule across your channels, and follow what resonates.
             </p>
