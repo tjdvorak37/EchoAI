@@ -3,13 +3,12 @@ import { HELP_ARTICLES, HELP_CATEGORIES } from '../data/helpArticles'
 import './HelpCenter.css'
 
 const COMMON_QUESTIONS = [
-  ['How do token balances & rollovers work?', 'rollover'],
-  ['How do I purchase additional tokens?', 'buy tokens'],
-  ['How do I use Social Listening intelligence?', 'social listening'],
-  ['What are the subscription plans & pricing?', 'subscription tiers'],
+  ['What is included with Standard and Premium?', 'standard premium'],
+  ['How do I connect a social account?', 'connect social account'],
   ['How do I schedule a multi-channel post?', 'schedule a post'],
-  ['How do I clean up photos with Pixel Healing?', 'heal'],
-  ['How do I connect AI provider API keys?', 'api key'],
+  ['How do I import an image from my device?', 'image lab import'],
+  ['How do I connect Meta, Google, or TikTok Ads?', 'connect advertising accounts'],
+  ['How do I use Signal Watch?', 'signal watch'],
 ]
 
 const searchableText = (article) => [
