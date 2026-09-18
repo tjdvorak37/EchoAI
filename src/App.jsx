@@ -193,6 +193,7 @@ function App() {
   )
 
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [workspaceSidebarOpen, setWorkspaceSidebarOpen] = useState(true)
   const [connectedAccounts, setConnectedAccounts] = useState([])
   const [socialPlatformReadiness, setSocialPlatformReadiness] = useState([])
   const [socialPlatformReadinessLoading, setSocialPlatformReadinessLoading] = useState(false)
@@ -3757,7 +3758,25 @@ function App() {
         </div>
       </header>
 
-      <nav className="main-nav">
+      <div className="workspace-layout">
+      <aside className={`workspace-sidebar ${workspaceSidebarOpen ? 'open' : 'collapsed'}`}>
+        <div className="workspace-sidebar-brand">
+          <span className="workspace-sidebar-mark">E</span>
+          {workspaceSidebarOpen && <strong>Workspace</strong>}
+          <button type="button" className="workspace-sidebar-toggle" onClick={() => setWorkspaceSidebarOpen((open) => !open)} aria-label={workspaceSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} title={workspaceSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
+            {workspaceSidebarOpen ? '‹' : '›'}
+          </button>
+        </div>
+        {workspaceSidebarOpen && <div className="workspace-sidebar-section">
+          <span className="workspace-sidebar-label">Connected channels</span>
+          {connectedAccounts.slice(0, 5).map((account) => {
+            const meta = getPlatformMeta(account.platform)
+            return <button type="button" className="workspace-channel" key={account.id} onClick={() => requestWorkspaceTab('integrations')}><span style={{ color: meta.color }}>{meta.icon}</span><span>{meta.label}</span><small>+</small></button>
+          })}
+          {connectedAccounts.length === 0 && <p className="workspace-sidebar-empty">Connect channels to see them here.</p>}
+          <button type="button" className="workspace-sidebar-more" onClick={() => requestWorkspaceTab('integrations')}>+ More connections</button>
+        </div>}
+        <nav className="main-nav">
         <div className="main-nav-group">
           <span className="main-nav-label">Plan</span>
           {[
@@ -3810,10 +3829,27 @@ function App() {
             </button>
           ))}
         </div>
+        </nav>
+      </aside>
+
+      <div className="workspace-content">
+      <nav className="workspace-top-nav" aria-label="Primary workspace areas">
+        {[
+          ['listening', 'Analytics', ChartNoAxesCombined],
+          ['dashboard', 'Reporting', BarChart3],
+          ['repost', 'Inbox', Repeat2],
+          ['scheduler', 'Planning', CalendarDays],
+          ['integrations', 'SmartLinks', Link2],
+          ['credits', 'Ads', ImagePlus],
+        ].map(([key, label, Icon]) => (
+          <button key={key} type="button" className={`workspace-top-link ${activeTab === key ? 'active' : ''}`} onClick={() => requestWorkspaceTab(key)}>
+            <Icon size={17} aria-hidden="true" />{label}
+          </button>
+        ))}
       </nav>
 
-      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${activeTab === 'admin' ? 'management-workspace-layout' : ''} ${hasPaidAccess && isAssetPanelOpen && activeTab !== 'admin' ? '' : 'asset-drawer-collapsed'}`}>
-        {hasPaidAccess && activeTab !== 'help' && activeTab !== 'admin' && (
+      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${activeTab === 'admin' ? 'management-workspace-layout' : ''} ${hasPaidAccess && isAssetPanelOpen && activeTab === 'photo' ? '' : 'workspace-no-drawer'}`}>
+        {hasPaidAccess && activeTab === 'photo' && (
         <aside
           className={`asset-drawer ${activeTab === 'photo' ? 'photo-workspace-drawer' : ''} ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
           onDragEnter={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); setDrawerDragActive(true) } }}
@@ -5481,6 +5517,8 @@ function App() {
           </Suspense>
         )}
       </main>
+      </div>
+      </div>
 
       {supportModalOpen && (
         <div className="modal-overlay" role="presentation" onClick={closeSupportModal}>
