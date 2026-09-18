@@ -16,7 +16,19 @@ import { financeService } from './services/financeService'
 import { analyticsService } from './services/analyticsService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import echoMascot from './assets/echo-mascot.svg'
-import { CalendarDays } from 'lucide-react'
+import {
+  BarChart3,
+  CalendarDays,
+  ChartNoAxesCombined,
+  FilePlus2,
+  ImagePlus,
+  LayoutDashboard,
+  LifeBuoy,
+  Link2,
+  Repeat2,
+  Settings2,
+  Video,
+} from 'lucide-react'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
@@ -3563,27 +3575,58 @@ function App() {
       </header>
 
       <nav className="main-nav">
-        {[
-          ['dashboard', 'Dashboard'],
-          ['listening', 'Social Listening'],
-          ['repost', 'Repost Hub'],
-          ['scheduler', 'Scheduler'],
-          ['photo', 'Photo Creator'],
-          ['studio', 'Video Studio'],
-          ['integrations', 'Integrations'],
-          ['account', 'Manage account'],
-          ['help', 'How To'],
-          ...(canViewManagementBoard ? [['admin', 'IT / Management']] : []),
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
-            onClick={() => requestWorkspaceTab(key)}
-          >
-            {label}{!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? ' · Paid' : ''}
-          </button>
-        ))}
+        <div className="main-nav-group">
+          <span className="main-nav-label">Plan</span>
+          {[
+            ['dashboard', 'Dashboard', LayoutDashboard],
+            ['scheduler', 'Scheduler', CalendarDays],
+            ['repost', 'Repost Hub', Repeat2],
+          ].map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
+              onClick={() => requestWorkspaceTab(key)}
+            >
+              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? ' · Paid' : ''}
+            </button>
+          ))}
+        </div>
+        <div className="main-nav-group">
+          <span className="main-nav-label">Create &amp; measure</span>
+          {[
+            ['photo', 'Photo Creator', ImagePlus],
+            ['studio', 'Video Studio', Video],
+            ['listening', 'Social Listening', ChartNoAxesCombined],
+          ].map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
+              onClick={() => requestWorkspaceTab(key)}
+            >
+              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? ' · Paid' : ''}
+            </button>
+          ))}
+        </div>
+        <div className="main-nav-group main-nav-group-secondary">
+          <span className="main-nav-label">Workspace</span>
+          {[
+            ['integrations', 'Integrations', Link2],
+            ['account', 'Manage account', Settings2],
+            ['help', 'Help center', LifeBuoy],
+            ...(canViewManagementBoard ? [['admin', 'IT / Management', BarChart3]] : []),
+          ].map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
+              onClick={() => requestWorkspaceTab(key)}
+            >
+              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? ' · Paid' : ''}
+            </button>
+          ))}
+        </div>
       </nav>
 
       <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${activeTab === 'admin' ? 'management-workspace-layout' : ''} ${hasPaidAccess && isAssetPanelOpen && activeTab !== 'admin' ? '' : 'asset-drawer-collapsed'}`}>
@@ -3923,10 +3966,18 @@ function App() {
               </div>
             )}
 
-            <h2>Overview</h2>
-            <p className="panel-note">
-              Build morning campaigns once, then deploy automatically throughout the day.
-            </p>
+            <div className="dashboard-command-bar">
+              <div>
+                <p className="section-label">Your workspace</p>
+                <h2>Good to see you, {contactCard?.fullName?.split(' ')[0] || session?.email?.split('@')[0] || 'creator'}.</h2>
+                <p className="panel-note">See what is moving, then take the next useful action.</p>
+              </div>
+              <div className="dashboard-command-actions">
+                <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('scheduler')}><FilePlus2 size={17} /> Create a post</button>
+                <button type="button" className="ghost-button" onClick={() => setCalendarOpen(true)}><CalendarDays size={17} /> Open calendar</button>
+                <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('integrations')}><Link2 size={17} /> Connect a channel</button>
+              </div>
+            </div>
 
             <div className="stats-grid">
               {stats.map((item) => (
