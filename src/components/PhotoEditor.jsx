@@ -1020,21 +1020,26 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setOpenMenu(null)
   }
 
+  const importImageFile = (file) => {
+    if (!file?.type?.startsWith('image/')) {
+      setNotice('Choose an image file to import.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      commitHistory()
+      setUploadedImage(event.target?.result || '')
+      setNotice('Image imported successfully.')
+    }
+    reader.readAsDataURL(file)
+  }
+
   const handleFileOpen = () => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
     input.onchange = (e) => {
-      const file = e.target.files?.[0]
-      if (file) {
-        const reader = new FileReader()
-        reader.onload = (evt) => {
-          commitHistory()
-          setUploadedImage(evt.target?.result || '')
-          setNotice('Image imported successfully.')
-        }
-        reader.readAsDataURL(file)
-      }
+      importImageFile(e.target.files?.[0])
     }
     input.click()
     setOpenMenu(null)
@@ -2005,7 +2010,14 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   }
 
   return (
-    <section className={`photo-creator-shell ${compactMode ? 'compact' : ''}`}>
+    <section
+      className={`photo-creator-shell ${compactMode ? 'compact' : ''}`}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault()
+        importImageFile(event.dataTransfer.files?.[0])
+      }}
+    >
       <header className="photo-creator-header">
         <div>
           <p className="small-title">Image Lab</p>
