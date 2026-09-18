@@ -1582,9 +1582,9 @@ function App() {
   const handleSchedulePost = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    const hasContent = Boolean(composer.message.trim() || composer.mediaAssetIds.length || composer.imageIdea.trim())
+    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim())
     if (!hasContent || !composer.scheduledAt || !composer.channels.length) {
-      setSchedulerError('Attach a photo/video flyer, write a caption, or add an image brief, select at least one channel, and set a deployment date and time.')
+      setSchedulerError('Write a caption or add an image brief, select at least one channel, and set a deployment date and time.')
       return
     }
 
@@ -1598,7 +1598,7 @@ function App() {
       return
     }
 
-    const defaultTitle = composer.campaign.trim() || (composer.mediaAssetIds.length ? 'Visual Flyer Post' : 'Social Post')
+    const defaultTitle = composer.campaign.trim() || 'Social Post'
 
     const newPost = await platformService.schedulePost({
       campaign: defaultTitle,
@@ -1607,11 +1607,7 @@ function App() {
       scheduledAt: composer.scheduledAt,
       channels: composer.channels,
       channelAccounts: composer.channelAccounts,
-      media: workspaceAssets
-        .filter((asset) => composer.mediaAssetIds.includes(asset.id))
-        .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl }) => ({
-          id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl,
-        })),
+      media: [],
     })
 
     setScheduledPosts((prev) => [newPost, ...prev])
@@ -1630,9 +1626,9 @@ function App() {
   const handlePostNow = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    const hasContent = Boolean(composer.message.trim() || composer.mediaAssetIds.length || composer.imageIdea.trim())
+    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim())
     if (!hasContent || !composer.channels.length) {
-      setSchedulerError('Attach a photo/video flyer, write a caption, or add an image brief, and select at least one channel before posting.')
+      setSchedulerError('Write a caption or add an image brief, and select at least one channel before posting.')
       return
     }
 
@@ -1646,7 +1642,7 @@ function App() {
       return
     }
 
-    const defaultTitle = composer.campaign.trim() || (composer.mediaAssetIds.length ? 'Visual Flyer Post' : 'Instant Post')
+    const defaultTitle = composer.campaign.trim() || 'Instant Post'
 
     try {
       const newPost = await platformService.postNow({
@@ -1655,11 +1651,7 @@ function App() {
         imageIdea: composer.imageIdea,
         channels: composer.channels,
         channelAccounts: composer.channelAccounts,
-        media: workspaceAssets
-          .filter((asset) => composer.mediaAssetIds.includes(asset.id))
-          .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl }) => ({
-            id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl,
-          })),
+        media: [],
       })
 
       setScheduledPosts((prev) => [newPost, ...prev])
@@ -4478,8 +4470,6 @@ function App() {
               handleReschedulePost={handleReschedulePost}
               scheduledPosts={scheduledPosts}
               connectedAccounts={connectedAccounts}
-              workspaceAssets={workspaceAssets}
-              handleUploadAsset={handleUploadAsset}
               getPlatformMeta={getPlatformMeta}
               getStatusBadgeClass={getStatusBadgeClass}
               schedulerError={schedulerError}

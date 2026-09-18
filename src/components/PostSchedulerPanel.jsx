@@ -52,8 +52,6 @@ export function PostSchedulerPanel({
   handleReschedulePost,
   scheduledPosts = [],
   connectedAccounts = [],
-  workspaceAssets = [],
-  handleUploadAsset,
   getPlatformMeta,
   getStatusBadgeClass,
   schedulerError,
@@ -158,17 +156,6 @@ export function PostSchedulerPanel({
   const charLimit = PLATFORM_LIMITS[previewPlatform] || 2200
   const charCount = composer.message.length
   const isOverCharLimit = charCount > charLimit
-
-  // Filtered workspace photos & videos
-  const availableMediaAssets = useMemo(
-    () => workspaceAssets.filter((a) => ['image', 'video'].includes(a.type)),
-    [workspaceAssets]
-  )
-
-  const attachedAssets = useMemo(
-    () => workspaceAssets.filter((a) => composer.mediaAssetIds.includes(a.id)),
-    [workspaceAssets, composer.mediaAssetIds]
-  )
 
   // Filtered scheduled posts queue
   const filteredQueue = useMemo(() => {
@@ -341,11 +328,6 @@ export function PostSchedulerPanel({
             <small>Active publishing channels</small>
           </div>
 
-          <div className="scheduler-kpi-card">
-            <span>Workspace Media Assets</span>
-            <strong style={{ color: 'var(--secondary)' }}>{availableMediaAssets.length}</strong>
-            <small>Photos &amp; videos available</small>
-          </div>
         </div>
 
         {/* Navigation Tabs */}
@@ -445,78 +427,6 @@ export function PostSchedulerPanel({
                   placeholder="e.g. Product flyer with bold typography and warm sunset tones"
                 />
               </label>
-
-              {/* Workspace Media Selection & Upload */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                  <p className="small-title" style={{ margin: 0 }}>Attach Workspace Photos &amp; Videos</p>
-                  <label htmlFor="scheduler-media-upload" className="primary-button" style={{ fontSize: '0.78rem', padding: '0.3rem 0.7rem', cursor: 'pointer' }}>
-                    📤 Upload New Media
-                  </label>
-                  <input
-                    id="scheduler-media-upload"
-                    type="file"
-                    accept="image/*,video/*"
-                    onChange={handleUploadAsset}
-                    style={{ display: 'none' }}
-                  />
-                </div>
-
-                <div className="chip-row" style={{ marginTop: '0.5rem' }}>
-                  {availableMediaAssets.map((asset) => {
-                    const isAttached = composer.mediaAssetIds.includes(asset.id)
-                    return (
-                      <button
-                        key={asset.id}
-                        type="button"
-                        className={`chip ${isAttached ? 'active' : ''}`}
-                        onClick={() =>
-                          setComposer((prev) => ({
-                            ...prev,
-                            mediaAssetIds: isAttached
-                              ? prev.mediaAssetIds.filter((id) => id !== asset.id)
-                              : [...prev.mediaAssetIds, asset.id],
-                          }))
-                        }
-                      >
-                        {isAttached ? '✓ ' : ''}{asset.type === 'video' ? '🎬 Video' : '🖼️ Image'}: {asset.name}
-                      </button>
-                    )
-                  })}
-                  {availableMediaAssets.length === 0 && (
-                    <span className="muted" style={{ fontSize: '0.82rem' }}>No workspace media uploaded yet. Use Upload above to add photos or videos.</span>
-                  )}
-                </div>
-
-                {/* Attached Thumbnail Gallery */}
-                {attachedAssets.length > 0 && (
-                  <div className="attached-media-grid">
-                    {attachedAssets.map((asset) => (
-                      <div key={asset.id} className="attached-thumb-card">
-                        {asset.type === 'video' ? (
-                          <video src={asset.previewUrl} />
-                        ) : (
-                          <img src={asset.previewUrl} alt={asset.name} />
-                        )}
-                        <span className="attached-thumb-type-tag">{asset.type}</span>
-                        <button
-                          type="button"
-                          className="attached-thumb-remove"
-                          onClick={() =>
-                            setComposer((prev) => ({
-                              ...prev,
-                              mediaAssetIds: prev.mediaAssetIds.filter((id) => id !== asset.id),
-                            }))
-                          }
-                          title="Remove media attachment"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
 
               {/* Publish Channels Selector */}
               <div>
@@ -657,16 +567,7 @@ export function PostSchedulerPanel({
                   </div>
                 </div>
 
-                {/* Media Preview Box */}
-                {attachedAssets.length > 0 ? (
-                  <div className="mockup-media-container">
-                    {attachedAssets[0].type === 'video' ? (
-                      <video src={attachedAssets[0].previewUrl} controls />
-                    ) : (
-                      <img src={attachedAssets[0].previewUrl} alt="Preview" />
-                    )}
-                  </div>
-                ) : composer.imageIdea ? (
+                {composer.imageIdea ? (
                   <div className="mockup-media-container" style={{ background: '#f1f5f9', color: '#64748b', flexDirection: 'column', gap: '0.4rem', padding: '1.5rem', textAlign: 'center' }}>
                     <span style={{ fontSize: '1.5rem' }}>🖼️</span>
                     <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>[Visual Brief: {composer.imageIdea}]</span>
@@ -677,8 +578,6 @@ export function PostSchedulerPanel({
                 <div className="mockup-caption-box">
                   {composer.message ? (
                     composer.message
-                  ) : attachedAssets.length > 0 ? (
-                    <em style={{ color: '#64748b', fontStyle: 'italic' }}>🖼️ Image Flyer Post (No caption text attached — flyer contains all info)</em>
                   ) : (
                     <em style={{ color: '#94a3b8' }}>Your post caption will appear here as you type...</em>
                   )}
@@ -1154,26 +1053,10 @@ export function PostSchedulerPanel({
 
               {/* Pre-Flight Inspection Details */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.15rem' }}>
-                {/* Media & Caption Preview */}
                 <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase' }}>Flyer / Media Attachment</h4>
-                  {attachedAssets.length > 0 ? (
-                    <div style={{ width: '100%', maxHeight: 200, borderRadius: 8, overflow: 'hidden', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {attachedAssets[0].type === 'video' ? (
-                        <video src={attachedAssets[0].previewUrl} controls style={{ maxHeight: 200 }} />
-                      ) : (
-                        <img src={attachedAssets[0].previewUrl} alt="Attached Flyer" style={{ maxHeight: 200, objectFit: 'contain' }} />
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', borderRadius: 8, padding: '1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
-                      No media attached. Post will deploy as text-only.
-                    </div>
-                  )}
-
                   <h4 style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase' }}>Post Caption / Copy</h4>
                   <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 8, padding: '0.75rem 0.85rem', fontSize: '0.88rem', color: '#0f172a', whiteSpace: 'pre-wrap', minHeight: 80 }}>
-                    {composer.message ? composer.message : <em style={{ color: '#64748b' }}>🖼️ Image Flyer Post (No caption text attached — flyer contains all info)</em>}
+                    {composer.message || <em style={{ color: '#64748b' }}>No caption has been added.</em>}
                   </div>
                 </div>
 
