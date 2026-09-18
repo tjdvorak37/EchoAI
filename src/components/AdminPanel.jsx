@@ -1510,12 +1510,12 @@ export function AdminPanel({
                             </div>}
 
                             {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group">
-                              <span className="it-user-detail-label">Beta AI access</span>
+                              <span className="it-user-detail-label">Beta Premium access</span>
                               <label className="toggle-row">
                                 <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.isBetaTester : member.isBetaTester === true} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, isBetaTester: event.target.checked }))} />
                                 Beta tester account
                               </label>
-                              <small className="muted">Beta accounts are free. Keep AI disabled until you are comfortable with their access.</small>
+                              <small className="muted">Beta testers receive Premium access at no charge. Keep AI disabled until you are comfortable with their access.</small>
                               <label className="toggle-row">
                                 <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.enabled : member.aiEnabled !== false} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, enabled: event.target.checked }))} />
                                 Allow AI generation
@@ -1529,7 +1529,7 @@ export function AdminPanel({
                                 } catch (error) {
                                   setBetaAiDraft((current) => ({ ...current, saving: false, error: error.message }))
                                 }
-                              }}>{betaAiDraft.saving ? 'Saving...' : 'Save beta AI access'}</button>
+                              }}>{betaAiDraft.saving ? 'Saving...' : 'Save beta access'}</button>
                               {betaAiDraft.error && <small className="field-error">{betaAiDraft.error}</small>}
                             </div>}
 
