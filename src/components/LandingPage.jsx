@@ -6,9 +6,12 @@ import {
   Check,
   ChevronDown,
   CirclePlay,
+  ChartNoAxesCombined,
   Image,
   Layers3,
+  Link2,
   Menu,
+  Megaphone,
   Send,
   ShieldCheck,
   Sparkles,
@@ -65,6 +68,19 @@ const showcaseFeatures = [
   [CalendarDays, 'Multi-platform scheduling', 'Plan approved posts and keep every connected channel in view.'],
   [Users, 'Team collaboration', 'Share assets, coordinate reposts, and keep work organized.'],
   [BarChart3, 'Analytics and insights', 'Follow performance, listening signals, and campaign activity.'],
+]
+
+const workflowSteps = [
+  [Link2, 'Connect', 'Link the channels and ad accounts your team already manages.', 'Connections'],
+  [Image, 'Create', 'Bring an image from your device into Image Lab and refine it.', 'Image Lab'],
+  [CalendarDays, 'Queue', 'Write the post, inspect each social preview, and choose the right moment.', 'Queue Studio'],
+  [ChartNoAxesCombined, 'Improve', 'Use audience signals and paid-media results to guide the next campaign.', 'Signal Watch + Ads'],
+]
+
+const premiumHighlights = [
+  ['Publish with confidence', 'Queue Studio, live social previews, and connected-channel publishing.'],
+  ['Create without the clutter', 'Image Lab and Motion Lab work directly with files from your device.'],
+  ['Make sharper decisions', 'Signal Watch and Ads show the conversations and outcomes worth acting on.'],
 ]
 
 const audiences = [
@@ -374,13 +390,51 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
           </div>
         </section>
 
+        <section className="landing-workflow-story" id="workflow">
+          <div className="landing-workflow-intro">
+            <p className="landing-kicker">Built around your real workflow</p>
+            <h2>From a rough idea to a smarter next move.</h2>
+            <p>EchoAI keeps the steps that usually live across separate tools in one practical rhythm: connect, create, queue, learn, repeat.</p>
+            <button type="button" className="landing-primary-action" onClick={onCreateAccount}>Create your account <span aria-hidden="true">→</span></button>
+          </div>
+          <div className="landing-workflow-board" aria-label="EchoAI workflow preview">
+            {workflowSteps.map(([Icon, title, description, app], index) => (
+              <article className={`landing-workflow-step step-${index + 1}`} key={title}>
+                <span className="landing-workflow-number">0{index + 1}</span>
+                <div className="landing-workflow-icon"><Icon size={22} /></div>
+                <div><small>{app}</small><h3>{title}</h3><p>{description}</p></div>
+              </article>
+            ))}
+            <div className="landing-workflow-result"><Megaphone size={19} /><span>Campaign ready to move</span><strong>Review, publish, learn</strong></div>
+          </div>
+        </section>
+
+        <section className="landing-premium-section">
+          <div className="landing-premium-copy">
+            <p className="landing-kicker">Premium unlocks the work</p>
+            <h2>The tools to turn consistency into growth.</h2>
+            <p>Keep a Standard account for free. Upgrade when you are ready to create, publish, monitor, and optimize from the same workspace.</p>
+            <div className="landing-premium-highlights">
+              {premiumHighlights.map(([title, detail]) => <div key={title}><Check size={18} /><p><strong>{title}</strong><span>{detail}</span></p></div>)}
+            </div>
+          </div>
+          <aside className="landing-premium-card">
+            <span className="landing-premium-card-label">EchoAI Premium</span>
+            <h3>One plan. Full momentum.</h3>
+            <div className="landing-premium-price"><strong>$39</strong><span>per month</span></div>
+            <div className="landing-premium-price annual"><strong>$390</strong><span>per year · save $78</span></div>
+            <button type="button" className="landing-primary-action" onClick={onCreateAccount}>Start with a free account <span aria-hidden="true">→</span></button>
+            <small>No card required to start. Upgrade when you are ready.</small>
+          </aside>
+        </section>
+
         <section className="landing-color-cta" id="get-started">
           <img src={echoCreator} alt="Echo in creator mode" />
           <div><h2>Let Echo do the heavy lifting.</h2><p>More creativity. Less busy work. Get your campaign ready, then enjoy the rest of your day.</p></div>
           <button type="button" className="landing-color-cta-button" onClick={onCreateAccount}>Start creating free <span>→</span></button>
         </section>
 
-        <section className="landing-platform-section" id="workflow">
+        <section className="landing-platform-section">
           <div className="landing-centered-heading"><p>Publish with confidence</p><h2>Meet your audience across their favorite platforms.</h2><span>Six live publishing integrations with five more clearly tracked on the roadmap.</span></div>
           <div className="landing-platform-strip">
             {SOCIAL_PLATFORMS.map((platform) => (
