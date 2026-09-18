@@ -756,8 +756,8 @@ export function AdminPanel({
     <div className="it-panel">
       <div className="it-header">
         <div>
-          <h2>IT / Admin Backend</h2>
-          <p className="it-header-sub">Restricted staff workspace • {currentUser?.role === 'admin' ? 'Super Admin' : 'Technician'}</p>
+          <h2>IT / Management</h2>
+          <p className="it-header-sub">Restricted staff workspace • {currentUser?.role === 'admin' ? 'Super Admin' : currentUser?.role === 'manager' ? 'Manager' : 'IT staff'}</p>
         </div>
       </div>
 
