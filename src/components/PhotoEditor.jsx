@@ -2008,7 +2008,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     <section className={`photo-creator-shell ${compactMode ? 'compact' : ''}`}>
       <header className="photo-creator-header">
         <div>
-          <p className="small-title">Photo Creator</p>
+          <p className="small-title">Image Lab</p>
           <h2>Professional image editor</h2>
           <p className="panel-note">Upload a photo, add text and graphics, retouch it, then export.</p>
         </div>
