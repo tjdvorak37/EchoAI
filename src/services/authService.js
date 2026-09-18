@@ -307,6 +307,24 @@ export const authService = {
     }
   },
 
+  async signInWithProvider(provider) {
+    if (!['google', 'facebook'].includes(provider)) {
+      throw new Error('That sign-in provider is not supported.')
+    }
+
+    if (!isSupabaseConfigured) {
+      throw new Error('Social sign-in is unavailable while Supabase is not configured.')
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? window.location.origin : 'https://echoaipro.com'
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo },
+    })
+
+    if (error) throw new Error(error.message)
+  },
+
   async verifyMfaCode({ email, code, factorId, challengeId }) {
     if (!code) {
       throw new Error('A verification code is required.')

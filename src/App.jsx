@@ -124,6 +124,7 @@ function App() {
     company: '',
     otpCode: '',
   })
+  const [authTermsAccepted, setAuthTermsAccepted] = useState(false)
   const [authError, setAuthError] = useState(() => {
     if (typeof window === 'undefined') return ''
     const hash = window.location.hash || ''
@@ -914,10 +915,26 @@ function App() {
     }
   }
 
+  const handleSocialSignIn = async (provider) => {
+    setAuthError('')
+    setAuthNotice('')
+    setAuthLoading(true)
+    try {
+      await authService.signInWithProvider(provider)
+    } catch (error) {
+      setAuthError(error.message)
+      setAuthLoading(false)
+    }
+  }
+
   const handleSignUp = async (event) => {
     event.preventDefault()
     setAuthError('')
     setAuthNotice('')
+    if (!authTermsAccepted) {
+      setAuthError('Please accept the terms to create your account.')
+      return
+    }
     setAuthLoading(true)
 
     try {
@@ -3064,6 +3081,18 @@ function App() {
           </button>
         </header>
 
+        <div className="auth-layout">
+          <aside className="auth-benefits" aria-label="EchoAI benefits">
+            <p className="section-label">EchoAI workspace</p>
+            <h2>Manage social media with clarity, not chaos.</h2>
+            <div className="auth-benefit-list">
+              <div><span className="auth-benefit-icon">▦</span><p><strong>All your social media in one place</strong><small>Stop jumping between tools. Keep content, accounts, and data together.</small></p></div>
+              <div><span className="auth-benefit-icon">♡</span><p><strong>Seamless collaboration</strong><small>Assign work, review posts, and keep feedback organized before anything goes live.</small></p></div>
+              <div><span className="auth-benefit-icon">▥</span><p><strong>Measure what really matters</strong><small>See what is working, what is not, and where to focus next.</small></p></div>
+            </div>
+            <div className="auth-trust-note"><strong>Built for creators and teams</strong><span>One calm workspace for the work behind every post.</span></div>
+          </aside>
+
         <section className="auth-panel">
           {checkoutReturn === 'success' && (
             <div className="promo-applied" style={{ marginBottom: '1rem' }}>
@@ -3153,6 +3182,17 @@ function App() {
             )
           ) : (
             <>
+              <div className="auth-provider-actions">
+                <button type="button" className="auth-provider-button" onClick={() => handleSocialSignIn('google')} disabled={authLoading}>
+                  <span className="provider-mark provider-google" aria-hidden="true">G</span>
+                  Continue with Google
+                </button>
+                <button type="button" className="auth-provider-button" onClick={() => handleSocialSignIn('facebook')} disabled={authLoading}>
+                  <span className="provider-mark provider-facebook" aria-hidden="true">f</span>
+                  Continue with Facebook
+                </button>
+              </div>
+              <div className="auth-divider"><span>or use your email</span></div>
               {authView === 'signin' && (
                 <form className="auth-form" onSubmit={handleSignIn}>
                   <h2>Sign in</h2>
@@ -3197,6 +3237,7 @@ function App() {
               {authView === 'signup' && (
                 <form className="auth-form" onSubmit={handleSignUp}>
                   <h2>Create account</h2>
+                  <p className="auth-form-note">Start with a free workspace. Connect your channels when you are ready.</p>
                   <label>
                     Full name
                     <input
@@ -3232,6 +3273,10 @@ function App() {
                       onChange={(event) => handleAuthChange('password', event.target.value)}
                       placeholder="••••••••"
                     />
+                  </label>
+                  <label className="auth-terms-check">
+                    <input type="checkbox" checked={authTermsAccepted} onChange={(event) => setAuthTermsAccepted(event.target.checked)} />
+                    <span>I agree to EchoAI&apos;s terms and privacy policy.</span>
                   </label>
                   <button type="submit" disabled={authLoading}>
                     {authLoading ? 'Creating account...' : 'Create account'}
@@ -3269,6 +3314,7 @@ function App() {
           {authError && <p className="auth-message auth-error">{authError}</p>}
           {authNotice && <p className="auth-message">{authNotice}</p>}
         </section>
+        </div>
       </div>
     )
   }
