@@ -13,6 +13,19 @@ const providers: Record<Provider, ProviderConfig> = {
   tiktok: { clientId: Deno.env.get('TIKTOK_ADS_CLIENT_KEY') ?? '', clientSecret: Deno.env.get('TIKTOK_ADS_CLIENT_SECRET') ?? '', authUrl: 'https://business-api.tiktok.com/portal/auth', tokenUrl: 'https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/', scopes: ['ads.read'] },
 }
 
+const providerConfig = async (provider: Provider) => {
+  const fallback = providers[provider]
+  const { data } = await db().from('developer_app_credentials').select('client_id, client_secret, redirect_uri, scopes, enabled').eq('provider', `${provider}_ads`).maybeSingle()
+  if (!data || data.enabled === false) return { ...fallback, redirectUri: callbackUrl(provider) }
+  return {
+    ...fallback,
+    clientId: data.client_id || fallback.clientId,
+    clientSecret: data.client_secret || fallback.clientSecret,
+    scopes: Array.isArray(data.scopes) && data.scopes.length ? data.scopes : fallback.scopes,
+    redirectUri: data.redirect_uri || callbackUrl(provider),
+  }
+}
+
 const db = () => createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', { auth: { persistSession: false } })
 const isProvider = (value: string): value is Provider => SUPPORTED_PROVIDERS.includes(value as Provider)
 const base64Url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
@@ -52,10 +65,10 @@ const googleAccounts = async (accessToken: string) => {
 }
 
 const exchangeCode = async (provider: Provider, code: string) => {
-  const config = providers[provider]
+  const config = await providerConfig(provider)
   const body = provider === 'tiktok'
     ? { app_id: config.clientId, secret: config.clientSecret, auth_code: code, grant_type: 'authorization_code' }
-    : { client_id: config.clientId, client_secret: config.clientSecret, code, redirect_uri: callbackUrl(provider), grant_type: 'authorization_code' }
+    : { client_id: config.clientId, client_secret: config.clientSecret, code, redirect_uri: config.redirectUri, grant_type: 'authorization_code' }
   const response = await fetch(config.tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) })
   if (!response.ok) throw new Error(`${provider} token exchange failed.`)
   const payload = await response.json()
@@ -65,11 +78,12 @@ const exchangeCode = async (provider: Provider, code: string) => {
 const providerStatus = async (userId: string) => {
   const { data: connections, error } = await db().from('ad_oauth_connections').select('provider, expires_at').eq('user_id', userId)
   if (error) throw error
-  return SUPPORTED_PROVIDERS.map((provider) => {
+  return await Promise.all(SUPPORTED_PROVIDERS.map(async (provider) => {
     const connection = connections?.find((item) => item.provider === provider)
-    const configured = Boolean(providers[provider].clientId && providers[provider].clientSecret)
+    const config = await providerConfig(provider)
+    const configured = Boolean(config.clientId && config.clientSecret)
     return { provider, status: connection ? 'connected' : configured ? 'not_connected' : 'needs_setup', expiresAt: connection?.expires_at ?? null }
-  })
+  }))
 }
 
 const metaReport = async (accessToken: string, accounts: string[], days: number) => {
@@ -164,13 +178,13 @@ Deno.serve(async (request) => {
     if (body.action === 'status') return json({ connections: await providerStatus(user.id) }, 200, request)
     if (body.action === 'connect' && isProvider(String(body.provider ?? ''))) {
       const provider = body.provider as Provider
-      const config = providers[provider]
+      const config = await providerConfig(provider)
       if (!config.clientId || !config.clientSecret) return json({ error: `${provider} advertising credentials have not been configured.` }, 409, request)
       const state = makeState()
       await db().from('ad_oauth_states').insert({ state, user_id: user.id, provider })
       const authUrl = new URL(config.authUrl)
       authUrl.searchParams.set('client_id', config.clientId)
-      authUrl.searchParams.set('redirect_uri', callbackUrl(provider))
+      authUrl.searchParams.set('redirect_uri', config.redirectUri)
       authUrl.searchParams.set('response_type', 'code')
       authUrl.searchParams.set('state', state)
       authUrl.searchParams.set('scope', provider === 'meta' ? config.scopes.join(',') : config.scopes.join(' '))

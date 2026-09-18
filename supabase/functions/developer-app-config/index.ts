@@ -15,7 +15,7 @@ const getCaller = async (request: Request) => {
   return data.user ?? null
 }
 
-const providers = ['meta', 'youtube', 'tiktok', 'x', 'linkedin', 'snapchat']
+const providers = ['meta', 'meta_ads', 'google_ads', 'tiktok_ads', 'youtube', 'tiktok', 'x', 'linkedin', 'snapchat']
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: getCorsHeaders(request) })

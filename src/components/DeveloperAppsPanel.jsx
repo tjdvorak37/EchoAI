@@ -3,6 +3,9 @@ import { developerAppService } from '../services/developerAppService'
 
 const PROVIDER_LABELS = {
   meta: 'Meta (Facebook + Instagram)',
+  meta_ads: 'Meta Ads',
+  google_ads: 'Google Ads',
+  tiktok_ads: 'TikTok Ads',
   youtube: 'YouTube',
   tiktok: 'TikTok',
   x: 'X',
@@ -11,12 +14,13 @@ const PROVIDER_LABELS = {
 }
 
 const DEFAULT_REDIRECT = 'https://yxmsqrtoghrazfwweqqf.supabase.co/functions/v1/social-oauth'
+const ADS_REDIRECT = 'https://yxmsqrtoghrazfwweqqf.supabase.co/functions/v1/ad-analytics'
 
-const draftFromRecord = (record) => ({
+const draftFromRecord = (record, provider) => ({
   appName: record?.app_name || '',
   clientId: record?.client_id || '',
   clientSecret: '',
-  redirectUri: record?.redirect_uri || DEFAULT_REDIRECT,
+  redirectUri: record?.redirect_uri || (provider.endsWith('_ads') ? ADS_REDIRECT : DEFAULT_REDIRECT),
   scopes: (record?.scopes || []).join(', '),
   enabled: record?.enabled !== false,
 })
@@ -35,7 +39,7 @@ export function DeveloperAppsPanel({ currentUser }) {
       if (!active) return
       setRecords(result.records || [])
       setCanEdit(result.canEdit === true)
-      setDraft(draftFromRecord((result.records || []).find((item) => item.provider === 'youtube')))
+      setDraft(draftFromRecord((result.records || []).find((item) => item.provider === 'youtube'), 'youtube'))
       setStatus((current) => ({ ...current, loading: false }))
     }).catch((error) => {
       if (active) setStatus({ loading: false, saving: false, message: '', error: error.message })
@@ -45,7 +49,7 @@ export function DeveloperAppsPanel({ currentUser }) {
 
   const selectProvider = (provider) => {
     setSelected(provider)
-    setDraft(draftFromRecord(records.find((item) => item.provider === provider)))
+    setDraft(draftFromRecord(records.find((item) => item.provider === provider), provider))
     setStatus((current) => ({ ...current, message: '', error: '' }))
   }
 
