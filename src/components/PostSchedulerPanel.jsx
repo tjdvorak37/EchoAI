@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { PUBLISHING_PLATFORMS, PUBLISHING_PLATFORM_KEYS } from '../data/socialPlatforms'
+import { PUBLISHING_PLATFORMS, PUBLISHING_PLATFORM_KEYS, SOCIAL_PLATFORMS } from '../data/socialPlatforms'
 import './PostSchedulerPanel.css'
 
 const PLATFORM_LIMITS = Object.fromEntries(
@@ -539,14 +539,15 @@ export function PostSchedulerPanel({
               </div>
 
               <div className="preview-platform-selector">
-                {PUBLISHING_PLATFORMS.map((platform) => (
+                {SOCIAL_PLATFORMS.map((platform) => (
                   <button
                     key={platform.key}
                     type="button"
                     className={`preview-platform-btn ${previewPlatform === platform.key ? 'active' : ''}`}
                     onClick={() => setPreviewPlatform(platform.key)}
+                    title={platform.releaseStatus === 'available' ? `Preview for ${platform.label}` : `${platform.label} is available for preview while publishing is in development.`}
                   >
-                    {platform.icon} {platform.label}
+                    {platform.icon} {platform.label}{platform.releaseStatus !== 'available' ? ' (preview)' : ''}
                   </button>
                 ))}
               </div>
