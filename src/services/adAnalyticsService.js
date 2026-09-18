@@ -8,7 +8,11 @@ const invoke = async (body) => {
   const { data, error } = await supabase.functions.invoke('ad-analytics', { headers: { Authorization: `Bearer ${accessToken}` }, body })
   if (error) {
     const detail = await error.context?.json?.().catch(() => null)
-    throw new Error(detail?.error || error.message || 'Advertising service is unavailable.')
+    const message = detail?.error || error.message || 'Advertising service is unavailable.'
+    if (/failed to send a request|function.*not found|404/i.test(message)) {
+      return { unavailable: true, message: 'Ads setup is not deployed yet. Ask your IT team to deploy the ad-analytics Edge Function and its database migration.' }
+    }
+    throw new Error(message)
   }
   return data
 }
@@ -16,11 +20,11 @@ const invoke = async (body) => {
 export const adAnalyticsService = {
   async listConnections() {
     const data = await invoke({ action: 'status' })
-    return data.connections || []
+    return { connections: data.connections || [], unavailable: data.unavailable, message: data.message }
   },
   async getReport({ days }) {
     const data = await invoke({ action: 'report', days })
-    return data.report || { totals: {}, campaigns: [], insights: [] }
+    return { report: data.report || { totals: {}, campaigns: [], insights: [] }, unavailable: data.unavailable, message: data.message }
   },
   async connect(provider) {
     const data = await invoke({ action: 'connect', provider })

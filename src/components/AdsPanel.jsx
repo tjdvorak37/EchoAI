@@ -21,6 +21,7 @@ export function AdsPanel() {
   const [refreshing, setRefreshing] = useState(false)
   const [connecting, setConnecting] = useState('')
   const [error, setError] = useState('')
+  const [serviceUnavailable, setServiceUnavailable] = useState(false)
 
   const load = async ({ refresh = false } = {}) => {
     setError('')
@@ -30,8 +31,11 @@ export function AdsPanel() {
         adAnalyticsService.listConnections(),
         adAnalyticsService.getReport({ days: Number(days) }),
       ])
-      setConnections(nextConnections)
-      setReport(nextReport)
+      setConnections(nextConnections.connections)
+      setReport(nextReport.report)
+      const unavailable = nextConnections.unavailable || nextReport.unavailable
+      setServiceUnavailable(unavailable)
+      if (unavailable) setError(nextConnections.message || nextReport.message)
     } catch (loadError) {
       setError(loadError.message || 'Unable to load advertising data.')
     } finally {
@@ -91,8 +95,8 @@ export function AdsPanel() {
                 <h3>{provider.name}</h3>
                 <p>{provider.description}</p>
               </div>
-              <span className={isConnected ? 'ads-status connected' : 'ads-status'}>{isConnected ? 'Connected' : connection?.status === 'needs_setup' ? 'Needs setup' : 'Not connected'}</span>
-              <button type="button" className={isConnected ? 'ghost-button' : 'primary-button'} onClick={() => connect(provider.id)} disabled={connecting === provider.id || connection?.status === 'needs_setup'}>
+              <span className={isConnected ? 'ads-status connected' : 'ads-status'}>{isConnected ? 'Connected' : serviceUnavailable ? 'Deployment required' : connection?.status === 'needs_setup' ? 'Needs setup' : 'Not connected'}</span>
+              <button type="button" className={isConnected ? 'ghost-button' : 'primary-button'} onClick={() => connect(provider.id)} disabled={serviceUnavailable || connecting === provider.id || connection?.status === 'needs_setup'} title={serviceUnavailable ? 'Deploy the ad-analytics Edge Function before connecting accounts.' : undefined}>
                 <ExternalLink size={16} aria-hidden="true" />
                 {connecting === provider.id ? 'Opening...' : isConnected ? 'Reconnect' : 'Connect'}
               </button>

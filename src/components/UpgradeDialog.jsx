@@ -9,13 +9,13 @@ export function UpgradeDialog({ feature, loadingPlan, error, onChoosePlan, onClo
         <header className="upgrade-header">
           <div className="upgrade-icon"><LockKeyhole size={21} /></div>
           <div>
-            <span>Paid feature</span>
+            <span>Premium feature</span>
             <h2 id="upgrade-title">Unlock {feature}</h2>
           </div>
           <button type="button" className="upgrade-close" onClick={onClose} aria-label="Close upgrade options"><X size={20} /></button>
         </header>
 
-        <p className="upgrade-intro">Your free account stays active. Choose a monthly plan when you are ready to use this tool.</p>
+        <p className="upgrade-intro">Your Standard account stays active. Choose a Premium plan when you are ready to use this tool.</p>
 
         <div className="upgrade-plans">
           {PLAN_ORDER.map((planKey) => {
@@ -34,7 +34,7 @@ export function UpgradeDialog({ feature, loadingPlan, error, onChoosePlan, onClo
         </div>
 
         {error && <p className="upgrade-error">{error}</p>}
-        <p className="upgrade-footnote">Cancel anytime and return to free access without losing your account.</p>
+        <p className="upgrade-footnote">Cancel anytime and return to Standard access without losing your account.</p>
       </section>
     </div>
   )

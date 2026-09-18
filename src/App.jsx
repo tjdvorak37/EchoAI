@@ -110,7 +110,9 @@ const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it', 'accountant', 'boa
 const STAFF_PLAN = 'creator'
 const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCase())
 const aiGenerationEnabled = () => false
-const FREE_ACCOUNT_TABS = new Set(['dashboard', 'credits', 'account', 'help'])
+// Standard members can see every destination; Premium is required to operate
+// paid creation, publishing, monitoring, and advertising tools.
+const STANDARD_ACCOUNT_TABS = new Set(['dashboard', 'account', 'help', 'integrations'])
 const TAB_LABELS = {
   listening: 'Signal Watch',
   repost: 'Broadcast Hub',
@@ -368,10 +370,10 @@ function App() {
   const [incomingReferralCode] = useState(
     () => new URLSearchParams(window.location.search).get('ref') || '',
   )
-  const hasPaidAccess = isStaffRole(session?.role) || myEntitlement?.entitled !== false
+  const hasPaidAccess = isStaffRole(session?.role) || myEntitlement?.entitled === true
 
   const requestWorkspaceTab = (tab) => {
-    if (hasPaidAccess || FREE_ACCOUNT_TABS.has(tab)) {
+    if (hasPaidAccess || STANDARD_ACCOUNT_TABS.has(tab)) {
       setActiveTab(tab)
       return
     }
@@ -3842,10 +3844,10 @@ function App() {
             <button
               key={key}
               type="button"
-              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
+              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
               onClick={() => requestWorkspaceTab(key)}
             >
-              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? ' · Paid' : ''}
+              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? ' · Premium' : ''}
             </button>
           ))}
         </div>
@@ -3859,10 +3861,10 @@ function App() {
             <button
               key={key}
               type="button"
-              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
+              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
               onClick={() => requestWorkspaceTab(key)}
             >
-              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? ' · Paid' : ''}
+              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? ' · Premium' : ''}
             </button>
           ))}
         </div>
@@ -3877,10 +3879,10 @@ function App() {
             <button
               key={key}
               type="button"
-              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
+              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
               onClick={() => requestWorkspaceTab(key)}
             >
-              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !FREE_ACCOUNT_TABS.has(key) ? ' · Paid' : ''}
+              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? ' · Premium' : ''}
             </button>
           ))}
         </div>

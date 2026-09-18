@@ -3,7 +3,6 @@ import { FinancePanel } from './FinancePanel'
 import { TrademarkPanel } from './TrademarkPanel'
 import { DeveloperAppsPanel } from './DeveloperAppsPanel'
 import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
-import { AiOperationsPanel } from './AiOperationsPanel'
 import { PricingProfitabilityPanel } from './PricingProfitabilityPanel'
 import { CompanyEmailPanel } from './CompanyEmailPanel'
 import { AnalyticsPanel } from './AnalyticsPanel'
@@ -23,7 +22,6 @@ const PLATFORM_TABS = [
   { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents', permission: 'trademarkEditAccess' },
   { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration', permission: 'developerAppEditAccess' },
   { id: 'integrations', label: '🔌 Integrations', hint: 'Third-party and platform integrations', permission: 'integrationsEditAccess' },
-  { id: 'ai-operations', label: '🤖 Echo AI operations', hint: 'AI provider routing, usage, and cost controls', permission: 'aiOperationsEditAccess' },
   { id: 'controls', label: '⚙️ Site Controls', hint: 'Feature flags and site-wide notices', permission: 'siteControlsEditAccess' },
 ]
 
@@ -33,7 +31,6 @@ const PLATFORM_ACCESS_CONTROLS = [
   { field: 'trademarkEditAccess', action: 'set-trademark-edit-access', label: 'Trademark & Legal', roles: ['it', 'manager'] },
   { field: 'developerAppEditAccess', action: 'set-developer-app-edit-access', label: 'Developer Apps', roles: ['it'] },
   { field: 'integrationsEditAccess', action: 'set-integrations-edit-access', label: 'Integrations', roles: ['it', 'manager'] },
-  { field: 'aiOperationsEditAccess', action: 'set-ai-operations-edit-access', label: 'Echo AI operations', roles: ['it', 'manager'] },
   { field: 'siteControlsEditAccess', action: 'set-site-controls-edit-access', label: 'Site Controls', roles: ['it', 'manager'] },
 ]
 
@@ -1922,8 +1919,6 @@ export function AdminPanel({
             </Section>
           </div>
         )}
-
-        {itTab === 'ai-operations' && <AiOperationsPanel />}
 
         {itTab === 'controls' && (
           <div>
