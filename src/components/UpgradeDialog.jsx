@@ -24,7 +24,7 @@ export function UpgradeDialog({ feature, loadingPlan, error, onChoosePlan, onClo
               <article className={plan.popular ? 'upgrade-plan is-popular' : 'upgrade-plan'} key={plan.key}>
                 <div><strong>{plan.label}</strong>{plan.popular && <span>Popular</span>}</div>
                 <p><b>${plan.monthlyPrice}</b> / month</p>
-                <small><Check size={13} /> {plan.includedAiCredits.toLocaleString()} monthly tokens · {plan.storageGb} GB</small>
+                <small><Check size={13} /> Full access to publishing, creation, monitoring, and Ads</small>
                 <button type="button" onClick={() => onChoosePlan(plan.key)} disabled={Boolean(loadingPlan)}>
                   {loadingPlan === plan.key ? 'Opening checkout...' : `Choose ${plan.label}`}
                 </button>

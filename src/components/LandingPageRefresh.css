@@ -249,6 +249,26 @@
   stroke-width: 3;
 }
 
+.landing-premium-offer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 1.35rem;
+  padding: 0.8rem 1rem;
+  color: #17234b;
+  background: #fff;
+  border: 1px solid #cdd9f4;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(49, 94, 231, 0.08);
+}
+
+.landing-premium-offer > div { display: grid; gap: 0.1rem; }
+.landing-premium-offer > div + div { padding-left: 0.9rem; border-left: 1px solid #dce4f4; }
+.landing-premium-offer strong { color: var(--pop-blue); font-size: 1.05rem; }
+.landing-premium-offer > div:first-child strong { color: var(--pop-navy); }
+.landing-premium-offer span { color: #64748b; font-size: 0.75rem; font-weight: 600; }
+
 .landing-hero-visual {
   width: 100%;
   display: flex;

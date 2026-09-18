@@ -310,6 +310,11 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
               <span><Check size={15} /> Free account available</span>
               <span><Check size={15} /> Upgrade anytime</span>
             </div>
+            <div className="landing-premium-offer" aria-label="Premium pricing">
+              <div><strong>Premium</strong><span>Full EchoAI access</span></div>
+              <div><strong>$39</strong><span>per month</span></div>
+              <div><strong>$390</strong><span>per year</span></div>
+            </div>
           </div>
 
           <div className="landing-hero-visual" aria-label="EchoAI creative workspace illustration">

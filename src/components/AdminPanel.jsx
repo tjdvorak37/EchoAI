@@ -871,18 +871,17 @@ export function AdminPanel({
             <Section title="Seat package pricing & quotes">
               <p className="panel-note">
                 Seat packages are sold by the year only, and every seat is provisioned at one plan level
-                (Standard, Storage+, Storage Pro, Storage Max, or Creator Studio) \u2014 the same plans sold
-                individually. Pick the plan the customer wants below, then quote by seat count.
+                (Premium) for the full EchoAI suite. Pick the package below, then quote by seat count.
               </p>
 
-              <h4 className="section-label">1. Which plan are these seats getting?</h4>
+              <h4 className="section-label">1. Premium package</h4>
               <div className="chip-row">
                 {PLAN_ORDER.map((key) => (
                   <button
                     key={key}
                     type="button"
                     className={quotePlanKey === key ? 'chip active' : 'chip'}
-                    title={`${PLANS[key].storageGb} GB storage \u2022 ${PLANS[key].includedAiCredits.toLocaleString('en-US')} AI credits/month`}
+                    title="Full Premium access"
                     onClick={() => setQuotePlanKey(key)}
                   >
                     {PLANS[key].label}

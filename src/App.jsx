@@ -337,7 +337,7 @@ function App() {
   const [financialTasks, setFinancialTasks] = useState([])
   const [showPurchase, setShowPurchase] = useState(false)
   const [companyPackageRequested, setCompanyPackageRequested] = useState(false)
-  const [purchasePlan, setPurchasePlan] = useState('storage_pro')
+  const [purchasePlan, setPurchasePlan] = useState('premium')
   // Stripe sends the buyer back here after checkout; they still need a login.
   const [checkoutReturn] = useState(
     () => new URLSearchParams(window.location.search).get('checkout') || '',

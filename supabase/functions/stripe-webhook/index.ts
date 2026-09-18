@@ -20,7 +20,7 @@ const supabase = createClient(
 // How long a customer keeps access after a failed charge while Stripe retries.
 const GRACE_DAYS = Number(Deno.env.get('BILLING_GRACE_DAYS') ?? '3')
 
-const PLAN_KEYS = ['standard', 'storage_plus', 'storage_pro', 'storage_max', 'creator']
+const PLAN_KEYS = ['premium', 'standard', 'storage_plus', 'storage_pro', 'storage_max', 'creator']
 
 const DEFAULT_STRIPE_PRICES: Record<string, string> = {
   STRIPE_PRICE_STANDARD_MONTHLY: 'price_1UFGJ9RrklQsqC822EUTvcKQ',
@@ -81,7 +81,7 @@ const planFromSubscription = (subscription: Stripe.Subscription) => {
       : 'monthly'
 
   return {
-    plan: metaPlan && PLAN_KEYS.includes(metaPlan) ? metaPlan : 'standard',
+    plan: metaPlan && PLAN_KEYS.includes(metaPlan) ? metaPlan : 'premium',
     interval,
   }
 }

@@ -20,77 +20,28 @@ export const ACCOUNT_TYPES = {
 }
 
 export const PLANS = {
-  standard: {
-    key: 'standard',
-    label: 'Standard',
-    storageGb: 2,
-    monthlyPrice: 29,
-    annualPrice: 295,
-    includedAiCredits: 500,
-    aiCreditValueUsd: 15,
-    tagline: 'Everything in EchoAI with room for day-to-day campaign work. Perfect for solo creators & freelancers.',
-    audience: 'Solo creators, freelancers',
-    marginPct: 93.8,
-  },
-  storage_plus: {
-    key: 'storage_plus',
-    label: 'Storage +',
-    storageGb: 10,
+  premium: {
+    key: 'premium',
+    label: 'Premium',
+    storageGb: 0,
     monthlyPrice: 39,
-    annualPrice: 398,
-    includedAiCredits: 1000,
-    aiCreditValueUsd: 25,
-    tagline: 'Five times the space and 1,000 monthly tokens for growing businesses and steady content creation.',
-    audience: 'Small businesses, growing content creators',
-    marginPct: 91.0,
-  },
-  storage_pro: {
-    key: 'storage_pro',
-    label: 'Storage Pro',
-    storageGb: 25,
-    monthlyPrice: 59,
-    annualPrice: 599,
-    includedAiCredits: 2500,
-    aiCreditValueUsd: 50,
-    tagline: '2,500 monthly tokens and 25 GB storage for regular multi-track video and multi-brand asset archives.',
-    audience: 'Agencies, multi-brand marketing teams',
+    annualPrice: 390,
+    includedAiCredits: 0,
+    tagline: 'Full EchoAI access for creators and teams ready to publish, monitor, create, and optimize campaigns.',
+    audience: 'Creators, businesses, and teams',
     popular: true,
-    marginPct: 86.4,
-  },
-  storage_max: {
-    key: 'storage_max',
-    label: 'Storage Max',
-    storageGb: 50,
-    monthlyPrice: 89,
-    annualPrice: 899,
-    includedAiCredits: 4500,
-    aiCreditValueUsd: 90,
-    tagline: 'Heavy production schedules with 4,500 monthly tokens, 50 GB storage, raw footage, and team workflows.',
-    audience: 'Production teams, high-volume social managers',
-    marginPct: 83.1,
-  },
-  creator: {
-    key: 'creator',
-    label: 'Creator Studio',
-    storageGb: 100,
-    monthlyPrice: 129,
-    annualPrice: 1299,
-    includedAiCredits: 7500,
-    aiCreditValueUsd: 150,
-    tagline: 'Maximum power with 7,500 monthly tokens and 100 GB storage for commercial video studios and enterprise agencies.',
-    audience: 'Enterprise agencies, commercial video studios',
-    marginPct: 80.6,
+    marginPct: 0,
   },
 }
 
-export const PLAN_ORDER = ['standard', 'storage_plus', 'storage_pro', 'storage_max', 'creator']
+export const PLAN_ORDER = ['premium']
 
 export const BILLING_INTERVALS = {
   monthly: { label: 'Monthly', suffix: '/ month' },
   annual: { label: 'Annual', suffix: '/ year' },
 }
 
-export const getPlan = (planKey) => PLANS[planKey] ?? PLANS.standard
+export const getPlan = (planKey) => PLANS[planKey] ?? PLANS.premium
 
 export const getPlanPrice = (planKey, interval) => {
   const plan = getPlan(planKey)

@@ -16,9 +16,9 @@ const CORE_FEATURES = [
   'Multi-channel scheduler, repost workflows, and team collaboration',
 ]
 
-export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode, billingLive, initialPlan = 'storage_pro' }) {
+export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode, billingLive, initialPlan = 'premium' }) {
   const [step, setStep] = useState('plan')
-  const [selectedPlan, setSelectedPlan] = useState(() => PLANS[initialPlan] ? initialPlan : 'storage_pro')
+  const [selectedPlan, setSelectedPlan] = useState(() => PLANS[initialPlan] ? initialPlan : 'premium')
   const [billingInterval, setBillingInterval] = useState('monthly')
   const [form, setForm] = useState({ fullName: '', email: '' })
   const [errors, setErrors] = useState({})
@@ -153,10 +153,9 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
 
         {step === 'plan' && (
           <>
-            <h2>Choose your plan</h2>
+            <h2>Choose Premium</h2>
             <p className="muted">
-              Every plan includes the complete EchoAI suite. The only difference is how much
-              storage you get.
+              Premium unlocks the complete EchoAI suite. Choose monthly flexibility or annual savings.
             </p>
 
             {referralCode && (
@@ -177,7 +176,7 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
                   onClick={() => setBillingInterval(key)}
                 >
                   {meta.label}
-                  {key === 'annual' ? ' — save 15%' : ''}
+                  {key === 'annual' ? ' — save $78' : ''}
                 </button>
               ))}
             </div>
@@ -207,8 +206,6 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
                       <span className="plan-price-num">${optionPrice}</span>
                       <span className="plan-price-period">{intervalMeta.suffix}</span>
                     </div>
-                    <p className="plan-card-storage">{option.storageGb} GB storage</p>
-                    <p className="plan-card-note">{option.includedAiCredits.toLocaleString()} Echo Credits included monthly</p>
                     <p className="plan-card-note">{option.tagline}</p>
                     {billingInterval === 'annual' && (
                       <p className="plan-card-note">Save ${savings} a year</p>
