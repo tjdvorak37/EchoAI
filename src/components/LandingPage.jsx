@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import demoPosterImage from '../assets/demo-poster.svg'
+import uploadedHeroArt from '../assets/woking-landing.png'
 import echoModern from '../assets/echo-poses/echo-modern-friendly.png'
 import echoTech from '../assets/echo-poses/echo-tech-assistant.png'
 import echoCreator from '../assets/echo-poses/echo-creator-mode.png'
@@ -313,36 +314,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
           </div>
 
           <div className="landing-hero-visual" aria-label="EchoAI creative workspace illustration">
-            <div className="landing-hero-card">
-              <div className="landing-hero-platforms" aria-hidden="true">
-                <span className="scene-badge badge-ig">IG</span>
-                <span className="scene-badge badge-tt">TT</span>
-                <span className="scene-badge badge-yt">YT</span>
-                <span className="scene-badge badge-x">X</span>
-                <span className="scene-badge badge-fb">f</span>
-                <span className="scene-badge badge-in">in</span>
-                <span className="scene-badge badge-pin">P</span>
-                <span className="scene-badge badge-threads">@</span>
-                <span className="scene-badge badge-gbp">GB</span>
-              </div>
-              <div className="landing-hero-mascot-row">
-                <span className="landing-scene-label">Ideas into impact! <span aria-hidden="true">↘</span></span>
-                <img className="landing-scene-mascot" src={echoModern} alt="Echo, the EchoAI creative assistant" />
-              </div>
-              <div className="landing-hero-desk">
-                <div className="landing-workstation-laptop"><Sparkles size={16} /><span>EchoAI</span></div>
-                <div className="landing-workstation-monitor">
-                  <div className="monitor-title"><Sparkles size={13} /><span>Campaign day</span></div>
-                  <strong>Everything scheduled</strong>
-                  <ul>
-                    <li><Check size={11} /> Content created</li>
-                    <li><Check size={11} /> Media polished</li>
-                    <li><Check size={11} /> Posts queued</li>
-                  </ul>
-                </div>
-              </div>
-              <div className="landing-hero-footnote"><Check size={13} /><span><strong>4 of 4 done</strong> — rest of week is yours</span></div>
-            </div>
+            <img className="landing-uploaded-hero-art" src={uploadedHeroArt} alt="EchoAI mascot creating content with social media icons, plants, laptop, coffee, and a planning board" />
           </div>
         </section>
 
