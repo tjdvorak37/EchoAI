@@ -46,6 +46,7 @@ export const platformService = {
       imageIdea: post.image_idea,
       scheduledAt: post.scheduled_at,
       channels: post.channels,
+      channelAccounts: post.channel_accounts ?? {},
       media: post.media ?? [],
       status: post.status,
     }))
@@ -73,6 +74,7 @@ export const platformService = {
         image_idea: payload.imageIdea,
         scheduled_at: payload.scheduledAt,
         channels: payload.channels,
+        channel_accounts: payload.channelAccounts ?? {},
         media: payload.media ?? [],
         status: 'scheduled',
       })
@@ -90,9 +92,29 @@ export const platformService = {
       imageIdea: data.image_idea,
       scheduledAt: data.scheduled_at,
       channels: data.channels,
+      channelAccounts: data.channel_accounts ?? {},
       media: data.media ?? [],
       status: data.status,
     }
+  },
+
+  async reschedulePost(postId, scheduledAtIso) {
+    if (!postId || !scheduledAtIso) throw new Error('Post ID and a new date/time are required.')
+
+    if (!isSupabaseConfigured) {
+      return { id: postId, scheduledAt: scheduledAtIso }
+    }
+
+    const { data, error } = await supabase
+      .from('scheduled_posts')
+      .update({ scheduled_at: scheduledAtIso })
+      .eq('id', postId)
+      .eq('status', 'scheduled')
+      .select('id, scheduled_at')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return { id: data.id, scheduledAt: data.scheduled_at }
   },
 
   async deleteScheduledPost(postId) {
@@ -136,6 +158,7 @@ export const platformService = {
         image_idea: payload.imageIdea,
         scheduled_at: publishedAt,
         channels: payload.channels,
+        channel_accounts: payload.channelAccounts ?? {},
         media: payload.media ?? [],
         status: 'scheduled',
       })
@@ -169,6 +192,7 @@ export const platformService = {
       imageIdea: data.image_idea,
       scheduledAt: data.scheduled_at,
       channels: data.channels,
+      channelAccounts: data.channel_accounts ?? {},
       media: data.media ?? [],
       status: publishResult.status,
     }

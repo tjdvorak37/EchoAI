@@ -2318,6 +2318,33 @@ button[type='submit']:hover {
 .integration-status-badge.good { color: #16a34a; }
 .integration-status-badge.warn { color: #d97706; }
 
+.integration-linked-accounts {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.integration-linked-account-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.6rem;
+  background: #f8fafc;
+}
+
+.integration-linked-account-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.integration-linked-account-row .integration-status-badge {
+  margin-left: 0;
+}
+
 .integration-platform-body {
   padding: 0.9rem 1rem;
   display: flex;
