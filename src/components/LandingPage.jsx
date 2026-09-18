@@ -20,7 +20,6 @@ import {
 import demoPosterImage from '../assets/demo-poster.svg'
 import uploadedHeroArt from '../assets/woking-landing.png'
 import echoModern from '../assets/echo-poses/echo-modern-friendly.png'
-import echoTech from '../assets/echo-poses/echo-tech-assistant.png'
 import echoCreator from '../assets/echo-poses/echo-creator-mode.png'
 import echoSocial from '../assets/echo-poses/echo-social-media.png'
 import echoAiTools from '../assets/echo-poses/echo-ai-tools.png'
@@ -62,7 +61,7 @@ const toolRibbon = [
 ]
 
 const showcaseFeatures = [
-  [Layers3, 'Advanced photo and video editors', 'Refine layers, timelines, text, audio, and brand styling.', echoPhoto],
+  [Layers3, 'Advanced photo and video editors', 'Refine layers, timelines, text, audio, and brand styling.'],
   [CalendarDays, 'Multi-platform scheduling', 'Plan approved posts and keep every connected channel in view.'],
   [Users, 'Team collaboration', 'Share assets, coordinate reposts, and keep work organized.'],
   [BarChart3, 'Analytics and insights', 'Follow performance, listening signals, and campaign activity.'],
@@ -335,7 +334,6 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
                 {['Home', 'Media', 'Photo', 'Video', 'Schedule', 'Analytics', 'Team'].map((item, index) => <span className={index === 0 ? 'active' : ''} key={item}>{item}</span>)}
               </aside>
               <div className="landing-workspace-canvas">
-                <img className="landing-tech-pose" src={echoTech} alt="Echo helping organize a campaign workspace" />
                 <div className="landing-media-row">
                   <img src={demoPosterImage} alt="Campaign artwork inside EchoAI" />
                   <div className="landing-media-swatch swatch-coral" />
@@ -354,10 +352,9 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
             <h2>One place to <em>create</em> and <span>grow.</span></h2>
             <p>Move from source material to finished content without losing time between disconnected apps.</p>
             <div className="landing-showcase-list">
-              {showcaseFeatures.map(([Icon, title, description, pose], index) => (
+              {showcaseFeatures.map(([Icon, title, description], index) => (
                 <div key={title} style={{ '--feature-index': index }}>
                   <span><Icon size={20} /></span><p><strong>{title}</strong><small>{description}</small></p>
-                  {pose && <img className="landing-feature-pose" src={pose} alt="" />}
                 </div>
               ))}
             </div>

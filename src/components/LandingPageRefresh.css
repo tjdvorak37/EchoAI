@@ -174,7 +174,7 @@
   align-items: center;
   position: relative;
   overflow: hidden;
-  padding: 1.5rem clamp(1.25rem, 4vw, 5rem) 0;
+  padding: 1rem clamp(1.25rem, 4vw, 5rem) 1.5rem;
   background: radial-gradient(circle at top left, rgba(255,255,255,0.9), rgba(245,247,255,0.9) 28%, rgba(246,251,248,0.86) 100%);
 }
 
@@ -534,7 +534,7 @@
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.8rem;
-  margin: -1rem auto 0;
+  margin: 0 auto;
 }
 
 .landing-tool-tile {
@@ -600,7 +600,7 @@
   gap: clamp(2.5rem, 6vw, 6rem);
   align-items: center;
   margin: 0 auto;
-  padding: clamp(2.5rem, 4vw, 4rem) clamp(1.25rem, 5vw, 4rem);
+  padding: clamp(1.75rem, 3vw, 2.75rem) clamp(1.25rem, 5vw, 4rem);
 }
 
 .landing-workspace-preview {
@@ -1312,25 +1312,8 @@
     transform-origin: bottom right;
   }
 
-  .landing-hero-desk {
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .landing-workstation-laptop {
-    width: 100%;
-  }
-
-  .scene-badge {
-    width: 38px;
-    height: 38px;
-    border-radius: 8px;
-    font-size: 0.66rem;
-  }
-
   .landing-tool-ribbon {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.6rem;
   }
 
@@ -1342,15 +1325,6 @@
   .landing-tool-tile > img {
     width: 52px;
     height: 52px;
-  }
-
-  .landing-tech-pose {
-    width: 64px;
-    height: 64px;
-  }
-
-  .landing-feature-pose {
-    display: none;
   }
 
   .landing-product-showcase,
