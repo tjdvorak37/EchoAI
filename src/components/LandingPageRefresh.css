@@ -167,14 +167,16 @@
 
 .landing-page .landing-showcase-hero {
   min-height: auto;
-  max-width: none;
+  max-width: 1180px;
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(500px, 1.05fr);
-  gap: clamp(1.5rem, 3vw, 3.5rem);
+  grid-template-columns: minmax(340px, 460px) minmax(420px, 600px);
+  justify-content: center;
+  gap: clamp(1.25rem, 2.5vw, 2.5rem);
   align-items: center;
   position: relative;
   overflow: hidden;
-  padding: 1rem clamp(1.25rem, 4vw, 5rem) 1.5rem;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 1.5rem;
   background: radial-gradient(circle at top left, rgba(255,255,255,0.9), rgba(245,247,255,0.9) 28%, rgba(246,251,248,0.86) 100%);
 }
 
@@ -277,7 +279,7 @@
 
 .landing-uploaded-hero-art {
   display: block;
-  width: min(100%, 760px);
+  width: min(100%, 600px);
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 24px 30px rgba(49, 61, 120, 0.14));
