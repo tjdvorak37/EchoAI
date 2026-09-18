@@ -274,6 +274,9 @@ function App() {
       ? `${getPlatformMeta(platform).label} connected successfully. Choose another selected provider to continue.`
       : `${getPlatformMeta(platform).label} connection was not completed.${reason ? ` ${decodeURIComponent(reason)}` : ''}`
   })
+  const [onboardingOpen, setOnboardingOpen] = useState(false)
+  const [onboardingStep, setOnboardingStep] = useState(0)
+  const [onboardingAnswers, setOnboardingAnswers] = useState({ role: '', goals: [], teamSize: '' })
   const [integrationError, setIntegrationError] = useState('')
   const [aiInput, setAiInput] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState([])
@@ -428,6 +431,17 @@ function App() {
       ? savedFolders
       : [...savedFolders, { id: AI_GENERATIONS_FOLDER_ID, name: 'AI Generations', parentId: 'folder-root', createdAt: new Date().toISOString(), system: true }])
     setWorkspaceAssets(hydrateWorkspaceAssets(d.workspaceAssets ?? []))
+    try {
+      const onboardingKey = `${getUserKey(user.id)}-onboarding`
+      const savedOnboarding = JSON.parse(localStorage.getItem(onboardingKey) || 'null')
+      if (!savedOnboarding?.completedAt) {
+        setOnboardingStep(0)
+        setOnboardingAnswers({ role: '', goals: [], teamSize: '' })
+        setOnboardingOpen(true)
+      }
+    } catch {
+      setOnboardingOpen(true)
+    }
 
     try {
       setAiDashboard(await billingService.getAiDashboard())
@@ -1484,6 +1498,32 @@ function App() {
     setQuickConnectNotice(`Opening ${getPlatformMeta(nextPlatform).label}. Sign in there and approve EchoAI access.`)
     await connectSocialAccount({
       platform: nextPlatform,
+      requestedScopes: ['posts', 'images', 'videos', 'analytics'],
+    })
+  }
+
+  const finishOnboarding = () => {
+    if (!session?.id) return
+    localStorage.setItem(`${getUserKey(session.id)}-onboarding`, JSON.stringify({
+      ...onboardingAnswers,
+      completedAt: new Date().toISOString(),
+    }))
+    setOnboardingOpen(false)
+  }
+
+  const toggleOnboardingGoal = (goal) => {
+    setOnboardingAnswers((current) => ({
+      ...current,
+      goals: current.goals.includes(goal)
+        ? current.goals.filter((item) => item !== goal)
+        : [...current.goals, goal],
+    }))
+  }
+
+  const startOnboardingConnection = async (platform) => {
+    setQuickConnectNotice(`Opening ${getPlatformMeta(platform).label}. Sign in there and approve EchoAI access.`)
+    await connectSocialAccount({
+      platform,
       requestedScopes: ['posts', 'images', 'videos', 'analytics'],
     })
   }
@@ -3321,6 +3361,103 @@ function App() {
 
   return (
     <div className="app-shell">
+      {onboardingOpen && (
+        <div className="onboarding-overlay" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+          <section className="onboarding-modal">
+            <header className="onboarding-header">
+              <div>
+                <p className="section-label">Let&apos;s tailor your workspace</p>
+                <h2 id="onboarding-title">
+                  {onboardingStep === 0 && 'What describes you best?'}
+                  {onboardingStep === 1 && 'How will you use EchoAI?'}
+                  {onboardingStep === 2 && 'Who will use the workspace?'}
+                  {onboardingStep === 3 && 'Connect your social networks'}
+                </h2>
+                <p>
+                  {onboardingStep === 0 && 'A quick answer helps us make the workspace feel relevant from day one.'}
+                  {onboardingStep === 1 && 'Choose every activity you want EchoAI to support.'}
+                  {onboardingStep === 2 && 'We use this to shape collaboration and approvals.'}
+                  {onboardingStep === 3 && 'You can connect more channels later from Integrations.'}
+                </p>
+              </div>
+              <button type="button" className="onboarding-skip" onClick={finishOnboarding}>Skip for now</button>
+            </header>
+
+            <div className="onboarding-progress" aria-label={`Onboarding step ${onboardingStep + 1} of 4`}>
+              {[0, 1, 2, 3].map((step) => <span key={step} className={step <= onboardingStep ? 'active' : ''} />)}
+            </div>
+
+            <div className="onboarding-body">
+              {onboardingStep === 0 && (
+                <div className="onboarding-choice-grid">
+                  {[
+                    ['creator', 'Content creator, personal brand, or influencer', 'Create consistently without juggling tools.'],
+                    ['business', 'Social media management in my company', 'Keep campaigns, approvals, and channels together.'],
+                    ['freelancer', 'Freelancer working for clients', 'Manage multiple brands with less context switching.'],
+                    ['agency', 'Marketing agency', 'Coordinate clients, content, and reporting in one place.'],
+                  ].map(([key, title, detail]) => (
+                    <button key={key} type="button" className={`onboarding-choice ${onboardingAnswers.role === key ? 'selected' : ''}`} onClick={() => setOnboardingAnswers((current) => ({ ...current, role: key }))}>
+                      <strong>{title}</strong><small>{detail}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {onboardingStep === 1 && (
+                <div className="onboarding-choice-grid">
+                  {[
+                    ['publish', 'Programming and publishing content'],
+                    ['analytics', 'Analysis and reports'],
+                    ['bio', 'Create a page for your bio link'],
+                    ['conversation', 'Conversation management'],
+                  ].map(([key, title]) => (
+                    <button key={key} type="button" className={`onboarding-choice ${onboardingAnswers.goals.includes(key) ? 'selected' : ''}`} onClick={() => toggleOnboardingGoal(key)}>
+                      <strong>{title}</strong><small>Select all that apply.</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {onboardingStep === 2 && (
+                <div className="onboarding-choice-grid onboarding-team-grid">
+                  {[
+                    ['solo', 'Just me'],
+                    ['team', 'I will work with more colleagues'],
+                  ].map(([key, title]) => (
+                    <button key={key} type="button" className={`onboarding-choice ${onboardingAnswers.teamSize === key ? 'selected' : ''}`} onClick={() => setOnboardingAnswers((current) => ({ ...current, teamSize: key }))}>
+                      <strong>{title}</strong><small>We can adjust this later.</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {onboardingStep === 3 && (
+                <div className="onboarding-social-grid">
+                  {['instagram', 'tiktok', 'facebook', 'youtube', 'linkedin', 'x'].map((platform) => {
+                    const connected = connectedAccounts.some((account) => account.platform.toLowerCase() === platform && account.status === 'healthy')
+                    return (
+                      <button key={platform} type="button" className={`onboarding-social ${connected ? 'connected' : ''}`} onClick={() => startOnboardingConnection(platform)} disabled={connected}>
+                        <span>{getPlatformMeta(platform).icon}</span>
+                        <strong>{connected ? 'Connected' : `Connect ${getPlatformMeta(platform).label}`}</strong>
+                      </button>
+                    )
+                  })}
+                  {quickConnectNotice && <p className="onboarding-notice">{quickConnectNotice}</p>}
+                </div>
+              )}
+            </div>
+
+            <footer className="onboarding-footer">
+              <button type="button" className="ghost-button" onClick={() => setOnboardingStep((step) => Math.max(0, step - 1))} disabled={onboardingStep === 0}>Previous</button>
+              {onboardingStep < 3 ? (
+                <button type="button" className="primary-button" onClick={() => setOnboardingStep((step) => step + 1)} disabled={(onboardingStep === 0 && !onboardingAnswers.role) || (onboardingStep === 1 && onboardingAnswers.goals.length === 0) || (onboardingStep === 2 && !onboardingAnswers.teamSize)}>Continue</button>
+              ) : (
+                <button type="button" className="primary-button" onClick={finishOnboarding}>Finish setup</button>
+              )}
+            </footer>
+          </section>
+        </div>
+      )}
       <AnnouncementBanner
         key={announcements.application.updatedAt}
         notice={announcements.application}
