@@ -62,7 +62,7 @@ const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((modu
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
-const CreditPurchasePanel = lazy(() => import('./components/CreditPurchasePanel').then((module) => ({ default: module.CreditPurchasePanel })))
+const AdsPanel = lazy(() => import('./components/AdsPanel').then((module) => ({ default: module.AdsPanel })))
 const RepostHubPanel = lazy(() => import('./components/RepostHubPanel').then((module) => ({ default: module.RepostHubPanel })))
 const PostSchedulerPanel = lazy(() => import('./components/PostSchedulerPanel').then((module) => ({ default: module.PostSchedulerPanel })))
 
@@ -4646,13 +4646,9 @@ function App() {
           </Suspense>
         )}
 
-        {aiGenerationEnabled() && activeTab === 'credits' && (
+        {activeTab === 'credits' && (
           <Suspense fallback={loadingPanel}>
-            <CreditPurchasePanel
-              isModal={false}
-              aiDashboard={aiDashboard}
-              onRefreshBalance={refreshAiBalance}
-            />
+            <AdsPanel />
           </Suspense>
         )}
 
