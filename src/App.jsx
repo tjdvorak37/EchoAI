@@ -115,6 +115,8 @@ const aiGenerationEnabled = () => false
 // Standard members can see every destination; Premium is required to operate
 // paid creation, publishing, monitoring, and advertising tools.
 const STANDARD_ACCOUNT_TABS = new Set(['dashboard', 'account', 'help', 'integrations'])
+const FREE_ACCOUNT_TABS = STANDARD_ACCOUNT_TABS
+const ASSET_DRAWER_ENABLED = false
 const TAB_LABELS = {
   listening: 'Signal Watch',
   repost: 'Broadcast Hub',
@@ -395,32 +397,6 @@ function App() {
     } catch (error) {
       setUpgradeError(error.message)
       setUpgradePlanLoading('')
-    }
-  }
-
-  const refreshAiBalance = async (addedAmount = null) => {
-    try {
-      if (!isSupabaseConfigured && addedAmount) {
-        setAiDashboard((prev) => {
-          const currentMonthly = prev?.monthlyBalance ?? 500
-          const currentPurchased = (prev?.purchasedBalance ?? 0) + addedAmount
-          const total = currentMonthly + currentPurchased
-          return {
-            ...prev,
-            balance: total,
-            monthlyBalance: currentMonthly,
-            purchasedBalance: currentPurchased,
-            monthlyAllowance: prev?.monthlyAllowance ?? 500,
-            pricing: prev?.pricing ?? [],
-            recentJobs: prev?.recentJobs ?? [],
-          }
-        })
-        return
-      }
-      const data = await billingService.getAiDashboard()
-      setAiDashboard(data)
-    } catch (err) {
-      console.warn('Unable to refresh AI balance', err)
     }
   }
 
@@ -3872,7 +3848,7 @@ function App() {
       </nav>
 
       <main className={`app-main ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${activeTab === 'admin' ? 'management-workspace-layout' : ''} workspace-no-drawer`}>
-        {false && hasPaidAccess && activeTab === 'photo' && (
+        {ASSET_DRAWER_ENABLED && hasPaidAccess && activeTab === 'photo' && (
         <aside
           className={`asset-drawer ${activeTab === 'photo' ? 'photo-workspace-drawer' : ''} ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
           onDragEnter={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); setDrawerDragActive(true) } }}

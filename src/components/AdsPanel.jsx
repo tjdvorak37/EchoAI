@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { BarChart3, CircleAlert, ExternalLink, RefreshCw, Target } from 'lucide-react'
 import { adAnalyticsService } from '../services/adAnalyticsService'
 import './AdsPanel.css'
@@ -23,7 +23,7 @@ export function AdsPanel() {
   const [error, setError] = useState('')
   const [serviceUnavailable, setServiceUnavailable] = useState(false)
 
-  const load = async ({ refresh = false } = {}) => {
+  const load = useCallback(async ({ refresh = false } = {}) => {
     setError('')
     refresh ? setRefreshing(true) : setLoading(true)
     try {
@@ -42,9 +42,12 @@ export function AdsPanel() {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [days])
 
-  useEffect(() => { load() }, [days])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [load])
 
   const connect = async (provider) => {
     setConnecting(provider)
