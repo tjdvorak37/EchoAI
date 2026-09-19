@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { Component, StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
@@ -46,8 +46,40 @@ window.addEventListener('load', () => {
   sessionStorage.removeItem(RELOAD_FLAG)
 })
 
+class AppErrorBoundary extends Component {
+  state = { error: null }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  componentDidCatch(error, info) {
+    console.error('EchoAI render error', error, info)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <main style={{ maxWidth: 720, margin: '4rem auto', padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
+          <h1>EchoAI could not load this workspace</h1>
+          <p>Refresh the page once. If the problem continues, send Support the error below.</p>
+          <button type="button" onClick={() => window.location.reload()}>Reload workspace</button>
+          <details style={{ marginTop: '1rem' }}>
+            <summary>Technical details</summary>
+            <pre style={{ whiteSpace: 'pre-wrap' }}>{this.state.error.message}</pre>
+          </details>
+        </main>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
   </StrictMode>,
 )
