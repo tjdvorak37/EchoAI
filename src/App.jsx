@@ -671,9 +671,9 @@ function App() {
     return 'badge info'
   }
 
-  const isAdminUser = session?.role === 'admin'
-  const canViewManagementBoard = ['admin', 'it', 'accountant'].includes(session?.role || '') || session?.isBoardMember === true
-  const canManageBrandKit = session?.role === 'admin'
+  const isAdminUser = ['admin', 'super_admin'].includes(session?.role || '')
+  const canViewManagementBoard = ['admin', 'super_admin', 'it', 'accountant'].includes(session?.role || '') || session?.isBoardMember === true
+  const canManageBrandKit = isAdminUser
 
   async function loadAdminData(user = session) {
     setAdminError('')
@@ -5472,7 +5472,7 @@ function App() {
           </section>
         )}
 
-        {activeTab === 'admin' && ['admin', 'it'].includes(session?.role || '') && (
+        {activeTab === 'admin' && ['admin', 'super_admin', 'it'].includes(session?.role || '') && (
           <Suspense fallback={loadingPanel}>
             <AdminPanel
               teamMembers={teamMembers}
