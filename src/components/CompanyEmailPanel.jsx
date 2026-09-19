@@ -83,11 +83,12 @@ export function CompanyEmailPanel({
   const [testDetails, setTestDetails] = useState('Sample ticket description: Customer requesting assistance with login routing and password setup.')
   const [testStatus, setTestStatus] = useState({ running: false, message: '', error: '' })
 
-  const isFullAdmin = currentUser?.role === 'admin'
+  const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  const isFullAdmin = ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role))
   const hasGrantedAccess = currentUser?.companyEmailEditAccess === true
   const canEdit = isFullAdmin || hasGrantedAccess
-  const staffRoles = ['admin', 'it', 'accountant']
-  const staffMembers = teamMembers.filter((member) => staffRoles.includes(member.role))
+  const staffRoles = ['admin', 'super_admin', 'it', 'accountant']
+  const staffMembers = teamMembers.filter((member) => staffRoles.includes(normalizeRole(member.role)))
   const assignedSeatsCount = companySeats.filter((seat) => seat.status !== 'revoked').length
 
   const loadNotificationConfig = async () => {

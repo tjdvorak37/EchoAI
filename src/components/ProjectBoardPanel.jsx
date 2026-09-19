@@ -28,6 +28,8 @@ function StatusPill({ value }) {
   return <span className={`project-status-pill project-status-${value}`}>{value}</span>
 }
 
+const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+
 export function ProjectBoardPanel({ currentUser, teamMembers = [] }) {
   const [projects, setProjects] = useState([])
   const [tasks, setTasks] = useState([])
@@ -40,8 +42,8 @@ export function ProjectBoardPanel({ currentUser, teamMembers = [] }) {
   const [filter, setFilter] = useState({ view: 'all', status: 'all' })
   const [status, setStatus] = useState({ loading: true, saving: false, error: '', message: '' })
 
-  const staffMembers = teamMembers.filter((member) => STAFF_ROLES.includes(member.role))
-  const canApproveCompletion = currentUser?.role === 'admin'
+  const staffMembers = teamMembers.filter((member) => STAFF_ROLES.includes(normalizeRole(member.role)))
+  const canApproveCompletion = ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role))
   const workspaceOpen = Boolean(workspaceProjectId)
 
   const getMemberName = (memberId) => {

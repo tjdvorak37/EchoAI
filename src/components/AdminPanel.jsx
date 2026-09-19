@@ -526,15 +526,15 @@ export function AdminPanel({
 
   const employeeRoles = ['admin', 'it', 'accountant', 'board_member']
   const filteredDirectoryMembers = itTab === 'employees'
-    ? teamMembers.filter((member) => employeeRoles.includes(member.role))
-    : teamMembers.filter((member) => !employeeRoles.includes(member.role))
+    ? teamMembers.filter((member) => employeeRoles.includes(normalizeRole(member.role)))
+    : teamMembers.filter((member) => !employeeRoles.includes(normalizeRole(member.role)))
   const filteredUsers = filteredDirectoryMembers.filter((member) => {
     const term = userSearch.trim().toLowerCase()
     const matchesSearch = !term
       || member.fullName?.toLowerCase().includes(term)
       || member.email?.toLowerCase().includes(term)
       || member.company?.toLowerCase().includes(term)
-    const matchesRole = userRoleFilter === 'all' || member.role === userRoleFilter
+    const matchesRole = userRoleFilter === 'all' || normalizeRole(member.role) === normalizeRole(userRoleFilter)
     const matchesStatus = userStatusFilter === 'all' || member.accessStatus === userStatusFilter
     return matchesSearch && matchesRole && matchesStatus
   })
@@ -1216,7 +1216,7 @@ export function AdminPanel({
                         <span>{ticketOpen.assignee || 'Unassigned'}</span>
                       </div>
                       <div className="workspace-conversation-history">
-                        {ticketOpen.messages.map((msg) => <div key={msg.id} className={`it-ticket-msg ${msg.role === 'admin' ? 'admin' : 'user'}`}><div className="it-ticket-msg-meta"><strong>{msg.author}</strong><span>{new Date(msg.sentAt).toLocaleString()}</span></div><p>{msg.body}</p></div>)}
+                        {ticketOpen.messages.map((msg) => <div key={msg.id} className={`it-ticket-msg ${normalizeRole(msg.role) === 'admin' ? 'admin' : 'user'}`}><div className="it-ticket-msg-meta"><strong>{msg.author}</strong><span>{new Date(msg.sentAt).toLocaleString()}</span></div><p>{msg.body}</p></div>)}
                         {ticketOpen.attachments?.length > 0 && (
                           <section className="ticket-attachment-gallery" aria-label="Ticket image attachments">
                             <h3>Attached images</h3>
@@ -1494,7 +1494,7 @@ export function AdminPanel({
 
                     {expanded && (
                       <div className="it-user-detail">
-                        {member.role === 'admin' && member.id !== currentUser?.id ? (
+                        {normalizeRole(member.role) === 'admin' && member.id !== currentUser?.id ? (
                           <p className="muted">Administrator accounts cannot be modified here.</p>
                         ) : (
                           <>
@@ -1527,7 +1527,7 @@ export function AdminPanel({
                             {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group it-user-detail-stack">
                               <span className="it-user-detail-label">Platform category permissions</span>
                               <div className="chip-row">
-                                {PLATFORM_ACCESS_CONTROLS.filter((control) => control.roles.includes(member.role)).map((control) => (
+                                {PLATFORM_ACCESS_CONTROLS.filter((control) => control.roles.includes(normalizeRole(member.role))).map((control) => (
                                   <button
                                     key={control.field}
                                     type="button"
@@ -1547,7 +1547,7 @@ export function AdminPanel({
                               <small className="muted">Grant only the Platform categories this staff member needs for their work. They must sign out and back in after a permission change.</small>
                             </div>}
 
-                            {isFullAdmin && (member.isBoardMember || member.role === 'board_member' || member.id === currentUser?.id) && <div className="it-user-detail-group">
+                            {isFullAdmin && (member.isBoardMember || normalizeRole(member.role) === 'board_member' || member.id === currentUser?.id) && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Quarterly profit share</span>
                               <input
                                 type="number"

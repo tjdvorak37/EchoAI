@@ -766,7 +766,7 @@ function App() {
   const financeSetter = (type, setter) => (update) => {
     setter((previous) => {
       const next = typeof update === 'function' ? update(previous) : update
-      if (isSupabaseConfigured && session?.company && ['admin', 'accountant'].includes(session.role)) {
+      if (isSupabaseConfigured && session?.company && ['admin', 'super_admin', 'accountant'].includes(normalizeRole(session.role))) {
         financeService.replaceRecords({
           companyKey: session.company,
           userId: session.id,
@@ -2172,7 +2172,7 @@ function App() {
 
       if (session?.id === updatedMember.id) {
         setSession((prev) => ({ ...prev, role: updatedMember.role }))
-        if (!['admin', 'it'].includes(updatedMember.role)) {
+        if (!['admin', 'super_admin', 'it'].includes(normalizeRole(updatedMember.role))) {
           setActiveTab('dashboard')
         }
       }
@@ -2228,7 +2228,7 @@ function App() {
           aiOperationsEditAccess: result.profile.ai_operations_edit_access === true,
           siteControlsEditAccess: result.profile.site_controls_edit_access === true,
           profitSharePercent: Number(result.profile.profit_share_percent || 0),
-          isBoardMember: result.profile.is_board_member === true || result.profile.role === 'board_member',
+          isBoardMember: result.profile.is_board_member === true || normalizeRole(result.profile.role) === 'board_member',
         },
         ...prev,
       ])

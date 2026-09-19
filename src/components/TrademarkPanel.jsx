@@ -32,11 +32,13 @@ const download = (name, content, type) => {
   URL.revokeObjectURL(url)
 }
 
+const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+
 export function TrademarkPanel({ currentUser }) {
   const [document, setDocument] = useState(DEFAULT_DOCUMENT)
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState({ saving: false, message: '', error: '' })
-  const isAdmin = currentUser?.role === 'admin'
+  const isAdmin = ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role))
   const canEdit = isAdmin || currentUser?.trademarkEditAccess === true
 
   useEffect(() => {

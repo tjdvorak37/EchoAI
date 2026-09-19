@@ -3,11 +3,13 @@ import { boardPayoutService } from '../services/boardPayoutService'
 
 const money = (value) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+
 export function BoardPayoutsPanel({ company, boardMembers = [], currentUser, adminMode = false }) {
   const [payouts, setPayouts] = useState([])
   const [form, setForm] = useState({ boardMemberId: '', quarterStart: '', quarterEnd: '', profitAfterExpenses: '', activeSubscriptionCount: '' })
   const [status, setStatus] = useState({ error: '', message: '' })
-  const isAdmin = currentUser?.role === 'admin'
+  const isAdmin = ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role))
 
   useEffect(() => {
     let active = true
@@ -46,7 +48,7 @@ export function BoardPayoutsPanel({ company, boardMembers = [], currentUser, adm
           <label>Profit after expenses<input required type="number" min="0" step="0.01" value={form.profitAfterExpenses} onChange={(event) => setForm((current) => ({ ...current, profitAfterExpenses: event.target.value }))} /></label>
           <label>Active subscriptions<input type="number" min="0" value={form.activeSubscriptionCount} onChange={(event) => setForm((current) => ({ ...current, activeSubscriptionCount: event.target.value }))} /></label>
           <p className="muted">Calculated payout: {money(payoutAmount)} at {sharePercent}%</p>
-          <button type="submit" className="primary-button" disabled={!isAdmin && currentUser?.role !== 'accountant'}>Create payout record</button>
+          <button type="submit" className="primary-button" disabled={!isAdmin && normalizeRole(currentUser?.role) !== 'accountant'}>Create payout record</button>
         </form>
       )}
       {status.message && <p className="auth-message">{status.message}</p>}

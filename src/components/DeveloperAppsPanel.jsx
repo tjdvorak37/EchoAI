@@ -22,13 +22,15 @@ const draftFromRecord = (record, provider) => ({
   enabled: record?.enabled !== false,
 })
 
+const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+
 export function DeveloperAppsPanel({ currentUser }) {
   const [records, setRecords] = useState([])
   const [selected, setSelected] = useState('youtube')
   const [draft, setDraft] = useState({ appName: '', clientId: '', clientSecret: '', redirectUri: DEFAULT_REDIRECT, scopes: '', enabled: true })
   const [canEdit, setCanEdit] = useState(false)
   const [status, setStatus] = useState({ loading: true, saving: false, message: '', error: '' })
-  const isAdmin = ['admin', 'super_admin'].includes(currentUser?.role)
+  const isAdmin = ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role))
 
   useEffect(() => {
     let active = true
