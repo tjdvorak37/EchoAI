@@ -482,7 +482,7 @@ export function AdminPanel({
       group: 'Platform',
       tabs: [
         ...visiblePlatformTabs,
-        { id: 'ai-operations', label: '🤖 AI Operations', hint: 'Manage Ask Echo, providers, and AI cost controls' },
+        { id: 'ai-operations', label: '🤖 AI Operations', hint: 'Manage providers and AI cost controls' },
       ],
     },
   ] : [
@@ -513,7 +513,7 @@ export function AdminPanel({
       group: 'Platform',
       tabs: [
         ...visiblePlatformTabs,
-        { id: 'ai-operations', label: '🤖 AI Operations', hint: 'Manage Ask Echo, providers, and AI cost controls' },
+        { id: 'ai-operations', label: '🤖 AI Operations', hint: 'Manage providers and AI cost controls' },
       ],
     },
   ].filter((section) => section.tabs.length > 0)

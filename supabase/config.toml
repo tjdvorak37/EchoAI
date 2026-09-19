@@ -39,9 +39,6 @@ verify_jwt = true
 [functions.inhouse-ai]
 verify_jwt = true
 
-[functions.echo-chat]
-verify_jwt = true
-
 [functions.listening-fetch]
 verify_jwt = true
 
