@@ -8,6 +8,7 @@ import { CompanyEmailPanel } from './CompanyEmailPanel'
 import { AnalyticsPanel } from './AnalyticsPanel'
 import { InternalForumPanel } from './InternalForumPanel'
 import { ProjectBoardPanel } from './ProjectBoardPanel'
+import { AiOperationsPanel } from './AiOperationsPanel'
 import { internalForumService } from '../services/internalForumService'
 import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
@@ -475,7 +476,10 @@ export function AdminPanel({
     },
     {
       group: 'Platform',
-      tabs: visiblePlatformTabs,
+      tabs: [
+        ...visiblePlatformTabs,
+        { id: 'ai-operations', label: '🤖 AI Operations', hint: 'Manage Ask Echo, providers, and AI cost controls' },
+      ],
     },
   ] : [
     {
@@ -503,7 +507,10 @@ export function AdminPanel({
     },
     {
       group: 'Platform',
-      tabs: visiblePlatformTabs,
+      tabs: [
+        ...visiblePlatformTabs,
+        { id: 'ai-operations', label: '🤖 AI Operations', hint: 'Manage Ask Echo, providers, and AI cost controls' },
+      ],
     },
   ].filter((section) => section.tabs.length > 0)
   const activeTabAllowed = TAB_GROUPS.some((section) => section.tabs.some((tab) => tab.id === itTab))
@@ -792,6 +799,8 @@ export function AdminPanel({
       {adminError && <p className="auth-message auth-error">{adminError}</p>}
 
       <div className="it-content">
+        {itTab === 'ai-operations' && <AiOperationsPanel />}
+
         {itTab === 'overview' && (
           <div className="it-overview">
             <div className="it-stat-grid">

@@ -74,6 +74,17 @@
   line-height: 1.45;
 }
 
+.in-page-echo-error {
+  margin: 0.65rem 0 0;
+  padding: 0.55rem 0.7rem;
+  color: #b42318;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
 .in-page-echo-prompts {
   display: flex;
   flex-wrap: wrap;
@@ -116,6 +127,12 @@
   color: #fff;
   background: #315ee7;
   border-radius: 6px;
+}
+
+.in-page-echo-form button:disabled,
+.in-page-echo-prompts button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .in-page-echo-launcher {

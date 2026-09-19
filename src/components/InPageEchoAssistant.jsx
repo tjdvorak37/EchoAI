@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { HelpCircle, Send, Sparkles, X } from 'lucide-react'
 import echoMascot from '../assets/echo-mascot.svg'
+import { askEcho } from '../services/echoChatService'
 import './InPageEchoAssistant.css'
 
 const ECHO_CONTEXT = {
@@ -78,12 +79,27 @@ export function InPageEchoAssistant({ activeTab }) {
   const [open, setOpen] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
+  const [history, setHistory] = useState([])
+  const [asking, setAsking] = useState(false)
+  const [error, setError] = useState('')
   const context = ECHO_CONTEXT[activeTab] || DEFAULT_CONTEXT
 
-  const askEcho = (prompt = question) => {
+  const handleAskEcho = async (prompt = question) => {
     if (!prompt.trim()) return
-    setQuestion(prompt)
-    setAnswer(context.answer)
+    const message = prompt.trim()
+    setError('')
+    setAsking(true)
+
+    try {
+      const result = await askEcho({ message, activeTab, history })
+      setAnswer(result.text)
+      setHistory((current) => [...current, { role: 'user', content: message }, { role: 'assistant', content: result.text }].slice(-6))
+      setQuestion('')
+    } catch (requestError) {
+      setError(requestError.message || 'Ask Echo is unavailable right now.')
+    } finally {
+      setAsking(false)
+    }
   }
 
   return (
@@ -94,16 +110,17 @@ export function InPageEchoAssistant({ activeTab }) {
             <div><span>Echo assistant · {context.pose}</span><h2>{context.title}</h2></div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close Echo assistant"><X size={18} /></button>
           </div>
-          <div className="in-page-echo-answer">
+          <div className="in-page-echo-answer" aria-live="polite" aria-busy={asking}>
             <Sparkles size={17} aria-hidden="true" />
-            <p>{answer || 'Ask a quick question and I’ll point you toward the next useful step on this page.'}</p>
+            <p>{asking ? 'Echo is thinking...' : answer || 'Ask a quick question and I’ll point you toward the next useful step on this page.'}</p>
           </div>
+          {error && <p className="in-page-echo-error" role="alert">{error}</p>}
           <div className="in-page-echo-prompts">
-            {context.prompts.map((prompt) => <button type="button" key={prompt} onClick={() => askEcho(prompt)}>{prompt}</button>)}
+            {context.prompts.map((prompt) => <button type="button" key={prompt} onClick={() => handleAskEcho(prompt)} disabled={asking}>{prompt}</button>)}
           </div>
-          <form onSubmit={(event) => { event.preventDefault(); askEcho() }} className="in-page-echo-form">
-            <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask Echo a question..." aria-label="Ask Echo a question" />
-            <button type="submit" aria-label="Ask Echo"><Send size={16} /></button>
+          <form onSubmit={(event) => { event.preventDefault(); handleAskEcho() }} className="in-page-echo-form">
+            <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask Echo a question..." aria-label="Ask Echo a question" disabled={asking} />
+            <button type="submit" aria-label="Ask Echo" disabled={asking}><Send size={16} /></button>
           </form>
         </section>
       )}

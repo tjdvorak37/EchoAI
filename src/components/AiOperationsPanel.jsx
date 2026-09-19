@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { EchoChatOperations } from './EchoChatOperations'
 
 const DEFAULT_CREDIT_PRODUCTS = [
   { id: 'credit_500', product_key: 'credit_500', label: '500 AI Tokens', credits: 500, price_usd: 9.99, enabled: true },
@@ -506,6 +507,8 @@ export function AiOperationsPanel() {
 
       {status.message && <p className="auth-message tone-positive" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '0.65rem 1rem', borderRadius: '8px' }}>{status.message}</p>}
       {status.error && <p className="auth-message auth-error">{status.error}</p>}
+
+      <EchoChatOperations />
 
       {/* Loss Alert Warning Banner */}
       {losingRoutes.length > 0 && (
