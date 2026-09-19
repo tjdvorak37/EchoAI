@@ -109,7 +109,7 @@ const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 // Staff accounts run the platform, so they get the top plan without paying for it.
 const STAFF_ROLES = ['admin', 'super_admin', 'it', 'accountant']
 const STAFF_PLAN = 'creator'
-const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+const normalizeRole = (role) => String(role ?? '').trim().replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase().replace(/[\s-]+/g, '_')
 const isStaffRole = (role) => STAFF_ROLES.includes(normalizeRole(role))
 const aiGenerationEnabled = () => false
 // Standard members can see every destination; Premium is required to operate
@@ -649,7 +649,7 @@ function App() {
   }
 
   const isAdminUser = ['admin', 'super_admin'].includes(normalizeRole(session?.role))
-  const canViewManagementBoard = ['admin', 'super_admin', 'it', 'accountant'].includes(normalizeRole(session?.role)) || session?.isBoardMember === true
+  const canViewManagementBoard = ['admin', 'super_admin', 'it', 'accountant', 'board_member', 'partner'].includes(normalizeRole(session?.role)) || session?.isBoardMember === true
   const canManageBrandKit = isAdminUser
 
   async function loadAdminData(user = session) {
@@ -5526,7 +5526,7 @@ function App() {
           </Suspense>
         )}
 
-        {activeTab === 'admin' && (normalizeRole(session?.role) === 'board_member' || session?.isBoardMember) && normalizeRole(session?.role) !== 'admin' && normalizeRole(session?.role) !== 'super_admin' && (
+        {activeTab === 'admin' && (['board_member', 'partner'].includes(normalizeRole(session?.role)) || session?.isBoardMember) && normalizeRole(session?.role) !== 'admin' && normalizeRole(session?.role) !== 'super_admin' && (
           <Suspense fallback={loadingPanel}>
             <BoardMemberFinancePanel company={session.company} />
           </Suspense>
