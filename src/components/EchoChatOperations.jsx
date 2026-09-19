@@ -6,7 +6,7 @@ const DEFAULT_SETTINGS = {
   enabled: false,
   gateway_url: '',
   gateway_token: '',
-  model: 'qwen2.5:7b-instruct',
+  model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
   daily_message_limit: 25,
   max_response_tokens: 600,
   system_prompt: '',
@@ -89,7 +89,7 @@ export function EchoChatOperations() {
       <div className="inhouse-engine-heading">
         <div>
           <h3>Ask Echo: Self-hosted Chat</h3>
-          <p className="muted">Premium-only idea and workflow support routed through your private Ollama gateway.</p>
+          <p className="muted">Premium-only idea and workflow support routed through your private AWS Bedrock gateway.</p>
         </div>
         <label className="toggle-row">
           <input type="checkbox" checked={settings.enabled} onChange={(event) => updateSetting('enabled', event.target.checked)} />
@@ -100,11 +100,11 @@ export function EchoChatOperations() {
       <div className="inhouse-settings-grid">
         <label>
           Secure gateway URL
-          <input type="url" value={settings.gateway_url} onChange={(event) => updateSetting('gateway_url', event.target.value)} placeholder="https://ollama-gateway.example.com/chat" />
+          <input type="url" value={settings.gateway_url} onChange={(event) => updateSetting('gateway_url', event.target.value)} placeholder="https://xxxxxxxxxx.execute-api.us-east-2.amazonaws.com/default/echoai-bedrock-gateway" />
         </label>
         <label>
-          Ollama model
-          <input value={settings.model} onChange={(event) => updateSetting('model', event.target.value)} placeholder="qwen2.5:7b-instruct" />
+          Bedrock model ID
+          <input value={settings.model} onChange={(event) => updateSetting('model', event.target.value)} placeholder="anthropic.claude-3-5-sonnet-20241022-v2:0" />
         </label>
         <label>
           Daily messages per Premium user
