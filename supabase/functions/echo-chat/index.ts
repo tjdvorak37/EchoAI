@@ -95,10 +95,16 @@ Deno.serve(async (request) => {
       body: JSON.stringify({ model: settings.model, messages, stream: false, maxTokens: settings.max_response_tokens }),
       signal: AbortSignal.timeout(45_000),
     })
-    const body = await response.json().catch(() => ({}))
+    const rawBody = await response.text()
+    const body = (() => { try { return JSON.parse(rawBody) } catch { return {} } })()
     if (!response.ok) {
-      console.error('Ask Echo gateway request failed', response.status, body)
-      return json({ error: 'Ask Echo could not reach its model server. Please try again shortly.' }, 502, request)
+      console.error('Ask Echo gateway request failed', response.status, rawBody)
+      const detail = `Upstream ${response.status}: ${rawBody.slice(0, 500) || '(empty body)'}`
+      return json({
+        error: isTest
+          ? `Ask Echo could not reach its model server. ${detail}`
+          : 'Ask Echo could not reach its model server. Please try again shortly.',
+      }, 502, request)
     }
 
     const text = typeof body?.text === 'string'
@@ -112,6 +118,11 @@ Deno.serve(async (request) => {
     return json({ text: text.trim(), model: settings.model }, 200, request)
   } catch (error) {
     console.error('Ask Echo gateway request failed', error)
-    return json({ error: 'Ask Echo could not reach its model server. Please try again shortly.' }, 502, request)
+    const message = error instanceof Error ? error.message : String(error)
+    return json({
+      error: isTest
+        ? `Ask Echo could not reach its model server. ${message}`
+        : 'Ask Echo could not reach its model server. Please try again shortly.',
+    }, 502, request)
   }
 })
