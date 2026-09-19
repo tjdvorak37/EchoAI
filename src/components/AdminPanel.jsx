@@ -204,6 +204,8 @@ export function AdminPanel({
   const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
   const [profitShareDraft, setProfitShareDraft] = useState({ userId: '', value: '', saving: false, error: '' })
   const [betaAiDraft, setBetaAiDraft] = useState({ userId: '', isBetaTester: false, saving: false, error: '' })
+  const [, setQuotaEditingUserId] = useState(null)
+  const [, setQuotaDraftMb] = useState('')
   const [forumUnreadCount, setForumUnreadCount] = useState(0)
 
   const openUserDetail = (member) => {

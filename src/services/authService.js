@@ -781,7 +781,7 @@ export const authService = {
     return normalizeMember(data)
   },
 
-  async updateUserRole({ userId, role, profitSharePercent }) {
+  async updateUserRole({ userId, role }) {
     if (!userId || !role) {
       throw new Error('User ID and role are required.')
     }
