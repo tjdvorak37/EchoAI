@@ -142,6 +142,8 @@ function NoticeEditor({ title, description, notice, onSave }) {
   )
 }
 
+const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+
 export function AdminPanel({
   teamMembers,
   accessRequests,
@@ -171,7 +173,7 @@ export function AdminPanel({
   currentUser,
   onAdminUserAction,
 }) {
-  const [itTab, setItTab] = useState(() => ['admin', 'super_admin'].includes(currentUser?.role) ? 'overview' : 'integrations')
+  const [itTab, setItTab] = useState(() => ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role)) ? 'overview' : 'integrations')
   const [openTabGroup, setOpenTabGroup] = useState(null)
   const tabNavRef = useRef(null)
   const [ticketOpen, setTicketOpen] = useState(null)
@@ -441,7 +443,7 @@ export function AdminPanel({
     ))
   }
 
-  const isFullAdmin = ['admin', 'super_admin'].includes(currentUser?.role)
+  const isFullAdmin = ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role))
   const forumTabLabel = `💬 Company Forum${forumUnreadCount > 0 ? ` (${forumUnreadCount})` : ''}`
   const visiblePlatformTabs = isFullAdmin
     ? PLATFORM_TABS

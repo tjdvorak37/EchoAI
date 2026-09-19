@@ -109,7 +109,8 @@ const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 // Staff accounts run the platform, so they get the top plan without paying for it.
 const STAFF_ROLES = ['admin', 'super_admin', 'it', 'accountant']
 const STAFF_PLAN = 'creator'
-const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCase())
+const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+const isStaffRole = (role) => STAFF_ROLES.includes(normalizeRole(role))
 const aiGenerationEnabled = () => false
 // Standard members can see every destination; Premium is required to operate
 // paid creation, publishing, monitoring, and advertising tools.
@@ -671,8 +672,8 @@ function App() {
     return 'badge info'
   }
 
-  const isAdminUser = ['admin', 'super_admin'].includes(session?.role || '')
-  const canViewManagementBoard = ['admin', 'super_admin', 'it', 'accountant'].includes(session?.role || '') || session?.isBoardMember === true
+  const isAdminUser = ['admin', 'super_admin'].includes(normalizeRole(session?.role))
+  const canViewManagementBoard = ['admin', 'super_admin', 'it', 'accountant'].includes(normalizeRole(session?.role)) || session?.isBoardMember === true
   const canManageBrandKit = isAdminUser
 
   async function loadAdminData(user = session) {
@@ -703,7 +704,7 @@ function App() {
         return
       }
 
-      if (user?.role !== 'admin' && (user?.isBoardMember || user?.role === 'board_member')) {
+      if (!['admin', 'super_admin'].includes(normalizeRole(user?.role)) && (user?.isBoardMember || normalizeRole(user?.role) === 'board_member')) {
         return
       }
 
@@ -843,7 +844,7 @@ function App() {
 
       setSession(restoredUser)
       await applyUserData(restoredUser)
-      if (['admin', 'it', 'accountant'].includes(restoredUser.role) || restoredUser.isBoardMember) {
+      if (['admin', 'super_admin', 'it', 'accountant'].includes(normalizeRole(restoredUser.role)) || restoredUser.isBoardMember) {
         await loadAdminData(restoredUser)
       }
     } catch {
@@ -1420,7 +1421,7 @@ function App() {
       await loadRepostWorkspace()
       await loadBrandKit()
       await loadCloudConnections()
-      if (['admin', 'it', 'accountant'].includes(result.user?.role) || result.user?.isBoardMember) {
+      if (['admin', 'super_admin', 'it', 'accountant'].includes(normalizeRole(result.user?.role)) || result.user?.isBoardMember) {
         await loadAdminData(result.user)
       }
       setMfaPending(false)
@@ -5472,7 +5473,7 @@ function App() {
           </section>
         )}
 
-        {activeTab === 'admin' && ['admin', 'super_admin', 'it'].includes(session?.role || '') && (
+        {activeTab === 'admin' && ['admin', 'super_admin', 'it'].includes(normalizeRole(session?.role)) && (
           <Suspense fallback={loadingPanel}>
             <AdminPanel
               teamMembers={teamMembers}
@@ -5533,7 +5534,7 @@ function App() {
           </Suspense>
         )}
 
-        {activeTab === 'admin' && session?.role === 'accountant' && (
+        {activeTab === 'admin' && normalizeRole(session?.role) === 'accountant' && (
           <Suspense fallback={loadingPanel}>
             <FinancePanel
               purchaseHistory={purchaseHistory}
@@ -5549,7 +5550,7 @@ function App() {
           </Suspense>
         )}
 
-        {activeTab === 'admin' && (session?.role === 'board_member' || session?.isBoardMember) && session?.role !== 'admin' && (
+        {activeTab === 'admin' && (normalizeRole(session?.role) === 'board_member' || session?.isBoardMember) && normalizeRole(session?.role) !== 'admin' && normalizeRole(session?.role) !== 'super_admin' && (
           <Suspense fallback={loadingPanel}>
             <BoardMemberFinancePanel company={session.company} />
           </Suspense>

@@ -4,8 +4,10 @@ import { DEFAULT_AGENT_CAPABILITIES } from './aiAgentService'
 const DEMO_ACCESS_REQUESTS = []
 const DEMO_USERS = []
 
+const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+
 const assertAccountCanAccess = (accessStatus, role = 'user') => {
-  const normalizedRole = String(role || '').toLowerCase()
+  const normalizedRole = normalizeRole(role)
 
   if (normalizedRole === 'admin' || normalizedRole === 'super_admin') {
     return
@@ -202,7 +204,7 @@ export const authService = {
     return {
       ...session.user,
       mustChangePassword: session.user.app_metadata?.must_change_password === true,
-      role: profile.role ?? session.user.user_metadata?.role ?? 'user',
+      role: normalizeRole(profile.role ?? session.user.user_metadata?.role ?? 'user'),
       accessStatus: profile.access_status ?? 'active',
       company: profile.company ?? '',
       isBoardMember: profile.is_board_member === true || profile.role === 'board_member',
@@ -274,7 +276,7 @@ export const authService = {
         user: {
           ...data.user,
           mustChangePassword: data.user?.app_metadata?.must_change_password === true,
-          role: profile?.role ?? 'user',
+          role: normalizeRole(profile?.role ?? 'user'),
           accessStatus: profile?.access_status ?? 'active',
           company: profile?.company ?? '',
           isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
@@ -364,7 +366,7 @@ export const authService = {
       user: {
         ...data.user,
         mustChangePassword: data.user?.app_metadata?.must_change_password === true,
-        role: profile?.role ?? data.user?.user_metadata?.role ?? 'user',
+        role: normalizeRole(profile?.role ?? data.user?.user_metadata?.role ?? 'user'),
         accessStatus: profile?.access_status ?? 'active',
         company: profile?.company ?? '',
         isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
