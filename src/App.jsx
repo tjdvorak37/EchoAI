@@ -552,28 +552,31 @@ function App() {
   useEffect(() => {
     if (!session?.id) return
     try {
-      // Keep image previews for the editor; strip larger non-image previews from storage.
-      const assetsForStorage = workspaceAssets.map((asset) => {
-        const rest = { ...asset }
-        if (asset.type !== 'image') {
-          delete rest.previewUrl
-        }
-        return rest
-      })
-      localStorage.setItem(
-        getUserKey(session.id),
-        JSON.stringify({
-          scheduledPosts,
-          connectedAccounts,
-          companyMainPosts,
-          companySocialAccounts,
-          repostQueue,
-          userReposts,
-          workspaceFolders,
-          workspaceAssets: assetsForStorage,
-          ...(isSupabaseConfigured ? {} : { aiAgentConfig }),
-        }),
-      )
+      // eslint-disable-next-line no-unused-vars -- previewUrl/dataUrl deliberately dropped from storage
+      const assetsForStorage = workspaceAssets.map(({ previewUrl, dataUrl, projectMetadata, ...asset }) => ({
+        ...asset,
+        ...(projectMetadata
+          ? { projectMetadata: { ...projectMetadata, imageSrc: undefined } }
+          : {}),
+      }))
+      const userData = {
+        scheduledPosts,
+        connectedAccounts,
+        companyMainPosts,
+        companySocialAccounts,
+        repostQueue,
+        userReposts,
+        workspaceFolders,
+        workspaceAssets: assetsForStorage,
+        ...(isSupabaseConfigured ? {} : { aiAgentConfig }),
+      }
+      try {
+        localStorage.setItem(getUserKey(session.id), JSON.stringify(userData))
+      } catch (storageError) {
+        if (storageError?.name !== 'QuotaExceededError') throw storageError
+        localStorage.setItem(getUserKey(session.id), JSON.stringify({ ...userData, workspaceAssets: [] }))
+        console.warn('Workspace asset previews exceeded browser storage; saved workspace metadata only.')
+      }
     } catch (err) {
       console.error('Unable to save user data', err)
     }

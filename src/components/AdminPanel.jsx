@@ -185,7 +185,7 @@ export function AdminPanel({
   const [quoteCompanyKey, setQuoteCompanyKey] = useState('')
   const [quoteManagerEmail, setQuoteManagerEmail] = useState('')
   const [quoteSeatCount, setQuoteSeatCount] = useState(10)
-  const [quotePlanKey, setQuotePlanKey] = useState('standard')
+  const [quotePlanKey, setQuotePlanKey] = useState('premium')
   const [quotePriceOverride, setQuotePriceOverride] = useState('')
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [quoteError, setQuoteError] = useState('')
@@ -702,6 +702,7 @@ export function AdminPanel({
 
   const companyPackageTickets = tickets.filter((t) => t.category === 'Company package' && isTicketActionable(t.status))
   const currentQuote = getSeatQuote(quotePlanKey, quoteSeatCount, quotePriceOverride)
+  const currentPlan = currentQuote?.plan ?? PLANS.premium
 
   const loadTicketIntoQuote = (ticket) => {
     setQuoteTicketId(ticket.id)
@@ -710,7 +711,7 @@ export function AdminPanel({
     setQuoteManagerEmail(ticket.requesterEmail || ticket.userEmail || '')
     const parsedSeats = parseRequestedSeatsFromDetails(ticket.details)
     setQuoteSeatCount(parsedSeats || 10)
-    setQuotePlanKey('standard')
+    setQuotePlanKey('premium')
     setQuotePriceOverride('')
     setQuoteMessage('')
     setQuoteError('')
@@ -740,14 +741,14 @@ export function AdminPanel({
         companyKey: quoteCompanyKey,
         seatLimit: currentQuote.count,
         pricePerSeatYear: currentQuote.pricePerSeatYear,
-        notes: `Quoted from ticket ${quoteTicketId || 'manual'} at ${formatUsd(currentQuote.totalAnnualPrice)}/year on the ${currentQuote.plan.label} plan.`,
+        notes: `Quoted from ticket ${quoteTicketId || 'manual'} at ${formatUsd(currentQuote.totalAnnualPrice)}/year on the ${currentPlan.label} plan.`,
         managerEmail: quoteManagerEmail,
         planKey: quotePlanKey,
       })
       if (quoteTicketId) {
         await updateTicketStatus(quoteTicketId, 'resolved')
       }
-      setQuoteMessage(`${currentQuote.plan.label} seats provisioned for ${quoteCompanyName || quoteCompanyKey}. ${quoteManagerEmail ? `${quoteManagerEmail} can now manage their own team.` : ''}`)
+      setQuoteMessage(`${currentPlan.label} seats provisioned for ${quoteCompanyName || quoteCompanyKey}. ${quoteManagerEmail ? `${quoteManagerEmail} can now manage their own team.` : ''}`)
     } catch (provisionError) {
       setQuoteError(provisionError.message)
     } finally {
@@ -897,13 +898,13 @@ export function AdminPanel({
                     title="Full Premium access"
                     onClick={() => setQuotePlanKey(key)}
                   >
-                    {PLANS[key].label}
+                    {(PLANS[key] ?? PLANS.premium).label}
                   </button>
                 ))}
               </div>
               <p className="muted">
-                {currentQuote.plan.label}: {currentQuote.plan.storageGb} GB storage + {currentQuote.plan.includedAiCredits.toLocaleString('en-US')} AI credits/month per seat.
-                List price {formatUsd(currentQuote.plan.annualPrice)}/seat/year.
+                {currentPlan.label}: {currentPlan.storageGb} GB storage + {currentPlan.includedAiCredits.toLocaleString('en-US')} AI credits/month per seat.
+                List price {formatUsd(currentPlan.annualPrice)}/seat/year.
               </p>
 
               <div className="seat-pricing-chart">
@@ -926,7 +927,7 @@ export function AdminPanel({
                 })}
               </div>
               <p className="muted">
-                Shaded portion of each bar is our cost of goods per seat/year for the {currentQuote.plan.label} plan ({formatUsd(getPlanCogsPerSeatYear(quotePlanKey))}).
+                Shaded portion of each bar is our cost of goods per seat/year for the {currentPlan.label} plan ({formatUsd(getPlanCogsPerSeatYear(quotePlanKey))}).
                 Do not quote below {MINIMUM_HEALTHY_MARGIN_PCT}% margin without manager approval.
               </p>
 
@@ -954,7 +955,7 @@ export function AdminPanel({
               </div>
 
               <div className="asset-usage-banner" style={currentQuote.belowFloor ? { borderColor: '#ef4444' } : undefined}>
-                <strong>{currentQuote.plan.label}: {currentQuote.count} seats × {formatUsd(currentQuote.pricePerSeatYear)}/year = {formatUsd(currentQuote.totalAnnualPrice)}/year</strong>
+                <strong>{currentPlan.label}: {currentQuote.count} seats × {formatUsd(currentQuote.pricePerSeatYear)}/year = {formatUsd(currentQuote.totalAnnualPrice)}/year</strong>
                 <span>
                   Cost of goods: {formatUsd(currentQuote.totalCogs)}/year • Margin: {currentQuote.marginPct.toFixed(1)}%
                   {currentQuote.belowFloor ? ' — below floor, get manager approval before sending' : ''}
