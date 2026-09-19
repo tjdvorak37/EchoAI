@@ -5,6 +5,7 @@ const DEMO_ACCESS_REQUESTS = []
 const DEMO_USERS = []
 
 const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+const isBoardMemberRole = (role) => ['board_member', 'partner'].includes(normalizeRole(role))
 
 const assertAccountCanAccess = (accessStatus, role = 'user') => {
   const normalizedRole = normalizeRole(role)
@@ -102,7 +103,7 @@ const normalizeMember = (record) => ({
   aiOperationsEditAccess: record.ai_operations_edit_access === true || record.aiOperationsEditAccess === true,
   siteControlsEditAccess: record.site_controls_edit_access === true || record.siteControlsEditAccess === true,
   profitSharePercent: Number(record.profit_share_percent ?? record.profitSharePercent ?? 0),
-  isBoardMember: record.is_board_member === true || record.role === 'board_member',
+  isBoardMember: record.is_board_member === true || isBoardMemberRole(record.role),
   seatManager: record.seat_manager === true,
   storageQuotaMb: record.storage_quota_mb ?? record.storageQuotaMb ?? 2048,
   aiAgentConfig: normalizeAiAgentConfig(record.ai_agent_config ?? record.aiAgentConfig),
@@ -207,7 +208,7 @@ export const authService = {
       role: normalizeRole(profile.role ?? session.user.user_metadata?.role ?? 'user'),
       accessStatus: profile.access_status ?? 'active',
       company: profile.company ?? '',
-      isBoardMember: profile.is_board_member === true || profile.role === 'board_member',
+      isBoardMember: profile.is_board_member === true || isBoardMemberRole(profile.role),
       profitSharePercent: Number(profile.profit_share_percent || 0),
       seatManager: profile.seat_manager === true,
       trademarkEditAccess: profile.trademark_edit_access === true,
@@ -279,7 +280,7 @@ export const authService = {
           role: normalizeRole(profile?.role ?? 'user'),
           accessStatus: profile?.access_status ?? 'active',
           company: profile?.company ?? '',
-          isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
+          isBoardMember: profile?.is_board_member === true || isBoardMemberRole(profile?.role),
           profitSharePercent: Number(profile?.profit_share_percent || 0),
           seatManager: profile?.seat_manager === true,
           trademarkEditAccess: profile?.trademark_edit_access === true,
@@ -369,7 +370,7 @@ export const authService = {
         role: normalizeRole(profile?.role ?? data.user?.user_metadata?.role ?? 'user'),
         accessStatus: profile?.access_status ?? 'active',
         company: profile?.company ?? '',
-        isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
+        isBoardMember: profile?.is_board_member === true || isBoardMemberRole(profile?.role),
         seatManager: profile?.seat_manager === true,
         trademarkEditAccess: profile?.trademark_edit_access === true,
         developerAppEditAccess: profile?.developer_app_edit_access === true,
