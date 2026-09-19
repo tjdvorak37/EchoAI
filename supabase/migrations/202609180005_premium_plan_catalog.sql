@@ -1,5 +1,12 @@
 -- New customer subscriptions use one Premium package. Existing subscriptions
 -- retain their historical plan values until they are changed or cancelled.
+alter table public.plan_catalog
+  drop constraint if exists plan_catalog_plan_check;
+
+alter table public.plan_catalog
+  add constraint plan_catalog_plan_check
+  check (plan in ('premium', 'standard', 'storage_plus', 'storage_pro', 'storage_max', 'creator'));
+
 insert into public.plan_catalog (plan, label, storage_gb, monthly_price_usd, annual_price_usd, sort_order)
 values ('premium', 'Premium', 0, 39, 390, 10)
 on conflict (plan) do update

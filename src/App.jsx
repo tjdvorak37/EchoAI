@@ -41,6 +41,7 @@ import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAge
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
 import { UpgradeDialog } from './components/UpgradeDialog'
+import { InPageEchoAssistant } from './components/InPageEchoAssistant'
 
 const AI_PROMPT_IDEAS = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
@@ -5643,6 +5644,8 @@ function App() {
           </section>
         </div>
       )}
+
+      <InPageEchoAssistant activeTab={activeTab} />
 
     </div>
   )
