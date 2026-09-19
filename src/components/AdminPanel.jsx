@@ -171,7 +171,7 @@ export function AdminPanel({
   currentUser,
   onAdminUserAction,
 }) {
-  const [itTab, setItTab] = useState(() => currentUser?.role === 'admin' ? 'overview' : 'integrations')
+  const [itTab, setItTab] = useState(() => ['admin', 'super_admin'].includes(currentUser?.role) ? 'overview' : 'integrations')
   const [openTabGroup, setOpenTabGroup] = useState(null)
   const tabNavRef = useRef(null)
   const [ticketOpen, setTicketOpen] = useState(null)
@@ -441,7 +441,7 @@ export function AdminPanel({
     ))
   }
 
-  const isFullAdmin = currentUser?.role === 'admin'
+  const isFullAdmin = ['admin', 'super_admin'].includes(currentUser?.role)
   const forumTabLabel = `💬 Company Forum${forumUnreadCount > 0 ? ` (${forumUnreadCount})` : ''}`
   const visiblePlatformTabs = isFullAdmin
     ? PLATFORM_TABS
@@ -756,7 +756,7 @@ export function AdminPanel({
       <div className="it-header">
         <div>
           <h2>IT / Management</h2>
-          <p className="it-header-sub">Restricted staff workspace • {currentUser?.role === 'admin' ? 'Super Admin' : 'IT staff'}</p>
+          <p className="it-header-sub">Restricted staff workspace • {isFullAdmin ? 'Super Admin' : 'IT staff'}</p>
         </div>
       </div>
 
