@@ -6,7 +6,7 @@ const DEFAULT_SETTINGS = {
   enabled: false,
   gateway_url: '',
   gateway_token: '',
-  model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+  model: 'amazon.nova-lite-v1:0',
   daily_message_limit: 25,
   max_response_tokens: 600,
   system_prompt: '',
@@ -104,7 +104,7 @@ export function EchoChatOperations() {
         </label>
         <label>
           Bedrock model ID
-          <input value={settings.model} onChange={(event) => updateSetting('model', event.target.value)} placeholder="anthropic.claude-3-5-sonnet-20241022-v2:0" />
+          <input value={settings.model} onChange={(event) => updateSetting('model', event.target.value)} placeholder="amazon.nova-lite-v1:0" />
         </label>
         <label>
           Daily messages per Premium user
