@@ -118,17 +118,7 @@ const aiGenerationEnabled = () => false
 // Standard members can see every destination; Premium is required to operate
 // paid creation, publishing, monitoring, and advertising tools.
 const STANDARD_ACCOUNT_TABS = new Set(['dashboard', 'account', 'help', 'integrations'])
-const FREE_ACCOUNT_TABS = STANDARD_ACCOUNT_TABS
 const ASSET_DRAWER_ENABLED = false
-const TAB_LABELS = {
-  listening: 'Signal Watch',
-  repost: 'Broadcast Hub',
-  scheduler: 'Queue Studio',
-  assistant: 'Create Desk',
-  photo: 'Image Lab',
-  studio: 'Motion Lab',
-  integrations: 'Connections',
-}
 
 function App() {
   const [authView, setAuthView] = useState(() =>
@@ -380,12 +370,7 @@ function App() {
   const hasPaidAccess = isStaffRole(session?.role) || myEntitlement?.entitled === true
 
   const requestWorkspaceTab = (tab) => {
-    if (hasPaidAccess || STANDARD_ACCOUNT_TABS.has(tab)) {
-      setActiveTab(tab)
-      return
-    }
-    setUpgradeError('')
-    setUpgradePrompt(TAB_LABELS[tab] || 'This feature')
+    setActiveTab(tab)
   }
 
   const handleChooseUpgradePlan = async (planKey) => {
@@ -2969,12 +2954,6 @@ function App() {
     }
   }
 
-  const returnToFreeWorkspace = useEffectEvent(() => {
-    if (FREE_ACCOUNT_TABS.has(activeTab)) return
-    setActiveTab('dashboard')
-    setUpgradePrompt(TAB_LABELS[activeTab] || 'This feature')
-  })
-
   // Refresh paid capability without ending the permanent free account session.
   useEffect(() => {
     if (!isSupabaseConfigured || !session?.id) return undefined
@@ -3000,7 +2979,6 @@ function App() {
       setMyEntitlement(entitlement)
 
       if (entitlement?.entitled !== false) return
-      returnToFreeWorkspace()
     }
     enforceEntitlement()
     const timer = setInterval(enforceEntitlement, 5 * 60 * 1000)
