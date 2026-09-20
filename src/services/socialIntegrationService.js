@@ -59,9 +59,10 @@ export const socialIntegrationService = {
         platform,
         account_name: accountName.trim(),
         account_type: accountType,
+        external_account_id: '',
         publishing_scopes: publishingScopes,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,platform' })
+      }, { onConflict: 'user_id,platform,external_account_id' })
       .select('*')
       .single()
 
