@@ -120,7 +120,8 @@ const googleReport = async (accessToken: string, accounts: string[], days: numbe
     })
     if (!response.ok) continue
     const batches = await response.json()
-    for (const row of batches.flatMap((batch: { results?: unknown[] }) => batch.results ?? []) as Array<{ campaign: { id: string, name: string }, metrics: { costMicros: string, impressions: string, clicks: string, conversions: number }>) {
+    const rows = batches.flatMap((batch: { results?: unknown[] }) => batch.results ?? []) as Array<{ campaign: { id: string, name: string }, metrics: { costMicros: string, impressions: string, clicks: string, conversions: number } }>
+    for (const row of rows) {
       const spend = Number(row.metrics.costMicros ?? 0) / 1_000_000
       const conversions = Number(row.metrics.conversions ?? 0)
       campaigns.push({ id: row.campaign.id, provider: 'google', name: row.campaign.name, spend, impressions: Number(row.metrics.impressions ?? 0), clicks: Number(row.metrics.clicks ?? 0), conversions, costPerConversion: conversions ? spend / conversions : 0 })
