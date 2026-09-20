@@ -1020,8 +1020,10 @@ function App() {
     setAuthNotice('')
     setAuthLoading(true)
     try {
-      await authService.resendSignupConfirmation(authState.email)
-      setAuthNotice('Confirmation email resent. Check your inbox and spam folder.')
+      const result = await authService.resendSignupConfirmation(authState.email)
+      setAuthNotice(result?.alreadyConfirmed
+        ? 'This account is already confirmed. You can sign in now.'
+        : 'Confirmation email resent. Check your inbox and spam folder.')
     } catch (error) {
       setAuthError(error.message)
     } finally {
