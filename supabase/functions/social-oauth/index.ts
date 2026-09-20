@@ -13,6 +13,7 @@ type ProviderConfig = {
   tokenUrl: string
   clientId: string
   clientSecret: string
+  redirectUri?: string
   scopes: string[]
   tokenAuth: 'body' | 'basic'
 }
@@ -105,7 +106,7 @@ const providerConfig = async (providerKey: keyof typeof PROVIDERS) => {
   const fallback = PROVIDERS[providerKey]
   const { data } = await admin()
     .from('developer_app_credentials')
-    .select('client_id, client_secret, scopes, enabled')
+    .select('client_id, client_secret, redirect_uri, scopes, enabled')
     .eq('provider', providerKey)
     .maybeSingle()
   if (!data || data.enabled === false) return fallback
@@ -113,6 +114,7 @@ const providerConfig = async (providerKey: keyof typeof PROVIDERS) => {
     ...fallback,
     clientId: data.client_id || fallback.clientId,
     clientSecret: data.client_secret || fallback.clientSecret,
+    redirectUri: data.redirect_uri || FUNCTION_URL,
     scopes: Array.isArray(data.scopes) && data.scopes.length ? data.scopes : fallback.scopes,
   }
 }
@@ -283,6 +285,7 @@ Deno.serve(async (request) => {
     const platform = pending.platform
     const provider = await providerConfig(providerForPlatform(platform))
     const oauthScopes = scopesForPlatform(platform, provider)
+    const redirectUri = provider.redirectUri || FUNCTION_URL
 
     try {
       const tokenHeaders: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' }
@@ -291,7 +294,7 @@ Deno.serve(async (request) => {
         client_secret: provider.clientSecret,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: FUNCTION_URL,
+        redirect_uri: redirectUri,
       }
       if (pending.code_verifier) tokenBody.code_verifier = pending.code_verifier
       if (provider.tokenAuth === 'basic') {
@@ -478,7 +481,7 @@ Deno.serve(async (request) => {
     stage = 'building provider authorization URL'
     const authorizationUrl = new URL(provider.authUrl)
     authorizationUrl.searchParams.set(platform === 'tiktok' ? 'client_key' : 'client_id', provider.clientId)
-    authorizationUrl.searchParams.set('redirect_uri', FUNCTION_URL)
+    authorizationUrl.searchParams.set('redirect_uri', provider.redirectUri || FUNCTION_URL)
     authorizationUrl.searchParams.set('response_type', 'code')
     authorizationUrl.searchParams.set('scope', scopeParamForPlatform(platform, oauthScopes))
     authorizationUrl.searchParams.set('state', state)
