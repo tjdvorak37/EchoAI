@@ -2356,6 +2356,10 @@ function App() {
       }
     }
 
+    if (action === 'delete-user' && result?.deleted) {
+      setTeamMembers((prev) => prev.filter((member) => member.id !== userId))
+    }
+
     return result
   }
 

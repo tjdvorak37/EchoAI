@@ -204,6 +204,7 @@ export function AdminPanel({
   const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
   const [profitShareDraft, setProfitShareDraft] = useState({ userId: '', value: '', saving: false, error: '' })
   const [betaAiDraft, setBetaAiDraft] = useState({ userId: '', isBetaTester: false, saving: false, error: '' })
+  const [deletingUserId, setDeletingUserId] = useState('')
   const [, setQuotaEditingUserId] = useState(null)
   const [, setQuotaDraftMb] = useState('')
   const [forumUnreadCount, setForumUnreadCount] = useState(0)
@@ -259,6 +260,22 @@ export function AdminPanel({
     const bytes = crypto.getRandomValues(new Uint8Array(12))
     const generated = `${Array.from(bytes, (byte) => characters[byte % characters.length]).join('')}A7!`
     setTemporaryPassword({ userId: member.id, value: generated, saving: false, message: '', error: '' })
+  }
+
+  const deleteUser = async (member) => {
+    const confirmed = window.confirm('Are you sure you want to do this? This will permanently delete the user and all associated data. This cannot be undone. Yes/No')
+    if (!confirmed) return
+
+    setDeletingUserId(member.id)
+    setNewUserStatus({ saving: false, message: '', error: '' })
+    try {
+      await onAdminUserAction({ action: 'delete-user', userId: member.id, email: member.email })
+      setExpandedUserId(null)
+    } catch (error) {
+      setNewUserStatus({ saving: false, message: '', error: error.message })
+    } finally {
+      setDeletingUserId('')
+    }
   }
 
   const saveProfileDraft = async (member) => {
@@ -1735,6 +1752,17 @@ export function AdminPanel({
                                 )}
                               </div>
                             </div>
+
+                            {isFullAdmin && member.id !== currentUser?.id && !['admin', 'super_admin'].includes(normalizeRole(member.role)) && (
+                              <div className="it-user-detail-group it-user-detail-stack">
+                                <span className="it-user-detail-label">Permanent deletion</span>
+                                <p className="muted it-verify-hint">Deletes the account, profile, subscriptions, connected credentials, support records, media, and other user-owned data. This cannot be undone.</p>
+                                <button type="button" className="danger-button" onClick={() => deleteUser(member)} disabled={Boolean(deletingUserId) || adminLoading}>
+                                  {deletingUserId === member.id ? 'Deleting user...' : 'Delete user and all data'}
+                                </button>
+                                {newUserStatus.error && <p className="auth-message auth-error">{newUserStatus.error}</p>}
+                              </div>
+                            )}
                           </>
                         )}
                       </div>

@@ -1,6 +1,7 @@
 // Privileged user-support actions for admins. The caller's role is re-checked
 // here with the service role key: a browser can claim any role, so the client's
 // own view of who it is never decides access.
+import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
 import { getNotificationConfig, sendSupportTicketEmail } from '../_shared/notify.ts'
@@ -16,6 +17,10 @@ const PRIVILEGED_ROLES = new Set([
 
 const PROFILE_ADMIN_FIELDS = 'id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, license_edit_access, integrations_edit_access, ai_operations_edit_access, site_controls_edit_access, created_at'
 const PROFILE_CREATE_FIELDS = 'id, full_name, email, company, role, profit_share_percent, access_status, storage_quota_mb, trademark_edit_access, developer_app_edit_access, company_email_edit_access, license_edit_access, integrations_edit_access, ai_operations_edit_access, site_controls_edit_access'
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
+  apiVersion: '2025-03-31.basil',
+  httpClient: Stripe.createFetchHttpClient(),
+})
 const PLATFORM_ACCESS_ACTIONS: Record<string, { column: string, label: string }> = {
   'set-trademark-edit-access': { column: 'trademark_edit_access', label: 'Trademark & Legal' },
   'set-developer-app-edit-access': { column: 'developer_app_edit_access', label: 'Developer Apps' },
@@ -24,6 +29,20 @@ const PLATFORM_ACCESS_ACTIONS: Record<string, { column: string, label: string }>
   'set-integrations-edit-access': { column: 'integrations_edit_access', label: 'Integrations' },
   'set-ai-operations-edit-access': { column: 'ai_operations_edit_access', label: 'Echo AI operations' },
   'set-site-controls-edit-access': { column: 'site_controls_edit_access', label: 'Site Controls' },
+}
+
+const removeStoragePrefix = async (adminClient: ReturnType<typeof createClient>, bucket: string, prefix: string) => {
+  const storage = adminClient.storage.from(bucket)
+  while (true) {
+    const { data: objects, error: listError } = await storage.list(prefix, { limit: 1000, offset: 0 })
+    if (listError) throw new Error(`Could not inspect ${bucket} storage: ${listError.message}`)
+    if (!objects?.length) return
+
+    const paths = objects.map((object) => `${prefix}${object.name}`)
+    const { error: removeError } = await storage.remove(paths)
+    if (removeError) throw new Error(`Could not remove ${bucket} storage: ${removeError.message}`)
+    if (objects.length < 1000) return
+  }
 }
 
 Deno.serve(async (request) => {
@@ -438,6 +457,105 @@ Deno.serve(async (request) => {
 
     if (!target) {
       return json({ error: `User not found for id '${userId || 'none'}' or email '${targetEmail || 'none'}'.` }, 404, request)
+    }
+
+    if (action === 'delete-user') {
+      if (!isSuperAdmin) {
+        return json({ error: 'Admin or Super Admin access is required to permanently delete users.' }, 403, request)
+      }
+      if (target.id === caller.user.id) {
+        return json({ error: 'You cannot delete your own administrator account here.' }, 400, request)
+      }
+      if (['admin', 'super_admin'].includes(String(target.role || '').toLowerCase())) {
+        return json({ error: 'Administrator accounts must be removed through a separate verified process.' }, 403, request)
+      }
+
+      const { data: subscription } = await adminClient
+        .from('subscriptions')
+        .select('stripe_customer_id')
+        .eq('user_id', target.id)
+        .maybeSingle()
+
+      if (subscription?.stripe_customer_id && Deno.env.get('STRIPE_SECRET_KEY')) {
+        const activeSubscriptions = await stripe.subscriptions.list({
+          customer: subscription.stripe_customer_id,
+          status: 'all',
+          limit: 100,
+        })
+        for (const item of activeSubscriptions.data) {
+          if (!['canceled', 'incomplete_expired'].includes(item.status)) {
+            await stripe.subscriptions.cancel(item.id)
+          }
+        }
+      }
+
+      const deleteRows = async (table: string, column = 'user_id') => {
+        const { error } = await adminClient.from(table).delete().eq(column, target.id)
+        if (error) throw new Error(`Could not remove ${table}: ${error.message}`)
+      }
+
+      // Remove user-owned rows explicitly, including tables whose foreign keys
+      // intentionally use SET NULL so Auth deletion cannot leave a data trail.
+      for (const table of [
+        'access_requests',
+        'subscriptions',
+        'billing_payments',
+        'promo_redemptions',
+        'referral_codes',
+        'user_ai_agent_config',
+        'mfa_recovery_codes',
+        'cloud_connections',
+        'cloud_oauth_states',
+        'user_social_accounts',
+        'social_oauth_credentials',
+        'social_oauth_states',
+        'scheduled_posts',
+        'support_tickets',
+        'ai_agent_connections',
+        'echo_brand_profiles',
+        'echo_credit_accounts',
+        'echo_credit_transactions',
+        'echo_ai_jobs',
+        'echo_ai_request_events',
+        'echo_ai_budget',
+        'echo_chat_usage',
+        'app_analytics_events',
+        'customer_exit_feedback',
+        'ad_oauth_states',
+        'ad_oauth_connections',
+        'posting_schedules',
+        'user_free_posting_usage',
+      ]) {
+        await deleteRows(table)
+      }
+
+      for (const [table, column] of [
+        ['referrals', 'referrer_user_id'],
+        ['referrals', 'referred_user_id'],
+        ['company_seats', 'profile_id'],
+        ['company_seats', 'assigned_by'],
+        ['company_seat_packages', 'created_by'],
+        ['internal_forum_posts', 'author_id'],
+        ['internal_forum_messages', 'sender_id'],
+        ['internal_forum_messages', 'recipient_id'],
+        ['internal_projects', 'created_by'],
+        ['internal_projects', 'owner_id'],
+        ['internal_project_tasks', 'created_by'],
+        ['internal_project_tasks', 'assignee_id'],
+        ['internal_project_notes', 'author_id'],
+        ['board_profit_payouts', 'board_member_id'],
+        ['board_profit_payouts', 'created_by'],
+      ] as const) {
+        await deleteRows(table, column)
+      }
+
+      await removeStoragePrefix(adminClient, 'ticket-attachments', `${target.id}/`)
+      await removeStoragePrefix(adminClient, 'social-media', `${target.id}/`)
+
+      const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(target.id)
+      if (authDeleteError) throw new Error(`Could not delete the authentication account: ${authDeleteError.message}`)
+
+      return json({ deleted: true, userId: target.id }, 200, request)
     }
 
     // Admins are excluded from these actions so one compromised admin account
