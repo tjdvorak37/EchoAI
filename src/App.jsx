@@ -5429,11 +5429,11 @@ function App() {
               </div>
               <button
                 type="button"
-                className="ghost-button"
+                className={myEntitlement?.entitled === false ? 'primary-button' : 'ghost-button'}
                 disabled={billingPortalLoading || !isSupabaseConfigured}
                 onClick={myEntitlement?.entitled === false ? () => setUpgradePrompt('paid EchoAI tools') : handleOpenBillingPortal}
               >
-                {billingPortalLoading ? 'Opening...' : myEntitlement?.entitled === false ? 'Choose a plan' : 'Manage billing'}
+                {billingPortalLoading ? 'Opening...' : myEntitlement?.entitled === false ? 'Upgrade to Premium' : 'Manage billing'}
               </button>
             </div>
             {billingPortalError && <span className="field-error">{billingPortalError}</span>}
