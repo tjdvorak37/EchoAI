@@ -1062,6 +1062,22 @@ function App() {
       if (isTemporaryPasswordChange) {
         await authService.changeTemporaryPassword(resetPassword.newPassword)
       } else {
+        const { data: currentSession } = await supabase.auth.getSession()
+        if (!currentSession.session && typeof window !== 'undefined' && window.location.hash.startsWith('#')) {
+          const hashParams = new URLSearchParams(window.location.hash.slice(1))
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+          if (accessToken && refreshToken) {
+            const { error: sessionError } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+            if (sessionError) throw new Error(sessionError.message)
+          }
+        }
+
+        const { data: recoverySession } = await supabase.auth.getSession()
+        if (!recoverySession.session) {
+          throw new Error('Your setup link has expired or its recovery session was not established. Request a new link and open it in the same browser.')
+        }
+
         const { error } = await supabase.auth.updateUser({
           password: resetPassword.newPassword,
         })
