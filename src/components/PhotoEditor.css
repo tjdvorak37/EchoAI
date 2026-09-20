@@ -1183,3 +1183,59 @@
     min-height: 52px;
   }
 }
+
+/* Keep the full editor reachable in the application shell. The canvas keeps
+   its export dimensions while the surrounding workspace can scroll. */
+.photo-creator-shell {
+  height: auto;
+  min-height: calc(100vh - 11.5rem);
+  overflow: visible;
+  color: #172033;
+  background: linear-gradient(145deg, #f4f8ff, #fff8fc);
+}
+
+.photo-creator-header,
+.editor-options-bar,
+.editor-menu-bar,
+.sidebar-menu-bar,
+.photo-sidebar,
+.photo-stage-panel,
+.photo-stage-wrap {
+  background: #ffffff;
+  border-color: #d7e1f1;
+}
+
+.photo-creator-header h2,
+.photo-stage-panel h3,
+.photo-sidebar h3,
+.photo-sidebar h4 {
+  color: #172033;
+}
+
+.photo-creator-header p,
+.photo-stage-panel .muted,
+.photo-sidebar .muted {
+  color: #64748b;
+}
+
+.photo-creator-grid {
+  height: auto;
+  min-height: 720px;
+}
+
+.photo-stage-panel {
+  height: auto;
+  min-height: 720px;
+  overflow: visible;
+}
+
+.photo-stage-wrap {
+  min-height: 540px;
+  overflow: auto;
+  background: #eef3fb;
+}
+
+.photo-stage-image {
+  object-fit: contain;
+  background: #ffffff;
+}
