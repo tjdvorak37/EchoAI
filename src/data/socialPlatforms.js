@@ -133,6 +133,9 @@ export const SOCIAL_PLATFORMS = [
   },
 ]
 
+// Keep active integrations easy to reach while leaving roadmap destinations at the end.
+SOCIAL_PLATFORMS.sort((left, right) => Number(right.releaseStatus === 'available') - Number(left.releaseStatus === 'available'))
+
 export const PUBLISHING_PLATFORMS = SOCIAL_PLATFORMS.filter((platform) => platform.releaseStatus === 'available')
 export const PUBLISHING_PLATFORM_KEYS = PUBLISHING_PLATFORMS.map((platform) => platform.key)
 
