@@ -1015,6 +1015,20 @@ function App() {
     }
   }
 
+  const handleResendConfirmation = async () => {
+    setAuthError('')
+    setAuthNotice('')
+    setAuthLoading(true)
+    try {
+      await authService.resendSignupConfirmation(authState.email)
+      setAuthNotice('Confirmation email resent. Check your inbox and spam folder.')
+    } catch (error) {
+      setAuthError(error.message)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   const handleResetPasswordSubmit = async (event) => {
     event.preventDefault()
     setAuthError('')
@@ -3341,6 +3355,9 @@ function App() {
                   </label>
                   <button type="submit" disabled={authLoading}>
                     {authLoading ? 'Signing in...' : 'Login'}
+                  </button>
+                  <button type="button" className="text-button" onClick={handleResendConfirmation} disabled={authLoading || !authState.email.trim()}>
+                    Resend confirmation email
                   </button>
                   <button
                     type="button"

@@ -83,7 +83,7 @@ Deno.serve(async (request) => {
     ticket_id: ticket.id,
     direction: 'staff',
     sender_name: 'EchoAI Support',
-    sender_email: Deno.env.get('MAIL_FROM_EMAIL') || 'support@echoaipro.com',
+    sender_email: 'support@echoaipro.com',
     body: cleanResponse,
   })
   if (messageError) return json({ error: 'The email was sent and the ticket updated, but its conversation history could not be saved.' }, 500, request)

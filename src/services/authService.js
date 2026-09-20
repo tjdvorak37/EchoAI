@@ -235,6 +235,11 @@ export const authService = {
       throw new Error(error.message)
     }
 
+    if (!data.user?.email_confirmed_at) {
+      await supabase.auth.signOut()
+      throw new Error('Please confirm your email address before signing in. Check your inbox or resend the confirmation email.')
+    }
+
     try {
       const { error: seatClaimError } = await supabase.rpc('claim_company_seat', {
         p_user_id: data.user?.id,
@@ -442,9 +447,15 @@ export const authService = {
       )
     }
 
-    // With email confirmation enabled, signUp returns the user but no session.
-    // The auth.users trigger provisions the profile and access request.
-    if (!data.session) {
+    // Auth confirmation is disabled so EchoAI can deliver the message from
+    // Support. The server still creates a single-use Auth confirmation link.
+    if (data.session) {
+      const { error: confirmationError } = await supabase.functions.invoke('send-auth-email', { body: { email } })
+      await supabase.auth.signOut()
+      if (confirmationError) {
+        const detail = await confirmationError.context?.json?.().catch(() => null)
+        throw new Error(detail?.error || confirmationError.message || 'Unable to send the confirmation email.')
+      }
       return { ok: true, activated: false, verificationRequired: true }
     }
 
@@ -1731,6 +1742,24 @@ export const authService = {
     if (error) {
       const detail = await error.context?.json?.().catch(() => null)
       throw new Error(detail?.error || error.message || 'Unable to request a password reset.')
+    }
+
+    return data ?? { ok: true }
+  },
+
+  async resendSignupConfirmation(email) {
+    if (!email) {
+      throw new Error('Email is required.')
+    }
+
+    if (!isSupabaseConfigured) {
+      return { ok: true }
+    }
+
+    const { data, error } = await supabase.functions.invoke('send-auth-email', { body: { email: String(email).trim().toLowerCase() } })
+
+    if (error) {
+      throw new Error(error.message || 'Unable to resend the confirmation email.')
     }
 
     return data ?? { ok: true }
