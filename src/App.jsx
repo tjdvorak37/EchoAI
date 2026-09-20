@@ -10,6 +10,7 @@ import { CLOUD_PROVIDERS, cloudDriveService, toLinkedAsset } from './services/cl
 import { getPlan, getStorageMb } from './data/plans'
 import { PUBLISHING_PLATFORMS, SOCIAL_PLATFORMS, getSocialPlatform } from './data/socialPlatforms'
 import { platformService } from './services/platformService'
+import { postingScheduleService } from './services/postingScheduleService'
 import { repostService } from './services/repostService'
 import { socialIntegrationService } from './services/socialIntegrationService'
 import { financeService } from './services/financeService'
@@ -65,6 +66,7 @@ const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((modu
 const AdsPanel = lazy(() => import('./components/AdsPanel').then((module) => ({ default: module.AdsPanel })))
 const RepostHubPanel = lazy(() => import('./components/RepostHubPanel').then((module) => ({ default: module.RepostHubPanel })))
 const PostSchedulerPanel = lazy(() => import('./components/PostSchedulerPanel').then((module) => ({ default: module.PostSchedulerPanel })))
+const PostingSchedulePanel = lazy(() => import('./components/PostingSchedulePanel').then((module) => ({ default: module.PostingSchedulePanel })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
@@ -1601,6 +1603,57 @@ function App() {
       channelAccounts: {},
       mediaAssetIds: [],
     })
+  }
+
+  const handlePostToNextSlot = async () => {
+    setSchedulerError('')
+    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim())
+    if (!hasContent || !composer.channels.length) {
+      setSchedulerError('Write a caption or add an image brief, and select at least one channel before queuing to the next slot.')
+      return
+    }
+
+    const invalidSelectedChannels = composer.channels.filter((channel) => {
+      const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
+      return !linkedAccount || linkedAccount.status !== 'healthy'
+    })
+    if (invalidSelectedChannels.length) {
+      setSchedulerError(`Complete OAuth for ${invalidSelectedChannels.join(', ')} before queuing this post.`)
+      return
+    }
+
+    try {
+      const schedule = await postingScheduleService.get()
+      const nextSlot = postingScheduleService.getNextAvailableSlot(schedule, scheduledPosts)
+      if (!nextSlot) {
+        setSchedulerError('No posting slots are set up yet. Add times in Account > Posting schedule first.')
+        return
+      }
+
+      const newPost = await platformService.schedulePost({
+        campaign: composer.campaign.trim() || 'Social Post',
+        message: composer.message,
+        imageIdea: composer.imageIdea,
+        scheduledAt: nextSlot.toISOString(),
+        channels: composer.channels,
+        channelAccounts: composer.channelAccounts,
+        media: [],
+      })
+
+      setScheduledPosts((prev) => [newPost, ...prev])
+      await syncPostToCalendar(newPost)
+      setComposer({
+        campaign: '',
+        message: '',
+        imageIdea: '',
+        scheduledAt: '',
+        channels: [],
+        channelAccounts: {},
+        mediaAssetIds: [],
+      })
+    } catch (error) {
+      setSchedulerError(error.message)
+    }
   }
 
   const handlePostNow = async (event) => {
@@ -4445,6 +4498,7 @@ function App() {
               handleComposerChange={handleComposerChange}
               handleSchedulePost={handleSchedulePost}
               handlePostNow={handlePostNow}
+              handlePostToNextSlot={handlePostToNextSlot}
               handleRepostNow={handleRepostNow}
               handleDeleteScheduledPost={handleDeleteScheduledPost}
               handleReschedulePost={handleReschedulePost}
@@ -5448,6 +5502,11 @@ function App() {
               <button type="button" className="danger-button" disabled={accountActionLoading || !isSupabaseConfigured} onClick={handleDeleteAccount}>Delete account</button>
             </div>
             {accountActionError && <span className="field-error">{accountActionError}</span>}
+
+            <h3 className="section-label">Posting schedule</h3>
+            <Suspense fallback={<p className="muted">Loading posting schedule...</p>}>
+              <PostingSchedulePanel />
+            </Suspense>
           </section>
         )}
 
