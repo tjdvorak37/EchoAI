@@ -30,7 +30,7 @@ export const PLANS = {
     tagline: 'Full EchoAI access for creators and teams ready to publish, monitor, create, and optimize campaigns.',
     audience: 'Creators, businesses, and teams',
     popular: true,
-    marginPct: 0,
+    marginPct: 90,
   },
 }
 
