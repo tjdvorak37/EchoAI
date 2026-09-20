@@ -1243,7 +1243,18 @@ export function AdminPanel({
                             {ticketOpen.attachments.map((attachment) => attachment.url ? (
                               <figure key={attachment.path}>
                                 <img src={attachment.url} alt={`Support ticket attachment: ${attachment.name}`} loading="lazy" />
-                                <figcaption>{attachment.name}</figcaption>
+                                <figcaption>
+                                  <span>{attachment.name}</span>
+                                  <a
+                                    className="ghost-button ticket-attachment-download"
+                                    href={attachment.url}
+                                    download={attachment.name}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Download
+                                  </a>
+                                </figcaption>
                               </figure>
                             ) : (
                               <p key={attachment.path} className="field-error">Preview unavailable for {attachment.name}. Refresh tickets to try again.</p>
