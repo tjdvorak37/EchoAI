@@ -5789,10 +5789,21 @@ button[type='submit']:hover {
 }
 
 .ticket-attachment-gallery figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
   margin-top: 0.3rem;
   color: #526176;
   font-size: 0.78rem;
   overflow-wrap: anywhere;
+}
+
+.ticket-attachment-download {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.75rem;
+  text-decoration: none;
 }
 
 .it-ticket-reply {
