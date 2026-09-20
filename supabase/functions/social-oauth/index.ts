@@ -458,11 +458,8 @@ Deno.serve(async (request) => {
 
     stage = 'preparing OAuth state'
     const db = admin()
-    // Expired-state cleanup must never block a new authorization request.
-    const pruneResult = await db.rpc('prune_social_oauth_states')
-    if (pruneResult.error) {
-      console.warn('Unable to prune expired social OAuth states:', pruneResult.error)
-    }
+    // Expired-state cleanup runs independently; it must never block a new
+    // authorization request.
     const state = crypto.randomUUID()
     const codeVerifier = platform === 'x' ? base64Url(crypto.getRandomValues(new Uint8Array(32))) : ''
     const requestedScopes = Array.isArray(body.requestedScopes)
