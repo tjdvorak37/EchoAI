@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useRef, useState, useMemo } from 'react'
 import { PUBLISHING_PLATFORMS, PUBLISHING_PLATFORM_KEYS, SOCIAL_PLATFORMS } from '../data/socialPlatforms'
 import './PostSchedulerPanel.css'
 
@@ -41,6 +41,24 @@ const SCHEDULER_TEMPLATES = [
   },
 ]
 
+const EMOJI_GROUPS = [
+  { label: 'Smileys', emojis: '😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🤩 🥳 😏 😒 😞 😔 😟 😕 🙁 ☹️ 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🫡 🤭 🤫 🤥 😶 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 🤐 🤑 🤠' },
+  { label: 'Gestures', emojis: '👋 🤚 🖐️ ✋ 🖖 👌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 👍 👎 ✊ 👊 🤝 🙏 👏 🙌 👐 🤲 💪 🫶 👀 👁️ 👄 💋' },
+  { label: 'People', emojis: '👶 🧒 👦 👧 🧑 👱 👨 🧔 👨‍🦰 👩 👩‍🦰 🧓 👴 👵 🙋 💁 🙆 🙅 🤷 🤦 🧘 🏃 🚶 💃 🕺 👯 🧚 🧜 🧞 🧙 🦸 🦹' },
+  { label: 'Hearts', emojis: '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 💌 💋 💯 💢 💥 💫 💦 💨' },
+  { label: 'Celebration', emojis: '🎉 🎊 🎈 🎁 🎂 🥳 🎆 🎇 ✨ 🌟 ⭐ 🌠 🔥 🚀 💫 🪩 🎵 🎶 🏆 🥇 🥈 🥉 🎯 💎 👑' },
+  { label: 'Nature', emojis: '🌞 🌝 🌛 🌜 🌚 🌈 ☀️ 🌤️ ⛅ 🌧️ ⛈️ ❄️ ☃️ 🌊 🌸 🌺 🌻 🌹 🌷 🌼 🍀 🌿 🌱 🌴 🌵 🍁 🍂 🍃' },
+  { label: 'Food', emojis: '🍎 🍏 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍒 🍑 🍍 🥝 🥑 🍅 🥕 🌽 🍔 🍟 🍕 🌭 🌮 🌯 🍿 🍩 🍪 🎂 🍰 🍫 🍭 ☕ 🧋 🍺 🍷' },
+  { label: 'Activities', emojis: '⚽ 🏀 🏈 ⚾ 🎾 🏐 🏉 🎱 🪀 🏓 🏸 🥊 🏋️ 🏄 🚴 🏊 🎮 🎲 🧩 🎨 🎤 🎧 🎸 🎹 📸' },
+  { label: 'Objects', emojis: '✅ ❌ ❗ ❓ ⁉️ ⚠️ 💡 🔔 🔒 🔑 📌 📍 ✏️ 📝 📅 📣 📢 💬 📈 📊 💰 💳 📱 💻 🖥️ 📧 🔗' },
+  { label: 'Animals', emojis: '🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🐤 🦄 🐝 🦋 🐢 🐳 🐬 🦈 🦋' },
+]
+
+const EMOJIS = EMOJI_GROUPS.map((group) => ({
+  ...group,
+  items: group.emojis.split(' '),
+}))
+
 export function PostSchedulerPanel({
   composer,
   setComposer,
@@ -68,6 +86,10 @@ export function PostSchedulerPanel({
   const [calendarFilterAccountId, setCalendarFilterAccountId] = useState('all')
   const [calendarSelectedDay, setCalendarSelectedDay] = useState('')
   const [dragPostId, setDragPostId] = useState('')
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
+  const [emojiSearch, setEmojiSearch] = useState('')
+  const messageInputRef = useRef(null)
+  const messageSelectionRef = useRef({ start: 0, end: 0 })
 
   const connectedPlatforms = useMemo(
     () => connectedAccounts
@@ -157,6 +179,39 @@ export function PostSchedulerPanel({
   const charLimit = PLATFORM_LIMITS[previewPlatform] || 2200
   const charCount = composer.message.length
   const isOverCharLimit = charCount > charLimit
+
+  const visibleEmojiGroups = useMemo(() => {
+    const search = emojiSearch.trim().toLowerCase()
+    if (!search) return EMOJIS
+    return EMOJIS
+      .map((group) => ({ ...group, items: group.label.toLowerCase().includes(search) ? group.items : group.items.filter((emoji) => emoji.includes(search)) }))
+      .filter((group) => group.items.length > 0)
+  }, [emojiSearch])
+
+  const rememberMessageSelection = () => {
+    const input = messageInputRef.current
+    if (!input) return
+    messageSelectionRef.current = {
+      start: input.selectionStart ?? composer.message.length,
+      end: input.selectionEnd ?? composer.message.length,
+    }
+  }
+
+  const insertEmoji = (emoji) => {
+    const { start, end } = messageSelectionRef.current
+    const message = composer.message
+    const nextMessage = `${message.slice(0, start)}${emoji}${message.slice(end)}`
+    const nextCursor = start + emoji.length
+    handleComposerChange('message', nextMessage)
+    setEmojiPickerOpen(false)
+    window.requestAnimationFrame(() => {
+      const input = messageInputRef.current
+      if (!input) return
+      input.focus()
+      input.setSelectionRange(nextCursor, nextCursor)
+      messageSelectionRef.current = { start: nextCursor, end: nextCursor }
+    })
+  }
 
   // Filtered scheduled posts queue
   const filteredQueue = useMemo(() => {
@@ -390,9 +445,13 @@ export function PostSchedulerPanel({
                   </span>
                 </span>
                 <textarea
+                  ref={messageInputRef}
                   rows="4"
                   value={composer.message}
                   onChange={(e) => handleComposerChange('message', e.target.value)}
+                  onSelect={rememberMessageSelection}
+                  onClick={rememberMessageSelection}
+                  onKeyUp={rememberMessageSelection}
                   placeholder="Type post caption or hashtags (or leave blank if your flyer image already contains all text)..."
                   style={{ borderColor: isOverCharLimit ? '#fca5a5' : undefined }}
                 />
@@ -408,14 +467,56 @@ export function PostSchedulerPanel({
                 >
                   #Add Marketing Hashtags
                 </button>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  style={{ fontSize: '0.76rem', padding: '0.25rem 0.55rem' }}
-                  onClick={() => setComposer((p) => ({ ...p, message: `${p.message} 🚀✨👇` }))}
-                >
-                  😀 Add Emojis
-                </button>
+                <div className="emoji-picker-wrap">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    style={{ fontSize: '0.76rem', padding: '0.25rem 0.55rem' }}
+                    aria-expanded={emojiPickerOpen}
+                    aria-haspopup="dialog"
+                    onMouseDown={rememberMessageSelection}
+                    onClick={() => setEmojiPickerOpen((open) => !open)}
+                  >
+                    😀 Choose Emoji
+                  </button>
+                  {emojiPickerOpen && (
+                    <div className="emoji-picker" role="dialog" aria-label="Choose an emoji">
+                      <div className="emoji-picker-header">
+                        <strong>Choose an emoji</strong>
+                        <button type="button" className="emoji-picker-close" onClick={() => setEmojiPickerOpen(false)} aria-label="Close emoji picker">×</button>
+                      </div>
+                      <input
+                        type="search"
+                        value={emojiSearch}
+                        onChange={(event) => setEmojiSearch(event.target.value)}
+                        placeholder="Search by category"
+                        aria-label="Search emoji categories"
+                      />
+                      <div className="emoji-picker-body">
+                        {visibleEmojiGroups.map((group) => (
+                          <section key={group.label} className="emoji-group">
+                            <p>{group.label}</p>
+                            <div className="emoji-grid">
+                              {group.items.map((emoji, index) => (
+                                <button
+                                  key={`${group.label}-${emoji}-${index}`}
+                                  type="button"
+                                  className="emoji-option"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => insertEmoji(emoji)}
+                                  aria-label={`Insert ${emoji}`}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          </section>
+                        ))}
+                        {!visibleEmojiGroups.length && <p className="emoji-empty">No emoji category found.</p>}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Visual Prompt / Image Brief */}
