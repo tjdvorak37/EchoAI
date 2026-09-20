@@ -636,7 +636,7 @@ export const authService = {
     }
 
     if (!isSupabaseConfigured) {
-      return { id: 'demo-seat-package', companyKey: normalizedCompany, seatLimit: parsedLimit, status: 'active', pricePerSeatYear: pricePerSeatYear ?? null, billingPeriod: 'annual', quoteNotes: notes ?? '', planKey: planKey || 'standard' }
+      return { id: 'demo-seat-package', companyKey: normalizedCompany, seatLimit: parsedLimit, status: 'active', pricePerSeatYear: pricePerSeatYear ?? null, billingPeriod: 'annual', quoteNotes: notes ?? '', planKey: planKey || 'premium' }
     }
 
     const { data, error } = await supabase.rpc('staff_provision_company_seats', {
@@ -645,7 +645,7 @@ export const authService = {
       p_price_per_seat_year: pricePerSeatYear ? Number(pricePerSeatYear) : null,
       p_notes: notes || null,
       p_manager_email: managerEmail || null,
-      p_plan_key: planKey || 'standard',
+      p_plan_key: planKey || 'premium',
     })
 
     if (error) throw new Error(error.message)
