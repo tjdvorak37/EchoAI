@@ -32,18 +32,6 @@ export const connectedAccountsSeed = [
     status: 'healthy',
   },
   {
-    id: 'acc_3',
-    platform: 'Snapchat',
-    accountName: 'Echo Stories',
-    status: 'token refresh due',
-  },
-  {
-    id: 'acc_4',
-    platform: 'TikTok',
-    accountName: '@echo.launches',
-    status: 'healthy',
-  },
-  {
     id: 'acc_5',
     platform: 'X',
     accountName: '@echo_brand',
@@ -64,7 +52,7 @@ export const scheduledPostsSeed = [
     id: 'post_102',
     campaign: 'Feature Spotlight',
     message: 'New product demo at 1 PM. Save your seat now.',
-    channels: ['tiktok', 'snapchat'],
+    channels: ['instagram'],
     scheduledAt: '2026-07-16T13:00:00',
     status: 'scheduled',
   },
@@ -72,7 +60,7 @@ export const scheduledPostsSeed = [
     id: 'post_103',
     campaign: 'Evening Reminder',
     message: 'Last call on summer bundles. Offer ends at midnight.',
-    channels: ['instagram', 'facebook', 'tiktok'],
+    channels: ['instagram', 'facebook'],
     scheduledAt: '2026-07-16T19:30:00',
     status: 'scheduled',
   },
@@ -81,17 +69,9 @@ export const scheduledPostsSeed = [
 export const aiPromptIdeas = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
   'Write a Facebook reminder for a flash sale ending tonight at midnight.',
-  'Draft Snapchat copy for a behind-the-scenes product reveal.',
 ]
 
 export const adminAlerts = [
-  {
-    id: 'issue_1',
-    title: 'Snapchat token refresh failed',
-    owner: 'IT Ops',
-    priority: 'high',
-    status: 'open',
-  },
   {
     id: 'issue_2',
     title: 'Delayed publish on Facebook campaign #3491',
@@ -148,12 +128,6 @@ export const companySocialAccountsSeed = [
     accountName: '@nike',
   },
   {
-    id: 'corp_acc_2',
-    companyName: 'Nike',
-    platform: 'TikTok',
-    accountName: '@nike',
-  },
-  {
     id: 'corp_acc_3',
     companyName: 'Nike',
     platform: 'Facebook',
@@ -175,7 +149,7 @@ export const companyMainPostsSeed = [
     companyName: 'Nike',
     title: 'Weekend Event Reminder',
     content: 'Join us Saturday at 10 AM for an in-store athlete clinic and exclusive giveaway.',
-    channels: ['instagram', 'tiktok'],
+    channels: ['instagram', 'facebook'],
     publishedAt: '2026-07-16T11:00:00',
   },
 ]
@@ -363,34 +337,6 @@ export const supportTicketsSeed = [
         role: 'user',
         body: 'When will my annual license auto-renew and will I receive an invoice?',
         sentAt: '2026-08-02T09:00:00',
-      },
-    ],
-  },
-  {
-    id: 'tkt-003',
-    subject: 'Snapchat integration not connecting',
-    category: 'Integration',
-    priority: 'medium',
-    status: 'resolved',
-    userId: 'demo-user-3',
-    userEmail: 'taylor@company.com',
-    userFullName: 'Taylor Morgan',
-    createdAt: '2026-07-28T14:10:00',
-    updatedAt: '2026-07-29T09:00:00',
-    messages: [
-      {
-        id: 'msg-003',
-        author: 'Taylor Morgan',
-        role: 'user',
-        body: 'Snapchat shows "token refresh due" and I cannot re-authenticate.',
-        sentAt: '2026-07-28T14:10:00',
-      },
-      {
-        id: 'msg-004',
-        author: 'Admin User',
-        role: 'admin',
-        body: 'Token has been refreshed from our end. Please try disconnecting and reconnecting your Snapchat account.',
-        sentAt: '2026-07-29T09:00:00',
       },
     ],
   },

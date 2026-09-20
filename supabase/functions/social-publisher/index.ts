@@ -20,11 +20,9 @@ type Credential = {
 
 const GRAPH_URL = 'https://graph.facebook.com/v21.0'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
-const TIKTOK_API_URL = 'https://open.tiktokapis.com/v2'
 const X_API_URL = 'https://api.x.com/2'
 const refreshEndpoints: Record<string, string> = {
   youtube: GOOGLE_TOKEN_URL,
-  tiktok: 'https://open.tiktokapis.com/v2/oauth/token/',
   x: 'https://api.x.com/2/oauth2/token',
   linkedin: 'https://www.linkedin.com/oauth/v2/accessToken',
 }
@@ -182,35 +180,6 @@ const publishYouTubeVideo = async (credential: Credential, post: ScheduledPost) 
   return String(uploaded.id)
 }
 
-const publishTikTokVideo = async (credential: Credential, post: ScheduledPost) => {
-  const video = post.media.find((item) => item.type === 'video' && item.storagePath)
-  if (!video?.storagePath) throw new Error('TikTok publishing requires an uploaded video attached to the post.')
-
-  const { data: file, error } = await admin().storage.from('social-media').download(video.storagePath)
-  if (error || !file) throw new Error('Unable to retrieve the selected video for TikTok publishing.')
-
-  const initResponse = await fetch(`${TIKTOK_API_URL}/post/publish/video/init/`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${credential.access_token}`, 'Content-Type': 'application/json; charset=UTF-8' },
-    body: JSON.stringify({
-      post_info: { title: post.message.slice(0, 220), privacy_level: 'PUBLIC_TO_EVERYONE', disable_duet: false, disable_comment: false, disable_stitch: false },
-      source_info: { source: 'FILE_UPLOAD', video_size: file.size, chunk_size: file.size, total_chunk_count: 1 },
-    }),
-  })
-  if (!initResponse.ok) throw new Error(await providerError(initResponse, 'TikTok upload session could not be created.'))
-  const init = await initResponse.json()
-  const uploadUrl = init.data?.upload_url
-  if (!uploadUrl) throw new Error('TikTok did not return an upload URL.')
-
-  const uploadResponse = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': video.mime || 'video/mp4', 'Content-Range': `bytes 0-${file.size - 1}/${file.size}` },
-    body: file,
-  })
-  if (!uploadResponse.ok) throw new Error('TikTok video upload failed.')
-  return String(init.data?.publish_id ?? 'tiktok-upload-accepted')
-}
-
 const publishXPost = async (credential: Credential, post: ScheduledPost) => {
   if (post.media?.some((item) => item.type === 'image' || item.type === 'video')) {
     throw new Error('X text publishing is ready; media upload requires an approved X media API product.')
@@ -262,7 +231,6 @@ const refreshCredential = async (credential: Credential, userId: string) => {
 
   const environmentNames: Record<string, [string, string]> = {
     youtube: ['YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET'],
-    tiktok: ['TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET'],
     x: ['X_CLIENT_ID', 'X_CLIENT_SECRET'],
     linkedin: ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'],
   }
@@ -285,10 +253,6 @@ const refreshCredential = async (credential: Credential, userId: string) => {
     client_secret: clientSecret,
     refresh_token: credential.refresh_token,
     grant_type: 'refresh_token',
-  }
-  if (credential.platform === 'tiktok') {
-    body.client_key = clientId
-    delete body.client_id
   }
   const headers: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' }
   if (credential.platform === 'x') {
@@ -317,7 +281,6 @@ const publishChannel = async (post: ScheduledPost, channel: string, credential: 
   if (channel === 'facebook') return publishFacebookPost(credential, post.message, post.media ?? [])
   if (channel === 'instagram') return publishInstagramImage(credential, post.message, post.media ?? [])
   if (channel === 'youtube') return publishYouTubeVideo(credential, post)
-  if (channel === 'tiktok') return publishTikTokVideo(credential, post)
   if (channel === 'x') return publishXPost(credential, post)
   if (channel === 'linkedin') return publishLinkedInPost(credential, post)
   throw new Error(`${channel} publishing is not deployed yet.`)

@@ -330,7 +330,6 @@
 .badge-fb { background: #1769d2; }
 .badge-in { background: #0a66c2; }
 .badge-pin { background: #bd081c; }
-.badge-threads { background: #2a2d35; }
 .badge-gbp { color: #1769d2; background: #fff; border: 1px solid #c9d7ee; }
 
 .landing-hero-platforms .scene-badge:nth-child(1) { transform: translate(-9rem, 8.5rem) rotate(-8deg); }

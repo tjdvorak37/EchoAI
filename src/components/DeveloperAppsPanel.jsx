@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { developerAppService } from '../services/developerAppService'
 
 const PROVIDERS = [
-  ['meta', 'Meta (Facebook + Instagram)', 'Live'], ['tiktok', 'TikTok', 'Live'], ['youtube', 'YouTube', 'Live'], ['x', 'X', 'Live'], ['linkedin', 'LinkedIn', 'Live'],
-  ['meta_ads', 'Meta Ads', 'Live'], ['google_ads', 'Google Ads', 'Live'], ['tiktok_ads', 'TikTok Ads', 'Live'],
+  ['meta', 'Meta (Facebook + Instagram)', 'Live'], ['youtube', 'YouTube', 'Live'], ['x', 'X', 'Live'], ['linkedin', 'LinkedIn', 'Live'],
+  ['meta_ads', 'Meta Ads', 'Live'], ['google_ads', 'Google Ads', 'Live'],
   ['google_drive', 'Google Drive & Calendar', 'Live'], ['microsoft_365', 'Microsoft 365 / OneDrive', 'Live'],
-  ['threads', 'Threads', 'Planned'], ['twitch', 'Twitch', 'Planned'], ['google_business', 'Google Business Profile', 'Planned'], ['bluesky', 'Bluesky', 'Planned'], ['pinterest', 'Pinterest', 'Planned'], ['snapchat', 'Snapchat', 'Planned'],
+  ['twitch', 'Twitch', 'Planned'], ['google_business', 'Google Business Profile', 'Planned'], ['pinterest', 'Pinterest', 'Planned'],
 ]
 const PROVIDER_LABELS = Object.fromEntries(PROVIDERS.map(([key, label]) => [key, label]))
 const PROVIDER_STATUS = Object.fromEntries(PROVIDERS.map(([key, , status]) => [key, status]))

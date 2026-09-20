@@ -7,7 +7,7 @@ const COMMON_QUESTIONS = [
   ['How do I connect a social account?', 'connect social account'],
   ['How do I schedule a multi-channel post?', 'schedule a post'],
   ['How do I import an image from my device?', 'image lab import'],
-  ['How do I connect Meta, Google, or TikTok Ads?', 'connect advertising accounts'],
+  ['How do I connect Meta or Google Ads?', 'connect advertising accounts'],
   ['How do I use Signal Watch?', 'signal watch'],
 ]
 

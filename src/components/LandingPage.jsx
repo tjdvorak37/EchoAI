@@ -97,7 +97,7 @@ const FEATURE_FAQS = [
   },
   {
     q: 'Which social media channels can I publish to?',
-    a: 'EchoAI currently publishes to Instagram, Facebook, TikTok, YouTube, X, and LinkedIn. Threads, Twitch, Google Business Profile, Bluesky, and Pinterest are visible on our integration roadmap and will open as each provider connection is completed.',
+    a: 'EchoAI currently publishes to Instagram, Facebook, YouTube, X, and LinkedIn. Twitch, Google Business Profile, and Pinterest are visible on our integration roadmap and will open as each provider connection is completed.',
   },
   {
     q: 'Are payments secure and can I cancel anytime?',
@@ -436,7 +436,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount, onPurchas
         </section>
 
         <section className="landing-platform-section">
-          <div className="landing-centered-heading"><p>Publish with confidence</p><h2>Meet your audience across their favorite platforms.</h2><span>Six live publishing integrations with five more clearly tracked on the roadmap.</span></div>
+          <div className="landing-centered-heading"><p>Publish with confidence</p><h2>Meet your audience across their favorite platforms.</h2><span>Five live publishing integrations with three more clearly tracked on the roadmap.</span></div>
           <div className="landing-platform-strip">
             {SOCIAL_PLATFORMS.map((platform) => (
               <div key={platform.key} className={platform.releaseStatus === 'available' ? 'is-live' : 'is-planned'} style={{ '--platform-color': platform.color, '--platform-bg': platform.bg }}>
@@ -458,7 +458,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount, onPurchas
           </div>
           <div className="landing-trust-row">
             <div><strong>Free</strong><span>Permanent account access</span></div>
-            <div><strong>11</strong><span>Social destinations</span></div>
+            <div><strong>8</strong><span>Social destinations</span></div>
             <div><strong>2</strong><span>Flexible token balances</span></div>
             <div><strong>1</strong><span>Connected workspace</span></div>
           </div>

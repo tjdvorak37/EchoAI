@@ -21,7 +21,7 @@ const SCHEDULER_TEMPLATES = [
     campaign: 'Flash Sale Weekend',
     message: '⚡ WEEKEND FLASH SALE! For the next 48 hours only, take 25% OFF everything when you use code FLASH25 at checkout.\n\nDon’t wait — stock is limited! 🛍️',
     imageIdea: 'Bold typography poster featuring "25% OFF" in bright brand colors',
-    channels: ['instagram', 'facebook', 'tiktok'],
+    channels: ['instagram', 'facebook'],
   },
   {
     key: 'spotlight',
@@ -37,7 +37,7 @@ const SCHEDULER_TEMPLATES = [
     campaign: 'Weekly Education',
     message: '💡 QUICK TIP: Did you know you can streamline your daily workflow in just 3 steps?\n\n1️⃣ Step One\n2️⃣ Step Two\n3️⃣ Step Three\n\nSave this post for later!',
     imageIdea: 'Clean 3-step numbered graphic with minimal layout',
-    channels: ['instagram', 'linkedin', 'tiktok'],
+    channels: ['instagram', 'linkedin'],
   },
 ]
 
@@ -100,7 +100,7 @@ export function PostSchedulerPanel({
     [connectedAccounts]
   )
 
-  // Distinct platforms available for the "Facebook only / TikTok only / all socials" filter.
+  // Distinct platforms available for the "Facebook only / Instagram only / all socials" filter.
   const calendarPlatformOptions = useMemo(
     () => [...new Set(connectedPlatforms)],
     [connectedPlatforms]

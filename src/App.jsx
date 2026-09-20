@@ -48,7 +48,6 @@ import { UpgradeDialog } from './components/UpgradeDialog'
 const AI_PROMPT_IDEAS = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
   'Write a Facebook reminder for a flash sale ending tonight at midnight.',
-  'Draft Snapchat copy for a behind-the-scenes product reveal.',
 ]
 const POST_TYPE_CHIPS = ['Product launch', 'Event promotion', 'Educational post', 'Customer story']
 
@@ -272,8 +271,6 @@ function App() {
   const [accountHandleDrafts, setAccountHandleDrafts] = useState(() => ({
     instagram: '@youraccount',
     facebook: 'Your page name',
-    tiktok: '@youraccount',
-    snapchat: 'Your Snapchat',
     x: '@youraccount',
     youtube: 'Your channel',
     linkedin: 'Your profile / page',
@@ -3531,7 +3528,7 @@ function App() {
 
               {onboardingStep === 3 && (
                 <div className="onboarding-social-grid">
-                  {['instagram', 'tiktok', 'facebook', 'youtube', 'linkedin', 'x'].map((platform) => {
+                  {['instagram', 'facebook', 'youtube', 'linkedin', 'x'].map((platform) => {
                     const connected = connectedAccounts.some((account) => account.platform.toLowerCase() === platform && account.status === 'healthy')
                     return (
                       <button key={platform} type="button" className={`onboarding-social ${connected ? 'connected' : ''}`} onClick={() => startOnboardingConnection(platform)} disabled={connected}>

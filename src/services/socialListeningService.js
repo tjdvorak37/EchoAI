@@ -1,7 +1,7 @@
 import { canUseAgentMode, runUserAiAgent } from './aiAgentService'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
-const SOCIAL_PLATFORMS = ['instagram', 'facebook', 'x', 'tiktok', 'youtube', 'linkedin', 'reddit']
+const SOCIAL_PLATFORMS = ['instagram', 'facebook', 'x', 'youtube', 'linkedin', 'reddit']
 const SOURCE_TYPES = ['social', 'news', 'forums', 'blogs', 'reviews', 'web']
 const ALERT_WINDOWS = {
   '24h': 24 * 60 * 60 * 1000,
@@ -46,7 +46,6 @@ const STOP_WORDS = new Set([
 const SOURCE_CATALOG = [
   { sourceType: 'social', platform: 'instagram', sourceName: 'Instagram feed' },
   { sourceType: 'social', platform: 'x', sourceName: 'X timeline' },
-  { sourceType: 'social', platform: 'tiktok', sourceName: 'TikTok comments' },
   { sourceType: 'social', platform: 'youtube', sourceName: 'YouTube comments' },
   { sourceType: 'news', platform: 'web', sourceName: 'Tech News Daily' },
   { sourceType: 'news', platform: 'web', sourceName: 'Martech Wire' },
