@@ -2045,6 +2045,27 @@ button[type='submit']:hover {
   color: #64748b;
 }
 
+.free-posting-allowance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0 0 0.9rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #dbeafe;
+  border-radius: 0.8rem;
+  background: linear-gradient(180deg, #f8fbff, #ffffff);
+  color: #0f172a;
+}
+
+.free-posting-allowance strong {
+  font-size: 0.85rem;
+}
+
+.free-posting-allowance span {
+  color: #475569;
+  font-size: 0.82rem;
+}
+
 .queue-meta {
   text-align: right;
   display: grid;
