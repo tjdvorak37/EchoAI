@@ -1582,6 +1582,11 @@ function App() {
     return connectedAccounts.find((account) => account.platform.toLowerCase() === channel)
   }
 
+  const getComposerMedia = () => (composer.mediaAssetIds || [])
+    .map((assetId) => workspaceAssets.find((asset) => asset.id === assetId))
+    .filter(Boolean)
+    .map(({ id, name, type, mime, previewUrl, storagePath }) => ({ id, name, type, mime, previewUrl, storagePath }))
+
   const handleSchedulePost = async (event) => {
     event.preventDefault()
     setSchedulerError('')
@@ -1610,7 +1615,7 @@ function App() {
       scheduledAt: composer.scheduledAt,
       channels: composer.channels,
       channelAccounts: composer.channelAccounts,
-      media: [],
+      media: getComposerMedia(),
     })
 
     setScheduledPosts((prev) => [newPost, ...prev])
@@ -1658,7 +1663,7 @@ function App() {
         scheduledAt: nextSlot.toISOString(),
         channels: composer.channels,
         channelAccounts: composer.channelAccounts,
-        media: [],
+        media: getComposerMedia(),
       })
 
       setScheduledPosts((prev) => [newPost, ...prev])
@@ -1705,7 +1710,7 @@ function App() {
         imageIdea: composer.imageIdea,
         channels: composer.channels,
         channelAccounts: composer.channelAccounts,
-        media: [],
+        media: getComposerMedia(),
       })
 
       setScheduledPosts((prev) => [newPost, ...prev])
@@ -4529,6 +4534,8 @@ function App() {
               handleReschedulePost={handleReschedulePost}
               scheduledPosts={scheduledPosts}
               connectedAccounts={connectedAccounts}
+              workspaceAssets={workspaceAssets}
+              onUploadAsset={handleUploadAsset}
               getPlatformMeta={getPlatformMeta}
               getStatusBadgeClass={getStatusBadgeClass}
               schedulerError={schedulerError}
