@@ -4,7 +4,7 @@
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
-import { getNotificationConfig, sendSupportTicketEmail } from '../_shared/notify.ts'
+import { getNotificationConfig, sendAccountConfirmationEmail, sendSupportTicketEmail } from '../_shared/notify.ts'
 
 const PRIVILEGED_ROLES = new Set([
   'admin',
@@ -362,9 +362,10 @@ Deno.serve(async (request) => {
       const rawAppUrl = Deno.env.get('APP_URL') ?? ''
       const appUrl = rawAppUrl.trim().replace(/\/$/, '') || 'https://echoaipro.com'
 
-      const { data: created, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+      const { data: created, error: createError } = await adminClient.auth.admin.createUser({
+        email,
+        email_confirm: false,
         data: { full_name: newFullName, company: newCompany },
-        redirectTo: `${appUrl}/?recovery=1`,
       })
       let invitedUser = created?.user ?? null
       if (!invitedUser && createError) {
@@ -384,8 +385,12 @@ Deno.serve(async (request) => {
           options: { redirectTo: `${appUrl}/?recovery=1` },
         })
         directRecoveryLink = recoveryData?.properties?.action_link ?? null
+        if (directRecoveryLink) {
+          const delivery = await sendAccountConfirmationEmail(email, directRecoveryLink, adminClient)
+          if (!delivery.success) return json({ error: delivery.error || 'User was created but the Support email could not be sent.' }, 503, request)
+        }
       } catch {
-        // Link generation is a best-effort convenience alongside the invite email
+        return json({ error: 'User was created but the Support email could not be sent.' }, 503, request)
       }
 
       const { data: profile, error: profileError } = await adminClient
