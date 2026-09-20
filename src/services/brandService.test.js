@@ -15,6 +15,10 @@ test('managers can manage the brand kit', () => {
   assert.equal(canManageBrandKit({ id: 'manager-1', role: 'manager' }), true)
 })
 
+test('IT staff can manage the brand kit', () => {
+  assert.equal(canManageBrandKit({ id: 'it-1', role: 'it' }), true)
+})
+
 test('logged-out users cannot manage the brand kit', () => {
   assert.equal(canManageBrandKit(null), false)
 })
