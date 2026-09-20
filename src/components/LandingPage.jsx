@@ -272,7 +272,7 @@ function SupportDialog({ onClose }) {
   )
 }
 
-export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
+export function LandingPage({ announcement, onSignIn, onCreateAccount, onPurchase }) {
   const [supportOpen, setSupportOpen] = useState(() => new URLSearchParams(window.location.search).get('support') === 'privacy')
   const [openFaqIndex, setOpenFaqIndex] = useState(0)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -423,7 +423,8 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount }) {
             <h3>One plan. Full momentum.</h3>
             <div className="landing-premium-price"><strong>$39</strong><span>per month</span></div>
             <div className="landing-premium-price annual"><strong>$390</strong><span>per year · save $78</span></div>
-            <button type="button" className="landing-primary-action" onClick={onCreateAccount}>Start with a free account <span aria-hidden="true">→</span></button>
+            <button type="button" className="landing-primary-action" onClick={() => onPurchase('premium')}>Buy Premium now <span aria-hidden="true">→</span></button>
+            <button type="button" className="landing-secondary-action" onClick={onCreateAccount}>Start with a free account instead</button>
             <small>No card required to start. Upgrade when you are ready.</small>
           </aside>
         </section>
