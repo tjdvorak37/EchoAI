@@ -47,6 +47,7 @@ export function PostSchedulerPanel({
   handleComposerChange,
   handleSchedulePost,
   handlePostNow,
+  handlePostToNextSlot,
   handleRepostNow,
   handleDeleteScheduledPost,
   handleReschedulePost,
@@ -524,6 +525,15 @@ export function PostSchedulerPanel({
                   style={{ padding: '0.65rem 1.25rem', fontSize: '0.92rem', background: 'linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%)' }}
                 >
                   📅 Queue Post
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={handlePostToNextSlot}
+                  title="Uses your recurring posting schedule from Account > Posting schedule"
+                  style={{ padding: '0.65rem 1.25rem', fontSize: '0.92rem' }}
+                >
+                  ⏭️ Post to Next Available Slot
                 </button>
               </div>
             </div>
