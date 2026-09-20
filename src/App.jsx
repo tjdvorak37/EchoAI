@@ -3855,7 +3855,7 @@ function App() {
         </div>
       </header>
 
-      <div className="workspace-layout">
+      <div className={`workspace-layout ${workspaceSidebarOpen ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
       <aside className={`workspace-sidebar ${workspaceSidebarOpen ? 'open' : 'collapsed'}`}>
         <div className="workspace-sidebar-brand">
           <span className="workspace-sidebar-mark">E</span>

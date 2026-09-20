@@ -770,6 +770,10 @@ button[type='submit']:hover {
   margin-top: 1rem;
 }
 
+.workspace-layout.sidebar-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
 .workspace-sidebar {
   position: sticky;
   top: 1rem;
@@ -823,6 +827,35 @@ button[type='submit']:hover {
 }
 
 .workspace-sidebar.collapsed .workspace-sidebar-toggle { margin-left: 0; }
+
+.workspace-sidebar.collapsed .main-nav {
+  width: 100%;
+  gap: 0.45rem;
+}
+
+.workspace-sidebar.collapsed .main-nav-group {
+  gap: 0.35rem;
+}
+
+.workspace-sidebar.collapsed .main-nav-label {
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  padding: 0;
+  opacity: 0;
+}
+
+.workspace-sidebar.collapsed .nav-link {
+  justify-content: center;
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  font-size: 0;
+}
+
+.workspace-sidebar.collapsed .nav-link svg {
+  flex: 0 0 auto;
+}
 
 .workspace-sidebar-section {
   display: grid;
