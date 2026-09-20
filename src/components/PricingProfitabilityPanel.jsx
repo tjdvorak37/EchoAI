@@ -6,11 +6,7 @@ export function PricingProfitabilityPanel() {
   const [vendorCostAdjustment, setVendorCostAdjustment] = useState(0) // % change in AI vendor costs
   const [customUserCount, setCustomUserCount] = useState(500)
   const customTierDistribution = {
-    standard: 30,
-    storage_plus: 25,
-    storage_pro: 30,
-    storage_max: 10,
-    creator: 5,
+    premium: 100,
   }
 
   // Target Revenue Allocation Defaults (%)
