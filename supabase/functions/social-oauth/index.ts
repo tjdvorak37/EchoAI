@@ -417,7 +417,7 @@ Deno.serve(async (request) => {
             platform,
             provider: platform,
             oauthImplemented: true,
-            publishing: `${platform} text and media publishing`,
+            publishing: platform === 'tiktok' ? 'TikTok video publishing' : `${platform} text publishing`,
           })),
           ...[
             ['threads', 'Threads publishing API integration is planned'],
