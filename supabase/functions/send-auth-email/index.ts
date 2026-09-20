@@ -19,7 +19,8 @@ Deno.serve(async (request) => {
     const { data: profile } = await adminClient.from('profiles').select('id, email').ilike('email', email).maybeSingle()
     if (!profile?.id) return json({ ok: true }, 200, request)
     const { data: authData } = await adminClient.auth.admin.getUserById(profile.id)
-    if (!authData.user?.email || authData.user.email_confirmed_at) return json({ ok: true }, 200, request)
+    if (!authData.user?.email) return json({ ok: true }, 200, request)
+    if (authData.user.email_confirmed_at) return json({ ok: true, alreadyConfirmed: true }, 200, request)
 
     const appUrl = (Deno.env.get('APP_URL') || 'https://www.echoaipro.com').trim().replace(/\/$/, '')
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
