@@ -44,6 +44,7 @@ import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAge
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
 import { UpgradeDialog } from './components/UpgradeDialog'
+import { removeStoredAsset } from './services/mediaAssets'
 
 const AI_PROMPT_IDEAS = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
@@ -2230,8 +2231,22 @@ function App() {
     }
   }
 
-  const deleteAsset = (assetId) => {
-    setWorkspaceAssets((prev) => prev.filter((asset) => asset.id !== assetId))
+  const deleteAsset = async (assetId) => {
+    const assetToDelete = workspaceAssets.find((asset) => asset.id === assetId)
+    if (!assetToDelete) return
+
+    try {
+      if (isSupabaseConfigured && assetToDelete.storagePath) {
+        await removeStoredAsset({
+          asset: assetToDelete,
+          storageClient: supabase.storage,
+        })
+      }
+      setWorkspaceAssets((prev) => prev.filter((asset) => asset.id !== assetId))
+    } catch (error) {
+      console.error('Unable to remove asset', error)
+      setAdminError(error.message || 'Unable to delete this asset from storage.')
+    }
   }
 
   const handleAssetDragStart = () => {}
