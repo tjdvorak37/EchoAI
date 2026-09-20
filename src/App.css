@@ -2021,11 +2021,11 @@ button[type='submit']:hover {
 .list-row {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1.25rem;
   align-items: flex-start;
   border-top: 1px solid #eef2ff;
-  padding-top: 0.7rem;
-  margin-top: 0.7rem;
+  padding-top: 1rem;
+  margin-top: 1rem;
 }
 
 .list-row p {
@@ -2328,7 +2328,7 @@ button[type='submit']:hover {
   font-size: 1rem;
   font-weight: 700;
   color: #0f172a;
-  margin: 1.5rem 0 0.8rem;
+  margin: 2rem 0 0.9rem;
 }
 
 .integration-grid {

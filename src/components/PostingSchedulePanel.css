@@ -1,7 +1,7 @@
 .posting-schedule-panel {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .posting-goal-row,
@@ -11,7 +11,7 @@
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  padding: 0.85rem 1rem;
+  padding: 1rem 1.1rem;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-surface-alt);
