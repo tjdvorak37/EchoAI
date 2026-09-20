@@ -380,6 +380,8 @@ Deno.serve(async (request) => {
   const user = await userFromRequest(request)
   if (!user) return json({ error: 'Authentication required.' }, 401, request)
 
+  let stage = 'request validation'
+  let platform = 'unknown'
   try {
     const body = await request.json()
     if (body.action === 'status') {
@@ -442,24 +444,31 @@ Deno.serve(async (request) => {
       return json({ platforms: await Promise.all(readiness) }, 200, request)
     }
 
-    const platform = String(body.platform ?? '').toLowerCase()
+    platform = String(body.platform ?? '').toLowerCase()
     if (body.action !== 'connect' || !platformIsSupported(platform)) {
       return json({ error: 'This social platform is not available for OAuth yet.' }, 400, request)
     }
 
+    stage = 'loading provider configuration'
     const provider = await providerConfig(providerForPlatform(platform))
     const oauthScopes = scopesForPlatform(platform, provider)
     if (!provider.clientId || !provider.clientSecret) {
       return json({ error: `${platform} OAuth is not configured on this deployment.` }, 503, request)
     }
 
+    stage = 'preparing OAuth state'
     const db = admin()
-    await db.rpc('prune_social_oauth_states')
+    // Expired-state cleanup must never block a new authorization request.
+    const pruneResult = await db.rpc('prune_social_oauth_states')
+    if (pruneResult.error) {
+      console.warn('Unable to prune expired social OAuth states:', pruneResult.error)
+    }
     const state = crypto.randomUUID()
     const codeVerifier = platform === 'x' ? base64Url(crypto.getRandomValues(new Uint8Array(32))) : ''
     const requestedScopes = Array.isArray(body.requestedScopes)
       ? body.requestedScopes.filter((scope: unknown) => typeof scope === 'string').slice(0, 10)
       : []
+    stage = 'saving OAuth state'
     const stateResult = await db.from('social_oauth_states').insert({
       state,
       user_id: user.id,
@@ -469,6 +478,7 @@ Deno.serve(async (request) => {
     })
     if (stateResult.error) throw stateResult.error
 
+    stage = 'building provider authorization URL'
     const authorizationUrl = new URL(provider.authUrl)
     authorizationUrl.searchParams.set(platform === 'tiktok' ? 'client_key' : 'client_id', provider.clientId)
     authorizationUrl.searchParams.set('redirect_uri', FUNCTION_URL)
@@ -487,6 +497,8 @@ Deno.serve(async (request) => {
 
     return json({ url: authorizationUrl.toString() }, 200, request)
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : 'Unable to start social authorization.' }, 500, request)
+    const message = error instanceof Error ? error.message : 'Unable to start social authorization.'
+    console.error('social OAuth start failed', { stage, platform, message })
+    return json({ error: `Social authorization failed during ${stage}. ${message}` }, 500, request)
   }
 })
