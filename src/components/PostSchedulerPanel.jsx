@@ -71,6 +71,8 @@ export function PostSchedulerPanel({
   handleReschedulePost,
   scheduledPosts = [],
   connectedAccounts = [],
+  workspaceAssets = [],
+  onUploadAsset,
   getPlatformMeta,
   getStatusBadgeClass,
   schedulerError,
@@ -316,6 +318,18 @@ export function PostSchedulerPanel({
     })
   }
 
+  const toggleMediaAsset = (assetId) => {
+    setComposer((prev) => {
+      const selected = prev.mediaAssetIds || []
+      return {
+        ...prev,
+        mediaAssetIds: selected.includes(assetId)
+          ? selected.filter((id) => id !== assetId)
+          : [...selected, assetId],
+      }
+    })
+  }
+
   const formatScheduleTime = (scheduledIso) => {
     if (!scheduledIso) return 'Not scheduled'
     const date = new Date(scheduledIso)
@@ -529,6 +543,41 @@ export function PostSchedulerPanel({
                   placeholder="e.g. Product flyer with bold typography and warm sunset tones"
                 />
               </label>
+
+              <div className="scheduler-media-picker">
+                <div className="scheduler-media-picker-header">
+                  <div>
+                    <p className="small-title" style={{ margin: 0 }}>Post Image / Media</p>
+                    <small style={{ color: '#64748b' }}>Choose media from your workspace or upload a new file.</small>
+                  </div>
+                  <label className="ghost-button scheduler-upload-button">
+                    Add image/media
+                    <input type="file" accept="image/*,video/*" onChange={onUploadAsset} />
+                  </label>
+                </div>
+                {workspaceAssets.filter((asset) => ['image', 'video'].includes(asset.type)).length > 0 ? (
+                  <div className="scheduler-media-grid">
+                    {workspaceAssets.filter((asset) => ['image', 'video'].includes(asset.type)).slice(0, 12).map((asset) => {
+                      const selected = (composer.mediaAssetIds || []).includes(asset.id)
+                      return (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          className={`scheduler-media-option ${selected ? 'selected' : ''}`}
+                          onClick={() => toggleMediaAsset(asset.id)}
+                          aria-pressed={selected}
+                          title={asset.name}
+                        >
+                          {asset.type === 'video' ? <video src={asset.previewUrl} muted /> : <img src={asset.previewUrl} alt={asset.name} />}
+                          <span>{selected ? 'Selected' : 'Use media'}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="muted" style={{ margin: '0.6rem 0 0', fontSize: '0.82rem' }}>No images or videos in your workspace yet.</p>
+                )}
+              </div>
 
               {/* Publish Channels Selector */}
               <div>
