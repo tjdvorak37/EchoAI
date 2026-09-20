@@ -1081,3 +1081,64 @@
     width: 100%;
   }
 }
+
+/* The video editor is a document-sized workspace, not a clipped viewport. */
+.video-editor {
+  height: auto;
+  min-height: calc(100vh - 11.5rem);
+  overflow: visible;
+  color: #172033;
+  background: linear-gradient(145deg, #f4f8ff, #fff8fc);
+}
+
+.video-brief-bar,
+.editor-toolbar,
+.editor-panel,
+.editor-properties,
+.timeline-container,
+.timeline-header,
+.track,
+.track-header,
+.track-clips {
+  color: #172033;
+  background: #ffffff;
+  border-color: #d7e1f1;
+}
+
+.editor-layout {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+
+.editor-center {
+  overflow: visible;
+  background: #f4f7fc;
+}
+
+.preview-area {
+  min-height: 480px;
+  background: #eef3fb;
+  border-color: #d7e1f1;
+}
+
+.preview-stage-shell {
+  background: #ffffff;
+  border-color: #cbd9ee;
+  box-shadow: 0 18px 42px rgba(49, 61, 120, 0.12);
+}
+
+.preview-video,
+.preview-image {
+  background: #ffffff;
+}
+
+.timeline-container {
+  min-height: 360px;
+  overflow: visible;
+}
+
+.timeline-tracks {
+  min-height: 240px;
+  overflow: auto;
+}
