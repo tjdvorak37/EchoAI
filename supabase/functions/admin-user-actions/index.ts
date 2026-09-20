@@ -517,7 +517,6 @@ Deno.serve(async (request) => {
         'echo_credit_transactions',
         'echo_ai_jobs',
         'echo_ai_request_events',
-        'echo_ai_budget',
         'echo_chat_usage',
         'app_analytics_events',
         'customer_exit_feedback',
