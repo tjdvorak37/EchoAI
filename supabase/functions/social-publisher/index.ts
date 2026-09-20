@@ -101,15 +101,26 @@ const publishFacebookPost = async (credential: Credential, message: string, medi
 }
 
 const publishInstagramImage = async (credential: Credential, message: string, media: ScheduledPost['media']) => {
-  const image = media.find((item) => item.type === 'image' && item.webUrl)
-  if (!image?.webUrl) {
-    throw new Error('Instagram publishing requires an attached image with a provider-accessible URL.')
+  const image = media.find((item) => item.type === 'image' && (item.webUrl || item.storagePath))
+  if (!image) {
+    throw new Error('Instagram publishing requires an attached image.')
+  }
+
+  let imageUrl = image.webUrl
+  if (!imageUrl && image.storagePath) {
+    const { data: signed, error } = await admin().storage
+      .from('social-media')
+      .createSignedUrl(image.storagePath, 60 * 60)
+    if (error || !signed?.signedUrl) {
+      throw new Error('Unable to create a temporary image URL for Instagram publishing.')
+    }
+    imageUrl = signed.signedUrl
   }
 
   const containerResponse = await fetch(`${GRAPH_URL}/${credential.external_account_id}/media`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ image_url: image.webUrl, caption: message, access_token: credential.access_token }),
+    body: new URLSearchParams({ image_url: imageUrl, caption: message, access_token: credential.access_token }),
   })
   if (!containerResponse.ok) throw new Error(await providerError(containerResponse, 'Instagram media upload failed.'))
   const container = await containerResponse.json()
