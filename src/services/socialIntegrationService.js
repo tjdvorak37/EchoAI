@@ -59,9 +59,10 @@ export const socialIntegrationService = {
         platform,
         account_name: accountName.trim(),
         account_type: accountType,
+        external_account_id: '',
         publishing_scopes: publishingScopes,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,platform' })
+      }, { onConflict: 'user_id,platform,external_account_id' })
       .select('*')
       .single()
 
@@ -100,8 +101,11 @@ export const socialIntegrationService = {
       const detail = await error.context?.json?.().catch(() => null)
       throw new Error(detail?.error || error.message || 'Unable to start social authorization.')
     }
-    if (!data?.url) throw new Error('The social provider did not return an authorization URL.')
+    if (!data?.url) {
+      throw new Error('The social provider did not return an authorization URL. Check the OAuth configuration and try again.')
+    }
 
     window.location.assign(data.url)
+    return data
   },
 }

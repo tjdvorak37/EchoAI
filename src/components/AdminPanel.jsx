@@ -3,14 +3,37 @@ import { FinancePanel } from './FinancePanel'
 import { TrademarkPanel } from './TrademarkPanel'
 import { DeveloperAppsPanel } from './DeveloperAppsPanel'
 import { BoardMemberFinancePanel } from './BoardMemberFinancePanel'
-import { AiOperationsPanel } from './AiOperationsPanel'
 import { PricingProfitabilityPanel } from './PricingProfitabilityPanel'
 import { CompanyEmailPanel } from './CompanyEmailPanel'
+import { AnalyticsPanel } from './AnalyticsPanel'
+import { InternalForumPanel } from './InternalForumPanel'
+import { ProjectBoardPanel } from './ProjectBoardPanel'
+import { AiOperationsPanel } from './AiOperationsPanel'
+import { internalForumService } from '../services/internalForumService'
 import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
 const USERS_PER_PAGE = 25
-const USER_ROLES = ['admin', 'manager', 'it', 'accountant', 'user']
+const TICKETS_PER_PAGE = 50
+const USER_ROLES = ['admin', 'it', 'accountant', 'user']
 const USER_STATUSES = ['active', 'pending', 'deactivated', 'approved', 'denied']
+
+const PLATFORM_TABS = [
+  { id: 'company-email', label: '📧 Company Email & SMTP', hint: 'Manage outbound support email, Microsoft 365, and mail routing', permission: 'companyEmailEditAccess' },
+  { id: 'licenses', label: '🔑 Licenses', hint: 'Manage company seat licenses', permission: 'licenseEditAccess' },
+  { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents', permission: 'trademarkEditAccess' },
+  { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration', permission: 'developerAppEditAccess' },
+  { id: 'integrations', label: '🔌 Integrations', hint: 'Third-party and platform integrations', permission: 'integrationsEditAccess' },
+  { id: 'controls', label: '⚙️ Site Controls', hint: 'Feature flags and site-wide notices', permission: 'siteControlsEditAccess' },
+]
+
+const PLATFORM_ACCESS_CONTROLS = [
+  { field: 'companyEmailEditAccess', action: 'set-company-email-edit-access', label: 'Company Email & SMTP', roles: ['it'] },
+  { field: 'licenseEditAccess', action: 'set-license-edit-access', label: 'Licenses', roles: ['it', 'accountant'] },
+  { field: 'trademarkEditAccess', action: 'set-trademark-edit-access', label: 'Trademark & Legal', roles: ['it'] },
+  { field: 'developerAppEditAccess', action: 'set-developer-app-edit-access', label: 'Developer Apps', roles: ['it'] },
+  { field: 'integrationsEditAccess', action: 'set-integrations-edit-access', label: 'Integrations', roles: ['it'] },
+  { field: 'siteControlsEditAccess', action: 'set-site-controls-edit-access', label: 'Site Controls', roles: ['it'] },
+]
 
 const formatDateTime = (value) => (value ? new Date(value).toLocaleString() : 'Never')
 
@@ -119,6 +142,8 @@ function NoticeEditor({ title, description, notice, onSave }) {
   )
 }
 
+const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+
 export function AdminPanel({
   teamMembers,
   accessRequests,
@@ -135,23 +160,24 @@ export function AdminPanel({
   taxRecords, setTaxRecords,
   refunds, setRefunds,
   financialTasks, setFinancialTasks,
-  quotaEditingUserId, setQuotaEditingUserId,
-  quotaDraftMb, setQuotaDraftMb,
-  handleQuotaUpdate, handleToggleUserAccess, handleUpdateUserRole, handleReviewAccessRequest,
+  handleToggleUserAccess, handleUpdateUserRole, handleReviewAccessRequest,
   companySeatPackage, companySeats,
   handleCreateCompanySeatPackage, handleUpdateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
   handleProvisionCompanySeatsForCustomer,
   handleRespondToSupportTicket,
   handleUpdateSupportTicketStatus,
+  handleUpdateSupportTicket,
+  handleRefreshSupportTickets,
   socialPlatformReadiness, socialPlatformReadinessLoading, socialPlatformReadinessError, handleRefreshSocialPlatformReadiness,
   adminLoading, adminError,
   currentUser,
   onAdminUserAction,
 }) {
-  const [itTab, setItTab] = useState(() => currentUser?.role === 'admin' ? 'overview' : 'integrations')
+  const [itTab, setItTab] = useState(() => ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role)) ? 'overview' : 'integrations')
   const [openTabGroup, setOpenTabGroup] = useState(null)
   const tabNavRef = useRef(null)
   const [ticketOpen, setTicketOpen] = useState(null)
+  const [openTicketIds, setOpenTicketIds] = useState([])
   const [replyDraft, setReplyDraft] = useState('')
   const [licenseNote, setLicenseNote] = useState({})
   const [quoteTicketId, setQuoteTicketId] = useState('')
@@ -159,7 +185,7 @@ export function AdminPanel({
   const [quoteCompanyKey, setQuoteCompanyKey] = useState('')
   const [quoteManagerEmail, setQuoteManagerEmail] = useState('')
   const [quoteSeatCount, setQuoteSeatCount] = useState(10)
-  const [quotePlanKey, setQuotePlanKey] = useState('standard')
+  const [quotePlanKey, setQuotePlanKey] = useState('premium')
   const [quotePriceOverride, setQuotePriceOverride] = useState('')
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [quoteError, setQuoteError] = useState('')
@@ -172,20 +198,26 @@ export function AdminPanel({
   const [expandedUserId, setExpandedUserId] = useState(null)
   const [verification, setVerification] = useState({ userId: null, summary: null, loading: false, error: '' })
   const [recoveryLink, setRecoveryLink] = useState({ userId: null, url: '', error: '', loading: false })
+  const [temporaryPassword, setTemporaryPassword] = useState({ userId: null, value: '', saving: false, message: '', error: '' })
   const [profileDraft, setProfileDraft] = useState({ fullName: '', company: '', saving: false, error: '' })
   const [newUserDraft, setNewUserDraft] = useState({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
   const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
   const [profitShareDraft, setProfitShareDraft] = useState({ userId: '', value: '', saving: false, error: '' })
-  const [betaAiDraft, setBetaAiDraft] = useState({ userId: '', isBetaTester: false, enabled: false, note: '', saving: false, error: '' })
+  const [betaAiDraft, setBetaAiDraft] = useState({ userId: '', isBetaTester: false, saving: false, error: '' })
+  const [deletingUserId, setDeletingUserId] = useState('')
+  const [, setQuotaEditingUserId] = useState(null)
+  const [, setQuotaDraftMb] = useState('')
+  const [forumUnreadCount, setForumUnreadCount] = useState(0)
 
   const openUserDetail = (member) => {
     const nextId = expandedUserId === member.id ? null : member.id
     setExpandedUserId(nextId)
     setVerification({ userId: null, summary: null, loading: false, error: '' })
     setRecoveryLink({ userId: null, url: '', error: '', loading: false })
+    setTemporaryPassword({ userId: nextId, value: '', saving: false, message: '', error: '' })
     setProfileDraft({ fullName: member.fullName || '', company: member.company || '', saving: false, error: '' })
     setProfitShareDraft({ userId: member.id, value: String(member.profitSharePercent || ''), saving: false, error: '' })
-    setBetaAiDraft({ userId: member.id, isBetaTester: member.isBetaTester === true, enabled: member.aiEnabled !== false, note: member.aiAccessNote || '', saving: false, error: '' })
+    setBetaAiDraft({ userId: member.id, isBetaTester: member.isBetaTester === true, saving: false, error: '' })
   }
 
   const loadVerification = async (member) => {
@@ -205,6 +237,44 @@ export function AdminPanel({
       setRecoveryLink({ userId: member.id, url, error: '', loading: false })
     } catch (error) {
       setRecoveryLink({ userId: member.id, url: '', error: error.message, loading: false })
+    }
+  }
+
+  const setUserTemporaryPassword = async (member) => {
+    const value = temporaryPassword.userId === member.id ? temporaryPassword.value : ''
+    if (value.length < 12) {
+      setTemporaryPassword((current) => ({ ...current, error: 'Use at least 12 characters.', message: '' }))
+      return
+    }
+    setTemporaryPassword((current) => ({ ...current, saving: true, error: '', message: '' }))
+    try {
+      await onAdminUserAction({ action: 'set-temporary-password', userId: member.id, email: member.email, temporaryPassword: value })
+      setTemporaryPassword({ userId: member.id, value: '', saving: false, message: 'Temporary password set. The user must replace it immediately after signing in.', error: '' })
+    } catch (error) {
+      setTemporaryPassword((current) => ({ ...current, saving: false, error: error.message, message: '' }))
+    }
+  }
+
+  const generateTemporaryPassword = (member) => {
+    const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+    const bytes = crypto.getRandomValues(new Uint8Array(12))
+    const generated = `${Array.from(bytes, (byte) => characters[byte % characters.length]).join('')}A7!`
+    setTemporaryPassword({ userId: member.id, value: generated, saving: false, message: '', error: '' })
+  }
+
+  const deleteUser = async (member) => {
+    const confirmed = window.confirm('Are you sure you want to do this? This will permanently delete the user and all associated data. This cannot be undone. Yes/No')
+    if (!confirmed) return
+
+    setDeletingUserId(member.id)
+    setNewUserStatus({ saving: false, message: '', error: '' })
+    try {
+      await onAdminUserAction({ action: 'delete-user', userId: member.id, email: member.email })
+      setExpandedUserId(null)
+    } catch (error) {
+      setNewUserStatus({ saving: false, message: '', error: error.message })
+    } finally {
+      setDeletingUserId('')
     }
   }
 
@@ -257,6 +327,8 @@ export function AdminPanel({
     search: '',
   })
   const [ticketView, setTicketView] = useState('active')
+  const [ticketPage, setTicketPage] = useState(1)
+  const [ticketRefresh, setTicketRefresh] = useState({ loading: false, error: '' })
   const activeLicenses = licenses.filter((l) => l.status === 'active').length
   const pendingLicenses = licenses.filter((l) => l.status === 'pending_payment').length
   const openTicketStatuses = ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated', 'open']
@@ -390,13 +462,19 @@ export function AdminPanel({
     ))
   }
 
-  const isFullAdmin = currentUser?.role === 'admin'
-  const canManageAiAccess = ['admin', 'manager', 'it'].includes(currentUser?.role)
+  const isFullAdmin = ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role))
+  const forumTabLabel = `💬 Company Forum${forumUnreadCount > 0 ? ` (${forumUnreadCount})` : ''}`
+  const visiblePlatformTabs = isFullAdmin
+    ? PLATFORM_TABS
+    : PLATFORM_TABS.filter((tab) => currentUser?.[tab.permission] === true)
   const TAB_GROUPS = isFullAdmin ? [
     {
       group: 'Support',
       tabs: [
         { id: 'overview', label: '📊 Overview', hint: 'Snapshot of open tickets, plan mix, and system health' },
+        { id: 'analytics', label: '📈 Analytics', hint: 'User retention, tool usage, navigation, and churn signals' },
+        { id: 'forum', label: forumTabLabel, hint: 'Training documents, company updates, and staff chat' },
+        { id: 'projects', label: '🗂️ Project Board', hint: 'Internal projects, tasks, owners, and completion review' },
         { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}`, hint: 'Respond to and manage customer support tickets' },
       ],
     },
@@ -420,13 +498,8 @@ export function AdminPanel({
     {
       group: 'Platform',
       tabs: [
-        { id: 'company-email', label: '📧 Company Email & SMTP', hint: 'Manage outbound support email, Microsoft 365, and mail routing' },
-        { id: 'licenses', label: '🔑 Licenses', hint: 'Manage company seat licenses' },
-        { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents' },
-        { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration' },
-        { id: 'integrations', label: '🔌 Integrations', hint: 'Third-party and platform integrations' },
-        { id: 'ai-operations', label: '🤖 Echo AI operations', hint: 'AI provider routing, usage, and cost controls' },
-        { id: 'controls', label: '⚙️ Site Controls', hint: 'Feature flags and site-wide notices' },
+        ...visiblePlatformTabs,
+        { id: 'ai-operations', label: '🤖 AI Operations', hint: 'Manage providers and AI cost controls' },
       ],
     },
   ] : [
@@ -434,6 +507,9 @@ export function AdminPanel({
       group: 'Support',
       tabs: [
         { id: 'overview', label: '📊 Service overview', hint: 'Snapshot of open tickets and account health' },
+        { id: 'analytics', label: '📈 Analytics', hint: 'User retention, tool usage, navigation, and churn signals' },
+        { id: 'forum', label: forumTabLabel, hint: 'Training documents, company updates, and staff chat' },
+        { id: 'projects', label: '🗂️ Project Board', hint: 'Internal projects, tasks, owners, and completion review' },
         { id: 'tickets', label: `🎫 Tickets${openTickets > 0 ? ` (${openTickets})` : ''}`, hint: 'Respond to and manage customer support tickets' },
       ],
     },
@@ -453,27 +529,31 @@ export function AdminPanel({
     {
       group: 'Platform',
       tabs: [
-        { id: 'company-email', label: '📧 Company Email & SMTP', hint: 'Manage outbound support email, Microsoft 365, and mail routing' },
-        { id: 'trademark', label: '⚖️ Trademark & Legal', hint: 'Trademark filings and legal documents' },
-        { id: 'developer-apps', label: '🔐 Developer Apps', hint: 'API keys and developer app configuration' },
-        { id: 'integrations', label: '🔌 Integrations', hint: 'Third-party and platform integrations' },
-        { id: 'ai-operations', label: '🤖 Echo AI operations', hint: 'AI provider routing, usage, and cost controls' },
-        { id: 'controls', label: '⚙️ Notices', hint: 'Site-wide notices and announcements' },
+        ...visiblePlatformTabs,
+        { id: 'ai-operations', label: '🤖 AI Operations', hint: 'Manage providers and AI cost controls' },
       ],
     },
-  ]
+  ].filter((section) => section.tabs.length > 0)
+  const activeTabAllowed = TAB_GROUPS.some((section) => section.tabs.some((tab) => tab.id === itTab))
+  const fallbackTabId = TAB_GROUPS[0]?.tabs[0]?.id || 'overview'
 
-  const employeeRoles = ['admin', 'manager', 'it', 'accountant', 'board_member']
+  useEffect(() => {
+    if (activeTabAllowed) return
+    setItTab(fallbackTabId)
+    setOpenTabGroup(null)
+  }, [activeTabAllowed, fallbackTabId])
+
+  const employeeRoles = ['admin', 'it', 'accountant', 'board_member']
   const filteredDirectoryMembers = itTab === 'employees'
-    ? teamMembers.filter((member) => employeeRoles.includes(member.role))
-    : teamMembers.filter((member) => !employeeRoles.includes(member.role))
+    ? teamMembers.filter((member) => employeeRoles.includes(normalizeRole(member.role)))
+    : teamMembers.filter((member) => !employeeRoles.includes(normalizeRole(member.role)))
   const filteredUsers = filteredDirectoryMembers.filter((member) => {
     const term = userSearch.trim().toLowerCase()
     const matchesSearch = !term
       || member.fullName?.toLowerCase().includes(term)
       || member.email?.toLowerCase().includes(term)
       || member.company?.toLowerCase().includes(term)
-    const matchesRole = userRoleFilter === 'all' || member.role === userRoleFilter
+    const matchesRole = userRoleFilter === 'all' || normalizeRole(member.role) === normalizeRole(userRoleFilter)
     const matchesStatus = userStatusFilter === 'all' || member.accessStatus === userStatusFilter
     return matchesSearch && matchesRole && matchesStatus
   })
@@ -486,8 +566,6 @@ export function AdminPanel({
         return (left.email || '').localeCompare(right.email || '')
       case 'company-asc':
         return (left.company || '').localeCompare(right.company || '')
-      case 'quota-desc':
-        return (right.storageQuotaMb ?? 0) - (left.storageQuotaMb ?? 0)
       default:
         return (left.fullName || '').localeCompare(right.fullName || '')
     }
@@ -505,9 +583,13 @@ export function AdminPanel({
 
   const ticketAssignees = ['Unassigned', ...new Set(tickets.map((ticket) => ticket.assignee).filter(Boolean))]
   const ticketQueues = ['all', ...new Set(tickets.map((ticket) => ticket.queue).filter(Boolean))]
+  const myOpenTickets = tickets.filter((ticket) => ticket.assigneeId === currentUser?.id && isTicketActionable(ticket.status)).length
+  const newTickets = tickets.filter((ticket) => ticket.status === 'new').length
   const filteredTickets = tickets.filter((ticket) => {
     const isHistoryTicket = ticket.status === 'closed'
     if (ticketView === 'active' && isHistoryTicket) return false
+    if (ticketView === 'new' && ticket.status !== 'new') return false
+    if (ticketView === 'mine' && (ticket.assigneeId !== currentUser?.id || isHistoryTicket)) return false
     if (ticketView === 'history' && !isHistoryTicket) return false
     const searchTerm = ticketFilter.search.trim().toLowerCase()
     const matchesSearch = !searchTerm || [
@@ -529,11 +611,97 @@ export function AdminPanel({
     return matchesSearch && matchesStatus && matchesPriority && matchesQueue && matchesAssignee
   })
 
-  const updateTicketField = (ticketId, patch) => {
-    setTickets((prev) => prev.map((ticket) =>
-      ticket.id === ticketId ? { ...ticket, ...patch, updatedAt: new Date().toISOString() } : ticket,
-    ))
+  const priorityRank = { critical: 0, high: 1, medium: 2, low: 3 }
+  const sortedTickets = [...filteredTickets].sort((left, right) =>
+    (priorityRank[left.priority] ?? 4) - (priorityRank[right.priority] ?? 4)
+      || new Date(right.createdAt) - new Date(left.createdAt),
+  )
+  const ticketPageCount = Math.max(1, Math.ceil(sortedTickets.length / TICKETS_PER_PAGE))
+  const safeTicketPage = Math.min(ticketPage, ticketPageCount)
+  const visibleTickets = sortedTickets.slice((safeTicketPage - 1) * TICKETS_PER_PAGE, safeTicketPage * TICKETS_PER_PAGE)
+
+  const updateTicketField = async (ticketId, patch) => {
+    try {
+      const updated = await handleUpdateSupportTicket({ ticketId, ...patch })
+      setTicketOpen((current) => current?.id === ticketId ? { ...current, ...updated } : current)
+      setSeatError('')
+      return updated
+    } catch (error) {
+      setSeatError(error.message)
+      return null
+    }
   }
+
+  const takeOverTicket = async (ticket) => {
+    if (!currentUser?.id) {
+      setSeatError('Your staff profile could not be identified for ticket assignment.')
+      return
+    }
+    const nextStatus = ['new', 'open'].includes(ticket.status) ? 'in_progress' : ticket.status
+    const updated = await updateTicketField(ticket.id, { assigneeId: currentUser.id, status: nextStatus })
+    if (updated) {
+      setTicketView('mine')
+      setTicketFilter((prev) => ({ ...prev, assignee: 'all', status: 'all' }))
+    }
+  }
+
+  const openTicketWorkspace = (ticket) => {
+    if (!ticket) return
+    setOpenTicketIds((current) => current.includes(ticket.id) ? current : [...current, ticket.id])
+    setTicketOpen(ticket)
+    setReplyDraft('')
+  }
+
+  const closeTicketWorkspace = (ticketId) => {
+    setOpenTicketIds((current) => {
+      const next = current.filter((id) => id !== ticketId)
+      if (ticketOpen?.id === ticketId) {
+        const nextTicket = tickets.find((ticket) => ticket.id === next[next.length - 1]) || null
+        setTicketOpen(nextTicket)
+        setReplyDraft('')
+      }
+      return next
+    })
+  }
+
+  const selectedCustomerInfo = ticketOpen ? [
+    ticketOpen.userFullName,
+    ticketOpen.userEmail,
+    ticketOpen.companyName,
+  ].filter(Boolean) : []
+
+  const refreshTickets = async () => {
+    setTicketRefresh({ loading: true, error: '' })
+    try {
+      const refreshed = await handleRefreshSupportTickets()
+      setTicketOpen((current) => current ? refreshed.find((ticket) => ticket.id === current.id) || null : null)
+      setTicketRefresh({ loading: false, error: '' })
+    } catch (error) {
+      setTicketRefresh({ loading: false, error: error.message })
+    }
+  }
+
+  useEffect(() => {
+    if (itTab !== 'tickets') return undefined
+    const intervalId = window.setInterval(() => {
+      handleRefreshSupportTickets()
+        .then((refreshed) => setTicketOpen((current) => current ? refreshed.find((ticket) => ticket.id === current.id) || null : null))
+        .catch(() => {})
+    }, 30000)
+    return () => window.clearInterval(intervalId)
+  }, [itTab, handleRefreshSupportTickets])
+
+  useEffect(() => {
+    if (!currentUser?.id) return undefined
+    const refreshUnread = () => {
+      internalForumService.getUnreadMessageCount(currentUser.id)
+        .then(setForumUnreadCount)
+        .catch(() => {})
+    }
+    refreshUnread()
+    const intervalId = window.setInterval(refreshUnread, 30000)
+    return () => window.clearInterval(intervalId)
+  }, [currentUser?.id])
 
   useEffect(() => {
     if (!openTabGroup) return undefined
@@ -551,6 +719,7 @@ export function AdminPanel({
 
   const companyPackageTickets = tickets.filter((t) => t.category === 'Company package' && isTicketActionable(t.status))
   const currentQuote = getSeatQuote(quotePlanKey, quoteSeatCount, quotePriceOverride)
+  const currentPlan = currentQuote?.plan ?? PLANS.premium
 
   const loadTicketIntoQuote = (ticket) => {
     setQuoteTicketId(ticket.id)
@@ -559,7 +728,7 @@ export function AdminPanel({
     setQuoteManagerEmail(ticket.requesterEmail || ticket.userEmail || '')
     const parsedSeats = parseRequestedSeatsFromDetails(ticket.details)
     setQuoteSeatCount(parsedSeats || 10)
-    setQuotePlanKey('standard')
+    setQuotePlanKey('premium')
     setQuotePriceOverride('')
     setQuoteMessage('')
     setQuoteError('')
@@ -589,14 +758,14 @@ export function AdminPanel({
         companyKey: quoteCompanyKey,
         seatLimit: currentQuote.count,
         pricePerSeatYear: currentQuote.pricePerSeatYear,
-        notes: `Quoted from ticket ${quoteTicketId || 'manual'} at ${formatUsd(currentQuote.totalAnnualPrice)}/year on the ${currentQuote.plan.label} plan.`,
+        notes: `Quoted from ticket ${quoteTicketId || 'manual'} at ${formatUsd(currentQuote.totalAnnualPrice)}/year on the ${currentPlan.label} plan.`,
         managerEmail: quoteManagerEmail,
         planKey: quotePlanKey,
       })
       if (quoteTicketId) {
         await updateTicketStatus(quoteTicketId, 'resolved')
       }
-      setQuoteMessage(`${currentQuote.plan.label} seats provisioned for ${quoteCompanyName || quoteCompanyKey}. ${quoteManagerEmail ? `${quoteManagerEmail} can now manage their own team.` : ''}`)
+      setQuoteMessage(`${currentPlan.label} seats provisioned for ${quoteCompanyName || quoteCompanyKey}. ${quoteManagerEmail ? `${quoteManagerEmail} can now manage their own team.` : ''}`)
     } catch (provisionError) {
       setQuoteError(provisionError.message)
     } finally {
@@ -608,8 +777,8 @@ export function AdminPanel({
     <div className="it-panel">
       <div className="it-header">
         <div>
-          <h2>IT / Admin Backend</h2>
-          <p className="it-header-sub">Restricted staff workspace • {currentUser?.role === 'admin' ? 'Super Admin' : 'Technician'}</p>
+          <h2>IT / Management</h2>
+          <p className="it-header-sub">Restricted staff workspace • {isFullAdmin ? 'Super Admin' : 'IT staff'}</p>
         </div>
       </div>
 
@@ -652,6 +821,8 @@ export function AdminPanel({
       {adminError && <p className="auth-message auth-error">{adminError}</p>}
 
       <div className="it-content">
+        {itTab === 'ai-operations' && <AiOperationsPanel />}
+
         {itTab === 'overview' && (
           <div className="it-overview">
             <div className="it-stat-grid">
@@ -720,32 +891,37 @@ export function AdminPanel({
           </div>
         )}
 
+        {itTab === 'analytics' && <AnalyticsPanel tickets={tickets} />}
+
+  {itTab === 'forum' && <InternalForumPanel currentUser={currentUser} teamMembers={teamMembers} onUnreadChange={setForumUnreadCount} />}
+
+  {itTab === 'projects' && <ProjectBoardPanel currentUser={currentUser} teamMembers={teamMembers} />}
+
         {itTab === 'licenses' && (
           <div>
             <Section title="Seat package pricing & quotes">
               <p className="panel-note">
                 Seat packages are sold by the year only, and every seat is provisioned at one plan level
-                (Standard, Storage+, Storage Pro, Storage Max, or Creator Studio) \u2014 the same plans sold
-                individually. Pick the plan the customer wants below, then quote by seat count.
+                (Premium) for the full EchoAI suite. Pick the package below, then quote by seat count.
               </p>
 
-              <h4 className="section-label">1. Which plan are these seats getting?</h4>
+              <h4 className="section-label">1. Premium package</h4>
               <div className="chip-row">
                 {PLAN_ORDER.map((key) => (
                   <button
                     key={key}
                     type="button"
                     className={quotePlanKey === key ? 'chip active' : 'chip'}
-                    title={`${PLANS[key].storageGb} GB storage \u2022 ${PLANS[key].includedAiCredits.toLocaleString('en-US')} AI credits/month`}
+                    title="Full Premium access"
                     onClick={() => setQuotePlanKey(key)}
                   >
-                    {PLANS[key].label}
+                    {(PLANS[key] ?? PLANS.premium).label}
                   </button>
                 ))}
               </div>
               <p className="muted">
-                {currentQuote.plan.label}: {currentQuote.plan.storageGb} GB storage + {currentQuote.plan.includedAiCredits.toLocaleString('en-US')} AI credits/month per seat.
-                List price {formatUsd(currentQuote.plan.annualPrice)}/seat/year.
+                {currentPlan.label}: {currentPlan.storageGb} GB storage + {currentPlan.includedAiCredits.toLocaleString('en-US')} AI credits/month per seat.
+                List price {formatUsd(currentPlan.annualPrice)}/seat/year.
               </p>
 
               <div className="seat-pricing-chart">
@@ -768,7 +944,7 @@ export function AdminPanel({
                 })}
               </div>
               <p className="muted">
-                Shaded portion of each bar is our cost of goods per seat/year for the {currentQuote.plan.label} plan ({formatUsd(getPlanCogsPerSeatYear(quotePlanKey))}).
+                Shaded portion of each bar is our cost of goods per seat/year for the {currentPlan.label} plan ({formatUsd(getPlanCogsPerSeatYear(quotePlanKey))}).
                 Do not quote below {MINIMUM_HEALTHY_MARGIN_PCT}% margin without manager approval.
               </p>
 
@@ -796,7 +972,7 @@ export function AdminPanel({
               </div>
 
               <div className="asset-usage-banner" style={currentQuote.belowFloor ? { borderColor: '#ef4444' } : undefined}>
-                <strong>{currentQuote.plan.label}: {currentQuote.count} seats × {formatUsd(currentQuote.pricePerSeatYear)}/year = {formatUsd(currentQuote.totalAnnualPrice)}/year</strong>
+                <strong>{currentPlan.label}: {currentQuote.count} seats × {formatUsd(currentQuote.pricePerSeatYear)}/year = {formatUsd(currentQuote.totalAnnualPrice)}/year</strong>
                 <span>
                   Cost of goods: {formatUsd(currentQuote.totalCogs)}/year • Margin: {currentQuote.marginPct.toFixed(1)}%
                   {currentQuote.belowFloor ? ' — below floor, get manager approval before sending' : ''}
@@ -945,220 +1121,180 @@ export function AdminPanel({
         )}
 
         {itTab === 'tickets' && (
-          <div className="it-tickets-layout">
-            <div className="it-ticket-list">
-              <Section title="Support tickets">
-                <div className="it-ticket-filters">
-                  <div className="it-ticket-view-tabs" role="tablist" aria-label="Ticket views">
-                    <button
-                      type="button"
-                      className={ticketView === 'active' ? 'active' : ''}
-                      onClick={() => {
-                        setTicketView('active')
-                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
-                        setTicketOpen(null)
-                      }}
-                    >
-                      Active queue
+          <div className="ticket-workspace-page">
+            <div className="workspace-tabs ticket-workspace-tabs">
+              <button type="button" className={`workspace-tab ${!ticketOpen ? 'workspace-tab-active' : ''}`} onClick={() => { setTicketOpen(null); setReplyDraft('') }}>Queue</button>
+              {openTicketIds.map((ticketId) => {
+                const tabTicket = tickets.find((ticket) => ticket.id === ticketId)
+                if (!tabTicket) return null
+                return (
+                  <span key={ticketId} className="workspace-tab-wrap">
+                    <button type="button" className={`workspace-tab ${ticketOpen?.id === ticketId ? 'workspace-tab-active' : ''}`} onClick={() => { setTicketOpen(tabTicket); setReplyDraft('') }}>
+                      {tabTicket.subject || ticketId}
                     </button>
-                    <button
-                      type="button"
-                      className={ticketView === 'history' ? 'active' : ''}
-                      onClick={() => {
-                        setTicketView('history')
-                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
-                        setTicketOpen(null)
-                      }}
-                    >
-                      History ({tickets.filter((ticket) => ticket.status === 'closed').length})
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={ticketFilter.search}
-                    onChange={(event) => setTicketFilter((prev) => ({ ...prev, search: event.target.value }))}
-                    placeholder="Search tickets, people, tags..."
-                  />
-                  <div className="it-ticket-filter-row">
-                    <select value={ticketFilter.status} onChange={(event) => setTicketFilter((prev) => ({ ...prev, status: event.target.value }))}>
-                      <option value="all">All statuses</option>
-                      <option value="new">New</option>
-                      <option value="triage">In triage</option>
-                      <option value="in_progress">In progress</option>
-                      <option value="waiting_customer">Waiting on customer</option>
-                      <option value="escalated">Escalated</option>
-                      {ticketView === 'active' && <option value="resolved">Resolved</option>}
-                      {ticketView === 'history' && <option value="closed">Closed</option>}
-                    </select>
-                    <select value={ticketFilter.priority} onChange={(event) => setTicketFilter((prev) => ({ ...prev, priority: event.target.value }))}>
-                      <option value="all">All priorities</option>
-                      <option value="critical">Critical</option>
-                      <option value="high">High</option>
-                      <option value="medium">Medium</option>
-                      <option value="low">Low</option>
-                    </select>
-                    <select value={ticketFilter.queue} onChange={(event) => setTicketFilter((prev) => ({ ...prev, queue: event.target.value }))}>
-                      <option value="all">All queues</option>
-                      {ticketQueues.filter((queue) => queue !== 'all').map((queue) => (
-                        <option key={queue} value={queue}>{queue}</option>
-                      ))}
-                    </select>
-                    <select value={ticketFilter.assignee} onChange={(event) => setTicketFilter((prev) => ({ ...prev, assignee: event.target.value }))}>
-                      <option value="all">All assignees</option>
-                      {ticketAssignees.map((assignee) => (
-                        <option key={assignee} value={assignee}>{assignee}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="it-ticket-stats">
-                  {[
-                    { label: 'Open', value: tickets.filter((t) => ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated'].includes(t.status)).length },
-                    { label: 'Critical', value: tickets.filter((t) => t.priority === 'critical').length },
-                    { label: 'Waiting', value: tickets.filter((t) => t.status === 'waiting_customer').length },
-                    { label: 'Resolved', value: tickets.filter((t) => t.status === 'resolved').length },
-                  ].map((stat) => (
-                    <div key={stat.label} className="it-ticket-stat">
-                      <strong>{stat.value}</strong>
-                      <span>{stat.label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {filteredTickets.map((t) => (
-                  <div
-                    key={t.id}
-                    className={`it-row it-ticket-row ${ticketOpen?.id === t.id ? 'active' : ''}`}
-                    onClick={() => setTicketOpen(tickets.find((tk) => tk.id === t.id))}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div>
-                      <p style={{ fontWeight: 600 }}>{t.subject}</p>
-                      <span>
-                        {t.userFullName} • {t.category} • {t.queue || 'unassigned queue'} • {new Date(t.createdAt).toLocaleDateString()}
-                      </span>
-                      {t.tags?.length > 0 && (
-                        <div className="it-ticket-tags">
-                          {t.tags.map((tag) => <span key={`${t.id}-${tag}`} className="it-tag">{tag}</span>)}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      <StatusBadge value={t.priority} />
-                      <StatusBadge value={t.status} />
-                    </div>
-                  </div>
-                ))}
-                {filteredTickets.length === 0 && <p className="muted">No tickets match this filter.</p>}
-              </Section>
+                    <button type="button" className="workspace-tab-close" onClick={() => closeTicketWorkspace(ticketId)} aria-label={`Close ${tabTicket.subject}`}>×</button>
+                  </span>
+                )
+              })}
+              <button type="button" className="workspace-reset-btn" onClick={() => { setOpenTicketIds([]); setTicketOpen(null); setReplyDraft('') }}>Reset Workspace</button>
             </div>
 
-            {ticketOpen && (
-              <div className="it-ticket-detail">
-                <div className="it-ticket-detail-header">
-                  <div>
-                    <h4>{ticketOpen.subject}</h4>
-                    <span>{ticketOpen.userFullName} ({ticketOpen.userEmail}) • {ticketOpen.category} • {ticketOpen.queue || 'unassigned queue'}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <StatusBadge value={ticketOpen.priority} />
-                    <StatusBadge value={ticketOpen.status} />
-                  </div>
-                </div>
+            {ticketRefresh.error && <p className="auth-message auth-error">{ticketRefresh.error}</p>}
 
-                <div className="it-ticket-meta-grid">
-                  <div><span>Owner</span><strong>{ticketOpen.assignee || 'Unassigned'}</strong></div>
-                  <div><span>Customer</span><strong>{ticketOpen.customerTier || 'standard'}</strong></div>
-                  <div><span>Due</span><strong>{ticketOpen.dueAt ? new Date(ticketOpen.dueAt).toLocaleDateString() : 'No due date'}</strong></div>
-                  <div><span>Updated</span><strong>{new Date(ticketOpen.updatedAt || ticketOpen.createdAt).toLocaleString()}</strong></div>
-                </div>
+            <div className="ticket-workspace-body">
+              <aside className="workspace-pane ticket-workspace-left">
+                <div className="workspace-pane-header"><strong>{ticketOpen ? 'Ticket Controls' : 'Views'}</strong></div>
+                <div className="workspace-pane-content workspace-block-stack">
+                  {!ticketOpen && (
+                    <>
+                      <section className="workspace-block">
+                        <h2>Queue</h2>
+                        <div className="workspace-field-grid">
+                          <label>View<select value={ticketView} onChange={(event) => { setTicketView(event.target.value); setTicketOpen(null) }}><option value="active">All active</option><option value="new">New tickets</option><option value="mine">My queue</option><option value="history">History</option></select></label>
+                          <label>Status<select value={ticketFilter.status} onChange={(event) => setTicketFilter((prev) => ({ ...prev, status: event.target.value }))}><option value="all">All statuses</option><option value="new">New</option><option value="triage">In triage</option><option value="in_progress">In progress</option><option value="waiting_customer">Waiting on customer</option><option value="escalated">Escalated</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
+                          <label>Queue<select value={ticketFilter.queue} onChange={(event) => setTicketFilter((prev) => ({ ...prev, queue: event.target.value }))}><option value="all">All queues</option>{ticketQueues.filter((queue) => queue !== 'all').map((queue) => <option key={queue} value={queue}>{queue}</option>)}</select></label>
+                          <label>Assigned to<select value={ticketFilter.assignee} onChange={(event) => setTicketFilter((prev) => ({ ...prev, assignee: event.target.value }))}><option value="all">All assignees</option>{ticketAssignees.map((assignee) => <option key={assignee} value={assignee}>{assignee}</option>)}</select></label>
+                        </div>
+                      </section>
+                      <section className="workspace-block">
+                        <div className="ticket-control-row"><span>Open</span><strong>{tickets.filter((t) => ['new', 'triage', 'in_progress', 'waiting_customer', 'escalated'].includes(t.status)).length}</strong></div>
+                        <div className="ticket-control-row"><span>New</span><strong>{newTickets}</strong></div>
+                        <div className="ticket-control-row"><span>Mine</span><strong>{myOpenTickets}</strong></div>
+                        <button type="button" className="primary-button" onClick={refreshTickets} disabled={ticketRefresh.loading}>{ticketRefresh.loading ? 'Refreshing...' : 'Refresh tickets'}</button>
+                      </section>
+                    </>
+                  )}
 
-                <div className="it-ticket-actions-inline">
-                  <select
-                    value={ticketOpen.status}
-                    onChange={(event) => updateTicketField(ticketOpen.id, { status: event.target.value })}
-                  >
-                    <option value="new">New</option>
-                    <option value="triage">In triage</option>
-                    <option value="in_progress">In progress</option>
-                    <option value="waiting_customer">Waiting on customer</option>
-                    <option value="escalated">Escalated</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                  <select
-                    value={ticketOpen.priority}
-                    onChange={(event) => updateTicketField(ticketOpen.id, { priority: event.target.value })}
-                  >
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                  <select
-                    value={ticketOpen.assignee || 'Unassigned'}
-                    onChange={(event) => updateTicketField(ticketOpen.id, { assignee: event.target.value === 'Unassigned' ? '' : event.target.value })}
-                  >
-                    <option value="Unassigned">Unassigned</option>
-                    {ticketAssignees.filter((assignee) => assignee !== 'Unassigned').map((assignee) => (
-                      <option key={assignee} value={assignee}>{assignee}</option>
-                    ))}
-                  </select>
+                  {ticketOpen && (
+                    <>
+                      <section className="workspace-block">
+                        <h2>{ticketOpen.id}</h2>
+                        <div className="ticket-control-card">
+                          <strong>{ticketOpen.assignee || 'Unassigned'}</strong>
+                          <span>{ticketOpen.category} / {ticketOpen.queue || 'general'}</span>
+                        </div>
+                        <div className="workspace-field-grid">
+                          <label>Status<select value={ticketOpen.status} onChange={(event) => updateTicketField(ticketOpen.id, { status: event.target.value })}><option value="new">New</option><option value="triage">In triage</option><option value="in_progress">In progress</option><option value="waiting_customer">Waiting on customer</option><option value="escalated">Escalated</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
+                          <label>Priority<select value={ticketOpen.priority} onChange={(event) => updateTicketField(ticketOpen.id, { priority: event.target.value })}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+                          <label>Assignee<select value={ticketOpen.assigneeId || ''} onChange={(event) => updateTicketField(ticketOpen.id, { assigneeId: event.target.value })}><option value="">Unassigned</option>{teamMembers.filter((member) => ['admin', 'it'].includes(member.role)).map((member) => <option key={member.id} value={member.id}>{member.fullName || member.email}</option>)}</select></label>
+                        </div>
+                        {isTicketActionable(ticketOpen.status) && ticketOpen.assigneeId !== currentUser?.id && <button type="button" className="primary-button" onClick={() => takeOverTicket(ticketOpen)}>Take over ticket</button>}
+                        <button type="button" className="ghost-button" onClick={() => closeTicket(ticketOpen.id)}>Close ticket</button>
+                      </section>
+                      <section className="workspace-block">
+                        <h2>Tags</h2>
+                        <input value={(ticketOpen.tags || []).join(', ')} onChange={(event) => setTicketOpen((current) => ({ ...current, tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) }))} onBlur={() => updateTicketField(ticketOpen.id, { tags: ticketOpen.tags || [] })} placeholder="billing, login, security" />
+                      </section>
+                    </>
+                  )}
                 </div>
+              </aside>
 
-                <div className="it-ticket-messages">
-                  {ticketOpen.messages.map((msg) => (
-                    <div key={msg.id} className={`it-ticket-msg ${msg.role === 'admin' ? 'admin' : 'user'}`}>
-                      <div className="it-ticket-msg-meta">
-                        <strong>{msg.author}</strong>
-                        <span>{new Date(msg.sentAt).toLocaleString()}</span>
+              <main className="workspace-pane ticket-workspace-center">
+                <div className="workspace-pane-header">
+                  <strong>{ticketOpen ? ticketOpen.subject : 'Main Ticket List'}</strong>
+                  <span>{ticketOpen ? ticketOpen.status : `${filteredTickets.length} tickets`}</span>
+                </div>
+                <div className="workspace-pane-content workspace-pane-content-center">
+                  {!ticketOpen && (
+                    <div className="ticket-main-list">
+                      <input className="ticket-workspace-search" type="text" value={ticketFilter.search} onChange={(event) => setTicketFilter((prev) => ({ ...prev, search: event.target.value }))} placeholder="Search tickets, people, tags..." />
+                      <div className="workspace-table-wrap">
+                        <table>
+                          <thead><tr><th>Status</th><th>Subject</th><th>Requester</th><th>Requested</th><th>Priority</th><th>Tech</th><th>Actions</th></tr></thead>
+                          <tbody>
+                            {visibleTickets.map((ticket) => (
+                              <tr key={ticket.id} className={ticketOpen?.id === ticket.id ? 'workspace-row-selected' : ''} onClick={() => openTicketWorkspace(ticket)}>
+                                <td><StatusBadge value={ticket.status} /></td>
+                                <td><strong>{ticket.subject}</strong><span>{ticket.id}</span></td>
+                                <td>{ticket.userFullName || 'No Customer'}</td>
+                                <td>{new Date(ticket.createdAt).toLocaleString()}</td>
+                                <td>{ticket.priority}</td>
+                                <td>{ticket.assignee || 'Unassigned'}</td>
+                                <td><button type="button" className="primary-button" onClick={(event) => { event.stopPropagation(); openTicketWorkspace(ticket) }}>Open</button></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                      <p>{msg.body}</p>
+                      {filteredTickets.length === 0 && ticketView === 'mine' && openTickets > 0 && (
+                        <p className="muted">
+                          No tickets are assigned to you.{' '}
+                          <button type="button" className="text-button" onClick={() => setTicketView('active')}>View all active tickets</button>
+                        </p>
+                      )}
+                      {filteredTickets.length === 0 && !(ticketView === 'mine' && openTickets > 0) && <p className="muted">No tickets match this filter.</p>}
+                      {filteredTickets.length > TICKETS_PER_PAGE && <div className="it-ticket-pagination"><span>Showing {(safeTicketPage - 1) * TICKETS_PER_PAGE + 1}-{Math.min(safeTicketPage * TICKETS_PER_PAGE, filteredTickets.length)} of {filteredTickets.length}</span><div><button type="button" className="ghost-button" disabled={safeTicketPage === 1} onClick={() => setTicketPage((page) => Math.max(1, page - 1))}>Previous</button><button type="button" className="ghost-button" disabled={safeTicketPage === ticketPageCount} onClick={() => setTicketPage((page) => Math.min(ticketPageCount, page + 1))}>Next</button></div></div>}
                     </div>
-                  ))}
+                  )}
+
+                  {ticketOpen && (
+                    <div className="ticket-conversation-workspace">
+                      <div className="ticket-meta-strip">
+                        <span>{ticketOpen.id}</span>
+                        <span>{ticketOpen.priority}</span>
+                        <span>{ticketOpen.assignee || 'Unassigned'}</span>
+                      </div>
+                      <div className="workspace-conversation-history">
+                        {ticketOpen.messages.map((msg) => <div key={msg.id} className={`it-ticket-msg ${normalizeRole(msg.role) === 'admin' ? 'admin' : 'user'}`}><div className="it-ticket-msg-meta"><strong>{msg.author}</strong><span>{new Date(msg.sentAt).toLocaleString()}</span></div><p>{msg.body}</p></div>)}
+                        {ticketOpen.attachments?.length > 0 && (
+                          <section className="ticket-attachment-gallery" aria-label="Ticket image attachments">
+                            <h3>Attached images</h3>
+                            {ticketOpen.attachments.map((attachment) => attachment.url ? (
+                              <figure key={attachment.path}>
+                                <img src={attachment.url} alt={`Support ticket attachment: ${attachment.name}`} loading="lazy" />
+                                <figcaption>
+                                  <span>{attachment.name}</span>
+                                  <a
+                                    className="ghost-button ticket-attachment-download"
+                                    href={attachment.url}
+                                    download={attachment.name}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Download
+                                  </a>
+                                </figcaption>
+                              </figure>
+                            ) : (
+                              <p key={attachment.path} className="field-error">Preview unavailable for {attachment.name}. Refresh tickets to try again.</p>
+                            ))}
+                          </section>
+                        )}
+                      </div>
+                      {isTicketActionable(ticketOpen.status) ? (
+                        <div className="workspace-conversation-compose">
+                          <h3>New Message</h3>
+                          <textarea value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder="Type your message..." rows={4} />
+                          <div className="project-quick-actions"><button type="button" className="primary-button" onClick={() => sendReply(ticketOpen.id)}>Send reply</button><button type="button" className="ghost-button" onClick={() => resolveTicket(ticketOpen.id)}>Mark resolved</button></div>
+                        </div>
+                      ) : (
+                        <div className="it-ticket-closed-notice">This ticket is {ticketOpen.status}. <button type="button" className="text-button" onClick={() => updateTicketStatus(ticketOpen.id, 'open')}>Reopen</button></div>
+                      )}
+                    </div>
+                  )}
                 </div>
+              </main>
 
-                {isTicketActionable(ticketOpen.status) && (
-                  <div className="it-ticket-reply">
-                    <textarea
-                      value={replyDraft}
-                      onChange={(e) => setReplyDraft(e.target.value)}
-                      placeholder="Type your reply..."
-                      rows={3}
-                    />
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <button type="button" className="primary-button" onClick={() => sendReply(ticketOpen.id)}>
-                        Send reply
-                      </button>
-                      <button type="button" className="ghost-button" onClick={() => resolveTicket(ticketOpen.id)}>
-                        Mark resolved
-                      </button>
-                      <button type="button" className="ghost-button" style={{ color: '#ef4444' }} onClick={() => closeTicket(ticketOpen.id)}>
-                        Close ticket
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {!isTicketActionable(ticketOpen.status) && (
-                  <div className="it-ticket-closed-notice">
-                    This ticket is {ticketOpen.status}.
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => {
-                        setTicketView('active')
-                        setTicketFilter((prev) => ({ ...prev, status: 'all' }))
-                        updateTicketStatus(ticketOpen.id, 'open')
-                      }}
-                    >
-                      Reopen
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+              <aside className="workspace-pane ticket-workspace-right">
+                <div className="workspace-pane-header"><strong>{ticketOpen ? 'Customer Information' : 'Customer Snapshot'}</strong></div>
+                <div className="workspace-pane-content workspace-block-stack">
+                  {ticketOpen ? (
+                    <section className="workspace-block">
+                      <h2>{ticketOpen.userFullName || 'No customer contact'}</h2>
+                      {selectedCustomerInfo.length === 0 ? <p className="muted">No customer contacts linked yet.</p> : selectedCustomerInfo.slice(1).map((item) => <p key={item} className="muted">{item}</p>)}
+                      <div className="ticket-control-row"><span>Created</span><strong>{new Date(ticketOpen.createdAt).toLocaleString()}</strong></div>
+                      <div className="ticket-control-row"><span>Assigned</span><strong>{ticketOpen.assignee || 'Unassigned'}</strong></div>
+                    </section>
+                  ) : (
+                    <section className="workspace-block">
+                      <h2>{visibleTickets[0]?.subject || 'No ticket selected'}</h2>
+                      <p className="muted">{visibleTickets[0]?.userFullName || 'Open a ticket to view customer information.'}</p>
+                    </section>
+                  )}
+                </div>
+              </aside>
+            </div>
           </div>
         )}
 
@@ -1303,8 +1439,7 @@ export function AdminPanel({
                   <label>Full name<input required value={newUserDraft.fullName} onChange={(event) => setNewUserDraft((current) => ({ ...current, fullName: event.target.value }))} /></label>
                   <label>Email<input required type="email" value={newUserDraft.email} onChange={(event) => setNewUserDraft((current) => ({ ...current, email: event.target.value }))} /></label>
                   <label>Company<input required value={newUserDraft.company} onChange={(event) => setNewUserDraft((current) => ({ ...current, company: event.target.value }))} /></label>
-                  <label>Role<select value={newUserDraft.role} onChange={(event) => setNewUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="it">Technician</option><option value="accountant">Accounting</option><option value="board_member">Board Member</option><option value="manager">Manager</option><option value="user">Standard user</option></select></label>
-                  {newUserDraft.role === 'board_member' && <label>Profit share percentage (1-10%)<input required type="number" min="1" max="10" step="0.01" value={newUserDraft.profitSharePercent || ''} onChange={(event) => setNewUserDraft((current) => ({ ...current, profitSharePercent: event.target.value }))} /></label>}
+                  <label>Role<select value={newUserDraft.role} onChange={(event) => setNewUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="it">IT</option><option value="accountant">Accountant</option><option value="user">User</option></select></label>
                   <div className="action-row"><button type="submit" className="primary-button" disabled={newUserStatus.saving}>{newUserStatus.saving ? 'Sending invitation...' : 'Create and invite user'}</button></div>
                   {newUserStatus.message && <p className="auth-message">{newUserStatus.message}</p>}
                   {newUserStatus.error && <p className="auth-message auth-error">{newUserStatus.error}</p>}
@@ -1352,7 +1487,6 @@ export function AdminPanel({
                     <option value="name-desc">Name Z–A</option>
                     <option value="email-asc">Email A–Z</option>
                     <option value="company-asc">Company A–Z</option>
-                    <option value="quota-desc">Largest quota</option>
                   </select>
                 </label>
               </div>
@@ -1391,72 +1525,65 @@ export function AdminPanel({
 
                     {expanded && (
                       <div className="it-user-detail">
-                        {member.role === 'admin' && member.id !== currentUser?.id ? (
+                        {normalizeRole(member.role) === 'admin' && member.id !== currentUser?.id ? (
                           <p className="muted">Administrator accounts cannot be modified here.</p>
                         ) : (
                           <>
-                            {canManageAiAccess && member.id !== currentUser?.id && <div className="it-user-detail-group">
+                            {member.id !== currentUser?.id && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Access</span>
                               <button type="button" className="ghost-button" onClick={() => handleToggleUserAccess(member)} disabled={adminLoading}>
                                 {member.accessStatus === 'deactivated' ? 'Reactivate' : 'Deactivate'}
                               </button>
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                onClick={() => { setQuotaEditingUserId(member.id); setQuotaDraftMb(String(member.storageQuotaMb ?? 500)) }}
-                              >
-                                Quota: {member.storageQuotaMb ?? 500} MB
-                              </button>
                             </div>}
 
                             {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group">
-                              <span className="it-user-detail-label">Beta AI access</span>
+                              <span className="it-user-detail-label">Beta Premium access</span>
                               <label className="toggle-row">
                                 <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.isBetaTester : member.isBetaTester === true} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, isBetaTester: event.target.checked }))} />
                                 Beta tester account
                               </label>
-                              <small className="muted">Beta accounts are free. Keep AI disabled until you are comfortable with their access.</small>
-                              <label className="toggle-row">
-                                <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.enabled : member.aiEnabled !== false} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, enabled: event.target.checked }))} />
-                                Allow AI generation
-                              </label>
-                              <textarea rows="2" value={betaAiDraft.userId === member.id ? betaAiDraft.note : member.aiAccessNote || ''} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, note: event.target.value }))} placeholder="Note shown when AI is disabled for this beta tester." />
+                              <small className="muted">Beta testers receive Premium access at no charge. Premium status is managed by this flag, not by their user role.</small>
                               <button type="button" className="primary-button" disabled={betaAiDraft.saving} onClick={async () => {
                                 setBetaAiDraft((current) => ({ ...current, saving: true, error: '' }))
                                 try {
-                                  await onAdminUserAction({ action: 'set-beta-ai-access', userId: member.id, email: member.email, isBetaTester: betaAiDraft.isBetaTester, enabled: betaAiDraft.enabled, note: betaAiDraft.note })
+                                  await onAdminUserAction({ action: 'set-beta-ai-access', userId: member.id, email: member.email, isBetaTester: betaAiDraft.isBetaTester, enabled: true, note: '' })
                                   setBetaAiDraft((current) => ({ ...current, saving: false }))
                                 } catch (error) {
                                   setBetaAiDraft((current) => ({ ...current, saving: false, error: error.message }))
                                 }
-                              }}>{betaAiDraft.saving ? 'Saving...' : 'Save beta AI access'}</button>
+                              }}>{betaAiDraft.saving ? 'Saving...' : 'Save beta access'}</button>
                               {betaAiDraft.error && <small className="field-error">{betaAiDraft.error}</small>}
                             </div>}
 
-                            {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">
-                              <span className="it-user-detail-label">Trademark specialist</span>
-                              <button
-                                type="button"
-                                className={member.trademarkEditAccess ? 'primary-button' : 'ghost-button'}
-                                onClick={async () => {
-                                  try {
-                                    await onAdminUserAction({ action: 'set-trademark-edit-access', userId: member.id, email: member.email, enabled: !member.trademarkEditAccess })
-                                  } catch (error) {
-                                    setNewUserStatus({ saving: false, message: '', error: error.message })
-                                  }
-                                }}
-                              >
-                                {member.trademarkEditAccess ? 'Editing granted' : 'Grant editing access'}
-                              </button>
-                              <small className="muted">Only grant this to a trained trademark/legal specialist.</small>
+                            {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group it-user-detail-stack">
+                              <span className="it-user-detail-label">Platform category permissions</span>
+                              <div className="chip-row">
+                                {PLATFORM_ACCESS_CONTROLS.filter((control) => control.roles.includes(normalizeRole(member.role))).map((control) => (
+                                  <button
+                                    key={control.field}
+                                    type="button"
+                                    className={member[control.field] ? 'primary-button' : 'ghost-button'}
+                                    onClick={async () => {
+                                      try {
+                                        await onAdminUserAction({ action: control.action, userId: member.id, email: member.email, enabled: !member[control.field] })
+                                      } catch (error) {
+                                        setNewUserStatus({ saving: false, message: '', error: error.message })
+                                      }
+                                    }}
+                                  >
+                                    {member[control.field] ? `${control.label} granted` : `Grant ${control.label}`}
+                                  </button>
+                                ))}
+                              </div>
+                              <small className="muted">Grant only the Platform categories this staff member needs for their work. They must sign out and back in after a permission change.</small>
                             </div>}
 
-                            {isFullAdmin && (member.isBoardMember || member.role === 'board_member' || member.id === currentUser?.id) && <div className="it-user-detail-group">
+                            {isFullAdmin && (member.isBoardMember || normalizeRole(member.role) === 'board_member' || member.id === currentUser?.id) && <div className="it-user-detail-group">
                               <span className="it-user-detail-label">Quarterly profit share</span>
                               <input
                                 type="number"
                                 min="1"
-                                max="10"
+                                max="50"
                                 step="0.01"
                                 value={profitShareDraft.userId === member.id ? profitShareDraft.value : String(member.profitSharePercent || '')}
                                 onChange={(event) => setProfitShareDraft({ userId: member.id, value: event.target.value, saving: false, error: '' })}
@@ -1467,8 +1594,8 @@ export function AdminPanel({
                                 disabled={profitShareDraft.saving}
                                 onClick={async () => {
                                   const value = Number(profitShareDraft.value)
-                                  if (!Number.isFinite(value) || value < 1 || value > 10) {
-                                    setProfitShareDraft((current) => ({ ...current, error: 'Enter a percentage from 1 to 10.' }))
+                                  if (!Number.isFinite(value) || value < 1 || value > 50) {
+                                    setProfitShareDraft((current) => ({ ...current, error: 'Enter a percentage from 1 to 50.' }))
                                     return
                                   }
                                   setProfitShareDraft((current) => ({ ...current, saving: true, error: '' }))
@@ -1503,42 +1630,6 @@ export function AdminPanel({
                                 {member.isBoardMember ? 'Board Member enabled' : 'Add Board Member role'}
                               </button>
                               <small className="muted">Board Membership can coexist with Admin and payroll. Set the percentage above after enabling.</small>
-                            </div>}
-
-                            {isFullAdmin && member.role === 'it' && <div className="it-user-detail-group">
-                              <span className="it-user-detail-label">Developer Apps specialist</span>
-                              <button
-                                type="button"
-                                className={member.developerAppEditAccess ? 'primary-button' : 'ghost-button'}
-                                onClick={async () => {
-                                  try {
-                                    await onAdminUserAction({ action: 'set-developer-app-edit-access', userId: member.id, email: member.email, enabled: !member.developerAppEditAccess })
-                                  } catch (error) {
-                                    setNewUserStatus({ saving: false, message: '', error: error.message })
-                                  }
-                                }}
-                              >
-                                {member.developerAppEditAccess ? 'Editing granted' : 'Grant editing access'}
-                              </button>
-                              <small className="muted">Only grant this to a trusted provider-credentials specialist.</small>
-                            </div>}
-
-                            {isFullAdmin && ['it', 'manager'].includes(member.role) && <div className="it-user-detail-group">
-                              <span className="it-user-detail-label">Company Email &amp; SMTP editing</span>
-                              <button
-                                type="button"
-                                className={member.companyEmailEditAccess ? 'primary-button' : 'ghost-button'}
-                                onClick={async () => {
-                                  try {
-                                    await onAdminUserAction({ action: 'set-company-email-edit-access', userId: member.id, email: member.email, enabled: !member.companyEmailEditAccess })
-                                  } catch (error) {
-                                    setNewUserStatus({ saving: false, message: '', error: error.message })
-                                  }
-                                }}
-                              >
-                                {member.companyEmailEditAccess ? 'Email editing granted' : 'Grant email editing access'}
-                              </button>
-                              <small className="muted">Allows this technician or manager to modify Microsoft 365 passwords, SMTP server routing, and ticket alert parameters.</small>
                             </div>}
 
                             {isFullAdmin && <div className="it-user-detail-group">
@@ -1645,8 +1736,44 @@ export function AdminPanel({
                                     </button>
                                   </div>
                                 )}
+
+                                {isFullAdmin && member.id !== currentUser?.id && (
+                                  <div className="it-temp-password">
+                                    <p className="muted it-verify-hint">Set a temporary password after verifying the user. They will be required to replace it before entering the app.</p>
+                                    <label>
+                                      Temporary password
+                                      <input
+                                        type="text"
+                                        minLength={12}
+                                        autoComplete="new-password"
+                                        value={temporaryPassword.userId === member.id ? temporaryPassword.value : ''}
+                                        onChange={(event) => setTemporaryPassword({ userId: member.id, value: event.target.value, saving: false, message: '', error: '' })}
+                                        placeholder="At least 12 characters"
+                                      />
+                                    </label>
+                                    <div className="action-row">
+                                      <button type="button" className="ghost-button" onClick={() => generateTemporaryPassword(member)}>Generate</button>
+                                      <button type="button" className="primary-button" disabled={temporaryPassword.saving} onClick={() => setUserTemporaryPassword(member)}>
+                                        {temporaryPassword.saving ? 'Setting...' : 'Set temporary password'}
+                                      </button>
+                                    </div>
+                                    {temporaryPassword.userId === member.id && temporaryPassword.error && <p className="auth-message auth-error">{temporaryPassword.error}</p>}
+                                    {temporaryPassword.userId === member.id && temporaryPassword.message && <p className="auth-message">{temporaryPassword.message}</p>}
+                                  </div>
+                                )}
                               </div>
                             </div>
+
+                            {isFullAdmin && member.id !== currentUser?.id && !['admin', 'super_admin'].includes(normalizeRole(member.role)) && (
+                              <div className="it-user-detail-group it-user-detail-stack">
+                                <span className="it-user-detail-label">Permanent deletion</span>
+                                <p className="muted it-verify-hint">Deletes the account, profile, subscriptions, connected credentials, support records, media, and other user-owned data. This cannot be undone.</p>
+                                <button type="button" className="danger-button" onClick={() => deleteUser(member)} disabled={Boolean(deletingUserId) || adminLoading}>
+                                  {deletingUserId === member.id ? 'Deleting user...' : 'Delete user and all data'}
+                                </button>
+                                {newUserStatus.error && <p className="auth-message auth-error">{newUserStatus.error}</p>}
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
@@ -1693,23 +1820,6 @@ export function AdminPanel({
               ))}
             </Section>}
 
-            {quotaEditingUserId && (
-              <Section title="Edit storage quota">
-                <label>
-                  Quota (MB) for {teamMembers.find((m) => m.id === quotaEditingUserId)?.fullName}
-                  <input
-                    type="number"
-                    min="1"
-                    value={quotaDraftMb}
-                    onChange={(e) => setQuotaDraftMb(e.target.value)}
-                  />
-                </label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button type="button" className="primary-button" onClick={() => { const m = teamMembers.find((item) => item.id === quotaEditingUserId); if (m) handleQuotaUpdate(m) }}>Save quota</button>
-                  <button type="button" className="ghost-button" onClick={() => setQuotaEditingUserId('')}>Cancel</button>
-                </div>
-              </Section>
-            )}
           </div>
         )}
 
@@ -1825,8 +1935,6 @@ export function AdminPanel({
             </Section>
           </div>
         )}
-
-        {itTab === 'ai-operations' && <AiOperationsPanel />}
 
         {itTab === 'controls' && (
           <div>

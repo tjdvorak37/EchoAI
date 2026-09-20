@@ -6,22 +6,48 @@ import { authService } from './services/authService'
 import { announcementService, DEFAULT_ANNOUNCEMENTS } from './services/announcementService'
 import { billingService } from './services/billingService'
 import { brandService, createEmptyBrandKit, loadBrandFonts, MAX_LOGO_BYTES } from './services/brandService'
+import { canManageBrandKit } from './services/brandPermissions'
 import { CLOUD_PROVIDERS, cloudDriveService, toLinkedAsset } from './services/cloudDriveService'
 import { getPlan, getStorageMb } from './data/plans'
+import { PUBLISHING_PLATFORMS, SOCIAL_PLATFORMS, getSocialPlatform } from './data/socialPlatforms'
 import { platformService } from './services/platformService'
+import { postingScheduleService } from './services/postingScheduleService'
 import { repostService } from './services/repostService'
 import { socialIntegrationService } from './services/socialIntegrationService'
 import { financeService } from './services/financeService'
+import { analyticsService } from './services/analyticsService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import echoMascot from './assets/echo-mascot.svg'
+import { FREE_POSTING_ALLOWANCE, getFreePostingUsage } from './services/freePostingAllowance'
+import echoModern from './assets/echo-poses/echo-modern-friendly.png'
+import echoTech from './assets/echo-poses/echo-tech-assistant.png'
+import echoCreator from './assets/echo-poses/echo-creator-mode.png'
+import echoSocial from './assets/echo-poses/echo-social-media.png'
+import echoAiTools from './assets/echo-poses/echo-ai-tools.png'
+import echoPhoto from './assets/echo-poses/echo-photo-editor.png'
+import echoVideo from './assets/echo-poses/echo-video-editor.png'
+import echoScheduler from './assets/echo-poses/echo-scheduler.png'
+import echoAnalytics from './assets/echo-poses/echo-analytics.png'
+import {
+  BarChart3,
+  CalendarDays,
+  ChartNoAxesCombined,
+  FilePlus2,
+  ImagePlus,
+  LayoutDashboard,
+  LifeBuoy,
+  Link2,
+  Repeat2,
+  Settings2,
+  Video,
+} from 'lucide-react'
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
+import { UpgradeDialog } from './components/UpgradeDialog'
 
 const AI_PROMPT_IDEAS = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
   'Write a Facebook reminder for a flash sale ending tonight at midnight.',
-  'Draft Snapchat copy for a behind-the-scenes product reveal.',
 ]
 const POST_TYPE_CHIPS = ['Product launch', 'Event promotion', 'Educational post', 'Customer story']
 
@@ -38,9 +64,10 @@ const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((modu
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
-const CreditPurchasePanel = lazy(() => import('./components/CreditPurchasePanel').then((module) => ({ default: module.CreditPurchasePanel })))
+const AdsPanel = lazy(() => import('./components/AdsPanel').then((module) => ({ default: module.AdsPanel })))
 const RepostHubPanel = lazy(() => import('./components/RepostHubPanel').then((module) => ({ default: module.RepostHubPanel })))
 const PostSchedulerPanel = lazy(() => import('./components/PostSchedulerPanel').then((module) => ({ default: module.PostSchedulerPanel })))
+const PostingSchedulePanel = lazy(() => import('./components/PostingSchedulePanel').then((module) => ({ default: module.PostingSchedulePanel })))
 
 // Per-user localStorage isolation — each user's data lives under their own key
 const getUserKey = (userId) => `echoai-u-${userId}-v1`
@@ -49,19 +76,7 @@ const readUserData = (userId) => {
   try { return JSON.parse(localStorage.getItem(getUserKey(userId))) } catch { return null }
 }
 
-const PLATFORM_META = {
-  instagram: { label: 'Instagram', icon: 'IG', color: '#E1306C', bg: 'rgba(225,48,108,0.12)', border: 'rgba(225,48,108,0.35)' },
-  facebook:  { label: 'Facebook',  icon: 'FB', color: '#1877F2', bg: 'rgba(24,119,242,0.12)', border: 'rgba(24,119,242,0.35)' },
-  tiktok:    { label: 'TikTok',    icon: 'TT', color: '#FE2C55', bg: 'rgba(254,44,85,0.12)',  border: 'rgba(254,44,85,0.35)' },
-  snapchat:  { label: 'Snapchat',  icon: '👻', color: '#F7C600', bg: 'rgba(247,198,0,0.12)',  border: 'rgba(247,198,0,0.35)' },
-  x:         { label: 'X',         icon: '𝕏',  color: '#e2e8f0', bg: 'rgba(226,232,240,0.1)', border: 'rgba(226,232,240,0.3)' },
-  youtube:   { label: 'YouTube',   icon: '▶',  color: '#FF0000', bg: 'rgba(255,0,0,0.12)',    border: 'rgba(255,0,0,0.35)' },
-  linkedin:  { label: 'LinkedIn',  icon: 'in', color: '#0A66C2', bg: 'rgba(10,102,194,0.12)', border: 'rgba(10,102,194,0.35)' },
-}
-
-const getPlatformMeta = (platformName) =>
-  PLATFORM_META[platformName?.toLowerCase()] ??
-  { label: platformName, icon: '🔗', color: '#64748b', bg: 'rgba(100,116,139,0.1)', border: 'rgba(100,116,139,0.25)' }
+const getPlatformMeta = getSocialPlatform
 
 const SOCIAL_PUBLISHING_SCOPES = ['posts', 'images', 'videos', 'comments', 'analytics']
 
@@ -94,14 +109,33 @@ const hydrateWorkspaceAssets = (assets) =>
 const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 
 // Staff accounts run the platform, so they get the top plan without paying for it.
-const STAFF_ROLES = ['admin', 'super_admin', 'manager', 'it', 'accountant', 'board_member']
+const STAFF_ROLES = ['admin', 'super_admin', 'it', 'accountant']
 const STAFF_PLAN = 'creator'
-const isStaffRole = (role) => STAFF_ROLES.includes(String(role || '').toLowerCase())
+const normalizeRole = (role) => String(role ?? '').trim().replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase().replace(/[\s-]+/g, '_')
+const isStaffRole = (role) => STAFF_ROLES.includes(normalizeRole(role))
+const aiGenerationEnabled = () => false
+// Standard members can see every destination; Premium is required to operate
+// paid creation, publishing, monitoring, and advertising tools.
+const STANDARD_ACCOUNT_TABS = new Set(['dashboard', 'account', 'help', 'integrations'])
+const ASSET_DRAWER_ENABLED = false
 
 function App() {
   const [authView, setAuthView] = useState(() =>
     new URLSearchParams(window.location.search).get('checkout') === 'success' ? 'signup' : 'landing',
   )
+  const [headerMascotIndex, setHeaderMascotIndex] = useState(0)
+  const headerMascotImages = useMemo(
+    () => [echoTech, echoModern, echoCreator, echoSocial, echoAiTools, echoPhoto, echoVideo, echoScheduler, echoAnalytics],
+    [],
+  )
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setHeaderMascotIndex((current) => (current + 1) % headerMascotImages.length)
+    }, 60000)
+
+    return () => window.clearInterval(timer)
+  }, [headerMascotImages])
   const [authState, setAuthState] = useState({
     email: '',
     password: '',
@@ -109,6 +143,7 @@ function App() {
     company: '',
     otpCode: '',
   })
+  const [authTermsAccepted, setAuthTermsAccepted] = useState(false)
   const [authError, setAuthError] = useState(() => {
     if (typeof window === 'undefined') return ''
     const hash = window.location.hash || ''
@@ -177,6 +212,7 @@ function App() {
   )
 
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [workspaceSidebarOpen, setWorkspaceSidebarOpen] = useState(true)
   const [connectedAccounts, setConnectedAccounts] = useState([])
   const [socialPlatformReadiness, setSocialPlatformReadiness] = useState([])
   const [socialPlatformReadinessLoading, setSocialPlatformReadinessLoading] = useState(false)
@@ -228,14 +264,13 @@ function App() {
     imageIdea: '',
     scheduledAt: '',
     channels: [],
+    channelAccounts: {},
     mediaAssetIds: [],
   })
   const [schedulerError, setSchedulerError] = useState('')
   const [accountHandleDrafts, setAccountHandleDrafts] = useState(() => ({
     instagram: '@youraccount',
     facebook: 'Your page name',
-    tiktok: '@youraccount',
-    snapchat: 'Your Snapchat',
     x: '@youraccount',
     youtube: 'Your channel',
     linkedin: 'Your profile / page',
@@ -258,6 +293,9 @@ function App() {
       ? `${getPlatformMeta(platform).label} connected successfully. Choose another selected provider to continue.`
       : `${getPlatformMeta(platform).label} connection was not completed.${reason ? ` ${decodeURIComponent(reason)}` : ''}`
   })
+  const [onboardingOpen, setOnboardingOpen] = useState(false)
+  const [onboardingStep, setOnboardingStep] = useState(0)
+  const [onboardingAnswers, setOnboardingAnswers] = useState({ role: '', goals: [], teamSize: '' })
   const [integrationError, setIntegrationError] = useState('')
   const [aiInput, setAiInput] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState([])
@@ -280,8 +318,6 @@ function App() {
   const [editingName, setEditingName] = useState('')
   const [isAssetPanelOpen, setIsAssetPanelOpen] = useState(() => window.innerWidth > 768)
   const [drawerDragActive, setDrawerDragActive] = useState(false)
-  const [quotaEditingUserId, setQuotaEditingUserId] = useState('')
-  const [quotaDraftMb, setQuotaDraftMb] = useState('2048')
   const [licenses, setLicenses] = useState([])
   const [tickets, setTickets] = useState([])
   const [purchaseHistory, setPurchaseHistory] = useState([])
@@ -295,15 +331,16 @@ function App() {
   const [financialTasks, setFinancialTasks] = useState([])
   const [showPurchase, setShowPurchase] = useState(false)
   const [companyPackageRequested, setCompanyPackageRequested] = useState(false)
-  const [purchasePlan, setPurchasePlan] = useState('storage_pro')
+  const [purchasePlan, setPurchasePlan] = useState('premium')
   // Stripe sends the buyer back here after checkout; they still need a login.
   const [checkoutReturn] = useState(
     () => new URLSearchParams(window.location.search).get('checkout') || '',
   )
   const [myEntitlement, setMyEntitlement] = useState(null)
+  const [upgradePrompt, setUpgradePrompt] = useState('')
+  const [upgradePlanLoading, setUpgradePlanLoading] = useState('')
+  const [upgradeError, setUpgradeError] = useState('')
   const [aiDashboard, setAiDashboard] = useState(null)
-  const [creditPurchaseModalOpen, setCreditPurchaseModalOpen] = useState(false)
-  const [selectedCreditPackKey, setSelectedCreditPackKey] = useState('')
   const [creditsCheckoutNotice, setCreditsCheckoutNotice] = useState(() => {
     const status = new URLSearchParams(window.location.search).get('credits')
     const tokens = new URLSearchParams(window.location.search).get('tokens')
@@ -325,30 +362,28 @@ function App() {
   const [incomingReferralCode] = useState(
     () => new URLSearchParams(window.location.search).get('ref') || '',
   )
+  const [freePostingUsageState, setFreePostingUsageState] = useState(0)
+  const freePostingUsage = session?.id ? freePostingUsageState : 0
+  const hasPaidAccess = isStaffRole(session?.role) || myEntitlement?.entitled === true
 
-  const refreshAiBalance = async (addedAmount = null) => {
+  const requestWorkspaceTab = (tab) => {
+    setActiveTab(tab)
+  }
+
+  const handleChooseUpgradePlan = async (planKey) => {
+    setUpgradeError('')
+    setUpgradePlanLoading(planKey)
     try {
-      if (!isSupabaseConfigured && addedAmount) {
-        setAiDashboard((prev) => {
-          const currentMonthly = prev?.monthlyBalance ?? 500
-          const currentPurchased = (prev?.purchasedBalance ?? 0) + addedAmount
-          const total = currentMonthly + currentPurchased
-          return {
-            ...prev,
-            balance: total,
-            monthlyBalance: currentMonthly,
-            purchasedBalance: currentPurchased,
-            monthlyAllowance: prev?.monthlyAllowance ?? 500,
-            pricing: prev?.pricing ?? [],
-            recentJobs: prev?.recentJobs ?? [],
-          }
-        })
-        return
-      }
-      const data = await billingService.getAiDashboard()
-      setAiDashboard(data)
-    } catch (err) {
-      console.warn('Unable to refresh AI balance', err)
+      await billingService.startCheckout({
+        plan: planKey,
+        billingInterval: 'monthly',
+        email: session?.email,
+        fullName: contactCard?.fullName || session?.user_metadata?.full_name || '',
+        referralCode: incomingReferralCode,
+      })
+    } catch (error) {
+      setUpgradeError(error.message)
+      setUpgradePlanLoading('')
     }
   }
 
@@ -384,6 +419,17 @@ function App() {
       ? savedFolders
       : [...savedFolders, { id: AI_GENERATIONS_FOLDER_ID, name: 'AI Generations', parentId: 'folder-root', createdAt: new Date().toISOString(), system: true }])
     setWorkspaceAssets(hydrateWorkspaceAssets(d.workspaceAssets ?? []))
+    try {
+      const onboardingKey = `${getUserKey(user.id)}-onboarding`
+      const savedOnboarding = JSON.parse(localStorage.getItem(onboardingKey) || 'null')
+      if (!savedOnboarding?.completedAt) {
+        setOnboardingStep(0)
+        setOnboardingAnswers({ role: '', goals: [], teamSize: '' })
+        setOnboardingOpen(true)
+      }
+    } catch {
+      setOnboardingOpen(true)
+    }
 
     try {
       setAiDashboard(await billingService.getAiDashboard())
@@ -452,6 +498,23 @@ function App() {
   }, [session?.id])
 
   useEffect(() => {
+    if (!session?.id) return undefined
+
+    let active = true
+    getFreePostingUsage(session.id)
+      .then((usage) => {
+        if (active) setFreePostingUsageState(usage)
+      })
+      .catch(() => {
+        if (active) setFreePostingUsageState(0)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [session?.id])
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const creditsParam = params.get('credits')
     if (!creditsParam) return undefined
@@ -493,28 +556,31 @@ function App() {
   useEffect(() => {
     if (!session?.id) return
     try {
-      // Keep image previews for the editor; strip larger non-image previews from storage.
-      const assetsForStorage = workspaceAssets.map((asset) => {
-        const rest = { ...asset }
-        if (asset.type !== 'image') {
-          delete rest.previewUrl
-        }
-        return rest
-      })
-      localStorage.setItem(
-        getUserKey(session.id),
-        JSON.stringify({
-          scheduledPosts,
-          connectedAccounts,
-          companyMainPosts,
-          companySocialAccounts,
-          repostQueue,
-          userReposts,
-          workspaceFolders,
-          workspaceAssets: assetsForStorage,
-          ...(isSupabaseConfigured ? {} : { aiAgentConfig }),
-        }),
-      )
+      // eslint-disable-next-line no-unused-vars -- previewUrl/dataUrl deliberately dropped from storage
+      const assetsForStorage = workspaceAssets.map(({ previewUrl, dataUrl, projectMetadata, ...asset }) => ({
+        ...asset,
+        ...(projectMetadata
+          ? { projectMetadata: { ...projectMetadata, imageSrc: undefined } }
+          : {}),
+      }))
+      const userData = {
+        scheduledPosts,
+        connectedAccounts,
+        companyMainPosts,
+        companySocialAccounts,
+        repostQueue,
+        userReposts,
+        workspaceFolders,
+        workspaceAssets: assetsForStorage,
+        ...(isSupabaseConfigured ? {} : { aiAgentConfig }),
+      }
+      try {
+        localStorage.setItem(getUserKey(session.id), JSON.stringify(userData))
+      } catch (storageError) {
+        if (storageError?.name !== 'QuotaExceededError') throw storageError
+        localStorage.setItem(getUserKey(session.id), JSON.stringify({ ...userData, workspaceAssets: [] }))
+        console.warn('Workspace asset previews exceeded browser storage; saved workspace metadata only.')
+      }
     } catch (err) {
       console.error('Unable to save user data', err)
     }
@@ -589,9 +655,9 @@ function App() {
     return 'badge info'
   }
 
-  const isAdminUser = session?.role === 'admin'
-  const canViewManagementBoard = ['admin', 'manager', 'it', 'accountant', 'board_member'].includes(session?.role || '') || session?.isBoardMember === true
-  const canManageBrandKit = ['admin', 'manager'].includes(session?.role || '')
+  const isAdminUser = ['admin', 'super_admin'].includes(normalizeRole(session?.role))
+  const canViewManagementBoard = ['admin', 'super_admin', 'it', 'accountant', 'board_member', 'partner'].includes(normalizeRole(session?.role)) || session?.isBoardMember === true
+  const userCanManageBrandKit = canManageBrandKit(session)
 
   async function loadAdminData(user = session) {
     setAdminError('')
@@ -621,7 +687,7 @@ function App() {
         return
       }
 
-      if (user?.role !== 'admin' && (user?.isBoardMember || user?.role === 'board_member')) {
+      if (!['admin', 'super_admin'].includes(normalizeRole(user?.role)) && (user?.isBoardMember || normalizeRole(user?.role) === 'board_member')) {
         return
       }
 
@@ -683,7 +749,7 @@ function App() {
   const financeSetter = (type, setter) => (update) => {
     setter((previous) => {
       const next = typeof update === 'function' ? update(previous) : update
-      if (isSupabaseConfigured && session?.company && ['admin', 'accountant'].includes(session.role)) {
+      if (isSupabaseConfigured && session?.company && ['admin', 'super_admin', 'accountant'].includes(normalizeRole(session.role))) {
         financeService.replaceRecords({
           companyKey: session.company,
           userId: session.id,
@@ -737,6 +803,23 @@ function App() {
     return updated
   }
 
+  const handleUpdateSupportTicket = async (payload) => {
+    const updated = await authService.updateSupportTicket(payload)
+    const assignee = teamMembers.find((member) => member.id === updated.assigneeId)
+    const normalized = {
+      ...updated,
+      ...(payload.assigneeId !== undefined ? { assignee: assignee?.fullName || assignee?.email || '' } : {}),
+    }
+    setTickets((prev) => prev.map((ticket) => ticket.id === payload.ticketId ? { ...ticket, ...normalized } : ticket))
+    return normalized
+  }
+
+  const handleRefreshSupportTickets = async () => {
+    const supportTickets = await authService.getSupportTickets()
+    setTickets(supportTickets)
+    return supportTickets
+  }
+
   const restorePersistedSession = useEffectEvent(async (isActive) => {
     try {
       const restoredUser = await authService.restoreSession()
@@ -744,7 +827,7 @@ function App() {
 
       setSession(restoredUser)
       await applyUserData(restoredUser)
-      if (['admin', 'manager', 'it', 'accountant', 'board_member'].includes(restoredUser.role)) {
+      if (['admin', 'super_admin', 'it', 'accountant'].includes(normalizeRole(restoredUser.role)) || restoredUser.isBoardMember) {
         await loadAdminData(restoredUser)
       }
     } catch {
@@ -854,10 +937,26 @@ function App() {
     }
   }
 
+  const handleSocialSignIn = async (provider) => {
+    setAuthError('')
+    setAuthNotice('')
+    setAuthLoading(true)
+    try {
+      await authService.signInWithProvider(provider)
+    } catch (error) {
+      setAuthError(error.message)
+      setAuthLoading(false)
+    }
+  }
+
   const handleSignUp = async (event) => {
     event.preventDefault()
     setAuthError('')
     setAuthNotice('')
+    if (!authTermsAccepted) {
+      setAuthError('Please accept the terms to create your account.')
+      return
+    }
     setAuthLoading(true)
 
     try {
@@ -871,8 +970,8 @@ function App() {
         result?.activated
           ? result.seatActivated
             ? 'Account created and your company seat is assigned. Check your inbox to verify your email, then sign in.'
-            : 'Account created and your subscription is attached. Check your inbox to verify your email, then sign in.'
-          : 'Account request submitted. Check your inbox to verify your email. Access unlocks once your subscription is active or a manager approves you.',
+            : 'Your free account is ready. Check your inbox to verify your email, then sign in.'
+          : 'Your free account is ready. Check your inbox to verify your email, then sign in.',
       )
       setAuthView('signin')
     } catch (error) {
@@ -898,6 +997,22 @@ function App() {
     }
   }
 
+  const handleResendConfirmation = async () => {
+    setAuthError('')
+    setAuthNotice('')
+    setAuthLoading(true)
+    try {
+      const result = await authService.resendSignupConfirmation(authState.email)
+      setAuthNotice(result?.alreadyConfirmed
+        ? 'This account is already confirmed. You can sign in now.'
+        : 'Confirmation email resent. Check your inbox and spam folder.')
+    } catch (error) {
+      setAuthError(error.message)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   const handleResetPasswordSubmit = async (event) => {
     event.preventDefault()
     setAuthError('')
@@ -913,8 +1028,10 @@ function App() {
       return
     }
 
-    if (resetPassword.newPassword.length < 8) {
-      setAuthError('Choose a password with at least 8 characters.')
+    const isTemporaryPasswordChange = session?.mustChangePassword === true || session?.app_metadata?.must_change_password === true
+    const minimumLength = isTemporaryPasswordChange ? 12 : 8
+    if (resetPassword.newPassword.length < minimumLength) {
+      setAuthError(`Choose a password with at least ${minimumLength} characters.`)
       return
     }
 
@@ -926,20 +1043,44 @@ function App() {
         return
       }
 
-      const { error } = await supabase.auth.updateUser({
-        password: resetPassword.newPassword,
-      })
+      if (isTemporaryPasswordChange) {
+        await authService.changeTemporaryPassword(resetPassword.newPassword)
+      } else {
+        const { data: currentSession } = await supabase.auth.getSession()
+        if (!currentSession.session && typeof window !== 'undefined' && window.location.hash.startsWith('#')) {
+          const hashParams = new URLSearchParams(window.location.hash.slice(1))
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+          if (accessToken && refreshToken) {
+            const { error: sessionError } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+            if (sessionError) throw new Error(sessionError.message)
+          }
+        }
 
-      if (error) {
-        throw new Error(error.message)
+        const { data: recoverySession } = await supabase.auth.getSession()
+        if (!recoverySession.session) {
+          throw new Error('Your setup link has expired or its recovery session was not established. Request a new link and open it in the same browser.')
+        }
+
+        const { error } = await supabase.auth.updateUser({
+          password: resetPassword.newPassword,
+        })
+        if (error) throw new Error(error.message)
       }
 
-      setAuthNotice('Your password has been updated. You can sign in now.')
+      setAuthNotice(isTemporaryPasswordChange ? 'Your password has been updated. Opening your account...' : 'Your password has been updated. You can sign in now.')
       setResetPassword({ newPassword: '', confirmPassword: '' })
       setTimeout(() => {
+        if (isTemporaryPasswordChange) {
+          setSession((current) => current ? {
+            ...current,
+            mustChangePassword: false,
+            app_metadata: { ...(current.app_metadata || {}), must_change_password: false },
+          } : current)
+        }
         setIsPasswordRecoveryActive(false)
         setAuthView('signin')
-        window.history.replaceState({}, '', window.location.origin)
+        if (!isTemporaryPasswordChange) window.history.replaceState({}, '', window.location.origin)
       }, 1200)
     } catch (error) {
       setAuthError(error.message)
@@ -1295,7 +1436,7 @@ function App() {
       await loadRepostWorkspace()
       await loadBrandKit()
       await loadCloudConnections()
-      if (['admin', 'manager', 'it', 'accountant', 'board_member'].includes(result.user?.role)) {
+      if (['admin', 'super_admin', 'it', 'accountant'].includes(normalizeRole(result.user?.role)) || result.user?.isBoardMember) {
         await loadAdminData(result.user)
       }
       setMfaPending(false)
@@ -1337,8 +1478,12 @@ function App() {
         status: 'oauth required',
         connectionStatus: 'profile_saved',
       }
+      // Update the matching account by id when editing, and only replace an
+      // unconnected placeholder for this platform — never a different,
+      // already-connected account for the same platform.
       setConnectedAccounts((prev) => [
-        ...prev.filter((account) => account.platform.toLowerCase() !== normalizedPlatform),
+        ...prev.filter((account) => account.id !== nextAccount.id
+          && !(account.platform.toLowerCase() === normalizedPlatform && account.status !== 'healthy')),
         nextAccount,
       ])
       setAccountHandleDrafts((prev) => ({ ...prev, [normalizedPlatform]: normalizedName }))
@@ -1346,6 +1491,7 @@ function App() {
       setIntegrationError(error.message)
     }
   }
+
 
   const removeSocialAccount = async (account) => {
     setIntegrationError('')
@@ -1401,6 +1547,32 @@ function App() {
     })
   }
 
+  const finishOnboarding = () => {
+    if (!session?.id) return
+    localStorage.setItem(`${getUserKey(session.id)}-onboarding`, JSON.stringify({
+      ...onboardingAnswers,
+      completedAt: new Date().toISOString(),
+    }))
+    setOnboardingOpen(false)
+  }
+
+  const toggleOnboardingGoal = (goal) => {
+    setOnboardingAnswers((current) => ({
+      ...current,
+      goals: current.goals.includes(goal)
+        ? current.goals.filter((item) => item !== goal)
+        : [...current.goals, goal],
+    }))
+  }
+
+  const startOnboardingConnection = async (platform) => {
+    setQuickConnectNotice(`Opening ${getPlatformMeta(platform).label}. Sign in there and approve EchoAI access.`)
+    await connectSocialAccount({
+      platform,
+      requestedScopes: ['posts', 'images', 'videos', 'analytics'],
+    })
+  }
+
   const loadSocialPlatformReadiness = async () => {
     setSocialPlatformReadinessError('')
     setSocialPlatformReadinessLoading(true)
@@ -1413,17 +1585,33 @@ function App() {
     }
   }
 
+  // Resolves which connected account a channel targets: the account chosen in
+  // channelAccounts when set (needed once a platform has more than one
+  // connected account), otherwise the first connected account for that platform.
+  const resolveChannelAccount = (channel, channelAccounts) => {
+    const requestedAccountId = channelAccounts?.[channel]
+    if (requestedAccountId) {
+      return connectedAccounts.find((account) => account.id === requestedAccountId)
+    }
+    return connectedAccounts.find((account) => account.platform.toLowerCase() === channel)
+  }
+
+  const getComposerMedia = () => (composer.mediaAssetIds || [])
+    .map((assetId) => workspaceAssets.find((asset) => asset.id === assetId))
+    .filter(Boolean)
+    .map(({ id, name, type, mime, previewUrl, storagePath }) => ({ id, name, type, mime, previewUrl, storagePath }))
+
   const handleSchedulePost = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    const hasContent = Boolean(composer.message.trim() || composer.mediaAssetIds.length || composer.imageIdea.trim())
+    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim())
     if (!hasContent || !composer.scheduledAt || !composer.channels.length) {
-      setSchedulerError('Attach a photo/video flyer, write a caption, or add an image brief, select at least one channel, and set a deployment date and time.')
+      setSchedulerError('Write a caption or add an image brief, select at least one channel, and set a deployment date and time.')
       return
     }
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
-      const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
+      const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
       return !linkedAccount || linkedAccount.status !== 'healthy'
     })
 
@@ -1432,7 +1620,7 @@ function App() {
       return
     }
 
-    const defaultTitle = composer.campaign.trim() || (composer.mediaAssetIds.length ? 'Visual Flyer Post' : 'Social Post')
+    const defaultTitle = composer.campaign.trim() || 'Social Post'
 
     const newPost = await platformService.schedulePost({
       campaign: defaultTitle,
@@ -1440,11 +1628,8 @@ function App() {
       imageIdea: composer.imageIdea,
       scheduledAt: composer.scheduledAt,
       channels: composer.channels,
-      media: workspaceAssets
-        .filter((asset) => composer.mediaAssetIds.includes(asset.id))
-        .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl }) => ({
-          id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl,
-        })),
+      channelAccounts: composer.channelAccounts,
+      media: getComposerMedia(),
     })
 
     setScheduledPosts((prev) => [newPost, ...prev])
@@ -1455,21 +1640,73 @@ function App() {
       imageIdea: '',
       scheduledAt: '',
       channels: [],
+      channelAccounts: {},
       mediaAssetIds: [],
     })
+  }
+
+  const handlePostToNextSlot = async () => {
+    setSchedulerError('')
+    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim())
+    if (!hasContent || !composer.channels.length) {
+      setSchedulerError('Write a caption or add an image brief, and select at least one channel before queuing to the next slot.')
+      return
+    }
+
+    const invalidSelectedChannels = composer.channels.filter((channel) => {
+      const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
+      return !linkedAccount || linkedAccount.status !== 'healthy'
+    })
+    if (invalidSelectedChannels.length) {
+      setSchedulerError(`Complete OAuth for ${invalidSelectedChannels.join(', ')} before queuing this post.`)
+      return
+    }
+
+    try {
+      const schedule = await postingScheduleService.get()
+      const nextSlot = postingScheduleService.getNextAvailableSlot(schedule, scheduledPosts)
+      if (!nextSlot) {
+        setSchedulerError('No posting slots are set up yet. Add times in Account > Posting schedule first.')
+        return
+      }
+
+      const newPost = await platformService.schedulePost({
+        campaign: composer.campaign.trim() || 'Social Post',
+        message: composer.message,
+        imageIdea: composer.imageIdea,
+        scheduledAt: nextSlot.toISOString(),
+        channels: composer.channels,
+        channelAccounts: composer.channelAccounts,
+        media: getComposerMedia(),
+      })
+
+      setScheduledPosts((prev) => [newPost, ...prev])
+      await syncPostToCalendar(newPost)
+      setComposer({
+        campaign: '',
+        message: '',
+        imageIdea: '',
+        scheduledAt: '',
+        channels: [],
+        channelAccounts: {},
+        mediaAssetIds: [],
+      })
+    } catch (error) {
+      setSchedulerError(error.message)
+    }
   }
 
   const handlePostNow = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    const hasContent = Boolean(composer.message.trim() || composer.mediaAssetIds.length || composer.imageIdea.trim())
+    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim())
     if (!hasContent || !composer.channels.length) {
-      setSchedulerError('Attach a photo/video flyer, write a caption, or add an image brief, and select at least one channel before posting.')
+      setSchedulerError('Write a caption or add an image brief, and select at least one channel before posting.')
       return
     }
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
-      const linkedAccount = connectedAccounts.find((a) => a.platform.toLowerCase() === channel)
+      const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
       return !linkedAccount || linkedAccount.status !== 'healthy'
     })
 
@@ -1478,7 +1715,7 @@ function App() {
       return
     }
 
-    const defaultTitle = composer.campaign.trim() || (composer.mediaAssetIds.length ? 'Visual Flyer Post' : 'Instant Post')
+    const defaultTitle = composer.campaign.trim() || 'Instant Post'
 
     try {
       const newPost = await platformService.postNow({
@@ -1486,11 +1723,8 @@ function App() {
         message: composer.message,
         imageIdea: composer.imageIdea,
         channels: composer.channels,
-        media: workspaceAssets
-          .filter((asset) => composer.mediaAssetIds.includes(asset.id))
-          .map(({ id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl }) => ({
-            id, name, type, mime, size, previewUrl, linked, provider, externalId, storagePath, webUrl,
-          })),
+        channelAccounts: composer.channelAccounts,
+        media: getComposerMedia(),
       })
 
       setScheduledPosts((prev) => [newPost, ...prev])
@@ -1500,8 +1734,42 @@ function App() {
         imageIdea: '',
         scheduledAt: '',
         channels: [],
+        channelAccounts: {},
         mediaAssetIds: [],
       })
+    } catch (error) {
+      setSchedulerError(error.message)
+    }
+  }
+
+  const handleRepostNow = async (post) => {
+    setSchedulerError('')
+    const channels = post.channels || []
+    if (!channels.length) {
+      setSchedulerError('Select at least one connected channel before reposting.')
+      return
+    }
+
+    const invalidSelectedChannels = channels.filter((channel) => {
+      const linkedAccount = resolveChannelAccount(channel, post.channelAccounts)
+      return !linkedAccount || linkedAccount.status !== 'healthy'
+    })
+
+    if (invalidSelectedChannels.length) {
+      setSchedulerError(`Complete OAuth for ${invalidSelectedChannels.join(', ')} before reposting.`)
+      return
+    }
+
+    try {
+      const repost = await platformService.postNow({
+        campaign: post.campaign ? `Repost: ${post.campaign}` : 'Repost',
+        message: post.message || '',
+        imageIdea: post.imageIdea || '',
+        channels,
+        channelAccounts: post.channelAccounts,
+        media: post.media || [],
+      })
+      setScheduledPosts((prev) => [repost, ...prev])
     } catch (error) {
       setSchedulerError(error.message)
     }
@@ -1530,6 +1798,18 @@ function App() {
     try {
       await platformService.deleteScheduledPost(post.id)
       setScheduledPosts((prev) => prev.filter((item) => item.id !== post.id))
+    } catch (error) {
+      setSchedulerError(error.message)
+    }
+  }
+
+  // Used by the calendar's drag-and-drop day cells to move a queued post to a new date.
+  const handleReschedulePost = async (post, scheduledAtIso) => {
+    if (post.status !== 'scheduled') return
+    setSchedulerError('')
+    try {
+      const result = await platformService.reschedulePost(post.id, scheduledAtIso)
+      setScheduledPosts((prev) => prev.map((item) => (item.id === post.id ? { ...item, scheduledAt: result.scheduledAt } : item)))
     } catch (error) {
       setSchedulerError(error.message)
     }
@@ -1819,6 +2099,10 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    analyticsService.trackEvent({ session, eventType: 'navigation', eventName: activeTab, route: activeTab }).catch(() => {})
+  }, [activeTab, session])
+
   const handleAssetFileDrop = async (event) => {
     event.preventDefault()
     event.stopPropagation()
@@ -1942,32 +2226,6 @@ function App() {
 
   const handleAssetDragStart = () => {}
 
-  const handleQuotaUpdate = async (member) => {
-    const nextQuota = Number(quotaDraftMb)
-    if (!Number.isFinite(nextQuota) || nextQuota <= 0) {
-      setAdminError('Storage quota must be a positive number.')
-      return
-    }
-
-    try {
-      const updatedMember = await authService.updateUserStorageQuota({
-        userId: member.id,
-        storageQuotaMb: nextQuota,
-      })
-
-      setTeamMembers((prev) =>
-        prev.map((item) => (item.id === updatedMember.id ? { ...item, ...updatedMember } : item)),
-      )
-      if (session?.id === updatedMember.id) {
-        setSession((prev) => ({ ...prev, storageQuotaMb: updatedMember.storageQuotaMb }))
-      }
-      setQuotaEditingUserId('')
-      setQuotaDraftMb('2048')
-      setAdminError('')
-    } catch (error) {
-      setAdminError(error.message)
-    }
-  }
   const handleUpdateUserRole = async (member, nextRole) => {
     setAdminError('')
     setAdminLoading(true)
@@ -1985,7 +2243,7 @@ function App() {
 
       if (session?.id === updatedMember.id) {
         setSession((prev) => ({ ...prev, role: updatedMember.role }))
-        if (!['admin', 'manager', 'it'].includes(updatedMember.role)) {
+        if (!['admin', 'super_admin', 'it'].includes(normalizeRole(updatedMember.role))) {
           setActiveTab('dashboard')
         }
       }
@@ -1998,6 +2256,7 @@ function App() {
 
   const openSupportModal = () => {
     if (supportCloseTimerRef.current) window.clearTimeout(supportCloseTimerRef.current)
+    analyticsService.trackEvent({ session, eventType: 'support', eventName: 'opened_support_modal', route: activeTab }).catch(() => {})
     setSupportError('')
     setSupportSuccess('')
     setSupportTicket({
@@ -2019,8 +2278,8 @@ function App() {
     setSupportTicket((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleAdminUserAction = async ({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent }) => {
-    const result = await authService.adminUserAction({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent })
+  const handleAdminUserAction = async ({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent, temporaryPassword }) => {
+    const result = await authService.adminUserAction({ action, userId, fullName, company, email, role, enabled, note, isBetaTester, profitSharePercent, temporaryPassword })
 
     if (action === 'create-user' && result?.profile) {
       setTeamMembers((prev) => [
@@ -2035,8 +2294,12 @@ function App() {
           trademarkEditAccess: result.profile.trademark_edit_access === true,
           developerAppEditAccess: result.profile.developer_app_edit_access === true,
           companyEmailEditAccess: result.profile.company_email_edit_access === true,
+          licenseEditAccess: result.profile.license_edit_access === true,
+          integrationsEditAccess: result.profile.integrations_edit_access === true,
+          aiOperationsEditAccess: result.profile.ai_operations_edit_access === true,
+          siteControlsEditAccess: result.profile.site_controls_edit_access === true,
           profitSharePercent: Number(result.profile.profit_share_percent || 0),
-          isBoardMember: result.profile.is_board_member === true || result.profile.role === 'board_member',
+          isBoardMember: result.profile.is_board_member === true || normalizeRole(result.profile.role) === 'board_member',
         },
         ...prev,
       ])
@@ -2057,6 +2320,30 @@ function App() {
     if (action === 'set-company-email-edit-access' && result?.profile) {
       setTeamMembers((prev) => prev.map((member) => (
         member.id === userId ? { ...member, companyEmailEditAccess: result.profile.company_email_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-license-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, licenseEditAccess: result.profile.license_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-integrations-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, integrationsEditAccess: result.profile.integrations_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-ai-operations-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, aiOperationsEditAccess: result.profile.ai_operations_edit_access === true } : member
+      )))
+    }
+
+    if (action === 'set-site-controls-edit-access' && result?.profile) {
+      setTeamMembers((prev) => prev.map((member) => (
+        member.id === userId ? { ...member, siteControlsEditAccess: result.profile.site_controls_edit_access === true } : member
       )))
     }
 
@@ -2086,6 +2373,10 @@ function App() {
       if (session?.id === userId) {
         setSession((current) => ({ ...current, fullName: result.profile.full_name, company: result.profile.company }))
       }
+    }
+
+    if (action === 'delete-user' && result?.deleted) {
+      setTeamMembers((prev) => prev.filter((member) => member.id !== userId))
     }
 
     return result
@@ -2660,8 +2951,7 @@ function App() {
     }
   }
 
-  // Continuously enforce billing entitlement. If a renewal fails or a plan
-  // lapses while someone is signed in, their session ends without intervention.
+  // Refresh paid capability without ending the permanent free account session.
   useEffect(() => {
     if (!isSupabaseConfigured || !session?.id) return undefined
 
@@ -2670,7 +2960,7 @@ function App() {
     const enforceEntitlement = async () => {
       // Staff run the site itself and are never billed, so entitlement never gates them.
       if (isStaffRole(session?.role)) {
-        setMyEntitlement({ entitled: true, status: 'employee', plan: STAFF_PLAN, provider: 'internal', role: session.role })
+        setMyEntitlement({ entitled: true, accessLevel: 'paid', status: 'employee', plan: STAFF_PLAN, provider: 'internal', role: session.role })
         return
       }
 
@@ -2686,11 +2976,6 @@ function App() {
       setMyEntitlement(entitlement)
 
       if (entitlement?.entitled !== false) return
-
-      await authService.signOut()
-      if (cancelled) return
-      setSession(null)
-      setAuthError('Your subscription is no longer active. Renew to restore access.')
     }
     enforceEntitlement()
     const timer = setInterval(enforceEntitlement, 5 * 60 * 1000)
@@ -2718,19 +3003,22 @@ function App() {
     setWorkspaceFolders([])
     setWorkspaceAssets([])
     setAiDashboard(null)
-    setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: [], mediaAssetIds: [] })
+    setComposer({ campaign: '', message: '', imageIdea: '', scheduledAt: '', channels: [], channelAccounts: {}, mediaAssetIds: [] })
     setAiSuggestions([])
     setAiAgentConfig(createDefaultAiAgentConfig())
     setAiAgentDraft(createDefaultAiAgentConfig())
+    setMyEntitlement(null)
+    setUpgradePrompt('')
   }
 
-  const isResetPasswordRoute = isPasswordRecoveryActive || (typeof window !== 'undefined' && window.location.pathname === '/reset-password')
+  const isTemporaryPasswordChange = session?.mustChangePassword === true || session?.app_metadata?.must_change_password === true
+  const isResetPasswordRoute = isTemporaryPasswordChange || isPasswordRecoveryActive || (typeof window !== 'undefined' && window.location.pathname === '/reset-password')
 
   if (isResetPasswordRoute) {
     return (
       <div className="auth-page">
         <header className="auth-header">
-          <button
+          {!isTemporaryPasswordChange && <button
             type="button"
             className="text-button"
             onClick={() => {
@@ -2742,12 +3030,12 @@ function App() {
             }}
           >
             ← Back to sign in
-          </button>
+          </button>}
         </header>
 
         <section className="auth-panel">
-          <h1>Set your password</h1>
-          <p>Choose a secure password for your account to complete setup or restore access.</p>
+          <h1>{isTemporaryPasswordChange ? 'Replace your temporary password' : 'Set your password'}</h1>
+          <p>{isTemporaryPasswordChange ? 'You must choose a private password before continuing to your account.' : 'Choose a secure password for your account to complete setup or restore access.'}</p>
 
           <form className="auth-form" onSubmit={handleResetPasswordSubmit}>
             <label>
@@ -2755,7 +3043,7 @@ function App() {
               <input
                 type="password"
                 required
-                minLength={8}
+                minLength={isTemporaryPasswordChange ? 12 : 8}
                 value={resetPassword.newPassword}
                 onChange={(event) => setResetPassword((prev) => ({ ...prev, newPassword: event.target.value }))}
                 placeholder="••••••••"
@@ -2766,7 +3054,7 @@ function App() {
               <input
                 type="password"
                 required
-                minLength={8}
+                minLength={isTemporaryPasswordChange ? 12 : 8}
                 value={resetPassword.confirmPassword}
                 onChange={(event) => setResetPassword((prev) => ({ ...prev, confirmPassword: event.target.value }))}
                 placeholder="••••••••"
@@ -2780,7 +3068,7 @@ function App() {
           {authError && (
             <div style={{ marginTop: '0.8rem' }}>
               <p className="auth-message auth-error">{authError}</p>
-              <button
+              {!isTemporaryPasswordChange && <button
                 type="button"
                 className="text-button"
                 style={{ marginTop: '0.4rem', fontSize: '0.85rem' }}
@@ -2790,7 +3078,7 @@ function App() {
                 }}
               >
                 Need a new reset link? Click here →
-              </button>
+              </button>}
             </div>
           )}
           {authNotice && <p className="auth-message">{authNotice}</p>}
@@ -2894,6 +3182,7 @@ function App() {
           <LandingPage
             announcement={announcements.landing}
             onSignIn={() => setAuthView('signin')}
+            onCreateAccount={() => setAuthView('signup')}
             onCompanyPackageRequest={() => setCompanyPackageRequested(false)}
             onPurchase={(planKey) => {
               if (planKey) setPurchasePlan(planKey)
@@ -2923,6 +3212,18 @@ function App() {
             {authView === 'signin' ? 'Create account' : 'Sign in'}
           </button>
         </header>
+
+        <div className="auth-layout">
+          <aside className="auth-benefits" aria-label="EchoAI benefits">
+            <p className="section-label">EchoAI workspace</p>
+            <h2>Manage social media with clarity, not chaos.</h2>
+            <div className="auth-benefit-list">
+              <div><span className="auth-benefit-icon">▦</span><p><strong>All your social media in one place</strong><small>Stop jumping between tools. Keep content, accounts, and data together.</small></p></div>
+              <div><span className="auth-benefit-icon">♡</span><p><strong>Seamless collaboration</strong><small>Assign work, review posts, and keep feedback organized before anything goes live.</small></p></div>
+              <div><span className="auth-benefit-icon">▥</span><p><strong>Measure what really matters</strong><small>See what is working, what is not, and where to focus next.</small></p></div>
+            </div>
+            <div className="auth-trust-note"><strong>Built for creators and teams</strong><span>One calm workspace for the work behind every post.</span></div>
+          </aside>
 
         <section className="auth-panel">
           {checkoutReturn === 'success' && (
@@ -3013,6 +3314,17 @@ function App() {
             )
           ) : (
             <>
+              <div className="auth-provider-actions">
+                <button type="button" className="auth-provider-button" onClick={() => handleSocialSignIn('google')} disabled={authLoading}>
+                  <span className="provider-mark provider-google" aria-hidden="true">G</span>
+                  Continue with Google
+                </button>
+                <button type="button" className="auth-provider-button" onClick={() => handleSocialSignIn('facebook')} disabled={authLoading}>
+                  <span className="provider-mark provider-facebook" aria-hidden="true">f</span>
+                  Continue with Facebook
+                </button>
+              </div>
+              <div className="auth-divider"><span>or use your email</span></div>
               {authView === 'signin' && (
                 <form className="auth-form" onSubmit={handleSignIn}>
                   <h2>Sign in</h2>
@@ -3037,6 +3349,9 @@ function App() {
                   <button type="submit" disabled={authLoading}>
                     {authLoading ? 'Signing in...' : 'Login'}
                   </button>
+                  <button type="button" className="text-button" onClick={handleResendConfirmation} disabled={authLoading || !authState.email.trim()}>
+                    Resend confirmation email
+                  </button>
                   <button
                     type="button"
                     className="text-button"
@@ -3049,7 +3364,7 @@ function App() {
                     className="text-button"
                     onClick={() => setShowPurchase(true)}
                   >
-                    Don&apos;t have access? Purchase a license →
+                    Need paid tools? View plans →
                   </button>
                 </form>
               )}
@@ -3057,6 +3372,7 @@ function App() {
               {authView === 'signup' && (
                 <form className="auth-form" onSubmit={handleSignUp}>
                   <h2>Create account</h2>
+                  <p className="auth-form-note">Start with a free workspace. Connect your channels when you are ready.</p>
                   <label>
                     Full name
                     <input
@@ -3092,6 +3408,10 @@ function App() {
                       onChange={(event) => handleAuthChange('password', event.target.value)}
                       placeholder="••••••••"
                     />
+                  </label>
+                  <label className="auth-terms-check">
+                    <input type="checkbox" checked={authTermsAccepted} onChange={(event) => setAuthTermsAccepted(event.target.checked)} />
+                    <span>I agree to EchoAI&apos;s terms and privacy policy.</span>
                   </label>
                   <button type="submit" disabled={authLoading}>
                     {authLoading ? 'Creating account...' : 'Create account'}
@@ -3129,18 +3449,128 @@ function App() {
           {authError && <p className="auth-message auth-error">{authError}</p>}
           {authNotice && <p className="auth-message">{authNotice}</p>}
         </section>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="app-shell">
+      {onboardingOpen && (
+        <div className="onboarding-overlay" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+          <section className="onboarding-modal">
+            <header className="onboarding-header">
+              <div>
+                <p className="section-label">Let&apos;s tailor your workspace</p>
+                <h2 id="onboarding-title">
+                  {onboardingStep === 0 && 'What describes you best?'}
+                  {onboardingStep === 1 && 'How will you use EchoAI?'}
+                  {onboardingStep === 2 && 'Who will use the workspace?'}
+                  {onboardingStep === 3 && 'Connect your social networks'}
+                </h2>
+                <p>
+                  {onboardingStep === 0 && 'A quick answer helps us make the workspace feel relevant from day one.'}
+                  {onboardingStep === 1 && 'Choose every activity you want EchoAI to support.'}
+                  {onboardingStep === 2 && 'We use this to shape collaboration and approvals.'}
+                  {onboardingStep === 3 && 'You can connect more channels later from Integrations.'}
+                </p>
+              </div>
+              <button type="button" className="onboarding-skip" onClick={finishOnboarding}>Skip for now</button>
+            </header>
+
+            <div className="onboarding-progress" aria-label={`Onboarding step ${onboardingStep + 1} of 4`}>
+              {[0, 1, 2, 3].map((step) => <span key={step} className={step <= onboardingStep ? 'active' : ''} />)}
+            </div>
+
+            <div className="onboarding-body">
+              {onboardingStep === 0 && (
+                <div className="onboarding-choice-grid">
+                  {[
+                    ['creator', 'Content creator, personal brand, or influencer', 'Create consistently without juggling tools.'],
+                    ['business', 'Social media management in my company', 'Keep campaigns, approvals, and channels together.'],
+                    ['freelancer', 'Freelancer working for clients', 'Manage multiple brands with less context switching.'],
+                    ['agency', 'Marketing agency', 'Coordinate clients, content, and reporting in one place.'],
+                  ].map(([key, title, detail]) => (
+                    <button key={key} type="button" className={`onboarding-choice ${onboardingAnswers.role === key ? 'selected' : ''}`} onClick={() => setOnboardingAnswers((current) => ({ ...current, role: key }))}>
+                      <strong>{title}</strong><small>{detail}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {onboardingStep === 1 && (
+                <div className="onboarding-choice-grid">
+                  {[
+                    ['publish', 'Programming and publishing content'],
+                    ['analytics', 'Analysis and reports'],
+                    ['bio', 'Create a page for your bio link'],
+                    ['conversation', 'Conversation management'],
+                  ].map(([key, title]) => (
+                    <button key={key} type="button" className={`onboarding-choice ${onboardingAnswers.goals.includes(key) ? 'selected' : ''}`} onClick={() => toggleOnboardingGoal(key)}>
+                      <strong>{title}</strong><small>Select all that apply.</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {onboardingStep === 2 && (
+                <div className="onboarding-choice-grid onboarding-team-grid">
+                  {[
+                    ['solo', 'Just me'],
+                    ['team', 'I will work with more colleagues'],
+                  ].map(([key, title]) => (
+                    <button key={key} type="button" className={`onboarding-choice ${onboardingAnswers.teamSize === key ? 'selected' : ''}`} onClick={() => setOnboardingAnswers((current) => ({ ...current, teamSize: key }))}>
+                      <strong>{title}</strong><small>We can adjust this later.</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {onboardingStep === 3 && (
+                <div className="onboarding-social-grid">
+                  {['instagram', 'facebook', 'youtube', 'linkedin', 'x'].map((platform) => {
+                    const connected = connectedAccounts.some((account) => account.platform.toLowerCase() === platform && account.status === 'healthy')
+                    return (
+                      <button key={platform} type="button" className={`onboarding-social ${connected ? 'connected' : ''}`} onClick={() => startOnboardingConnection(platform)} disabled={connected}>
+                        <span>{getPlatformMeta(platform).icon}</span>
+                        <strong>{connected ? 'Connected' : `Connect ${getPlatformMeta(platform).label}`}</strong>
+                      </button>
+                    )
+                  })}
+                  {quickConnectNotice && <p className="onboarding-notice">{quickConnectNotice}</p>}
+                </div>
+              )}
+            </div>
+
+            <footer className="onboarding-footer">
+              <button type="button" className="ghost-button" onClick={() => setOnboardingStep((step) => Math.max(0, step - 1))} disabled={onboardingStep === 0}>Previous</button>
+              {onboardingStep < 3 ? (
+                <button type="button" className="primary-button" onClick={() => setOnboardingStep((step) => step + 1)} disabled={(onboardingStep === 0 && !onboardingAnswers.role) || (onboardingStep === 1 && onboardingAnswers.goals.length === 0) || (onboardingStep === 2 && !onboardingAnswers.teamSize)}>Continue</button>
+              ) : (
+                <button type="button" className="primary-button" onClick={finishOnboarding}>Finish setup</button>
+              )}
+            </footer>
+          </section>
+        </div>
+      )}
       <AnnouncementBanner
         key={announcements.application.updatedAt}
         notice={announcements.application}
         audience="application"
         dismissalScope={session.id}
       />
+      {upgradePrompt && (
+        <UpgradeDialog
+          feature={upgradePrompt}
+          loadingPlan={upgradePlanLoading}
+          error={upgradeError}
+          onChoosePlan={handleChooseUpgradePlan}
+          onClose={() => {
+            setUpgradePrompt('')
+            setUpgradeError('')
+          }}
+        />
+      )}
       <Suspense fallback={null}>
         <CalendarPopout
           open={calendarOpen}
@@ -3382,7 +3812,7 @@ function App() {
 
       <header className="top-bar">
         <div className="app-brand-heading">
-          <img src={echoMascot} alt="EchoAI mascot" />
+          <img src={headerMascotImages[headerMascotIndex]} alt="EchoAI mascot" />
           <div>
           <p className="brand">EchoAI</p>
           <h1>Campaign command center</h1>
@@ -3397,7 +3827,7 @@ function App() {
             aria-label="Open calendar"
             aria-expanded={calendarOpen}
           >
-            <span aria-hidden="true">📅</span>
+            <CalendarDays size={20} strokeWidth={2} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -3422,34 +3852,98 @@ function App() {
         </div>
       </header>
 
-      <nav className="main-nav">
+      <div className={`workspace-layout ${workspaceSidebarOpen ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
+      <aside className={`workspace-sidebar ${workspaceSidebarOpen ? 'open' : 'collapsed'}`}>
+        <div className="workspace-sidebar-brand">
+          <span className="workspace-sidebar-mark">E</span>
+          {workspaceSidebarOpen && <strong>Workspace</strong>}
+          <button type="button" className="workspace-sidebar-toggle" onClick={() => setWorkspaceSidebarOpen((open) => !open)} aria-label={workspaceSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} title={workspaceSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
+            {workspaceSidebarOpen ? '‹' : '›'}
+          </button>
+        </div>
+        {workspaceSidebarOpen && <div className="workspace-sidebar-section">
+          <span className="workspace-sidebar-label">Connected channels</span>
+          {connectedAccounts.slice(0, 5).map((account) => {
+            const meta = getPlatformMeta(account.platform)
+            return <button type="button" className="workspace-channel" key={account.id} onClick={() => requestWorkspaceTab('integrations')}><span style={{ color: meta.color }}>{meta.icon}</span><span>{meta.label}</span><small>+</small></button>
+          })}
+          {connectedAccounts.length === 0 && <p className="workspace-sidebar-empty">Connect channels to see them here.</p>}
+          <button type="button" className="workspace-sidebar-more" onClick={() => requestWorkspaceTab('integrations')}>+ More connections</button>
+        </div>}
+        <nav className="main-nav">
+        <div className="main-nav-group">
+          <span className="main-nav-label">Plan</span>
+          {[
+            ['dashboard', 'Home Base', LayoutDashboard],
+            ['scheduler', 'Queue Studio', CalendarDays],
+            ['repost', 'Broadcast Hub', Repeat2],
+          ].map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
+              onClick={() => requestWorkspaceTab(key)}
+            >
+              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? ' · Premium' : ''}
+            </button>
+          ))}
+        </div>
+        <div className="main-nav-group">
+          <span className="main-nav-label">Create &amp; measure</span>
+          {[
+            ['photo', 'Image Lab', ImagePlus],
+            ['studio', 'Motion Lab', Video],
+            ['listening', 'Signal Watch', ChartNoAxesCombined],
+          ].map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
+              onClick={() => requestWorkspaceTab(key)}
+            >
+              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? ' · Premium' : ''}
+            </button>
+          ))}
+        </div>
+        <div className="main-nav-group main-nav-group-secondary">
+          <span className="main-nav-label">Workspace</span>
+          {[
+            ['integrations', 'Connections', Link2],
+            ['account', 'Account', Settings2],
+            ['help', 'Help desk', LifeBuoy],
+            ...(canViewManagementBoard ? [['admin', 'IT / Management', BarChart3]] : []),
+          ].map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              className={`${activeTab === key ? 'nav-link active' : 'nav-link'} ${!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? 'paid-feature' : ''}`}
+              onClick={() => requestWorkspaceTab(key)}
+            >
+              <Icon size={16} aria-hidden="true" />{label}{!hasPaidAccess && !STANDARD_ACCOUNT_TABS.has(key) ? ' · Premium' : ''}
+            </button>
+          ))}
+        </div>
+        </nav>
+      </aside>
+
+      <div className="workspace-content">
+      <nav className="workspace-top-nav" aria-label="Primary workspace areas">
         {[
-          ['dashboard', 'Dashboard'],
-          ['listening', 'Social Listening'],
-          ['repost', 'Repost Hub'],
-          ['scheduler', 'Scheduler'],
-          ['assistant', 'Create'],
-          ['photo', 'Photo Creator'],
-          ['studio', 'Video Studio'],
-          ['credits', 'Buy Tokens'],
-          ['integrations', 'Integrations'],
-          ['account', 'Manage account'],
-          ['help', 'How To'],
-          ...(canViewManagementBoard ? [['admin', 'IT / Management']] : []),
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            className={activeTab === key ? 'nav-link active' : 'nav-link'}
-            onClick={() => setActiveTab(key)}
-          >
-            {label}
+          ['listening', 'Signal Desk', ChartNoAxesCombined],
+          ['dashboard', 'Pulse Reports', BarChart3],
+          ['repost', 'Reply Room', Repeat2],
+          ['scheduler', 'Campaign Flow', CalendarDays],
+          ['integrations', 'Link Studio', Link2],
+          ['credits', 'Promote Lab', ImagePlus],
+        ].map(([key, label, Icon]) => (
+          <button key={key} type="button" className={`workspace-top-link ${activeTab === key ? 'active' : ''}`} onClick={() => requestWorkspaceTab(key)}>
+            <Icon size={17} aria-hidden="true" />{label}
           </button>
         ))}
       </nav>
 
-      <main className={`app-main ${activeTab === 'photo' ? 'photo-workspace-layout' : ''} ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${isAssetPanelOpen ? '' : 'asset-drawer-collapsed'}`}>
-        {activeTab !== 'help' && (
+      <main className={`app-main ${activeTab === 'help' ? 'help-workspace-layout' : ''} ${activeTab === 'admin' ? 'management-workspace-layout' : ''} workspace-no-drawer`}>
+        {ASSET_DRAWER_ENABLED && hasPaidAccess && activeTab === 'photo' && (
         <aside
           className={`asset-drawer ${activeTab === 'photo' ? 'photo-workspace-drawer' : ''} ${isAssetPanelOpen ? 'open' : 'collapsed'} ${drawerDragActive ? 'drag-active' : ''}`}
           onDragEnter={(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); e.stopPropagation(); setDrawerDragActive(true) } }}
@@ -3785,10 +4279,18 @@ function App() {
               </div>
             )}
 
-            <h2>Overview</h2>
-            <p className="panel-note">
-              Build morning campaigns once, then deploy automatically throughout the day.
-            </p>
+            <div className="dashboard-command-bar">
+              <div>
+                <p className="section-label">Your workspace</p>
+                <h2>Good to see you, {contactCard?.fullName?.split(' ')[0] || session?.email?.split('@')[0] || 'creator'}.</h2>
+                <p className="panel-note">See what is moving, then take the next useful action.</p>
+              </div>
+              <div className="dashboard-command-actions">
+                <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('scheduler')}><FilePlus2 size={17} /> Start a draft</button>
+                <button type="button" className="ghost-button" onClick={() => setCalendarOpen(true)}><CalendarDays size={17} /> View timeline</button>
+                <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('integrations')}><Link2 size={17} /> Add a channel</button>
+              </div>
+            </div>
 
             <div className="stats-grid">
               {stats.map((item) => (
@@ -3803,7 +4305,7 @@ function App() {
               </article>
             </div>
 
-            <article className="sub-panel dashboard-ai-hub">
+            {aiGenerationEnabled() && <article className="sub-panel dashboard-ai-hub">
               <div className="dashboard-section-heading">
                 <div>
                   <p className="section-label">Echo AI</p>
@@ -3814,11 +4316,10 @@ function App() {
                   <button
                     type="button"
                     className="primary-button"
-                    onClick={() => setCreditPurchaseModalOpen(true)}
                   >
                     ⚡ Purchase additional tokens
                   </button>
-                  <button type="button" className="ghost-button" onClick={() => setActiveTab('assistant')}>Create with AI</button>
+                  <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('assistant')}>Create with AI</button>
                 </div>
               </div>
               <div className="dashboard-ai-summary">
@@ -3856,7 +4357,6 @@ function App() {
                     type="button"
                     className="primary-button"
                     style={{ marginTop: '0.45rem', fontSize: '0.84rem', padding: '0.48rem 0.85rem' }}
-                    onClick={() => setCreditPurchaseModalOpen(true)}
                   >
                     + Add Rollover Tokens
                   </button>
@@ -3896,10 +4396,6 @@ function App() {
                       key={pkg.key}
                       type="button"
                       className={`dashboard-token-quick-card ${pkg.popular ? 'popular' : ''} ${pkg.bestValue ? 'best-value' : ''}`}
-                      onClick={() => {
-                        setSelectedCreditPackKey(pkg.key)
-                        setCreditPurchaseModalOpen(true)
-                      }}
                     >
                       {pkg.popular && <span className="quick-badge popular">Popular</span>}
                       {pkg.bestValue && <span className="quick-badge best-value">Best Value</span>}
@@ -3921,7 +4417,7 @@ function App() {
                   ))}
                 </div>
               )}
-            </article>
+            </article>}
 
             <div className="split">
               <article className="sub-panel tone-ocean">
@@ -3952,14 +4448,14 @@ function App() {
               <article className="sub-panel tone-sun">
                 <h3>Quick actions</h3>
                 <div className="action-row">
-                  <button type="button" className="primary-button" onClick={() => setActiveTab('photo')}>
-                    Open photo creator
+                    <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('photo')}>
+                    Open Image Lab
                   </button>
-                  <button type="button" className="primary-button" onClick={() => setActiveTab('studio')}>
-                    Open video studio
+                    <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('studio')}>
+                    Open Motion Lab
                   </button>
-                  <button type="button" className="ghost-button" onClick={() => setActiveTab('scheduler')}>
-                    Open scheduler
+                    <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('scheduler')}>
+                    Open Queue Studio
                   </button>
                 </div>
                 {canViewManagementBoard && (
@@ -3997,6 +4493,7 @@ function App() {
                   imageIdea: `Create a helpful social response visual addressing ${mention.keyword || 'this customer conversation'}.`,
                   scheduledAt: '',
                   channels: [],
+                  channelAccounts: {},
                   mediaAssetIds: [],
                 })
                 setActiveTab('scheduler')
@@ -4041,11 +4538,14 @@ function App() {
               handleComposerChange={handleComposerChange}
               handleSchedulePost={handleSchedulePost}
               handlePostNow={handlePostNow}
+              handlePostToNextSlot={handlePostToNextSlot}
+              handleRepostNow={handleRepostNow}
               handleDeleteScheduledPost={handleDeleteScheduledPost}
+              handleReschedulePost={handleReschedulePost}
               scheduledPosts={scheduledPosts}
               connectedAccounts={connectedAccounts}
               workspaceAssets={workspaceAssets}
-              handleUploadAsset={handleUploadAsset}
+              onUploadAsset={handleUploadAsset}
               getPlatformMeta={getPlatformMeta}
               getStatusBadgeClass={getStatusBadgeClass}
               schedulerError={schedulerError}
@@ -4053,7 +4553,7 @@ function App() {
           </Suspense>
         )}
 
-        {activeTab === 'assistant' && (
+        {aiGenerationEnabled() && activeTab === 'assistant' && (
           <section className="panel panel-assistant">
             <div className="create-hub-heading">
               <div>
@@ -4188,11 +4688,7 @@ function App() {
 
         {activeTab === 'credits' && (
           <Suspense fallback={loadingPanel}>
-            <CreditPurchasePanel
-              isModal={false}
-              aiDashboard={aiDashboard}
-              onRefreshBalance={refreshAiBalance}
-            />
+            <AdsPanel />
           </Suspense>
         )}
 
@@ -4217,7 +4713,6 @@ function App() {
               <a href="#integrations-referral" className="chip">Refer &amp; earn</a>
               {session?.seatManager && companySeatPackage && <a href="#integrations-team" className="chip">Team seats</a>}
               <a href="#integrations-social" className="chip">Social accounts</a>
-              <a href="#integrations-ai" className="chip">AI providers &amp; keys</a>
               {canViewManagementBoard && <a href="#integrations-tools" className="chip">Third-party tools</a>}
             </nav>
 
@@ -4287,7 +4782,7 @@ function App() {
               <p className="muted">Your company has not added brand resources yet.</p>
             )}
 
-            {canManageBrandKit && <>
+            {userCanManageBrandKit && <>
             <h3 className="section-label">Manage company brand kit</h3>
             <p className="panel-note">
               Your company&apos;s colours, licensed fonts, and logos. Everything here is available in
@@ -4596,14 +5091,7 @@ function App() {
                   <div>
                     <p className="small-title">Choose providers</p>
                     <div className="quick-connect-providers">
-                      {[
-                        { key: 'instagram', available: true },
-                        { key: 'facebook', available: true },
-                        { key: 'youtube', available: true },
-                        { key: 'tiktok', available: false },
-                        { key: 'x', available: false },
-                        { key: 'linkedin', available: false },
-                      ].map(({ key, available }) => {
+                      {PUBLISHING_PLATFORMS.map(({ key }) => {
                         const meta = getPlatformMeta(key)
                         const connected = connectedAccounts.some((account) => account.platform.toLowerCase() === key && account.status === 'healthy')
                         const selected = quickConnectSelected.includes(key)
@@ -4612,12 +5100,11 @@ function App() {
                             key={key}
                             type="button"
                             className={`quick-connect-provider ${selected ? 'selected' : ''}`}
-                            disabled={!available}
                             onClick={() => setQuickConnectSelected((prev) => selected ? prev.filter((item) => item !== key) : [...prev, key])}
                           >
                             <span className="quick-connect-provider-icon" style={{ color: meta.color }}>{meta.icon}</span>
                             <span>{meta.label}</span>
-                            <small>{connected ? 'Connected' : available ? 'Available' : 'Coming soon'}</small>
+                            <small>{connected ? 'Connected' : 'Available'}</small>
                           </button>
                         )
                       })}
@@ -4635,19 +5122,16 @@ function App() {
               )}
             </article>
             <div className="integration-grid">
-              {[
-                { key: 'instagram', accountPlaceholder: '@youraccount', desc: 'Publish posts, stories, and reels. Read insights and story metrics.' },
-                { key: 'facebook',  accountPlaceholder: 'Your page name', desc: 'Schedule posts, publish to pages, and track ad-level reach.' },
-                { key: 'tiktok',    accountPlaceholder: '@youraccount', desc: 'Queue short-form videos, read performance data and comment trends.' },
-                { key: 'snapchat',  accountPlaceholder: 'Your Snapchat', desc: 'Upload creative content and track Snap campaign metrics.' },
-                { key: 'x',         accountPlaceholder: '@youraccount', desc: 'Post to X (formerly Twitter), schedule threads, and monitor mentions.' },
-                { key: 'youtube',   accountPlaceholder: 'Your channel', desc: 'Upload videos, schedule premieres, and read subscriber analytics.' },
-                { key: 'linkedin',  accountPlaceholder: 'Your profile / page', desc: 'Publish professional content and read engagement metrics.' },
-              ].map(({ key, accountPlaceholder, desc }) => {
+              {SOCIAL_PLATFORMS.map(({ key, accountPlaceholder, description, releaseStatus }) => {
                 const meta = getPlatformMeta(key)
-                const linked = connectedAccounts.find((a) => a.platform.toLowerCase() === key)
-                const inputValue = accountHandleDrafts[key] ?? linked?.accountName ?? accountPlaceholder
-                const selectedScopes = accountScopeDrafts[key] ?? linked?.publishingScopes ?? ['posts']
+                const available = releaseStatus === 'available'
+                // A platform can have several connected accounts at once — for
+                // example managing more than one client's Facebook Page.
+                const linkedAccounts = connectedAccounts.filter((a) => a.platform.toLowerCase() === key)
+                const hasConnectedAccount = linkedAccounts.some((account) => account.status === 'healthy')
+                const placeholder = linkedAccounts.find((account) => account.status !== 'healthy')
+                const inputValue = accountHandleDrafts[key] ?? placeholder?.accountName ?? accountPlaceholder
+                const selectedScopes = accountScopeDrafts[key] ?? placeholder?.publishingScopes ?? ['posts']
                 return (
                   <div
                     key={key}
@@ -4658,17 +5142,50 @@ function App() {
                       <span className="integration-platform-icon" style={{ color: meta.color }}>{meta.icon}</span>
                       <div>
                         <strong style={{ color: meta.color }}>{meta.label}</strong>
-                        {linked && <span className="integration-linked-handle">{linked.accountName}</span>}
+                        {linkedAccounts.length > 0 && (
+                          <span className="integration-linked-handle">
+                            {linkedAccounts.length === 1 ? linkedAccounts[0].accountName : `${linkedAccounts.length} accounts connected`}
+                          </span>
+                        )}
                       </div>
-                      {linked && (
-                        <span className={`integration-status-badge ${linked.status === 'healthy' ? 'good' : 'warn'}`}>
-                          {linked.status === 'healthy' ? '● OAuth connected' : 'OAuth access required'}
-                        </span>
-                      )}
+                      {!available && <span className="integration-status-badge warn">Planned</span>}
                     </div>
                     <div className="integration-platform-body">
-                      <p>{desc}</p>
-                      {linked ? (
+                      <p>{description}</p>
+
+                      {linkedAccounts.length > 0 && (
+                        <div className="integration-linked-accounts">
+                          {linkedAccounts.map((account) => (
+                            <div key={account.id} className="integration-linked-account-row">
+                              <span className={`integration-status-badge ${account.status === 'healthy' ? 'good' : 'warn'}`}>
+                                {account.status === 'healthy' ? '● OAuth connected' : 'OAuth access required'}
+                              </span>
+                              <strong>{account.accountName}</strong>
+                                              <div className="integration-actions">
+                                {available && (
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    onClick={() => connectSocialAccount({ platform: key, requestedScopes: account.publishingScopes ?? ['posts'] })}
+                                  >
+                                    {account.status === 'healthy' ? 'Reconnect OAuth' : `Authorize ${meta.label}`}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="ghost-button"
+                                  style={{ color: '#ef4444' }}
+                                  onClick={() => removeSocialAccount(account)}
+                                >
+                                  Remove account
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {(!hasConnectedAccount || !available) && (
                         <>
                           <label className="field-label">
                             Handle / profile name
@@ -4677,82 +5194,78 @@ function App() {
                               value={inputValue}
                               onChange={(event) => setAccountHandleDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
                               placeholder={accountPlaceholder}
+                              disabled={!available}
                             />
                           </label>
-                        </>
-                      ) : (
-                        <>
-                          <label className="field-label">
-                            Handle / profile name
-                            <input
-                              type="text"
-                              value={inputValue}
-                              onChange={(event) => setAccountHandleDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
-                              placeholder={accountPlaceholder}
-                            />
-                          </label>
+                          <div>
+                            <p className="small-title">Requested access</p>
+                            <div className="chip-row">
+                              {SOCIAL_PUBLISHING_SCOPES.map((scope) => {
+                                const selected = selectedScopes.includes(scope)
+                                return (
+                                  <button
+                                    key={scope}
+                                    type="button"
+                                    className={selected ? 'chip active' : 'chip'}
+                                    disabled={!available}
+                                    onClick={() => setAccountScopeDrafts((prev) => ({
+                                      ...prev,
+                                      [key]: selected
+                                        ? selectedScopes.filter((item) => item !== scope)
+                                        : [...selectedScopes, scope],
+                                    }))}
+                                  >
+                                    {scope}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                          <p className="muted">
+                            {available
+                              ? 'Your account profile and access preferences are private. Publishing stays disabled until this account completes OAuth authorization.'
+                              : 'This provider is on the EchoAI integration roadmap. Account connection will open after its OAuth and publishing review is complete.'}
+                          </p>
+                          <div className="integration-actions">
+                            {available && <button
+                              type="button"
+                              className="primary-button"
+                              style={{ background: meta.color, borderColor: meta.color }}
+                              onClick={() => saveSocialAccount({
+                                platform: key,
+                                accountName: inputValue,
+                                publishingScopes: selectedScopes,
+                              })}
+                            >
+                              Save account profile
+                            </button>}
+                            {available && (
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() => connectSocialAccount({
+                                  platform: key,
+                                  requestedScopes: selectedScopes,
+                                })}
+                              >
+                                {placeholder ? `Authorize ${meta.label}` : `Connect ${meta.label}`}
+                              </button>
+                            )}
+                          </div>
                         </>
                       )}
-                      <div>
-                        <p className="small-title">Requested access</p>
-                        <div className="chip-row">
-                          {SOCIAL_PUBLISHING_SCOPES.map((scope) => {
-                            const selected = selectedScopes.includes(scope)
-                            return (
-                              <button
-                                key={scope}
-                                type="button"
-                                className={selected ? 'chip active' : 'chip'}
-                                onClick={() => setAccountScopeDrafts((prev) => ({
-                                  ...prev,
-                                  [key]: selected
-                                    ? selectedScopes.filter((item) => item !== scope)
-                                    : [...selectedScopes, scope],
-                                }))}
-                              >
-                                {scope}
-                              </button>
-                            )
-                          })}
+
+                      {hasConnectedAccount && available && (
+                        <div className="integration-actions">
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => connectSocialAccount({ platform: key, requestedScopes: ['posts', 'images', 'videos', 'analytics'] })}
+                          >
+                            + Connect another {meta.label} account
+                          </button>
                         </div>
-                      </div>
-                      <p className="muted">Your account profile and access preferences are private. Publishing stays disabled until this account completes OAuth authorization.</p>
-                      <div className="integration-actions">
-                        <button
-                          type="button"
-                          className="primary-button"
-                          style={{ background: meta.color, borderColor: meta.color }}
-                          onClick={() => saveSocialAccount({
-                            platform: key,
-                            accountName: inputValue,
-                            publishingScopes: selectedScopes,
-                          })}
-                        >
-                          Save account profile
-                        </button>
-                        {['instagram', 'facebook', 'youtube'].includes(key) && (
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => connectSocialAccount({
-                              platform: key,
-                              requestedScopes: selectedScopes,
-                            })}
-                          >
-                            {linked?.status === 'healthy' ? 'Reconnect OAuth' : `Authorize ${meta.label}`}
-                          </button>
-                        )}
-                        {linked && (
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            style={{ color: '#ef4444' }}
-                            onClick={() => removeSocialAccount(linked)}
-                          >
-                            Remove account
-                          </button>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -4760,19 +5273,18 @@ function App() {
             </div>
             {integrationError && <span className="field-error">{integrationError}</span>}
 
-            <h3 className="section-label" id="integrations-ai">AI providers &amp; API keys</h3>
-            <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
+            {aiGenerationEnabled() && <h3 className="section-label" id="integrations-ai">AI providers &amp; API keys</h3>}
+            {aiGenerationEnabled() && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <div className="inhouse-engine-heading">
                 <div><h3>EchoAI hosted AI</h3><p className="muted">EchoAI Pro provides the AI accounts and keeps provider credentials on the backend. Your team uses Echo Credits instead of connecting personal AI accounts.</p></div>
-                <button type="button" className="primary-button" onClick={() => setCreditPurchaseModalOpen(true)}>⚡ Purchase Tokens (500–5,000)</button>
               </div>
               <div className="agent-connection-note">
                 <strong>Account status</strong>
                 <p>Provider setup, model routing, cost controls, rate limits, and emergency shutdowns are managed by IT and Management.</p>
               </div>
-            </article>
+            </article>}
 
-            {aiAgentConfig.provider === '__legacy_customer_connection__' && typeof window === 'undefined' && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
+            {aiGenerationEnabled() && aiAgentConfig.provider === '__legacy_customer_connection__' && typeof window === 'undefined' && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <div className="inhouse-engine-heading">
                 <div><h3>In-house AI engine</h3><p className="muted">Connect one orchestrator endpoint, declare its specialist abilities, and use it across writing, documents, images, characters, video, audio, vision, and safety review.</p></div>
                 <button type="button" className="openai-guide-button" onClick={() => setOpenAiGuideOpen(true)}>OpenAI connection guide <span aria-hidden="true">↗</span></button>
@@ -5004,11 +5516,20 @@ function App() {
             <h3 className="section-label">Subscription and payments</h3>
             <div className="list-row">
               <div>
-                <p>{myEntitlement?.plan ? `${getPlan(myEntitlement.plan).label} plan` : 'Your EchoAI subscription'}</p>
-                <span className="muted">Update payment method, upgrade, downgrade, or cancel your subscription.</span>
+                <p>{myEntitlement?.entitled === false ? 'Free account' : myEntitlement?.plan ? `${getPlan(myEntitlement.plan).label} plan` : 'Your EchoAI subscription'}</p>
+                <span className="muted">
+                  {myEntitlement?.entitled === false
+                    ? 'Your account remains available. Choose a plan whenever you need paid tools.'
+                    : 'Update payment method, upgrade, downgrade, or cancel your subscription.'}
+                </span>
               </div>
-              <button type="button" className="ghost-button" disabled={billingPortalLoading || !isSupabaseConfigured} onClick={handleOpenBillingPortal}>
-                {billingPortalLoading ? 'Opening...' : 'Manage billing'}
+              <button
+                type="button"
+                className={myEntitlement?.entitled === false ? 'primary-button' : 'ghost-button'}
+                disabled={billingPortalLoading || !isSupabaseConfigured}
+                onClick={myEntitlement?.entitled === false ? () => setUpgradePrompt('paid EchoAI tools') : handleOpenBillingPortal}
+              >
+                {billingPortalLoading ? 'Opening...' : myEntitlement?.entitled === false ? 'Upgrade to Premium' : 'Manage billing'}
               </button>
             </div>
             {billingPortalError && <span className="field-error">{billingPortalError}</span>}
@@ -5023,10 +5544,21 @@ function App() {
               <button type="button" className="danger-button" disabled={accountActionLoading || !isSupabaseConfigured} onClick={handleDeleteAccount}>Delete account</button>
             </div>
             {accountActionError && <span className="field-error">{accountActionError}</span>}
+
+            <h3 className="section-label">Posting schedule</h3>
+            {myEntitlement?.entitled === false && (
+              <div className="free-posting-allowance">
+                <strong>Free account posting allowance</strong>
+                <span>{Math.max(0, FREE_POSTING_ALLOWANCE - freePostingUsage)} of {FREE_POSTING_ALLOWANCE} postings remaining</span>
+              </div>
+            )}
+            <Suspense fallback={<p className="muted">Loading posting schedule...</p>}>
+              <PostingSchedulePanel />
+            </Suspense>
           </section>
         )}
 
-        {activeTab === 'admin' && ['admin', 'manager', 'it'].includes(session?.role || '') && (
+        {activeTab === 'admin' && ['admin', 'super_admin', 'it'].includes(normalizeRole(session?.role)) && (
           <Suspense fallback={loadingPanel}>
             <AdminPanel
               teamMembers={teamMembers}
@@ -5061,11 +5593,6 @@ function App() {
               boardMembers={teamMembers.filter((member) => member.role === 'board_member')}
               company={session.company}
               currentUser={session}
-              quotaEditingUserId={quotaEditingUserId}
-              setQuotaEditingUserId={setQuotaEditingUserId}
-              quotaDraftMb={quotaDraftMb}
-              setQuotaDraftMb={setQuotaDraftMb}
-              handleQuotaUpdate={handleQuotaUpdate}
               handleToggleUserAccess={handleToggleUserAccess}
               handleUpdateUserRole={handleUpdateUserRole}
               handleReviewAccessRequest={handleReviewAccessRequest}
@@ -5076,6 +5603,8 @@ function App() {
               handleProvisionCompanySeatsForCustomer={handleProvisionCompanySeatsForCustomer}
               handleRespondToSupportTicket={handleRespondToSupportTicket}
               handleUpdateSupportTicketStatus={handleUpdateSupportTicketStatus}
+              handleUpdateSupportTicket={handleUpdateSupportTicket}
+              handleRefreshSupportTickets={handleRefreshSupportTickets}
               onAdminUserAction={handleAdminUserAction}
               handleAssignCompanySeat={handleAssignCompanySeat}
               handleRevokeCompanySeat={handleRevokeCompanySeat}
@@ -5090,7 +5619,7 @@ function App() {
           </Suspense>
         )}
 
-        {activeTab === 'admin' && session?.role === 'accountant' && (
+        {activeTab === 'admin' && normalizeRole(session?.role) === 'accountant' && (
           <Suspense fallback={loadingPanel}>
             <FinancePanel
               purchaseHistory={purchaseHistory}
@@ -5106,12 +5635,14 @@ function App() {
           </Suspense>
         )}
 
-        {activeTab === 'admin' && (session?.role === 'board_member' || session?.isBoardMember) && session?.role !== 'admin' && (
+        {activeTab === 'admin' && (['board_member', 'partner'].includes(normalizeRole(session?.role)) || session?.isBoardMember) && normalizeRole(session?.role) !== 'admin' && normalizeRole(session?.role) !== 'super_admin' && (
           <Suspense fallback={loadingPanel}>
             <BoardMemberFinancePanel company={session.company} />
           </Suspense>
         )}
       </main>
+      </div>
+      </div>
 
       {supportModalOpen && (
         <div className="modal-overlay" role="presentation" onClick={closeSupportModal}>
@@ -5200,20 +5731,6 @@ function App() {
         </div>
       )}
 
-      {creditPurchaseModalOpen && (
-        <Suspense fallback={null}>
-          <CreditPurchasePanel
-            isModal={true}
-            initialSelectedKey={selectedCreditPackKey}
-            onClose={() => {
-              setCreditPurchaseModalOpen(false)
-              setSelectedCreditPackKey('')
-            }}
-            aiDashboard={aiDashboard}
-            onRefreshBalance={refreshAiBalance}
-          />
-        </Suspense>
-      )}
     </div>
   )
 }

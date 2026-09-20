@@ -11,27 +11,15 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
 
 const APP_URL = Deno.env.get('APP_URL') ?? 'http://localhost:5173'
 
-const PLAN_KEYS = ['standard', 'storage_plus', 'storage_pro', 'storage_max', 'creator']
+const PLAN_KEYS = ['premium']
 
 const PLAN_DEFAULTS: Record<string, { label: string; monthlyPrice: number; annualPrice: number; storageGb: number; tokens: number }> = {
-  standard: { label: 'Standard', monthlyPrice: 29, annualPrice: 295, storageGb: 2, tokens: 500 },
-  storage_plus: { label: 'Storage +', monthlyPrice: 39, annualPrice: 398, storageGb: 10, tokens: 1000 },
-  storage_pro: { label: 'Storage Pro', monthlyPrice: 59, annualPrice: 599, storageGb: 25, tokens: 2500 },
-  storage_max: { label: 'Storage Max', monthlyPrice: 89, annualPrice: 899, storageGb: 50, tokens: 4500 },
-  creator: { label: 'Creator Studio', monthlyPrice: 129, annualPrice: 1299, storageGb: 100, tokens: 7500 },
+  premium: { label: 'Premium', monthlyPrice: 39, annualPrice: 390, storageGb: 0, tokens: 0 },
 }
 
 const DEFAULT_STRIPE_PRICES: Record<string, string> = {
-  STRIPE_PRICE_STANDARD_MONTHLY: 'price_1UFGJ9RrklQsqC822EUTvcKQ',
-  STRIPE_PRICE_STANDARD_ANNUAL: 'price_1UFGJ9RrklQsqC823cmY2TfS',
-  STRIPE_PRICE_STORAGE_PLUS_MONTHLY: 'price_1UFGHxRrklQsqC820fmti9kY',
-  STRIPE_PRICE_STORAGE_PLUS_ANNUAL: 'price_1UFGHxRrklQsqC820FuI8teb',
-  STRIPE_PRICE_STORAGE_PRO_MONTHLY: 'price_1UFGGdRrklQsqC825AahS61v',
-  STRIPE_PRICE_STORAGE_PRO_ANNUAL: 'price_1UFGGdRrklQsqC82PLtdTqAr',
-  STRIPE_PRICE_STORAGE_MAX_MONTHLY: 'price_1UFGEiRrklQsqC82jSx1SMxs',
-  STRIPE_PRICE_STORAGE_MAX_ANNUAL: 'price_1UFGEiRrklQsqC82kFKGekg3',
-  STRIPE_PRICE_CREATOR_MONTHLY: 'price_1UFGCRRrklQsqC82vjVbVkuJ',
-  STRIPE_PRICE_CREATOR_ANNUAL: 'price_1UFGCRRrklQsqC82NfiDNVOW',
+  STRIPE_PRICE_PREMIUM_MONTHLY: 'price_1UHNUuRrklQsqC82ABwClNK6',
+  STRIPE_PRICE_PREMIUM_ANNUAL: 'price_1UHNWBRrklQsqC829hILTZSY',
 }
 
 // One Stripe price per tier per interval, e.g. STRIPE_PRICE_STORAGE_PRO_ANNUAL.
@@ -84,7 +72,7 @@ Deno.serve(async (request) => {
       return json({ error: 'Unknown plan.' }, 400, request)
     }
 
-    const planMeta = PLAN_DEFAULTS[plan] || PLAN_DEFAULTS.standard
+    const planMeta = PLAN_DEFAULTS[plan] || PLAN_DEFAULTS.premium
     const priceId = priceFor(plan, interval)
 
     const user = await userFromAuthHeader(request.headers.get('Authorization'))
@@ -119,7 +107,7 @@ Deno.serve(async (request) => {
         },
         product_data: {
           name: `EchoAI ${planMeta.label} (${interval === 'annual' ? 'Annual' : 'Monthly'})`,
-          description: `EchoAI ${planMeta.label} Plan — ${planMeta.storageGb} GB Storage & ${planMeta.tokens.toLocaleString()} Monthly Tokens`,
+          description: 'Full access to EchoAI publishing, creation, monitoring, and advertising tools.',
           tax_code: 'txcd_10103001',
         },
       },

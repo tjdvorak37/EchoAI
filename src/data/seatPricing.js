@@ -27,7 +27,7 @@ export const getVolumeTierForCount = (seatCount) => {
   return SEAT_VOLUME_DISCOUNTS.find((tier) => count >= tier.minSeats && count <= tier.maxSeats) ?? SEAT_VOLUME_DISCOUNTS[SEAT_VOLUME_DISCOUNTS.length - 1]
 }
 
-export const getPlan = (planKey) => PLANS[planKey] ?? PLANS.standard
+export const getPlan = (planKey) => PLANS[planKey] ?? PLANS.premium
 
 // Our cost of goods per seat/year at a plan's full list price — hosting,
 // storage, the plan's included AI credits, and support — derived from that

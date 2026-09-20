@@ -69,17 +69,26 @@ export function CompanyEmailPanel({
   const [notifySaving, setNotifySaving] = useState(false)
   const [notifyStatus, setNotifyStatus] = useState({ message: '', error: '' })
   const [smtpStatus, setSmtpStatus] = useState({ saving: false, message: '', error: '' })
+  const [inboundConfig, setInboundConfig] = useState({
+    inboundEmail: 'support@echoaipro.com',
+    inboundEnabled: false,
+    inboundWebhookSecret: '',
+    hasInboundWebhookSecret: false,
+  })
+  const [showInboundKey, setShowInboundKey] = useState(false)
+  const [inboundStatus, setInboundStatus] = useState({ saving: false, message: '', error: '' })
 
   // Test Notification State
   const [testCategory, setTestCategory] = useState('Technical issue')
   const [testDetails, setTestDetails] = useState('Sample ticket description: Customer requesting assistance with login routing and password setup.')
   const [testStatus, setTestStatus] = useState({ running: false, message: '', error: '' })
 
-  const isFullAdmin = currentUser?.role === 'admin'
+  const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  const isFullAdmin = ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role))
   const hasGrantedAccess = currentUser?.companyEmailEditAccess === true
   const canEdit = isFullAdmin || hasGrantedAccess
-  const staffRoles = ['admin', 'manager', 'it', 'accountant', 'board_member']
-  const staffMembers = teamMembers.filter((member) => staffRoles.includes(member.role))
+  const staffRoles = ['admin', 'super_admin', 'it', 'accountant']
+  const staffMembers = teamMembers.filter((member) => staffRoles.includes(normalizeRole(member.role)))
   const assignedSeatsCount = companySeats.filter((seat) => seat.status !== 'revoked').length
 
   const loadNotificationConfig = async () => {
@@ -111,7 +120,22 @@ export function CompanyEmailPanel({
 
   useEffect(() => {
     loadNotificationConfig()
+    authService.getTicketInboundConfig()
+      .then((config) => setInboundConfig((current) => ({ ...current, ...config })))
+      .catch((error) => setInboundStatus({ saving: false, message: '', error: error.message }))
   }, [])
+
+  const handleSaveInboundConfig = async (event) => {
+    event.preventDefault()
+    setInboundStatus({ saving: true, message: '', error: '' })
+    try {
+      const saved = await authService.updateTicketInboundConfig(inboundConfig)
+      setInboundConfig((current) => ({ ...current, ...saved, inboundWebhookSecret: '' }))
+      setInboundStatus({ saving: false, message: 'Inbound mailbox settings saved.', error: '' })
+    } catch (error) {
+      setInboundStatus({ saving: false, message: '', error: error.message })
+    }
+  }
 
   const handleSaveNotifyConfig = async (e) => {
     if (e) e.preventDefault()
@@ -561,6 +585,65 @@ export function CompanyEmailPanel({
                     placeholder="SG.123456789..."
                   />
                 </label>
+              </div>
+            </div>
+
+            <div className="company-email-inbound-settings">
+              <div className="company-email-card-header">
+                <h4 className="company-email-card-title">Inbound Ticket Replies</h4>
+                <span className={`company-email-badge ${inboundConfig.inboundEnabled && inboundConfig.hasInboundWebhookSecret ? 'success' : 'warning'}`}>
+                  {inboundConfig.inboundEnabled && inboundConfig.hasInboundWebhookSecret ? 'Ready' : 'Setup required'}
+                </span>
+              </div>
+              <p className="muted">Manage the Microsoft 365 mailbox and rotate the key used by the Power Automate inbound ticket flow.</p>
+              <div className="company-email-form-grid">
+                <label>
+                  Incoming Support Address
+                  <input
+                    type="email"
+                    required
+                    disabled={!canEdit}
+                    value={inboundConfig.inboundEmail}
+                    onChange={(event) => setInboundConfig((current) => ({ ...current, inboundEmail: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  Inbound Webhook Key
+                  <div className="company-email-password-input-wrap">
+                    <input
+                      type={showInboundKey ? 'text' : 'password'}
+                      disabled={!canEdit}
+                      value={inboundConfig.inboundWebhookSecret}
+                      onChange={(event) => setInboundConfig((current) => ({ ...current, inboundWebhookSecret: event.target.value }))}
+                      placeholder={inboundConfig.hasInboundWebhookSecret ? 'Key configured - enter a new key to rotate' : 'Enter at least 24 characters'}
+                      autoComplete="new-password"
+                    />
+                    <button type="button" disabled={!canEdit} className="company-email-password-toggle" onClick={() => setShowInboundKey((current) => !current)}>
+                      {showInboundKey ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <small className="muted">The saved key is never displayed. Use the same value in Power Automate.</small>
+                </label>
+              </div>
+              <label className="company-email-inbound-toggle">
+                <input
+                  type="checkbox"
+                  disabled={!canEdit || !inboundConfig.hasInboundWebhookSecret && !inboundConfig.inboundWebhookSecret}
+                  checked={inboundConfig.inboundEnabled}
+                  onChange={(event) => setInboundConfig((current) => ({ ...current, inboundEnabled: event.target.checked }))}
+                />
+                Accept customer email replies into support tickets
+              </label>
+              <div className="company-email-field-row">
+                <span className="company-email-field-label">Power Automate endpoint</span>
+                <span className="company-email-field-value">yxmsqrtoghrazfwweqqf.supabase.co/functions/v1/support-ticket-inbound</span>
+              </div>
+              <div className="company-email-inbound-actions">
+                <button type="button" className="primary-button" disabled={!canEdit || inboundStatus.saving} onClick={handleSaveInboundConfig}>
+                  {inboundStatus.saving ? 'Saving...' : inboundConfig.hasInboundWebhookSecret ? 'Save / Rotate Inbound Key' : 'Save Inbound Setup'}
+                </button>
+                {inboundStatus.message && <span className="company-email-success">{inboundStatus.message}</span>}
+                {inboundStatus.error && <span className="auth-message auth-error">{inboundStatus.error}</span>}
               </div>
             </div>
 
@@ -1021,11 +1104,11 @@ export function CompanyEmailPanel({
             <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               <div className="company-email-field-row">
                 <span className="company-email-field-label">Site URL</span>
-                <span className="company-email-field-value">https://echoaipro.com</span>
+                <span className="company-email-field-value">https://www.echoaipro.com</span>
               </div>
               <div className="company-email-field-row">
                 <span className="company-email-field-label">Additional Redirect URLs</span>
-                <span className="company-email-field-value">https://echoaipro.com/**, https://www.echoaipro.com/**, https://echoaipro.com/reset-password</span>
+                <span className="company-email-field-value">https://echoaipro.com/**, https://www.echoaipro.com/**, https://www.echoaipro.com/?recovery=1</span>
               </div>
             </div>
           </div>
@@ -1071,9 +1154,7 @@ export function CompanyEmailPanel({
                       onChange={(e) => setNewStaff((prev) => ({ ...prev, role: e.target.value }))}
                     >
                       <option value="it">Technician (IT)</option>
-                      <option value="manager">Manager</option>
                       <option value="accountant">Accounting</option>
-                      <option value="board_member">Board Member</option>
                       <option value="user">Standard user</option>
                     </select>
                   </label>
@@ -1089,12 +1170,12 @@ export function CompanyEmailPanel({
                 </div>
                 {newStaff.role === 'board_member' && (
                   <label style={{ marginTop: '0.5rem' }}>
-                    Profit share percentage (1-10%)
+                    Profit share percentage (1-50%)
                     <input
                       required
                       type="number"
                       min="1"
-                      max="10"
+                      max="50"
                       step="0.01"
                       value={newStaff.profitSharePercent || ''}
                       onChange={(e) => setNewStaff((prev) => ({ ...prev, profitSharePercent: e.target.value }))}

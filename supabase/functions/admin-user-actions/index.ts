@@ -1,9 +1,10 @@
 // Privileged user-support actions for admins. The caller's role is re-checked
 // here with the service role key: a browser can claim any role, so the client's
 // own view of who it is never decides access.
+import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
-import { getNotificationConfig, sendSupportTicketEmail } from '../_shared/notify.ts'
+import { getNotificationConfig, sendAccountConfirmationEmail, sendSupportTicketEmail } from '../_shared/notify.ts'
 
 const PRIVILEGED_ROLES = new Set([
   'admin',
@@ -13,6 +14,36 @@ const PRIVILEGED_ROLES = new Set([
   'accountant',
   'board_member',
 ])
+
+const PROFILE_ADMIN_FIELDS = 'id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, license_edit_access, integrations_edit_access, ai_operations_edit_access, site_controls_edit_access, created_at'
+const PROFILE_CREATE_FIELDS = 'id, full_name, email, company, role, profit_share_percent, access_status, storage_quota_mb, trademark_edit_access, developer_app_edit_access, company_email_edit_access, license_edit_access, integrations_edit_access, ai_operations_edit_access, site_controls_edit_access'
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
+  apiVersion: '2025-03-31.basil',
+  httpClient: Stripe.createFetchHttpClient(),
+})
+const PLATFORM_ACCESS_ACTIONS: Record<string, { column: string, label: string }> = {
+  'set-trademark-edit-access': { column: 'trademark_edit_access', label: 'Trademark & Legal' },
+  'set-developer-app-edit-access': { column: 'developer_app_edit_access', label: 'Developer Apps' },
+  'set-company-email-edit-access': { column: 'company_email_edit_access', label: 'Company Email & SMTP' },
+  'set-license-edit-access': { column: 'license_edit_access', label: 'Licenses' },
+  'set-integrations-edit-access': { column: 'integrations_edit_access', label: 'Integrations' },
+  'set-ai-operations-edit-access': { column: 'ai_operations_edit_access', label: 'Echo AI operations' },
+  'set-site-controls-edit-access': { column: 'site_controls_edit_access', label: 'Site Controls' },
+}
+
+const removeStoragePrefix = async (adminClient: ReturnType<typeof createClient>, bucket: string, prefix: string) => {
+  const storage = adminClient.storage.from(bucket)
+  while (true) {
+    const { data: objects, error: listError } = await storage.list(prefix, { limit: 1000, offset: 0 })
+    if (listError) throw new Error(`Could not inspect ${bucket} storage: ${listError.message}`)
+    if (!objects?.length) return
+
+    const paths = objects.map((object) => `${prefix}${object.name}`)
+    const { error: removeError } = await storage.remove(paths)
+    if (removeError) throw new Error(`Could not remove ${bucket} storage: ${removeError.message}`)
+    if (objects.length < 1000) return
+  }
+}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -81,6 +112,8 @@ Deno.serve(async (request) => {
       'update-ticket-notification-config',
       'test-ticket-notification',
       'notify-ticket-created',
+      'get-ticket-inbound-config',
+      'update-ticket-inbound-config',
     ])
     if (!action || (!globalActions.has(action) && !userId)) {
       return json({ error: 'An action and userId are required.' }, 400, request)
@@ -89,6 +122,77 @@ Deno.serve(async (request) => {
     if (action === 'get-ticket-notification-config') {
       const config = await getNotificationConfig(adminClient)
       return json({ config, canEdit: canEditEmail }, 200, request)
+    }
+
+    if (action === 'get-ticket-inbound-config') {
+      if (!canEditEmail) {
+        return json({ error: 'Company Email editing access is required to view inbound mailbox settings.' }, 403, request)
+      }
+      const { data: inboundConfig, error: inboundError } = await adminClient
+        .from('support_inbound_config')
+        .select('inbound_email, enabled, webhook_secret_hash')
+        .eq('id', 'default')
+        .maybeSingle()
+      if (inboundError) return json({ error: inboundError.message }, 500, request)
+      return json({
+        config: {
+          inboundEmail: inboundConfig?.inbound_email || 'support@echoaipro.com',
+          inboundEnabled: inboundConfig?.enabled === true,
+          hasInboundWebhookSecret: Boolean(inboundConfig?.webhook_secret_hash),
+        },
+        canEdit: canEditEmail,
+      }, 200, request)
+    }
+
+    if (action === 'update-ticket-inbound-config') {
+      if (!canEditEmail) {
+        return json({ error: 'Super Admin permission or granted Company Email editing access is required to modify inbound mailbox settings.' }, 403, request)
+      }
+
+      const inboundEmail = String(body.inboundEmail || '').trim().toLowerCase()
+      const inboundWebhookSecret = typeof body.inboundWebhookSecret === 'string' ? body.inboundWebhookSecret.trim() : ''
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inboundEmail)) {
+        return json({ error: 'Enter a valid inbound support mailbox address.' }, 400, request)
+      }
+      if (inboundWebhookSecret && inboundWebhookSecret.length < 24) {
+        return json({ error: 'The inbound webhook key must be at least 24 characters.' }, 400, request)
+      }
+
+      const updateData: Record<string, unknown> = {
+        inbound_email: inboundEmail,
+        enabled: body.inboundEnabled === true,
+        updated_by: caller.user.id,
+        updated_at: new Date().toISOString(),
+      }
+      if (inboundWebhookSecret) {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inboundWebhookSecret))
+        updateData.webhook_secret_hash = Array.from(new Uint8Array(digest))
+          .map((value) => value.toString(16).padStart(2, '0'))
+          .join('')
+      }
+
+      const { data: saved, error: saveError } = await adminClient
+        .from('support_inbound_config')
+        .update(updateData)
+        .eq('id', 'default')
+        .select('inbound_email, enabled, webhook_secret_hash')
+        .single()
+      if (saveError) return json({ error: saveError.message }, 500, request)
+
+      await adminClient.from('admin_user_audit').insert({
+        actor_id: caller.user.id,
+        target_user_id: null,
+        action: inboundWebhookSecret ? 'rotated_support_inbound_key' : 'updated_support_inbound_config',
+        detail: { inbound_email: saved.inbound_email, inbound_enabled: saved.enabled },
+      })
+
+      return json({
+        config: {
+          inboundEmail: saved.inbound_email,
+          inboundEnabled: saved.enabled,
+          hasInboundWebhookSecret: Boolean(saved.webhook_secret_hash),
+        },
+      }, 200, request)
     }
 
     if (action === 'update-ticket-notification-config') {
@@ -251,19 +355,17 @@ Deno.serve(async (request) => {
       const newCompany = typeof body.company === 'string' ? body.company.trim().slice(0, 120) : ''
       const role = typeof body.role === 'string' ? body.role : 'it'
       const profitSharePercent = Number(body.profitSharePercent || 0)
-      if (!email || !newFullName || !newCompany || !['it', 'accountant', 'board_member', 'manager', 'user'].includes(role)) {
-        return json({ error: 'Name, email, company, and a valid staff role are required.' }, 400, request)
-      }
-      if (role === 'board_member' && (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 10)) {
-        return json({ error: 'Board Member profit share must be between 1% and 10%.' }, 400, request)
+      if (!email || !newFullName || !newCompany || !['it', 'accountant', 'user'].includes(role)) {
+        return json({ error: 'Name, email, company, and a valid role are required.' }, 400, request)
       }
 
       const rawAppUrl = Deno.env.get('APP_URL') ?? ''
       const appUrl = rawAppUrl.trim().replace(/\/$/, '') || 'https://echoaipro.com'
 
-      const { data: created, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+      const { data: created, error: createError } = await adminClient.auth.admin.createUser({
+        email,
+        email_confirm: false,
         data: { full_name: newFullName, company: newCompany },
-        redirectTo: `${appUrl}/reset-password`,
       })
       let invitedUser = created?.user ?? null
       if (!invitedUser && createError) {
@@ -280,17 +382,21 @@ Deno.serve(async (request) => {
         const { data: recoveryData } = await adminClient.auth.admin.generateLink({
           type: 'recovery',
           email,
-          options: { redirectTo: `${appUrl}/reset-password` },
+          options: { redirectTo: `${appUrl}/?recovery=1` },
         })
         directRecoveryLink = recoveryData?.properties?.action_link ?? null
+        if (directRecoveryLink) {
+          const delivery = await sendAccountConfirmationEmail(email, directRecoveryLink, adminClient)
+          if (!delivery.success) return json({ error: delivery.error || 'User was created but the Support email could not be sent.' }, 503, request)
+        }
       } catch {
-        // Link generation is a best-effort convenience alongside the invite email
+        return json({ error: 'User was created but the Support email could not be sent.' }, 503, request)
       }
 
       const { data: profile, error: profileError } = await adminClient
         .from('profiles')
         .upsert({ id: invitedUser.id, email, full_name: newFullName, company: newCompany, role, profit_share_percent: role === 'board_member' ? profitSharePercent : 0, access_status: 'active' }, { onConflict: 'id' })
-        .select('id, full_name, email, company, role, profit_share_percent, access_status, storage_quota_mb, trademark_edit_access, developer_app_edit_access, company_email_edit_access')
+        .select(PROFILE_CREATE_FIELDS)
         .single()
       if (profileError) return json({ error: 'User was invited but the profile could not be configured.' }, 500, request)
 
@@ -316,7 +422,7 @@ Deno.serve(async (request) => {
 
     const { data: targetById } = await adminClient
       .from('profiles')
-      .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, created_at')
+      .select(PROFILE_ADMIN_FIELDS)
       .eq('id', lookupUserId)
       .maybeSingle()
 
@@ -324,13 +430,13 @@ Deno.serve(async (request) => {
     if (!target && typeof targetEmail === 'string' && targetEmail.trim()) {
       const { data: targetByEmail } = await adminClient
         .from('profiles')
-        .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, created_at')
+        .select(PROFILE_ADMIN_FIELDS)
         .ilike('email', targetEmail.trim())
         .maybeSingle()
       target = targetByEmail
     }
 
-    if (!target && ['set-trademark-edit-access', 'set-developer-app-edit-access', 'set-company-email-edit-access'].includes(action)) {
+    if (!target && PLATFORM_ACCESS_ACTIONS[action]) {
       let authTarget = userId ? (await adminClient.auth.admin.getUserById(userId)).data.user : null
       if (!authTarget && typeof targetEmail === 'string' && targetEmail.trim()) {
         const { data: users } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 })
@@ -348,7 +454,7 @@ Deno.serve(async (request) => {
             role: 'it',
             access_status: 'active',
           }, { onConflict: 'id' })
-          .select('id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, created_at')
+          .select(PROFILE_ADMIN_FIELDS)
           .single()
         target = repairedProfile
       }
@@ -358,12 +464,110 @@ Deno.serve(async (request) => {
       return json({ error: `User not found for id '${userId || 'none'}' or email '${targetEmail || 'none'}'.` }, 404, request)
     }
 
+    if (action === 'delete-user') {
+      if (!isSuperAdmin) {
+        return json({ error: 'Admin or Super Admin access is required to permanently delete users.' }, 403, request)
+      }
+      if (target.id === caller.user.id) {
+        return json({ error: 'You cannot delete your own administrator account here.' }, 400, request)
+      }
+      if (['admin', 'super_admin'].includes(String(target.role || '').toLowerCase())) {
+        return json({ error: 'Administrator accounts must be removed through a separate verified process.' }, 403, request)
+      }
+
+      const { data: subscription } = await adminClient
+        .from('subscriptions')
+        .select('stripe_customer_id')
+        .eq('user_id', target.id)
+        .maybeSingle()
+
+      if (subscription?.stripe_customer_id && Deno.env.get('STRIPE_SECRET_KEY')) {
+        const activeSubscriptions = await stripe.subscriptions.list({
+          customer: subscription.stripe_customer_id,
+          status: 'all',
+          limit: 100,
+        })
+        for (const item of activeSubscriptions.data) {
+          if (!['canceled', 'incomplete_expired'].includes(item.status)) {
+            await stripe.subscriptions.cancel(item.id)
+          }
+        }
+      }
+
+      const deleteRows = async (table: string, column = 'user_id') => {
+        const { error } = await adminClient.from(table).delete().eq(column, target.id)
+        if (error) throw new Error(`Could not remove ${table}: ${error.message}`)
+      }
+
+      // Remove user-owned rows explicitly, including tables whose foreign keys
+      // intentionally use SET NULL so Auth deletion cannot leave a data trail.
+      for (const table of [
+        'access_requests',
+        'subscriptions',
+        'billing_payments',
+        'promo_redemptions',
+        'referral_codes',
+        'user_ai_agent_config',
+        'mfa_recovery_codes',
+        'cloud_connections',
+        'cloud_oauth_states',
+        'user_social_accounts',
+        'social_oauth_credentials',
+        'social_oauth_states',
+        'scheduled_posts',
+        'support_tickets',
+        'ai_agent_connections',
+        'echo_brand_profiles',
+        'echo_credit_accounts',
+        'echo_credit_transactions',
+        'echo_ai_jobs',
+        'echo_ai_request_events',
+        'echo_chat_usage',
+        'app_analytics_events',
+        'customer_exit_feedback',
+        'ad_oauth_states',
+        'ad_oauth_connections',
+        'posting_schedules',
+        'user_free_posting_usage',
+      ]) {
+        await deleteRows(table)
+      }
+
+      for (const [table, column] of [
+        ['referrals', 'referrer_user_id'],
+        ['referrals', 'referred_user_id'],
+        ['company_seats', 'profile_id'],
+        ['company_seats', 'assigned_by'],
+        ['company_seat_packages', 'created_by'],
+        ['internal_forum_posts', 'author_id'],
+        ['internal_forum_messages', 'sender_id'],
+        ['internal_forum_messages', 'recipient_id'],
+        ['internal_projects', 'created_by'],
+        ['internal_projects', 'owner_id'],
+        ['internal_project_tasks', 'created_by'],
+        ['internal_project_tasks', 'assignee_id'],
+        ['internal_project_notes', 'author_id'],
+        ['board_profit_payouts', 'board_member_id'],
+        ['board_profit_payouts', 'created_by'],
+      ] as const) {
+        await deleteRows(table, column)
+      }
+
+      await removeStoragePrefix(adminClient, 'ticket-attachments', `${target.id}/`)
+      await removeStoragePrefix(adminClient, 'social-media', `${target.id}/`)
+
+      const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(target.id)
+      if (authDeleteError) throw new Error(`Could not delete the authentication account: ${authDeleteError.message}`)
+
+      return json({ deleted: true, userId: target.id }, 200, request)
+    }
+
     // Admins are excluded from these actions so one compromised admin account
     if (target.role === 'admin' && caller.user.id !== target.id && !isSuperAdmin) {
       return json({ error: 'Administrator accounts cannot be managed here.' }, 403, request)
     }
 
-    if (['admin', 'manager', 'it', 'accountant'].includes(target.role) && !isSuperAdmin) {
+    if (['admin', 'it', 'accountant'].includes(target.role) && !isSuperAdmin) {
       return json({ error: 'Only Super Admins can view or manage employee accounts.' }, 403, request)
     }
 
@@ -421,7 +625,7 @@ Deno.serve(async (request) => {
       const { data: link, error: linkError } = await adminClient.auth.admin.generateLink({
         type: 'recovery',
         email: target.email,
-        options: { redirectTo: `${appUrl}/reset-password` },
+        options: { redirectTo: `${appUrl}/?recovery=1` },
       })
 
       if (linkError) {
@@ -434,6 +638,40 @@ Deno.serve(async (request) => {
         recoveryLink: link.properties?.action_link ?? null,
         expiresHint: 'This link is single-use and expires in 1 hour.',
       }, 200, request)
+    }
+
+    if (action === 'set-temporary-password') {
+      if (!isSuperAdmin) {
+        return json({ error: 'Super Admin access is required to set a temporary password.' }, 403, request)
+      }
+      if (target.id === caller.user.id) {
+        return json({ error: 'Use the normal password change flow for your own account.' }, 400, request)
+      }
+
+      const temporaryPassword = typeof body.temporaryPassword === 'string' ? body.temporaryPassword : ''
+      if (temporaryPassword.length < 12) {
+        return json({ error: 'Temporary passwords must contain at least 12 characters.' }, 400, request)
+      }
+
+      const { data: authTarget, error: authTargetError } = await adminClient.auth.admin.getUserById(target.id)
+      if (authTargetError || !authTarget.user) {
+        return json({ error: 'Could not load that authentication account.' }, 404, request)
+      }
+
+      const { error: passwordError } = await adminClient.auth.admin.updateUserById(target.id, {
+        password: temporaryPassword,
+        app_metadata: {
+          ...(authTarget.user.app_metadata || {}),
+          must_change_password: true,
+          temporary_password_set_at: new Date().toISOString(),
+        },
+      })
+      if (passwordError) {
+        return json({ error: 'Could not set the temporary password.' }, 500, request)
+      }
+
+      await recordAudit('set_temporary_password', { must_change_password: true })
+      return json({ ok: true, mustChangePassword: true }, 200, request)
     }
 
     if (action === 'update-profile') {
@@ -462,7 +700,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'set-beta-ai-access') {
-      if (!['admin', 'manager', 'it'].includes(effectiveCallerProfile.role)) {
+      if (!['admin', 'it'].includes(effectiveCallerProfile.role)) {
         return json({ error: 'IT or Management access is required to change beta AI access.' }, 403, request)
       }
       const isBetaTester = body.isBetaTester === true
@@ -479,51 +717,20 @@ Deno.serve(async (request) => {
       return json({ profile: updated }, 200, request)
     }
 
-    if (action === 'set-trademark-edit-access') {
+    if (PLATFORM_ACCESS_ACTIONS[action]) {
       if (!isSuperAdmin) {
-        return json({ error: 'Super Admin access is required to grant trademark editing.' }, 403, request)
+        return json({ error: `Super Admin access is required to grant ${PLATFORM_ACCESS_ACTIONS[action].label} access.` }, 403, request)
       }
       const enabled = body.enabled === true
+      const column = PLATFORM_ACCESS_ACTIONS[action].column
       const { data: updated, error: updateError } = await adminClient
         .from('profiles')
-        .update({ trademark_edit_access: enabled })
+        .update({ [column]: enabled })
         .eq('id', target.id)
-        .select('id, trademark_edit_access')
+        .select(`id, ${column}`)
         .single()
-      if (updateError) return json({ error: 'Could not update trademark editing access.' }, 500, request)
-      await recordAudit('updated_profile', { trademark_edit_access: enabled })
-      return json({ profile: updated }, 200, request)
-    }
-
-    if (action === 'set-developer-app-edit-access') {
-      if (!isSuperAdmin) {
-        return json({ error: 'Super Admin access is required to grant Developer Apps editing.' }, 403, request)
-      }
-      const enabled = body.enabled === true
-      const { data: updated, error: updateError } = await adminClient
-        .from('profiles')
-        .update({ developer_app_edit_access: enabled })
-        .eq('id', target.id)
-        .select('id, developer_app_edit_access')
-        .single()
-      if (updateError) return json({ error: 'Could not update Developer Apps editing access.' }, 500, request)
-      await recordAudit('updated_profile', { developer_app_edit_access: enabled })
-      return json({ profile: updated }, 200, request)
-    }
-
-    if (action === 'set-company-email-edit-access') {
-      if (!isSuperAdmin) {
-        return json({ error: 'Super Admin access is required to grant Company Email & SMTP editing.' }, 403, request)
-      }
-      const enabled = body.enabled === true
-      const { data: updated, error: updateError } = await adminClient
-        .from('profiles')
-        .update({ company_email_edit_access: enabled })
-        .eq('id', target.id)
-        .select('id, company_email_edit_access')
-        .single()
-      if (updateError) return json({ error: 'Could not update Company Email editing access.' }, 500, request)
-      await recordAudit('updated_profile', { company_email_edit_access: enabled })
+      if (updateError) return json({ error: `Could not update ${PLATFORM_ACCESS_ACTIONS[action].label} access.` }, 500, request)
+      await recordAudit('updated_profile', { [column]: enabled })
       return json({ profile: updated }, 200, request)
     }
 
@@ -532,8 +739,8 @@ Deno.serve(async (request) => {
         return json({ error: 'Super Admin access is required to edit Board Member profit share.' }, 403, request)
       }
       const profitSharePercent = Number(body.profitSharePercent)
-      if (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 10) {
-        return json({ error: 'Profit share must be between 1% and 10%.' }, 400, request)
+      if (!Number.isFinite(profitSharePercent) || profitSharePercent < 1 || profitSharePercent > 50) {
+        return json({ error: 'Profit share must be between 1% and 50%.' }, 400, request)
       }
       const isCallerSelf = target.id === caller.user.id || (typeof targetEmail === 'string' && targetEmail.trim().toLowerCase() === callerEmail)
       if (!target.is_board_member && target.role !== 'board_member' && !(isCallerSelf && isSuperAdmin)) {
@@ -554,7 +761,7 @@ Deno.serve(async (request) => {
       if (!isSuperAdmin) return json({ error: 'Super Admin access is required to edit Board Membership.' }, 403, request)
       const enabled = body.enabled === true
       const share = Number(body.profitSharePercent || 0)
-      if (enabled && (!Number.isFinite(share) || share < 1 || share > 10)) return json({ error: 'Board Member profit share must be between 1% and 10%.' }, 400, request)
+      if (enabled && (!Number.isFinite(share) || share < 1 || share > 50)) return json({ error: 'Board Member profit share must be between 1% and 50%.' }, 400, request)
       const nextRole = !enabled && target.role === 'board_member' ? 'user' : target.role
       const { data: updated, error: updateError } = await adminClient.from('profiles').update({ role: nextRole, is_board_member: enabled, profit_share_percent: enabled ? share : 0 }).eq('id', target.id).select('id, role, is_board_member, profit_share_percent').single()
       if (updateError) return json({ error: 'Could not update Board Membership.' }, 500, request)

@@ -15,7 +15,7 @@ const getCaller = async (request: Request) => {
   return data.user ?? null
 }
 
-const providers = ['meta', 'youtube', 'tiktok', 'x', 'linkedin', 'snapchat']
+const providers = ['meta', 'meta_ads', 'google_ads', 'youtube', 'x', 'linkedin', 'google_drive', 'microsoft_365', 'twitch', 'google_business', 'pinterest']
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: getCorsHeaders(request) })
@@ -24,8 +24,19 @@ Deno.serve(async (request) => {
   const caller = await getCaller(request)
   if (!caller) return json({ error: 'Authentication required.' }, 401, request)
   const db = admin()
-  const { data: profile } = await db.from('profiles').select('role, developer_app_edit_access').eq('id', caller.id).maybeSingle()
-  const isAdmin = profile?.role === 'admin'
+  const callerEmail = caller.email?.trim().toLowerCase() || ''
+  let { data: profile } = await db.from('profiles').select('role, developer_app_edit_access').eq('id', caller.id).maybeSingle()
+  if (!profile && callerEmail) {
+    const { data: profileByEmail } = await db
+      .from('profiles')
+      .select('role, developer_app_edit_access')
+      .ilike('email', callerEmail)
+      .maybeSingle()
+    profile = profileByEmail
+  }
+  const role = String(profile?.role || caller.user_metadata?.role || caller.app_metadata?.role || '').toLowerCase()
+  const isOwner = callerEmail === 'tdvorak37@gmail.com' || callerEmail === 'support@echoaipro.com'
+  const isAdmin = ['admin', 'super_admin'].includes(role) || isOwner
   const canEdit = isAdmin || profile?.developer_app_edit_access === true
   if (request.method === 'POST' && !canEdit) return json({ error: 'Developer app editing access is required.' }, 403, request)
 

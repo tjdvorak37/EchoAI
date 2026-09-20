@@ -1,10 +1,41 @@
 import { useState } from 'react'
+import {
+  BarChart3,
+  BriefcaseBusiness,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  CirclePlay,
+  ChartNoAxesCombined,
+  Image,
+  Layers3,
+  Link2,
+  Menu,
+  Megaphone,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  Store,
+  Users,
+  Video,
+  X,
+} from 'lucide-react'
 import demoPosterImage from '../assets/demo-poster.svg'
-import echoMascot from '../assets/echo-mascot.svg'
-import { PLAN_ORDER, PLANS, getAnnualSavings } from '../data/plans'
+import uploadedHeroArt from '../assets/woking-landing.png'
+import echoModern from '../assets/echo-poses/echo-modern-friendly.png'
+import echoCreator from '../assets/echo-poses/echo-creator-mode.png'
+import echoSocial from '../assets/echo-poses/echo-social-media.png'
+import echoAiTools from '../assets/echo-poses/echo-ai-tools.png'
+import echoPhoto from '../assets/echo-poses/echo-photo-editor.png'
+import echoVideo from '../assets/echo-poses/echo-video-editor.png'
+import echoScheduler from '../assets/echo-poses/echo-scheduler.png'
+import echoAnalytics from '../assets/echo-poses/echo-analytics.png'
+import { SOCIAL_PLATFORMS } from '../data/socialPlatforms'
 import { authService } from '../services/authService'
+import { PRIVACY_STORAGE_KEY } from '../services/analyticsService'
 import { AnnouncementBanner } from './AnnouncementBanner'
 import './LandingPage.css'
+import './LandingPageRefresh.css'
 
 const SUPPORT_CATEGORIES = [
   'Cannot sign in',
@@ -14,34 +45,59 @@ const SUPPORT_CATEGORIES = [
   'Something else',
 ]
 
-const workflow = [
-  ['01', 'Bring your source material', 'Upload presentations, spreadsheets, PDFs, or sync seamlessly from Google Drive, OneDrive, and SharePoint.', 'blue'],
-  ['02', 'Create with Hosted & In-House AI', 'Generate structured briefs, captions, photoreal 4K images, timeline video plans, and voiceovers using EchoAI tokens.', 'coral'],
-  ['03', 'Refine in Real Studio Editors', 'Edit photo layers with non-destructive pixel healing, shape masks, multi-track video timelines, and brand kit typography.', 'yellow'],
-  ['04', 'Publish, Repost & Listen', 'Schedule across Instagram, Facebook, X, TikTok, YouTube, LinkedIn, sync calendars, and track market sentiment in real time.', 'green'],
+const PRODUCT_LINKS = [
+  ['Workspace files', '#tools'],
+  ['Photo Creator', '#tools'],
+  ['Video Editor', '#tools'],
+  ['Post Scheduler', '#workflow'],
+  ['Social Listening', '#tools'],
+  ['Brand & Cloud Workspace', '#tools'],
 ]
 
-const capabilities = [
-  ['AI Content Studio', 'One brief, every format', 'Transform scattered slide decks, spreadsheets, and docs into campaign copy, flyers, video plans, and post packages.', '#ff6b5e'],
-  ['Creative Studio Suite', 'Real multi-track media editors', 'Build branded image layers, retouch with pixel healing, arrange timeline video clips, mix audio tracks, and export WebM/PNG.', '#2364d8'],
-  ['Social Listening Hub', 'Google-style market intelligence', 'Track mentions, net sentiment (-100 to +100), competitor share of voice, product feature requests, and ChatGPT search citations.', '#d58b00'],
-  ['Multi-Channel Scheduler', 'Stay synced and automated', 'Queue multi-channel campaigns, mirror Google Calendar events, and move approved company broadcasts through team repost flows.', '#11866f'],
-  ['Two-Bucket Token Engine', 'Permanent rollover protection', 'Monthly plan tokens replenish each billing cycle. Top-up add-on tokens (500 to 5,000) never expire and carry over indefinitely.', '#7b4bc9'],
-  ['Brand Kit & Cloud Drives', 'Unified creative assets', 'Centralize company color palettes, licensed web fonts, approved logos, and link external cloud storage with zero quota overhead.', '#c24f72'],
+const toolRibbon = [
+  ['social', Send, 'Social Media', echoSocial],
+  ['workspace', Layers3, 'Workspace', echoAiTools],
+  ['photo', Image, 'Photo Editor', echoPhoto],
+  ['video', Video, 'Video Editor', echoVideo],
+  ['schedule', CalendarDays, 'Scheduler', echoScheduler],
+  ['analytics', BarChart3, 'Analytics', echoAnalytics],
+]
+
+const showcaseFeatures = [
+  [Layers3, 'Advanced photo and video editors', 'Refine layers, timelines, text, audio, and brand styling.'],
+  [CalendarDays, 'Multi-platform scheduling', 'Plan approved posts and keep every connected channel in view.'],
+  [Users, 'Team collaboration', 'Share assets, coordinate reposts, and keep work organized.'],
+  [BarChart3, 'Analytics and insights', 'Follow performance, listening signals, and campaign activity.'],
+]
+
+const workflowSteps = [
+  [Link2, 'Connect', 'Link the channels and ad accounts your team already manages.', 'Connections'],
+  [Image, 'Create', 'Bring an image from your device into Image Lab and refine it.', 'Image Lab'],
+  [CalendarDays, 'Queue', 'Write the post, inspect each social preview, and choose the right moment.', 'Queue Studio'],
+  [ChartNoAxesCombined, 'Improve', 'Use audience signals and paid-media results to guide the next campaign.', 'Signal Watch + Ads'],
+]
+
+const premiumHighlights = [
+  ['Publish with confidence', 'Queue Studio, live social previews, and connected-channel publishing.'],
+  ['Create without the clutter', 'Image Lab and Motion Lab work directly with files from your device.'],
+  ['Make sharper decisions', 'Signal Watch and Ads show the conversations and outcomes worth acting on.'],
+]
+
+const audiences = [
+  [Image, 'Content creators', ['Edit your own media', 'Publish consistently', 'Keep your account for free'], 'violet'],
+  [Store, 'Small businesses', ['Plan consistently', 'Keep brand assets together', 'Share work easily'], 'blue'],
+  [Users, 'Marketing teams', ['Collaborate around campaigns', 'Manage multiple channels', 'Streamline approvals'], 'green'],
+  [BriefcaseBusiness, 'Agencies', ['Organize client work', 'Build repeatable workflows', 'Scale paid tools when ready'], 'coral'],
 ]
 
 const FEATURE_FAQS = [
   {
-    q: 'How do monthly plan tokens vs purchased rollover tokens work?',
-    a: 'Each subscription package comes with a generous monthly token allowance (500 to 7,500 tokens) that renews each billing cycle. If you ever purchase additional top-up tokens (500, 1,000, 2,500, or 5,000), they are stored in a separate permanent rollover balance that NEVER expires and carries over month-to-month until used.',
-  },
-  {
-    q: 'Can I connect my company’s private AI keys or custom models?',
-    a: 'Yes! EchoAI provides full backend and frontend management for OpenAI, Runway ML, Anthropic Claude, Replicate, Google Gemini, and custom AI router gateways with live 1-click credential testing.',
+    q: 'Can I use my own images and videos?',
+    a: 'Yes. Upload your own media, refine it in the photo or video editor, organize it in your workspace, and schedule it across your connected channels.',
   },
   {
     q: 'Which social media channels can I publish to?',
-    a: 'EchoAI natively connects to Instagram, Facebook, TikTok, YouTube, X (Twitter), LinkedIn, and Snapchat with multi-channel queueing, scheduled deployments, and company repost syndication.',
+    a: 'EchoAI currently publishes to Instagram, Facebook, YouTube, X, and LinkedIn. Twitch, Google Business Profile, and Pinterest are visible on our integration roadmap and will open as each provider connection is completed.',
   },
   {
     q: 'Are payments secure and can I cancel anytime?',
@@ -51,10 +107,101 @@ const FEATURE_FAQS = [
 
 const Brand = () => (
   <span className="landing-brand-lockup">
-    <img src={echoMascot} alt="" />
+    <img src={echoModern} alt="" />
     <span>EchoAI</span>
   </span>
 )
+
+function NavDropdown({ label, children, wide = false, isOpen, onOpenChange }) {
+  return (
+    <div
+      className={`landing-nav-dropdown ${wide ? 'is-wide' : ''} ${isOpen ? 'is-open' : ''}`}
+      onMouseEnter={() => onOpenChange(true)}
+      onMouseLeave={() => onOpenChange(false)}
+      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) onOpenChange(false) }}
+    >
+      <button type="button" className="landing-nav-dropdown-trigger" onClick={() => onOpenChange(!isOpen)} aria-expanded={isOpen}>
+        {label}<ChevronDown size={15} aria-hidden="true" />
+      </button>
+      <div className="landing-nav-menu" onClick={() => onOpenChange(false)}>{children}</div>
+    </div>
+  )
+}
+
+function PrivacyChoices() {
+  const [choices, setChoices] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(PRIVACY_STORAGE_KEY)
+      return saved ? JSON.parse(saved) : null
+    } catch {
+      return null
+    }
+  })
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [analyticsAllowed, setAnalyticsAllowed] = useState(choices?.analytics ?? false)
+
+  const saveChoices = (analytics) => {
+    const nextChoices = { necessary: true, analytics, savedAt: new Date().toISOString() }
+    try {
+      window.localStorage.setItem(PRIVACY_STORAGE_KEY, JSON.stringify(nextChoices))
+    } catch {
+      // The choice still applies for this page view when storage is unavailable.
+    }
+    setChoices(nextChoices)
+    setAnalyticsAllowed(analytics)
+    setPanelOpen(false)
+  }
+
+  return (
+    <>
+      {!choices && !panelOpen && (
+        <aside className="landing-privacy-prompt" aria-labelledby="privacy-prompt-title">
+          <ShieldCheck size={22} aria-hidden="true" />
+          <div>
+            <strong id="privacy-prompt-title">Your privacy choices</strong>
+            <p>Choose whether EchoAI may use optional analytics. Essential storage keeps your account and preferences working.</p>
+            <a href="/privacy-policy">Read our privacy policy</a>
+          </div>
+          <div className="landing-privacy-actions">
+            <button type="button" className="landing-secondary-action" onClick={() => saveChoices(false)}>Decline optional</button>
+            <button type="button" className="landing-primary-action" onClick={() => saveChoices(true)}>Accept all</button>
+            <button type="button" className="landing-privacy-manage" onClick={() => setPanelOpen(true)}>Manage choices</button>
+          </div>
+        </aside>
+      )}
+
+      {panelOpen && (
+        <div className="landing-privacy-backdrop" role="dialog" aria-modal="true" aria-labelledby="privacy-panel-title">
+          <section className="landing-privacy-panel">
+            <div className="landing-privacy-panel-header">
+              <div><span>Privacy center</span><h2 id="privacy-panel-title">Control your data choices</h2></div>
+              <button type="button" onClick={() => setPanelOpen(false)} aria-label="Close privacy choices"><X size={20} /></button>
+            </div>
+            <p>Essential technologies are always active because they support security, authentication, and saved preferences.</p>
+            <div className="landing-privacy-option">
+              <div><strong>Essential</strong><span>Required for account security and core site operation.</span></div>
+              <span className="landing-privacy-required"><Check size={14} /> Always active</span>
+            </div>
+            <label className="landing-privacy-option">
+              <div><strong>Optional analytics</strong><span>Helps us understand feature usage and improve EchoAI.</span></div>
+              <input type="checkbox" checked={analyticsAllowed} onChange={(event) => setAnalyticsAllowed(event.target.checked)} />
+            </label>
+            <div className="landing-privacy-panel-actions">
+              <a href="/privacy-policy">Full privacy policy</a>
+              <button type="button" className="landing-primary-action" onClick={() => saveChoices(analyticsAllowed)}>Save choices</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {choices && !panelOpen && (
+        <button type="button" className="landing-privacy-launcher" onClick={() => setPanelOpen(true)} aria-label="Open privacy choices">
+          <ShieldCheck size={18} /> Privacy
+        </button>
+      )}
+    </>
+  )
+}
 
 function SupportDialog({ onClose }) {
   const [form, setForm] = useState({ name: '', email: '', category: SUPPORT_CATEGORIES[0], details: '' })
@@ -125,9 +272,11 @@ function SupportDialog({ onClose }) {
   )
 }
 
-export function LandingPage({ announcement, onSignIn, onPurchase, children }) {
+export function LandingPage({ announcement, onSignIn, onCreateAccount, onPurchase }) {
   const [supportOpen, setSupportOpen] = useState(() => new URLSearchParams(window.location.search).get('support') === 'privacy')
   const [openFaqIndex, setOpenFaqIndex] = useState(0)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [openDropdown, setOpenDropdown] = useState('')
 
   return (
     <div className="landing-page" id="top">
@@ -138,197 +287,195 @@ export function LandingPage({ announcement, onSignIn, onPurchase, children }) {
       />
       <header className="landing-nav">
         <a href="#top" aria-label="EchoAI home"><Brand /></a>
-        <nav className="landing-nav-links" aria-label="Landing page">
-          <a href="#workflow">How it works</a>
-          <a href="#tools">Features</a>
-          <a href="#pricing">Pricing &amp; Tokens</a>
-          <a href="#faq">FAQ</a>
+        <nav className={`landing-nav-links ${mobileMenuOpen ? 'is-open' : ''}`} aria-label="Landing page">
+          <NavDropdown label="Product" isOpen={openDropdown === 'product'} onOpenChange={(open) => setOpenDropdown(open ? 'product' : '')}>
+            <div className="landing-product-links">
+              {PRODUCT_LINKS.map(([label, href]) => <a href={href} key={label} onClick={() => setMobileMenuOpen(false)}>{label}<span>Explore</span></a>)}
+            </div>
+          </NavDropdown>
+          <NavDropdown label="Social media" wide isOpen={openDropdown === 'social'} onOpenChange={(open) => setOpenDropdown(open ? 'social' : '')}>
+            <div className="landing-social-links">
+              {SOCIAL_PLATFORMS.map((platform) => <a href="#workflow" key={platform.key} onClick={() => setMobileMenuOpen(false)}>{platform.label}</a>)}
+            </div>
+            <p className="landing-menu-note">One calendar for your connected channels. New integrations are released as provider access becomes available.</p>
+          </NavDropdown>
+          <a href="#get-started" onClick={() => setMobileMenuOpen(false)}>Plans</a>
+          <NavDropdown label="Resources" isOpen={openDropdown === 'resources'} onOpenChange={(open) => setOpenDropdown(open ? 'resources' : '')}>
+            <a href="#workflow" onClick={() => setMobileMenuOpen(false)}>How it works</a>
+            <a href="#faq" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
+            <button type="button" onClick={() => { setSupportOpen(true); setMobileMenuOpen(false) }}>Contact support</button>
+          </NavDropdown>
         </nav>
         <div className="landing-nav-actions">
-          <button type="button" className="landing-support-link" onClick={() => setSupportOpen(true)}>
-            Need help signing in?
-          </button>
           <button type="button" className="landing-login" onClick={onSignIn}>Sign in</button>
-          <button type="button" className="landing-primary-action" onClick={onPurchase}>Get started</button>
+          <button type="button" className="landing-primary-action" onClick={onCreateAccount}>Create free account</button>
+          <button type="button" className="landing-menu-toggle" onClick={() => setMobileMenuOpen((open) => !open)} aria-label="Toggle navigation" aria-expanded={mobileMenuOpen}>
+            {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
         </div>
       </header>
 
       <main>
-        {/* Hero Section */}
-        <section className="landing-hero">
+        <section className="landing-hero landing-showcase-hero">
           <div className="landing-hero-content">
-            <div className="landing-badge"><span /> AI Marketing &amp; Creative Operating System</div>
-            <h1 className="landing-headline">Create, edit, publish, and listen in one connected AI workspace.</h1>
+            <div className="landing-badge"><Sparkles size={14} /> All-in-one creator workspace</div>
+            <h1 className="landing-headline">Create. Plan.<br />Edit. Post.<br /><em>Grow</em></h1>
             <p className="landing-subhead">
-              Transform raw documents, presentations, and brand files into campaign-ready creative. Refine in non-destructive photo and timeline video editors, schedule across major social channels, and track real-time audience sentiment.
+              Bring your content and team together in one bright, practical workspace. Edit photos and videos, schedule across your channels, and follow what resonates.
             </p>
             <div className="landing-hero-actions">
-              <button type="button" className="landing-primary-action landing-hero-btn" onClick={onPurchase}>
-                Start free trial / Create project <span aria-hidden="true">→</span>
+              <button type="button" className="landing-primary-action landing-hero-btn" onClick={onCreateAccount}>
+                Start your free account <span aria-hidden="true">→</span>
               </button>
-              <a href="#pricing" className="landing-secondary-action landing-hero-btn" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                View pricing ($29–$129)
-              </a>
+              <a href="#tools" className="landing-secondary-action landing-hero-btn"><CirclePlay size={18} /> Explore the workspace</a>
             </div>
-            <div className="landing-proof-row" aria-label="Plan highlights">
-              <span><strong>$29/mo</strong> starting tier</span>
-              <span><strong>500–7,500</strong> monthly tokens</span>
-              <span><strong>Permanent</strong> token rollover</span>
-              <span><strong>Complete</strong> creative suite</span>
+            <div className="landing-proof-row" aria-label="Account highlights">
+              <span><Check size={15} /> No card required</span>
+              <span><Check size={15} /> Free account available</span>
+              <span><Check size={15} /> Upgrade anytime</span>
+            </div>
+            <div className="landing-premium-offer" aria-label="Premium pricing">
+              <div><strong>Premium</strong><span>Full EchoAI access</span></div>
+              <div><strong>$39</strong><span>per month</span></div>
+              <div><strong>$390</strong><span>per year</span></div>
             </div>
           </div>
 
-          <div className="landing-hero-visual" aria-label="EchoAI document to flyer workflow preview">
-            <img className="landing-mascot-float" src={echoMascot} alt="Echo, the EchoAI mascot" />
-            <div className="landing-visual-shell">
-              <div className="landing-visual-header">
-                <span className="landing-visual-brand"><i /> Creative Brief &amp; Studio Lab</span>
-                <span className="landing-visual-status">⚡ 2,500 Tokens Active</span>
-              </div>
-              <div className="landing-visual-body">
-                <div className="landing-source-column">
-                  <p>Source files &amp; references</p>
-                  {[
-                    ['PPTX', 'Q3 Launch Deck.pptx', '18 slides'],
-                    ['XLSX', 'Feature Specs & Pricing.xlsx', '4 sheets'],
-                    ['PDF', 'Brand Voice Guide.pdf', '12 pages'],
-                  ].map(([type, name, detail]) => (
-                    <div className="landing-source-file" key={name}>
-                      <span>{type}</span>
-                      <div><strong>{name}</strong><small>{detail}</small></div>
-                    </div>
-                  ))}
-                  <div className="landing-prompt-preview">
-                    <small>AI Campaign Directive</small>
-                    <p>Build 4:5 launch flyer, 3 Instagram captions &amp; 15s video storyboard.</p>
-                  </div>
+          <div className="landing-hero-visual" aria-label="EchoAI creative workspace illustration">
+            <img className="landing-uploaded-hero-art" src={uploadedHeroArt} alt="EchoAI mascot creating content with social media icons, plants, laptop, coffee, and a planning board" />
+          </div>
+        </section>
+
+        <nav className="landing-tool-ribbon" aria-label="EchoAI tools">
+          {toolRibbon.map(([key, Icon, label, pose]) => (
+            <a href="#tools" className={`landing-tool-tile tone-${key}`} key={key}>
+              <img src={pose} alt="" />
+              <span><Icon size={18} />{label}</span>
+            </a>
+          ))}
+        </nav>
+
+        <section className="landing-product-showcase" id="tools">
+          <div className="landing-workspace-preview" aria-label="EchoAI workspace preview">
+            <div className="landing-workspace-topbar"><span><i /> Your creative workspace</span><Sparkles size={16} /></div>
+            <div className="landing-workspace-body">
+              <aside>
+                {['Home', 'Media', 'Photo', 'Video', 'Schedule', 'Analytics', 'Team'].map((item, index) => <span className={index === 0 ? 'active' : ''} key={item}>{item}</span>)}
+              </aside>
+              <div className="landing-workspace-canvas">
+                <div className="landing-media-row">
+                  <img src={demoPosterImage} alt="Campaign artwork inside EchoAI" />
+                  <div className="landing-media-swatch swatch-coral" />
+                  <div className="landing-media-swatch swatch-blue" />
                 </div>
-                <div className="landing-result-column">
-                  <div className="landing-result-toolbar"><span>Multi-Layer Output</span><span>4:5 Studio Ready</span></div>
-                  <div className="landing-poster-wrap">
-                    <img src={demoPosterImage} alt="Editable campaign flyer generated in EchoAI" />
-                    <span className="landing-layer-tag tag-copy">Headline · Brand Font</span>
-                    <span className="landing-layer-tag tag-image">4K AI Visual · 10 tokens</span>
-                  </div>
+                  <div className="landing-ai-prompt"><Layers3 size={20} /><div><strong>Campaign workspace</strong><span>Keep your media, edits, and schedule together...</span></div><i aria-hidden="true">→</i></div>
+                <div className="landing-editor-row">
+                  <div><Image size={24} /><strong>Photo editor</strong><span>Layers · color · type</span></div>
+                  <div><Video size={24} /><strong>Video editor</strong><span>Timeline · audio · export</span></div>
                 </div>
               </div>
             </div>
           </div>
-        </section>
-
-        {/* Workflow 4-Step Grid */}
-        <section className="landing-workflow" id="workflow">
-          <div className="landing-section-heading">
-            <p>From scattered source files to unified campaigns</p>
-            <h2>A seamless creative pipeline built for velocity.</h2>
-          </div>
-          <div className="landing-workflow-grid">
-            {workflow.map(([number, title, description, tone]) => (
-              <article className={`landing-workflow-step tone-${tone}`} key={number}>
-                <span>{number}</span>
-                <div><h3>{title}</h3><p>{description}</p></div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* Core Capabilities */}
-        <section className="landing-tools" id="tools">
-          <div className="landing-section-heading landing-section-heading-inline">
-            <div><p>Complete product capability</p><h2>Everything your team needs to dominate content.</h2></div>
-            <p className="landing-section-copy">No exporting between disconnected tools just to finish one campaign.</p>
-          </div>
-          <div className="landing-capability-grid">
-            {capabilities.map(([label, title, description, accent]) => (
-              <article className="landing-capability" key={label} style={{ '--capability-accent': accent }}>
-                <span>{label}</span><h3>{title}</h3><p>{description}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* Pricing Tiers */}
-        <section className="landing-pricing" id="pricing">
-          <div className="landing-pricing-copy">
-            <p>Predictable subscription tiers</p>
-            <h2>Choose the right workspace for your scale.</h2>
-            <span>Every package includes the complete EchoAI creative suite, social listening, and monthly token allocations.</span>
-          </div>
-          <div className="landing-pricing-grid">
-            {PLAN_ORDER.map((planKey) => {
-              const plan = PLANS[planKey]
-              const savings = getAnnualSavings(planKey)
-              return (
-                <article className={`landing-price-panel ${plan.popular ? 'is-popular' : ''}`} key={plan.key}>
-                  <div className="landing-price-topline">
-                    <span>{plan.label}</span>
-                    <span>{plan.popular ? 'Most popular' : `${plan.storageGb} GB`}</span>
-                  </div>
-                  <div className="landing-price">
-                    <strong>${plan.monthlyPrice}</strong><span>per month</span>
-                  </div>
-                  <div className="landing-annual-price">
-                    <strong>${plan.annualPrice}</strong>
-                    <span>per year · save ${savings}</span>
-                  </div>
-                  <p>{plan.tagline}</p>
-                  <div className="landing-plan-storage">
-                    <strong>{plan.includedAiCredits.toLocaleString()} Tokens</strong>
-                    <span>included monthly · {plan.storageGb} GB space</span>
-                  </div>
-                  <button type="button" className={plan.popular ? 'landing-primary-action' : 'landing-secondary-action'} onClick={() => onPurchase(plan.key)}>
-                    Choose {plan.label}
-                  </button>
-                </article>
-              )
-            })}
-          </div>
-
-          {/* Top-up Token Add-ons Section */}
-          <div className="landing-addons-spotlight" style={{ marginTop: '2.5rem', background: '#ffffff', border: '1.5px solid #bfdbfe', borderRadius: '16px', padding: '1.5rem 2rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
-              <div>
-                <span className="section-label">Permanent Token Rollover</span>
-                <h3 style={{ margin: '0.2rem 0', fontSize: '1.25rem', color: '#0f172a' }}>⚡ Need extra tokens? Top-up add-on packs never expire.</h3>
-                <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-                  Purchase add-on packages anytime. They carry over month-to-month and are only tapped after your monthly plan tokens reach zero.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-              {[
-                { tokens: '500', price: '$9.99', tag: 'Starter' },
-                { tokens: '1,000', price: '$18.99', tag: 'Creator' },
-                { tokens: '2,500', price: '$39.99', tag: 'Most Popular', popular: true },
-                { tokens: '5,000', price: '$74.99', tag: 'Best Value (Save 25%)', best: true },
-              ].map((pack) => (
-                <div
-                  key={pack.tokens}
-                  style={{
-                    background: pack.best ? '#f0fdf4' : pack.popular ? '#eff6ff' : '#f8fafc',
-                    border: `1.5px solid ${pack.best ? '#86efac' : pack.popular ? '#93c5fd' : '#cbd5e1'}`,
-                    borderRadius: '12px',
-                    padding: '1rem',
-                    textAlign: 'center',
-                  }}
-                >
-                  <small style={{ fontWeight: 800, color: pack.best ? '#15803d' : pack.popular ? '#1d4ed8' : '#64748b', textTransform: 'uppercase', fontSize: '0.72rem' }}>{pack.tag}</small>
-                  <strong style={{ display: 'block', fontSize: '1.35rem', margin: '0.2rem 0', color: '#0f172a' }}>{pack.tokens} Tokens</strong>
-                  <span style={{ fontSize: '1rem', fontWeight: 800, color: '#1e293b' }}>{pack.price} <small style={{ fontWeight: 500, fontSize: '0.75rem', color: '#64748b' }}>one-time</small></span>
+          <div className="landing-showcase-copy">
+            <p className="landing-kicker">Everything you need</p>
+            <h2>One place to <em>create</em> and <span>grow.</span></h2>
+            <p>Move from source material to finished content without losing time between disconnected apps.</p>
+            <div className="landing-showcase-list">
+              {showcaseFeatures.map(([Icon, title, description], index) => (
+                <div key={title} style={{ '--feature-index': index }}>
+                  <span><Icon size={20} /></span><p><strong>{title}</strong><small>{description}</small></p>
                 </div>
               ))}
             </div>
           </div>
+        </section>
 
-          <div className="landing-included-row" style={{ marginTop: '2rem' }}>
-            <span>Included with every package</span>
-            <strong>AI Studio + private AI tools</strong>
-            <strong>Photo + video editors</strong>
-            <strong>Scheduler + reposting</strong>
-            <strong>Listening + cloud workspace</strong>
+        <section className="landing-workflow-story" id="workflow">
+          <div className="landing-workflow-intro">
+            <p className="landing-kicker">Built around your real workflow</p>
+            <h2>From a rough idea to a smarter next move.</h2>
+            <p>EchoAI keeps the steps that usually live across separate tools in one practical rhythm: connect, create, queue, learn, repeat.</p>
+            <button type="button" className="landing-primary-action" onClick={onCreateAccount}>Create your account <span aria-hidden="true">→</span></button>
           </div>
-          <p className="landing-pricing-note">Annual billing saves 15%. Secure 256-bit checkout powered by Stripe. Cancel anytime.</p>
+          <div className="landing-workflow-board" aria-label="EchoAI workflow preview">
+            {workflowSteps.map(([Icon, title, description, app], index) => (
+              <article className={`landing-workflow-step step-${index + 1}`} key={title}>
+                <span className="landing-workflow-number">0{index + 1}</span>
+                <div className="landing-workflow-icon"><Icon size={22} /></div>
+                <div><small>{app}</small><h3>{title}</h3><p>{description}</p></div>
+              </article>
+            ))}
+            <div className="landing-workflow-result"><Megaphone size={19} /><span>Campaign ready to move</span><strong>Review, publish, learn</strong></div>
+          </div>
+        </section>
+
+        <section className="landing-premium-section">
+          <div className="landing-premium-copy">
+            <p className="landing-kicker">Premium unlocks the work</p>
+            <h2>The tools to turn consistency into growth.</h2>
+            <p>Keep a Standard account for free. Upgrade when you are ready to create, publish, monitor, and optimize from the same workspace.</p>
+            <div className="landing-premium-highlights">
+              {premiumHighlights.map(([title, detail]) => <div key={title}><Check size={18} /><p><strong>{title}</strong><span>{detail}</span></p></div>)}
+            </div>
+          </div>
+          <aside className="landing-premium-card">
+            <span className="landing-premium-card-label">EchoAI Premium</span>
+            <h3>One plan. Full momentum.</h3>
+            <div className="landing-premium-price"><strong>$39</strong><span>per month</span></div>
+            <div className="landing-premium-price annual"><strong>$390</strong><span>per year · save $78</span></div>
+            <button type="button" className="landing-primary-action" onClick={() => onPurchase('premium')}>Buy Premium now <span aria-hidden="true">→</span></button>
+            <button type="button" className="landing-secondary-action" onClick={onCreateAccount}>Start with a free account instead</button>
+            <small>No card required to start. Upgrade when you are ready.</small>
+          </aside>
+        </section>
+
+        <section className="landing-color-cta" id="get-started">
+          <img src={echoCreator} alt="Echo in creator mode" />
+          <div><h2>Let Echo do the heavy lifting.</h2><p>More creativity. Less busy work. Get your campaign ready, then enjoy the rest of your day.</p></div>
+          <button type="button" className="landing-color-cta-button" onClick={onCreateAccount}>Start creating free <span>→</span></button>
+        </section>
+
+        <section className="landing-platform-section">
+          <div className="landing-centered-heading"><p>Publish with confidence</p><h2>Meet your audience across their favorite platforms.</h2><span>Five live publishing integrations with three more clearly tracked on the roadmap.</span></div>
+          <div className="landing-platform-strip">
+            {SOCIAL_PLATFORMS.map((platform) => (
+              <div key={platform.key} className={platform.releaseStatus === 'available' ? 'is-live' : 'is-planned'} style={{ '--platform-color': platform.color, '--platform-bg': platform.bg }}>
+                <span>{platform.icon}</span><strong>{platform.label}</strong><small>{platform.releaseStatus === 'available' ? 'Available' : 'Planned'}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="landing-audiences">
+          <div className="landing-centered-heading"><p>Built to flex with you</p><h2>For creators, businesses, and teams.</h2><span>Start with a permanent free account, then unlock paid tools as your workflow grows.</span></div>
+          <div className="landing-audience-grid">
+            {audiences.map(([Icon, title, benefits, tone]) => (
+              <article className={`landing-audience-card tone-${tone}`} key={title}>
+                <Icon size={30} /><h3>{title}</h3>
+                <ul>{benefits.map((benefit) => <li key={benefit}><Check size={15} /> {benefit}</li>)}</ul>
+              </article>
+            ))}
+          </div>
+          <div className="landing-trust-row">
+            <div><strong>Free</strong><span>Permanent account access</span></div>
+            <div><strong>8</strong><span>Social destinations</span></div>
+            <div><strong>2</strong><span>Flexible token balances</span></div>
+            <div><strong>1</strong><span>Connected workspace</span></div>
+          </div>
+        </section>
+
+        <section className="landing-closing-cta">
+          <div>
+            <p>Ready to bring your ideas to life?</p>
+            <h2>Create, share, grow. Happier.</h2>
+            <span>Your account stays with you, even when your subscription changes.</span>
+            <div className="landing-hero-actions">
+              <button type="button" className="landing-primary-action" onClick={onCreateAccount}>Create free account <span>→</span></button>
+              <a href="#tools" className="landing-secondary-action"><CirclePlay size={17} /> Explore tools</a>
+            </div>
+            <div className="landing-closing-proof"><span><Check size={14} /> No card required</span><span><Check size={14} /> Free account available</span><span><Check size={14} /> Upgrade anytime</span></div>
+          </div>
+          <img src={echoModern} alt="Echo celebrating a finished campaign" />
         </section>
 
         {/* FAQ Section */}
@@ -369,12 +516,11 @@ export function LandingPage({ announcement, onSignIn, onPurchase, children }) {
           </div>
         </section>
 
-        {children}
       </main>
 
       <footer className="landing-footer">
         <a href="#top"><Brand /></a>
-        <span>AI content creation, editing, publishing, and listening in one workspace.</span>
+        <span>Editing, publishing, analytics, and collaboration in one workspace.</span>
         <div className="landing-footer-actions">
           <button type="button" className="landing-support-link" onClick={() => setSupportOpen(true)}>
             Contact support
@@ -387,6 +533,7 @@ export function LandingPage({ announcement, onSignIn, onPurchase, children }) {
       </footer>
 
       {supportOpen && <SupportDialog onClose={() => setSupportOpen(false)} />}
+      <PrivacyChoices />
     </div>
   )
 }

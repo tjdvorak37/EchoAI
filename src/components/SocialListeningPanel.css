@@ -59,10 +59,10 @@
 }
 
 .listening-preset-chip.active {
-  background: #2563eb;
-  border-color: #1d4ed8;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  border-color: transparent;
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 8px rgba(49, 94, 231, 0.2);
 }
 
 /* Navigation Tabs */
@@ -96,8 +96,8 @@
 }
 
 .listening-tab-btn.active {
-  background: #eff6ff;
-  color: #2563eb;
+  background: rgba(49, 94, 231, 0.08);
+  color: var(--primary-strong);
 }
 
 /* KPI Scorecards */
@@ -283,13 +283,13 @@
 
 .voice-bar-fill {
   height: 100%;
-  background: #2563eb;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
   border-radius: 999px;
   transition: width 300ms ease;
 }
 
 .voice-compare-row.brand-leader .voice-bar-fill {
-  background: #2563eb;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
 }
 
 /* Product & Feature Feedback Matrix */
@@ -330,7 +330,7 @@
 
 .theme-snippet {
   background: #f8fafc;
-  border-left: 3px solid #3b82f6;
+  border-left: 3px solid var(--primary);
   padding: 0.55rem 0.75rem;
   font-size: 0.82rem;
   color: #334155;
@@ -395,9 +395,9 @@
 }
 
 .topic-bubble:hover {
-  border-color: #3b82f6;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border-color: var(--primary);
+  background: rgba(49, 94, 231, 0.06);
+  color: var(--primary-strong);
   transform: scale(1.04);
 }
 

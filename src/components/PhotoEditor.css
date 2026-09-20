@@ -39,6 +39,11 @@
   letter-spacing: -0.02em;
   opacity: 0.9;
   font-weight: 600;
+  color: #f8fafc;
+}
+
+.photo-creator-header p {
+  color: #94a3b8;
 }
 
 .photo-creator-header .small-title {
@@ -667,16 +672,19 @@
   font-size: 1.05rem;
   letter-spacing: 0.01em;
   background: #ffffff;
+  container-type: inline-size;
 }
 
 .photo-stage-onboarding {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
-  max-width: 360px;
+  gap: 0.38rem;
+  max-width: 90%;
   margin: 0 auto;
   text-align: left;
+  padding: 1rem;
+  font-size: clamp(0.62rem, 2.4cqw, 0.9rem);
 }
 
 .photo-stage-onboarding .small-title {
@@ -1174,4 +1182,60 @@
   .photo-sidebar-collapsed-card {
     min-height: 52px;
   }
+}
+
+/* Keep the full editor reachable in the application shell. The canvas keeps
+   its export dimensions while the surrounding workspace can scroll. */
+.photo-creator-shell {
+  height: auto;
+  min-height: calc(100vh - 11.5rem);
+  overflow: visible;
+  color: #172033;
+  background: linear-gradient(145deg, #f4f8ff, #fff8fc);
+}
+
+.photo-creator-header,
+.editor-options-bar,
+.editor-menu-bar,
+.sidebar-menu-bar,
+.photo-sidebar,
+.photo-stage-panel,
+.photo-stage-wrap {
+  background: #ffffff;
+  border-color: #d7e1f1;
+}
+
+.photo-creator-header h2,
+.photo-stage-panel h3,
+.photo-sidebar h3,
+.photo-sidebar h4 {
+  color: #172033;
+}
+
+.photo-creator-header p,
+.photo-stage-panel .muted,
+.photo-sidebar .muted {
+  color: #64748b;
+}
+
+.photo-creator-grid {
+  height: auto;
+  min-height: 720px;
+}
+
+.photo-stage-panel {
+  height: auto;
+  min-height: 720px;
+  overflow: visible;
+}
+
+.photo-stage-wrap {
+  min-height: 540px;
+  overflow: auto;
+  background: #eef3fb;
+}
+
+.photo-stage-image {
+  object-fit: contain;
+  background: #ffffff;
 }

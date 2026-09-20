@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { canUseAgentMode, runUserAiAgent } from './aiAgentService'
+import { consumeFreePostingAllowance } from './freePostingAllowance'
 
 const randomId = () => `post_${Math.random().toString(36).slice(2, 10)}`
 
@@ -8,6 +9,37 @@ const getCurrentUserId = async () => {
   if (error) throw new Error(error.message)
   if (!data.user) throw new Error('Sign in before scheduling a post.')
   return data.user.id
+}
+
+const getEntitlement = async () => {
+  if (!isSupabaseConfigured) {
+    return { entitled: false, accessLevel: 'free', status: 'none' }
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('my_entitlement')
+    if (error || !data) {
+      return { entitled: false, accessLevel: 'free', status: 'none' }
+    }
+    return data
+  } catch {
+    return { entitled: false, accessLevel: 'free', status: 'none' }
+  }
+}
+
+const ensureFreePostingAllowance = async ({ channels }) => {
+  if (!isSupabaseConfigured) return { allowed: true, used: 0, remaining: Number.POSITIVE_INFINITY }
+
+  const userId = await getCurrentUserId()
+  const entitlement = await getEntitlement()
+  const channelCount = new Set((channels ?? []).filter(Boolean)).size
+  const result = await consumeFreePostingAllowance({ userId, entitlement, channelCount })
+
+  if (!result.allowed) {
+    throw new Error(result.message)
+  }
+
+  return result
 }
 
 const localMessageIdeas = (prompt) => [
@@ -46,6 +78,7 @@ export const platformService = {
       imageIdea: post.image_idea,
       scheduledAt: post.scheduled_at,
       channels: post.channels,
+      channelAccounts: post.channel_accounts ?? {},
       media: post.media ?? [],
       status: post.status,
     }))
@@ -62,6 +95,8 @@ export const platformService = {
       return post
     }
 
+    await ensureFreePostingAllowance({ channels: payload.channels })
+
     const userId = await getCurrentUserId()
 
     const { data, error } = await supabase
@@ -73,6 +108,7 @@ export const platformService = {
         image_idea: payload.imageIdea,
         scheduled_at: payload.scheduledAt,
         channels: payload.channels,
+        channel_accounts: payload.channelAccounts ?? {},
         media: payload.media ?? [],
         status: 'scheduled',
       })
@@ -90,9 +126,29 @@ export const platformService = {
       imageIdea: data.image_idea,
       scheduledAt: data.scheduled_at,
       channels: data.channels,
+      channelAccounts: data.channel_accounts ?? {},
       media: data.media ?? [],
       status: data.status,
     }
+  },
+
+  async reschedulePost(postId, scheduledAtIso) {
+    if (!postId || !scheduledAtIso) throw new Error('Post ID and a new date/time are required.')
+
+    if (!isSupabaseConfigured) {
+      return { id: postId, scheduledAt: scheduledAtIso }
+    }
+
+    const { data, error } = await supabase
+      .from('scheduled_posts')
+      .update({ scheduled_at: scheduledAtIso })
+      .eq('id', postId)
+      .eq('status', 'scheduled')
+      .select('id, scheduled_at')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return { id: data.id, scheduledAt: data.scheduled_at }
   },
 
   async deleteScheduledPost(postId) {
@@ -125,6 +181,8 @@ export const platformService = {
       return post
     }
 
+    await ensureFreePostingAllowance({ channels: payload.channels })
+
     const userId = await getCurrentUserId()
 
     const { data, error } = await supabase
@@ -136,6 +194,7 @@ export const platformService = {
         image_idea: payload.imageIdea,
         scheduled_at: publishedAt,
         channels: payload.channels,
+        channel_accounts: payload.channelAccounts ?? {},
         media: payload.media ?? [],
         status: 'scheduled',
       })
@@ -169,6 +228,7 @@ export const platformService = {
       imageIdea: data.image_idea,
       scheduledAt: data.scheduled_at,
       channels: data.channels,
+      channelAccounts: data.channel_accounts ?? {},
       media: data.media ?? [],
       status: publishResult.status,
     }

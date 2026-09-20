@@ -39,6 +39,23 @@ const admin = () =>
     { auth: { persistSession: false } },
   )
 
+const providerConfig = async (provider: keyof typeof PROVIDERS) => {
+  const fallback = PROVIDERS[provider]
+  const credentialProvider = provider === 'google' ? 'google_drive' : 'microsoft_365'
+  const { data } = await admin()
+    .from('developer_app_credentials')
+    .select('client_id, client_secret, scopes, enabled')
+    .eq('provider', credentialProvider)
+    .maybeSingle()
+  if (!data || data.enabled === false) return fallback
+  return {
+    ...fallback,
+    clientId: data.client_id || fallback.clientId,
+    clientSecret: data.client_secret || fallback.clientSecret,
+    scope: Array.isArray(data.scopes) && data.scopes.length ? data.scopes.join(' ') : fallback.scope,
+  }
+}
+
 const userFromRequest = async (request: Request) => {
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) return null
@@ -72,7 +89,7 @@ const freshAccessToken = async (userId: string, provider: ProviderKey) => {
 
   if (!connection.refresh_token) throw new Error('reauth_required')
 
-  const config = PROVIDERS[provider]
+  const config = await providerConfig(provider)
   const response = await fetch(config.tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -261,7 +278,7 @@ Deno.serve(async (request) => {
     await db.from('cloud_oauth_states').delete().eq('state', state)
 
     const provider = pending.provider as ProviderKey
-    const config = PROVIDERS[provider]
+    const config = await providerConfig(provider)
 
     const tokenResponse = await fetch(config.tokenUrl, {
       method: 'POST',
@@ -326,7 +343,7 @@ Deno.serve(async (request) => {
     const provider = body.provider as ProviderKey
 
     if (action === 'connect') {
-      const config = PROVIDERS[provider]
+      const config = await providerConfig(provider)
       if (!config?.clientId) {
         return json({ error: `${provider} is not configured on this deployment.` }, 503, request)
       }

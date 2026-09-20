@@ -20,19 +20,11 @@ const supabase = createClient(
 // How long a customer keeps access after a failed charge while Stripe retries.
 const GRACE_DAYS = Number(Deno.env.get('BILLING_GRACE_DAYS') ?? '3')
 
-const PLAN_KEYS = ['standard', 'storage_plus', 'storage_pro', 'storage_max', 'creator']
+const PLAN_KEYS = ['premium']
 
 const DEFAULT_STRIPE_PRICES: Record<string, string> = {
-  STRIPE_PRICE_STANDARD_MONTHLY: 'price_1UFGJ9RrklQsqC822EUTvcKQ',
-  STRIPE_PRICE_STANDARD_ANNUAL: 'price_1UFGJ9RrklQsqC823cmY2TfS',
-  STRIPE_PRICE_STORAGE_PLUS_MONTHLY: 'price_1UFGHxRrklQsqC820fmti9kY',
-  STRIPE_PRICE_STORAGE_PLUS_ANNUAL: 'price_1UFGHxRrklQsqC820FuI8teb',
-  STRIPE_PRICE_STORAGE_PRO_MONTHLY: 'price_1UFGGdRrklQsqC825AahS61v',
-  STRIPE_PRICE_STORAGE_PRO_ANNUAL: 'price_1UFGGdRrklQsqC82PLtdTqAr',
-  STRIPE_PRICE_STORAGE_MAX_MONTHLY: 'price_1UFGEiRrklQsqC82jSx1SMxs',
-  STRIPE_PRICE_STORAGE_MAX_ANNUAL: 'price_1UFGEiRrklQsqC82kFKGekg3',
-  STRIPE_PRICE_CREATOR_MONTHLY: 'price_1UFGCRRrklQsqC82vjVbVkuJ',
-  STRIPE_PRICE_CREATOR_ANNUAL: 'price_1UFGCRRrklQsqC82NfiDNVOW',
+  STRIPE_PRICE_PREMIUM_MONTHLY: 'price_1UHNUuRrklQsqC82ABwClNK6',
+  STRIPE_PRICE_PREMIUM_ANNUAL: 'price_1UHNWBRrklQsqC829hILTZSY',
 }
 
 // Reverse lookup from Stripe price id back to our tier + interval, built from the
@@ -81,7 +73,7 @@ const planFromSubscription = (subscription: Stripe.Subscription) => {
       : 'monthly'
 
   return {
-    plan: metaPlan && PLAN_KEYS.includes(metaPlan) ? metaPlan : 'standard',
+    plan: metaPlan && PLAN_KEYS.includes(metaPlan) ? metaPlan : 'premium',
     interval,
   }
 }

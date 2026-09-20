@@ -313,11 +313,6 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
     }
   }
 
-  const openGeneratePanel = () => {
-    setActiveToolbar('generate')
-    if (!generatePrompt.trim()) setGenerateMode('text')
-  }
-
   const saveGeneratedVideo = (result, media, index) => {
     const asset = {
       id: nextLocalId('asset'),
@@ -1043,8 +1038,8 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   return (
     <div className="video-editor">
       <div className="video-editor-intro">
-        <p className="small-title">Video Studio</p>
-        <p className="panel-note">Add or generate clips, arrange them on the timeline below, add text/effects, then export.</p>
+        <p className="small-title">Motion Lab</p>
+        <p className="panel-note">Upload clips, arrange them on the timeline, add text and effects, then export.</p>
       </div>
       {brief && (
         <div className="video-brief-bar">
@@ -1118,15 +1113,11 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           <button type="button" className="toolbar-btn" onClick={exportTimeline} disabled={isExporting}>
             {isExporting ? `Exporting ${exportProgress}%` : '⬇ Export video'}
           </button>
-          <button type="button" className="toolbar-btn video-toolbar-generate" onClick={generateVideo} disabled={generateBusy}>
-            {generateBusy ? 'Generating...' : '✦ Generate'}
-          </button>
           {statusMessage && <span className="muted">{statusMessage}</span>}
         </div>
 
         <div className="toolbar-groups">
           {[
-            ['generate', 'Create a scene with AI'],
             ['media', 'Add your uploaded photos, video, or audio'],
             ['transitions', 'Fades and wipes between clips'],
             ['effects', 'Position, scale, opacity, and blend'],
@@ -1150,7 +1141,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
       <div className="editor-layout">
         <aside className="editor-panel">
-          {activeToolbar === 'generate' && (
+          {(() => false)() && activeToolbar === 'generate' && (
             <div className="tool-panel video-generation-panel">
               <h3>Generate video</h3>
               <p className="muted">Create a short scene with your in-house AI, then save it or add it to the timeline.</p>
@@ -1458,12 +1449,11 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                   <small>
                     {activeVisualClip
                       ? 'Re-upload this file to enable playback'
-                      : 'Upload your own clip or describe a scene for AI to generate'}
+                      : 'Upload your own clip to begin'}
                   </small>
                   {!activeVisualClip && (
                     <div className="preview-placeholder-actions">
                       <button type="button" className="preview-generate-button" onClick={() => setActiveToolbar('media')}>Upload media <span>›</span></button>
-                      <button type="button" className="preview-generate-button" onClick={openGeneratePanel}>✦ Go generate <span>›</span></button>
                     </div>
                   )}
                 </div>

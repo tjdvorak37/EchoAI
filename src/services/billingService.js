@@ -198,7 +198,7 @@ export const billingService = {
 
   async getMyEntitlement() {
     if (!isSupabaseConfigured) {
-      return { entitled: true, status: 'demo' }
+      return { entitled: true, accessLevel: 'paid', status: 'demo' }
     }
 
     const { data, error } = await supabase.rpc('my_entitlement')
@@ -207,7 +207,7 @@ export const billingService = {
       throw new Error(error.message)
     }
 
-    return data ?? { entitled: false, status: 'none' }
+    return data ?? { entitled: false, accessLevel: 'free', status: 'none' }
   },
 
   async getAiDashboard() {

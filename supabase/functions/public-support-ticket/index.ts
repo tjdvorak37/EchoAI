@@ -2,7 +2,7 @@
 // path, so it is rate limited per email and per IP and never accepts uploads.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
-import { sendSupportTicketEmail } from '../_shared/notify.ts'
+import { sendSupportAcknowledgmentEmail, sendSupportTicketEmail } from '../_shared/notify.ts'
 
 const MAX_PER_EMAIL_PER_HOUR = 3
 const MAX_PER_IP_PER_HOUR = 6
@@ -98,7 +98,7 @@ Deno.serve(async (request) => {
 
     // Trigger outbound email / webhook notification to support@echoaipro.com & configured staff
     try {
-      await sendSupportTicketEmail({
+      const notificationPayload = {
         ticketId: ticketRecord?.id,
         requesterName: cleanName || cleanEmail,
         requesterEmail: cleanEmail,
@@ -106,7 +106,11 @@ Deno.serve(async (request) => {
         details: cleanDetails,
         source: 'landing',
         createdAt: ticketRecord?.created_at,
-      }, adminClient)
+      } as const
+      await Promise.allSettled([
+        sendSupportTicketEmail(notificationPayload, adminClient),
+        sendSupportAcknowledgmentEmail(notificationPayload, adminClient),
+      ])
     } catch (notifyErr) {
       console.warn('Failed to dispatch support notification:', notifyErr)
     }

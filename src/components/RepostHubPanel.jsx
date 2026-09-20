@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PUBLISHING_PLATFORMS } from '../data/socialPlatforms'
 import './RepostHubPanel.css'
 
 export function RepostHubPanel({
@@ -158,10 +159,10 @@ export function RepostHubPanel({
         <div className="repost-hero-bar">
           <div>
             <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.45rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <span>📢</span> Repost Hub &amp; Brand Syndication
+              <span>📢</span> Broadcast Hub
             </h2>
             <p className="panel-note" style={{ margin: 0, fontSize: '0.86rem' }}>
-              Monitor company content, customize copy with your personal handle/promo code, and rebrand posts directly to your personal channels.
+              Pick up approved company stories, make them yours, and send them to the channels you manage.
             </p>
           </div>
 
@@ -172,7 +173,7 @@ export function RepostHubPanel({
               onClick={onToggleAutoApproval}
               style={{ fontSize: '0.85rem' }}
             >
-              {autoApproveCompanyPosts ? '⚡ Auto-Repost: ON' : '⚙️ Auto-Repost: OFF'}
+              {autoApproveCompanyPosts ? '⚡ Auto-share: ON' : '⚙️ Auto-share: OFF'}
             </button>
             {isAdminUser && (
               <button
@@ -181,7 +182,7 @@ export function RepostHubPanel({
                 onClick={() => setActiveTab('admin-publish')}
                 style={{ fontSize: '0.85rem' }}
               >
-                ➕ Create Company Broadcast
+                ➕ Start a company story
               </button>
             )}
           </div>
@@ -472,8 +473,8 @@ export function RepostHubPanel({
                       value={newAccountDraft.platform}
                       onChange={(e) => setNewAccountDraft((p) => ({ ...p, platform: e.target.value }))}
                     >
-                      {['Instagram', 'Facebook', 'TikTok', 'X', 'LinkedIn', 'YouTube'].map((pl) => (
-                        <option key={pl} value={pl}>{pl}</option>
+                      {PUBLISHING_PLATFORMS.map((platform) => (
+                        <option key={platform.key} value={platform.label}>{platform.label}</option>
                       ))}
                     </select>
                   </label>
@@ -572,14 +573,14 @@ export function RepostHubPanel({
                 <div>
                   <p className="small-title">Suggested Target Channels</p>
                   <div className="chip-row">
-                    {['instagram', 'facebook', 'tiktok', 'linkedin', 'x', 'youtube'].map((ch) => (
+                    {PUBLISHING_PLATFORMS.map((platform) => (
                       <button
-                        key={ch}
+                        key={platform.key}
                         type="button"
-                        className={`chip ${newPostDraft.channels.includes(ch) ? 'active' : ''}`}
-                        onClick={() => toggleAdminChannel(ch)}
+                        className={`chip ${newPostDraft.channels.includes(platform.key) ? 'active' : ''}`}
+                        onClick={() => toggleAdminChannel(platform.key)}
                       >
-                        {ch}
+                        {platform.label}
                       </button>
                     ))}
                   </div>
@@ -724,14 +725,14 @@ export function RepostHubPanel({
               <div>
                 <p className="small-title">Publish to Your Personal Connected Channels</p>
                 <div className="chip-row">
-                  {['instagram', 'facebook', 'tiktok', 'linkedin', 'x', 'youtube'].map((ch) => (
+                  {PUBLISHING_PLATFORMS.map((platform) => (
                     <button
-                      key={ch}
+                      key={platform.key}
                       type="button"
-                      className={`chip ${customDraft.selectedChannels.includes(ch) ? 'active' : ''}`}
-                      onClick={() => toggleChannel(ch)}
+                      className={`chip ${customDraft.selectedChannels.includes(platform.key) ? 'active' : ''}`}
+                      onClick={() => toggleChannel(platform.key)}
                     >
-                      {ch}
+                      {platform.label}
                     </button>
                   ))}
                 </div>

@@ -31,6 +31,9 @@ alter table public.user_social_accounts
 alter table public.user_social_accounts
   add column if not exists provider_account_url text not null default '';
 
+alter table public.social_oauth_states
+  add column if not exists code_verifier text;
+
 alter table public.scheduled_posts
   add column if not exists publish_attempts integer not null default 0;
 alter table public.scheduled_posts

@@ -1,5 +1,25 @@
 project_id = "echoai"
 
+[auth]
+site_url = "https://www.echoaipro.com"
+additional_redirect_urls = [
+	"https://www.echoaipro.com/**",
+	"https://echoaipro.com/**",
+	"https://www.echoaipro.com/?recovery=1",
+	"https://echoaipro.com/?recovery=1",
+]
+
+[auth.email]
+# EchoAI sends confirmation, recovery, and invitation messages through its
+# server-side Support email provider instead of Supabase's built-in mailer.
+enable_confirmations = false
+max_frequency = "1m"
+otp_length = 8
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
 [functions.stripe-webhook]
 # Stripe signs requests itself; it cannot present a Supabase JWT.
 verify_jwt = false
@@ -36,6 +56,21 @@ verify_jwt = false
 
 [functions.public-support-ticket]
 # Public support intake validates and rate-limits requests inside the function.
+verify_jwt = false
+
+[functions.support-ticket-reply]
+verify_jwt = true
+
+[functions.support-ticket-inbound]
+# Microsoft 365 / Power Automate authenticates with SUPPORT_INBOUND_WEBHOOK_SECRET.
+verify_jwt = false
+
+[functions.password-reset-request]
+# Password recovery is public, but the function uses generic responses and hashed throttling.
+verify_jwt = false
+
+[functions.send-auth-email]
+# Auth links are generated server-side and delivered through Support email.
 verify_jwt = false
 
 [functions.social-publisher]

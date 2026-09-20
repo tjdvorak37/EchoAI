@@ -4,14 +4,17 @@ import { DEFAULT_AGENT_CAPABILITIES } from './aiAgentService'
 const DEMO_ACCESS_REQUESTS = []
 const DEMO_USERS = []
 
+const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+const isBoardMemberRole = (role) => ['board_member', 'partner'].includes(normalizeRole(role))
+
 const assertAccountCanAccess = (accessStatus, role = 'user') => {
-  const normalizedRole = String(role || '').toLowerCase()
+  const normalizedRole = normalizeRole(role)
 
   if (normalizedRole === 'admin' || normalizedRole === 'super_admin') {
     return
   }
 
-  if (!accessStatus || accessStatus === 'active' || accessStatus === 'approved') {
+  if (!accessStatus || accessStatus === 'active' || accessStatus === 'approved' || accessStatus === 'pending') {
     return
   }
 
@@ -22,9 +25,8 @@ const assertAccountCanAccess = (accessStatus, role = 'user') => {
 }
 
 const BLOCKED_STATUS_MESSAGES = {
-  pending: 'Your account is not active yet. Complete your subscription to unlock access.',
   denied: 'Your account request was denied. Contact Management or IT for help.',
-  deactivated: 'Your access is inactive. This usually means a subscription lapsed or a payment failed — renew to restore it instantly.',
+  deactivated: 'Your account has been deactivated. Contact Management or IT for help.',
 }
 
 const normalizeRequest = (record) => ({
@@ -96,8 +98,12 @@ const normalizeMember = (record) => ({
   trademarkEditAccess: record.trademark_edit_access === true,
   developerAppEditAccess: record.developer_app_edit_access === true,
   companyEmailEditAccess: record.company_email_edit_access === true || record.companyEmailEditAccess === true,
+  licenseEditAccess: record.license_edit_access === true || record.licenseEditAccess === true,
+  integrationsEditAccess: record.integrations_edit_access === true || record.integrationsEditAccess === true,
+  aiOperationsEditAccess: record.ai_operations_edit_access === true || record.aiOperationsEditAccess === true,
+  siteControlsEditAccess: record.site_controls_edit_access === true || record.siteControlsEditAccess === true,
   profitSharePercent: Number(record.profit_share_percent ?? record.profitSharePercent ?? 0),
-  isBoardMember: record.is_board_member === true || record.role === 'board_member',
+  isBoardMember: record.is_board_member === true || isBoardMemberRole(record.role),
   seatManager: record.seat_manager === true,
   storageQuotaMb: record.storage_quota_mb ?? record.storageQuotaMb ?? 2048,
   aiAgentConfig: normalizeAiAgentConfig(record.ai_agent_config ?? record.aiAgentConfig),
@@ -198,15 +204,20 @@ export const authService = {
 
     return {
       ...session.user,
-      role: profile.role ?? session.user.user_metadata?.role ?? 'user',
+      mustChangePassword: session.user.app_metadata?.must_change_password === true,
+      role: normalizeRole(profile.role ?? session.user.user_metadata?.role ?? 'user'),
       accessStatus: profile.access_status ?? 'active',
       company: profile.company ?? '',
-      isBoardMember: profile.is_board_member === true || profile.role === 'board_member',
+      isBoardMember: profile.is_board_member === true || isBoardMemberRole(profile.role),
       profitSharePercent: Number(profile.profit_share_percent || 0),
       seatManager: profile.seat_manager === true,
       trademarkEditAccess: profile.trademark_edit_access === true,
       developerAppEditAccess: profile.developer_app_edit_access === true,
       companyEmailEditAccess: profile.company_email_edit_access === true,
+      licenseEditAccess: profile.license_edit_access === true,
+      integrationsEditAccess: profile.integrations_edit_access === true,
+      aiOperationsEditAccess: profile.ai_operations_edit_access === true,
+      siteControlsEditAccess: profile.site_controls_edit_access === true,
     }
   },
 
@@ -222,6 +233,11 @@ export const authService = {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
       throw new Error(error.message)
+    }
+
+    if (!data.user?.email_confirmed_at) {
+      await supabase.auth.signOut()
+      throw new Error('Please confirm your email address before signing in. Check your inbox or resend the confirmation email.')
     }
 
     try {
@@ -265,15 +281,20 @@ export const authService = {
         enrollmentRequired: true,
         user: {
           ...data.user,
-          role: profile?.role ?? 'user',
+          mustChangePassword: data.user?.app_metadata?.must_change_password === true,
+          role: normalizeRole(profile?.role ?? 'user'),
           accessStatus: profile?.access_status ?? 'active',
           company: profile?.company ?? '',
-          isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
+          isBoardMember: profile?.is_board_member === true || isBoardMemberRole(profile?.role),
           profitSharePercent: Number(profile?.profit_share_percent || 0),
           seatManager: profile?.seat_manager === true,
           trademarkEditAccess: profile?.trademark_edit_access === true,
           developerAppEditAccess: profile?.developer_app_edit_access === true,
           companyEmailEditAccess: profile?.company_email_edit_access === true,
+          licenseEditAccess: profile?.license_edit_access === true,
+          integrationsEditAccess: profile?.integrations_edit_access === true,
+          aiOperationsEditAccess: profile?.ai_operations_edit_access === true,
+          siteControlsEditAccess: profile?.site_controls_edit_access === true,
         },
       }
     }
@@ -292,6 +313,24 @@ export const authService = {
       challengeId: challenge.id,
       user: null,
     }
+  },
+
+  async signInWithProvider(provider) {
+    if (!['google', 'facebook'].includes(provider)) {
+      throw new Error('That sign-in provider is not supported.')
+    }
+
+    if (!isSupabaseConfigured) {
+      throw new Error('Social sign-in is unavailable while Supabase is not configured.')
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? window.location.origin : 'https://echoaipro.com'
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo },
+    })
+
+    if (error) throw new Error(error.message)
   },
 
   async verifyMfaCode({ email, code, factorId, challengeId }) {
@@ -332,14 +371,19 @@ export const authService = {
     return {
       user: {
         ...data.user,
-        role: profile?.role ?? data.user?.user_metadata?.role ?? 'user',
+        mustChangePassword: data.user?.app_metadata?.must_change_password === true,
+        role: normalizeRole(profile?.role ?? data.user?.user_metadata?.role ?? 'user'),
         accessStatus: profile?.access_status ?? 'active',
         company: profile?.company ?? '',
-        isBoardMember: profile?.is_board_member === true || profile?.role === 'board_member',
+        isBoardMember: profile?.is_board_member === true || isBoardMemberRole(profile?.role),
         seatManager: profile?.seat_manager === true,
         trademarkEditAccess: profile?.trademark_edit_access === true,
         developerAppEditAccess: profile?.developer_app_edit_access === true,
         companyEmailEditAccess: profile?.company_email_edit_access === true,
+        licenseEditAccess: profile?.license_edit_access === true,
+        integrationsEditAccess: profile?.integrations_edit_access === true,
+        aiOperationsEditAccess: profile?.ai_operations_edit_access === true,
+        siteControlsEditAccess: profile?.site_controls_edit_access === true,
       },
     }
   },
@@ -375,7 +419,7 @@ export const authService = {
         reviewedAt: null,
       })
 
-      return { ok: true }
+      return { ok: true, activated: true, freeAccount: true }
     }
 
     const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://echoaipro.com'
@@ -403,9 +447,15 @@ export const authService = {
       )
     }
 
-    // With email confirmation enabled, signUp returns the user but no session.
-    // The auth.users trigger provisions the profile and access request.
-    if (!data.session) {
+    // Auth confirmation is disabled so EchoAI can deliver the message from
+    // Support. The server still creates a single-use Auth confirmation link.
+    if (data.session) {
+      const { error: confirmationError } = await supabase.functions.invoke('send-auth-email', { body: { email } })
+      await supabase.auth.signOut()
+      if (confirmationError) {
+        const detail = await confirmationError.context?.json?.().catch(() => null)
+        throw new Error(detail?.error || confirmationError.message || 'Unable to send the confirmation email.')
+      }
       return { ok: true, activated: false, verificationRequired: true }
     }
 
@@ -597,7 +647,7 @@ export const authService = {
     }
 
     if (!isSupabaseConfigured) {
-      return { id: 'demo-seat-package', companyKey: normalizedCompany, seatLimit: parsedLimit, status: 'active', pricePerSeatYear: pricePerSeatYear ?? null, billingPeriod: 'annual', quoteNotes: notes ?? '', planKey: planKey || 'standard' }
+      return { id: 'demo-seat-package', companyKey: normalizedCompany, seatLimit: parsedLimit, status: 'active', pricePerSeatYear: pricePerSeatYear ?? null, billingPeriod: 'annual', quoteNotes: notes ?? '', planKey: planKey || 'premium' }
     }
 
     const { data, error } = await supabase.rpc('staff_provision_company_seats', {
@@ -606,7 +656,7 @@ export const authService = {
       p_price_per_seat_year: pricePerSeatYear ? Number(pricePerSeatYear) : null,
       p_notes: notes || null,
       p_manager_email: managerEmail || null,
-      p_plan_key: planKey || 'standard',
+      p_plan_key: planKey || 'premium',
     })
 
     if (error) throw new Error(error.message)
@@ -743,9 +793,12 @@ export const authService = {
     return normalizeMember(data)
   },
 
-  async updateUserRole({ userId, role, profitSharePercent }) {
+  async updateUserRole({ userId, role }) {
     if (!userId || !role) {
       throw new Error('User ID and role are required.')
+    }
+    if (!['admin', 'it', 'accountant', 'user'].includes(role)) {
+      throw new Error('Role must be Admin, IT, Accountant, or User.')
     }
 
     if (!['user', 'manager', 'it', 'accountant', 'board_member', 'admin'].includes(role)) {
@@ -772,7 +825,7 @@ export const authService = {
 
     const { data, error } = await supabase
       .from('profiles')
-      .update({ role, ...(role === 'board_member' ? { profit_share_percent: Number(profitSharePercent) || 0 } : {}) })
+      .update({ role })
       .eq('id', userId)
       .select('*')
       .single()
@@ -1069,18 +1122,11 @@ export const authService = {
       throw new Error(error.message)
     }
 
-    // Notify support@echoaipro.com & configured staff of the new ticket
+    // Dispatch staff notification and requester acknowledgment through an
+    // ownership-checked endpoint available to signed-in customers.
     try {
-      await supabase.functions.invoke('admin-user-actions', {
-        body: {
-          action: 'notify-ticket-created',
-          ticketId: data.id,
-          category,
-          details,
-          requesterName: user.user_metadata?.full_name || user.email,
-          requesterEmail: user.email,
-          source: 'app',
-        },
+      await supabase.functions.invoke('support-ticket-notify', {
+        body: { ticketId: data.id },
       })
     } catch (notifyError) {
       console.warn('Unable to dispatch support email notification:', notifyError)
@@ -1314,6 +1360,34 @@ export const authService = {
     return updatePayload
   },
 
+  async getTicketInboundConfig() {
+    const defaults = {
+      inboundEmail: 'support@echoaipro.com',
+      inboundEnabled: false,
+      hasInboundWebhookSecret: false,
+    }
+    if (!isSupabaseConfigured) return defaults
+    const result = await this.adminUserAction({ action: 'get-ticket-inbound-config' })
+    return { ...defaults, ...(result?.config || {}) }
+  },
+
+  async updateTicketInboundConfig(config) {
+    if (!isSupabaseConfigured) {
+      return {
+        inboundEmail: config.inboundEmail,
+        inboundEnabled: config.inboundEnabled === true,
+        hasInboundWebhookSecret: Boolean(config.inboundWebhookSecret),
+      }
+    }
+    const result = await this.adminUserAction({
+      action: 'update-ticket-inbound-config',
+      inboundEmail: config.inboundEmail,
+      inboundEnabled: config.inboundEnabled === true,
+      inboundWebhookSecret: config.inboundWebhookSecret,
+    })
+    return result?.config
+  },
+
   async testTicketNotification(payload = {}) {
     const config = await this.getTicketNotificationConfig()
     const testCategory = payload.category || 'Technical issue'
@@ -1397,67 +1471,149 @@ export const authService = {
   async getSupportTickets() {
     if (!isSupabaseConfigured) return []
 
-    const { data, error } = await supabase
+    const { data: tickets, error } = await supabase
       .from('support_tickets')
       .select('*')
       .order('created_at', { ascending: false })
 
     if (error) throw new Error(error.message)
 
-    return (data ?? []).map((ticket) => ({
+    const ticketIds = (tickets ?? []).map((ticket) => ticket.id)
+    const messagesByTicketId = new Map()
+    if (ticketIds.length) {
+      const { data: ticketMessages } = await supabase
+        .from('support_ticket_messages')
+        .select('id, ticket_id, direction, sender_name, sender_email, body, created_at')
+        .in('ticket_id', ticketIds)
+        .order('created_at', { ascending: true })
+      for (const message of ticketMessages ?? []) {
+        const messages = messagesByTicketId.get(message.ticket_id) || []
+        messages.push({
+          id: message.id,
+          author: message.sender_name || message.sender_email || (message.direction === 'staff' ? 'EchoAI Support' : 'Requester'),
+          role: message.direction === 'staff' ? 'admin' : 'user',
+          body: message.body,
+          sentAt: message.created_at,
+        })
+        messagesByTicketId.set(message.ticket_id, messages)
+      }
+    }
+
+    const profileIds = [...new Set((tickets ?? []).flatMap((ticket) => [ticket.assigned_to, ticket.user_id]).filter(Boolean))]
+    let profilesById = new Map()
+    if (profileIds.length) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, company')
+        .in('id', profileIds)
+      profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
+    }
+
+    const attachmentPaths = [...new Set((tickets ?? []).flatMap((ticket) => ticket.attachment_paths || []))]
+    let attachmentUrlsByPath = new Map()
+    if (attachmentPaths.length) {
+      const { data: signedAttachments } = await supabase.storage
+        .from('ticket-attachments')
+        .createSignedUrls(attachmentPaths, 60 * 60)
+      attachmentUrlsByPath = new Map(
+        (signedAttachments ?? []).filter((attachment) => attachment.signedUrl).map((attachment) => [attachment.path, attachment.signedUrl]),
+      )
+    }
+
+    return (tickets ?? []).map((ticket) => {
+      const assignee = profilesById.get(ticket.assigned_to)
+      const requester = profilesById.get(ticket.user_id)
+      const requesterName = ticket.requester_name || ticket.contact_name || requester?.full_name || ''
+      const requesterEmail = ticket.requester_email || ticket.contact_email || requester?.email || ''
+      return {
       id: ticket.id,
       subject: ticket.subject || ticket.category,
       category: ticket.category,
       details: ticket.details,
-      userFullName: ticket.requester_name || ticket.contact_name || (ticket.user_id ? 'Authenticated user' : 'Signed-out visitor'),
-      userEmail: ticket.requester_email || ticket.contact_email || '',
-      requesterEmail: ticket.requester_email || ticket.contact_email || '',
-      companyName: ticket.company_name || '',
+      userFullName: requesterName || (ticket.user_id ? 'Authenticated user' : 'Signed-out visitor'),
+      userEmail: requesterEmail,
+      requesterEmail,
+      companyName: ticket.company_name || requester?.company || '',
       source: ticket.source || 'app',
       attachmentPaths: ticket.attachment_paths || [],
-      status: ticket.status,
-      priority: ticket.category === 'Company package' ? 'high' : 'medium',
+      attachments: (ticket.attachment_paths || []).map((path) => ({
+        path,
+        name: path.split('/').pop() || 'Ticket attachment',
+        url: attachmentUrlsByPath.get(path) || '',
+      })),
+      status: ticket.status === 'open' ? 'new' : ticket.status,
+      priority: ticket.priority || 'medium',
+      queue: ticket.queue || 'general',
+      tags: ticket.tags || [],
+      assigneeId: ticket.assigned_to || '',
+      assignee: assignee?.full_name || assignee?.email || '',
       createdAt: ticket.created_at,
       updatedAt: ticket.updated_at,
-      messages: [{
+      messages: messagesByTicketId.get(ticket.id) || [{
         id: `${ticket.id}-initial`,
-        author: ticket.requester_name || ticket.contact_name || ticket.requester_email || ticket.contact_email || 'Requester',
+        author: requesterName || requesterEmail || 'Requester',
         role: 'user',
         body: ticket.details,
         sentAt: ticket.created_at,
-      }],
+      }, ...(ticket.admin_response ? [{
+        id: `${ticket.id}-response`,
+        author: 'EchoAI Support',
+        role: 'admin',
+        body: ticket.admin_response,
+        sentAt: ticket.responded_at || ticket.updated_at,
+      }] : [])],
       adminResponse: ticket.admin_response || '',
-    }))
+      }
+    })
   },
 
   async respondToSupportTicket({ ticketId, response }) {
     if (!ticketId || !response?.trim()) throw new Error('A ticket response is required.')
-    if (!isSupabaseConfigured) return { id: ticketId, status: 'in_progress', adminResponse: response.trim() }
+    if (!isSupabaseConfigured) return { id: ticketId, status: 'waiting_customer', adminResponse: response.trim() }
+
+    const { data, error } = await supabase.functions.invoke('support-ticket-reply', {
+      body: { ticketId, response: response.trim() },
+    })
+
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message)
+    }
+    return data
+  },
+
+  async updateSupportTicket({ ticketId, status, priority, queue, tags, assigneeId }) {
+    if (!ticketId) throw new Error('A ticket is required.')
+    const update = {}
+    if (status) update.status = status
+    if (priority) update.priority = priority
+    if (typeof queue === 'string') update.queue = queue.trim() || 'general'
+    if (Array.isArray(tags)) update.tags = [...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))].slice(0, 20)
+    if (assigneeId !== undefined) update.assigned_to = assigneeId || null
+    if (!Object.keys(update).length) throw new Error('Choose a ticket field to update.')
+    if (!isSupabaseConfigured) return { id: ticketId, ...update, assigneeId: update.assigned_to || '', updatedAt: new Date().toISOString() }
 
     const { data, error } = await supabase
       .from('support_tickets')
-      .update({ admin_response: response.trim(), responded_at: new Date().toISOString(), status: 'in_progress' })
+      .update(update)
       .eq('id', ticketId)
-      .select('*')
+      .select('id, status, priority, queue, tags, assigned_to, updated_at')
       .single()
 
     if (error) throw new Error(error.message)
-    return { id: data.id, status: data.status, adminResponse: data.admin_response }
+    return {
+      id: data.id,
+      status: data.status,
+      priority: data.priority,
+      queue: data.queue,
+      tags: data.tags || [],
+      assigneeId: data.assigned_to || '',
+      updatedAt: data.updated_at,
+    }
   },
 
   async updateSupportTicketStatus({ ticketId, status }) {
-    if (!ticketId || !status) throw new Error('A ticket and status are required.')
-    if (!isSupabaseConfigured) return { id: ticketId, status, updatedAt: new Date().toISOString() }
-
-    const { data, error } = await supabase
-      .from('support_tickets')
-      .update({ status })
-      .eq('id', ticketId)
-      .select('id, status, updated_at')
-      .single()
-
-    if (error) throw new Error(error.message)
-    return { id: data.id, status: data.status, updatedAt: data.updated_at }
+    return this.updateSupportTicket({ ticketId, status })
   },
 
   async updateCompanySeatPackage({ packageId, seatLimit, assignedSeats = 0 }) {
@@ -1553,6 +1709,21 @@ export const authService = {
     return data
   },
 
+  async changeTemporaryPassword(password) {
+    if (!isSupabaseConfigured) throw new Error('Supabase is not configured.')
+
+    const { data, error } = await supabase.functions.invoke('account-actions', {
+      body: { action: 'change-temporary-password', password },
+    })
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message || 'Unable to update your password.')
+    }
+
+    await supabase.auth.refreshSession()
+    return data
+  },
+
   async requestPasswordReset(email) {
     if (!email) {
       throw new Error('Email is required.')
@@ -1562,18 +1733,36 @@ export const authService = {
       return { ok: true }
     }
 
-    const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://echoaipro.com'
     const cleanEmail = String(email).trim().toLowerCase()
 
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: `${appOrigin}/reset-password`,
+    const { data, error } = await supabase.functions.invoke('password-reset-request', {
+      body: { email: cleanEmail },
     })
 
     if (error) {
-      throw new Error(error.message)
+      const detail = await error.context?.json?.().catch(() => null)
+      throw new Error(detail?.error || error.message || 'Unable to request a password reset.')
     }
 
-    return { ok: true }
+    return data ?? { ok: true }
+  },
+
+  async resendSignupConfirmation(email) {
+    if (!email) {
+      throw new Error('Email is required.')
+    }
+
+    if (!isSupabaseConfigured) {
+      return { ok: true }
+    }
+
+    const { data, error } = await supabase.functions.invoke('send-auth-email', { body: { email: String(email).trim().toLowerCase() } })
+
+    if (error) {
+      throw new Error(error.message || 'Unable to resend the confirmation email.')
+    }
+
+    return data ?? { ok: true }
   },
 
   async signOut() {
