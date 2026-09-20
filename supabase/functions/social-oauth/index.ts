@@ -1,7 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
 
-const APP_URL = Deno.env.get('APP_URL') ?? 'http://localhost:5173'
+const APP_URL = Deno.env.get('APP_URL')
+  ?? Deno.env.get('SITE_URL')
+  ?? (Deno.env.get('VERCEL_URL') ? `https://${Deno.env.get('VERCEL_URL')}` : 'http://localhost:5173')
 const FUNCTION_URL = `${Deno.env.get('SUPABASE_URL')}/functions/v1/social-oauth`
 
 type Platform = 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'x' | 'linkedin'

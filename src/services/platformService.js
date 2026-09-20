@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { canUseAgentMode, runUserAiAgent } from './aiAgentService'
+import { consumeFreePostingAllowance } from './freePostingAllowance'
 
 const randomId = () => `post_${Math.random().toString(36).slice(2, 10)}`
 
@@ -8,6 +9,37 @@ const getCurrentUserId = async () => {
   if (error) throw new Error(error.message)
   if (!data.user) throw new Error('Sign in before scheduling a post.')
   return data.user.id
+}
+
+const getEntitlement = async () => {
+  if (!isSupabaseConfigured) {
+    return { entitled: false, accessLevel: 'free', status: 'none' }
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('my_entitlement')
+    if (error || !data) {
+      return { entitled: false, accessLevel: 'free', status: 'none' }
+    }
+    return data
+  } catch {
+    return { entitled: false, accessLevel: 'free', status: 'none' }
+  }
+}
+
+const ensureFreePostingAllowance = async ({ channels }) => {
+  if (!isSupabaseConfigured) return { allowed: true, used: 0, remaining: Number.POSITIVE_INFINITY }
+
+  const userId = await getCurrentUserId()
+  const entitlement = await getEntitlement()
+  const channelCount = new Set((channels ?? []).filter(Boolean)).size
+  const result = await consumeFreePostingAllowance({ userId, entitlement, channelCount })
+
+  if (!result.allowed) {
+    throw new Error(result.message)
+  }
+
+  return result
 }
 
 const localMessageIdeas = (prompt) => [
@@ -62,6 +94,8 @@ export const platformService = {
     if (!isSupabaseConfigured) {
       return post
     }
+
+    await ensureFreePostingAllowance({ channels: payload.channels })
 
     const userId = await getCurrentUserId()
 
@@ -146,6 +180,8 @@ export const platformService = {
     if (!isSupabaseConfigured) {
       return post
     }
+
+    await ensureFreePostingAllowance({ channels: payload.channels })
 
     const userId = await getCurrentUserId()
 

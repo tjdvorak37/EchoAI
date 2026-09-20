@@ -6,6 +6,7 @@ import { authService } from './services/authService'
 import { announcementService, DEFAULT_ANNOUNCEMENTS } from './services/announcementService'
 import { billingService } from './services/billingService'
 import { brandService, createEmptyBrandKit, loadBrandFonts, MAX_LOGO_BYTES } from './services/brandService'
+import { canManageBrandKit } from './services/brandPermissions'
 import { CLOUD_PROVIDERS, cloudDriveService, toLinkedAsset } from './services/cloudDriveService'
 import { getPlan, getStorageMb } from './data/plans'
 import { PUBLISHING_PLATFORMS, SOCIAL_PLATFORMS, getSocialPlatform } from './data/socialPlatforms'
@@ -16,6 +17,7 @@ import { socialIntegrationService } from './services/socialIntegrationService'
 import { financeService } from './services/financeService'
 import { analyticsService } from './services/analyticsService'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { FREE_POSTING_ALLOWANCE, getFreePostingUsage } from './services/freePostingAllowance'
 import echoModern from './assets/echo-poses/echo-modern-friendly.png'
 import echoTech from './assets/echo-poses/echo-tech-assistant.png'
 import echoCreator from './assets/echo-poses/echo-creator-mode.png'
@@ -373,6 +375,8 @@ function App() {
   const [incomingReferralCode] = useState(
     () => new URLSearchParams(window.location.search).get('ref') || '',
   )
+  const [freePostingUsageState, setFreePostingUsageState] = useState(0)
+  const freePostingUsage = session?.id ? freePostingUsageState : 0
   const hasPaidAccess = isStaffRole(session?.role) || myEntitlement?.entitled === true
 
   const requestWorkspaceTab = (tab) => {
@@ -509,6 +513,23 @@ function App() {
       .catch((error) => console.error('Unable to load platform announcements', error))
 
     return () => { active = false }
+  }, [session?.id])
+
+  useEffect(() => {
+    if (!session?.id) return undefined
+
+    let active = true
+    getFreePostingUsage(session.id)
+      .then((usage) => {
+        if (active) setFreePostingUsageState(usage)
+      })
+      .catch(() => {
+        if (active) setFreePostingUsageState(0)
+      })
+
+    return () => {
+      active = false
+    }
   }, [session?.id])
 
   useEffect(() => {
@@ -654,7 +675,7 @@ function App() {
 
   const isAdminUser = ['admin', 'super_admin'].includes(normalizeRole(session?.role))
   const canViewManagementBoard = ['admin', 'super_admin', 'it', 'accountant', 'board_member', 'partner'].includes(normalizeRole(session?.role)) || session?.isBoardMember === true
-  const canManageBrandKit = isAdminUser
+  const userCanManageBrandKit = canManageBrandKit(session)
 
   async function loadAdminData(user = session) {
     setAdminError('')
@@ -4740,7 +4761,7 @@ function App() {
               <p className="muted">Your company has not added brand resources yet.</p>
             )}
 
-            {canManageBrandKit && <>
+            {userCanManageBrandKit && <>
             <h3 className="section-label">Manage company brand kit</h3>
             <p className="panel-note">
               Your company&apos;s colours, licensed fonts, and logos. Everything here is available in
@@ -5504,6 +5525,12 @@ function App() {
             {accountActionError && <span className="field-error">{accountActionError}</span>}
 
             <h3 className="section-label">Posting schedule</h3>
+            {myEntitlement?.entitled === false && (
+              <div className="free-posting-allowance">
+                <strong>Free account posting allowance</strong>
+                <span>{Math.max(0, FREE_POSTING_ALLOWANCE - freePostingUsage)} of {FREE_POSTING_ALLOWANCE} postings remaining</span>
+              </div>
+            )}
             <Suspense fallback={<p className="muted">Loading posting schedule...</p>}>
               <PostingSchedulePanel />
             </Suspense>
