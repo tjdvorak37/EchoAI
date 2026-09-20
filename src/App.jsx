@@ -97,14 +97,30 @@ const createDefaultAiAgentConfig = () => ({
   message: 'EchoAI manages provider accounts, API keys, routing, and safety controls on the backend.',
 })
 
-const hydrateWorkspaceAssets = (assets) =>
-  (assets ?? []).map((asset) => {
-    if (asset?.type !== 'image' || asset?.previewUrl) {
-      return asset
-    }
+// Uploaded previews are data URLs held in memory only; they are stripped
+// before saving so localStorage never has to hold megabytes of base64. On
+// reload, restore a real preview from Supabase storage for any asset that
+// still has a storagePath, or the thumbnail renders as a broken image icon.
+const hydrateWorkspaceAssets = async (assets) => {
+  const list = assets ?? []
+  if (!isSupabaseConfigured) return list
 
-    return asset
+  const needsSignedUrl = list.filter(
+    (asset) => ['image', 'video'].includes(asset?.type) && !asset?.previewUrl && asset?.storagePath,
+  )
+  if (!needsSignedUrl.length) return list
+
+  const { data, error } = await supabase.storage
+    .from('social-media')
+    .createSignedUrls(needsSignedUrl.map((asset) => asset.storagePath), 60 * 60 * 24)
+  if (error || !data) return list
+
+  const signedUrlByPath = new Map(data.map((entry) => [entry.path, entry.signedUrl]))
+  return list.map((asset) => {
+    const signedUrl = asset?.storagePath ? signedUrlByPath.get(asset.storagePath) : ''
+    return signedUrl ? { ...asset, previewUrl: signedUrl } : asset
   })
+}
 
 const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 
@@ -418,7 +434,7 @@ function App() {
     setWorkspaceFolders(savedFolders.some((folder) => folder.id === AI_GENERATIONS_FOLDER_ID)
       ? savedFolders
       : [...savedFolders, { id: AI_GENERATIONS_FOLDER_ID, name: 'AI Generations', parentId: 'folder-root', createdAt: new Date().toISOString(), system: true }])
-    setWorkspaceAssets(hydrateWorkspaceAssets(d.workspaceAssets ?? []))
+    setWorkspaceAssets(await hydrateWorkspaceAssets(d.workspaceAssets ?? []))
     try {
       const onboardingKey = `${getUserKey(user.id)}-onboarding`
       const savedOnboarding = JSON.parse(localStorage.getItem(onboardingKey) || 'null')
