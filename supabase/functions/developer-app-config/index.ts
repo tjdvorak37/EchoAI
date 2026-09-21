@@ -41,7 +41,7 @@ Deno.serve(async (request) => {
   if (request.method === 'POST' && !canEdit) return json({ error: 'Developer app editing access is required.' }, 403, request)
 
   if (request.method === 'GET') {
-    const { data, error } = await db.from('developer_app_credentials').select('provider, app_name, client_id, redirect_uri, scopes, enabled, updated_by, updated_at').order('provider')
+    const { data, error } = await db.from('developer_app_credentials').select('provider, app_name, client_id, redirect_uri, scopes, enabled, config_id, updated_by, updated_at').order('provider')
     if (error) return json({ error: error.message }, 500, request)
     return json({ providers, records: data ?? [], canEdit }, 200, request)
   }
@@ -53,6 +53,7 @@ Deno.serve(async (request) => {
   const appName = typeof body.appName === 'string' ? body.appName.trim().slice(0, 160) : ''
   const redirectUri = typeof body.redirectUri === 'string' ? body.redirectUri.trim().slice(0, 500) : ''
   const scopes = Array.isArray(body.scopes) ? body.scopes.filter((scope: unknown) => typeof scope === 'string').slice(0, 30) : []
+  const configId = typeof body.configId === 'string' ? body.configId.trim().slice(0, 160) : ''
   if (!clientId || !appName) return json({ error: 'App name and client ID are required.' }, 400, request)
 
   const update: Record<string, unknown> = {
@@ -61,12 +62,13 @@ Deno.serve(async (request) => {
     client_id: clientId,
     redirect_uri: redirectUri,
     scopes,
+    config_id: configId,
     enabled: body.enabled !== false,
     updated_by: caller.id,
     updated_at: new Date().toISOString(),
   }
   if (clientSecret) update.client_secret = clientSecret
-  const { data, error } = await db.from('developer_app_credentials').upsert(update).select('provider, app_name, client_id, redirect_uri, scopes, enabled, updated_by, updated_at').single()
+  const { data, error } = await db.from('developer_app_credentials').upsert(update).select('provider, app_name, client_id, redirect_uri, scopes, enabled, config_id, updated_by, updated_at').single()
   if (error) return json({ error: error.message }, 500, request)
   return json({ record: data }, 200, request)
 })
