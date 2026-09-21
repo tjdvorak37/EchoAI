@@ -44,11 +44,11 @@ import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAge
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
 import { UpgradeDialog } from './components/UpgradeDialog'
+import { removeStoredAsset } from './services/mediaAssets'
 
 const AI_PROMPT_IDEAS = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
   'Write a Facebook reminder for a flash sale ending tonight at midnight.',
-  'Draft Snapchat copy for a behind-the-scenes product reveal.',
 ]
 const POST_TYPE_CHIPS = ['Product launch', 'Event promotion', 'Educational post', 'Customer story']
 
@@ -65,6 +65,8 @@ const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((modu
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
+const TermsOfService = lazy(() => import('./components/TermsOfService').then((module) => ({ default: module.TermsOfService })))
+const DataDeletion = lazy(() => import('./components/DataDeletion').then((module) => ({ default: module.DataDeletion })))
 const AdsPanel = lazy(() => import('./components/AdsPanel').then((module) => ({ default: module.AdsPanel })))
 const RepostHubPanel = lazy(() => import('./components/RepostHubPanel').then((module) => ({ default: module.RepostHubPanel })))
 const PostSchedulerPanel = lazy(() => import('./components/PostSchedulerPanel').then((module) => ({ default: module.PostSchedulerPanel })))
@@ -98,14 +100,30 @@ const createDefaultAiAgentConfig = () => ({
   message: 'EchoAI manages provider accounts, API keys, routing, and safety controls on the backend.',
 })
 
-const hydrateWorkspaceAssets = (assets) =>
-  (assets ?? []).map((asset) => {
-    if (asset?.type !== 'image' || asset?.previewUrl) {
-      return asset
-    }
+// Uploaded previews are data URLs held in memory only; they are stripped
+// before saving so localStorage never has to hold megabytes of base64. On
+// reload, restore a real preview from Supabase storage for any asset that
+// still has a storagePath, or the thumbnail renders as a broken image icon.
+const hydrateWorkspaceAssets = async (assets) => {
+  const list = assets ?? []
+  if (!isSupabaseConfigured) return list
 
-    return asset
+  const needsSignedUrl = list.filter(
+    (asset) => ['image', 'video'].includes(asset?.type) && !asset?.previewUrl && asset?.storagePath,
+  )
+  if (!needsSignedUrl.length) return list
+
+  const { data, error } = await supabase.storage
+    .from('social-media')
+    .createSignedUrls(needsSignedUrl.map((asset) => asset.storagePath), 60 * 60 * 24)
+  if (error || !data) return list
+
+  const signedUrlByPath = new Map(data.map((entry) => [entry.path, entry.signedUrl]))
+  return list.map((asset) => {
+    const signedUrl = asset?.storagePath ? signedUrlByPath.get(asset.storagePath) : ''
+    return signedUrl ? { ...asset, previewUrl: signedUrl } : asset
   })
+}
 
 const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 
@@ -240,7 +258,6 @@ function App() {
   })
   const localIdRef = useRef(3000)
   const [alerts, setAlerts] = useState([])
-  const [accessRequests, setAccessRequests] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminError, setAdminError] = useState('')
@@ -272,8 +289,6 @@ function App() {
   const [accountHandleDrafts, setAccountHandleDrafts] = useState(() => ({
     instagram: '@youraccount',
     facebook: 'Your page name',
-    tiktok: '@youraccount',
-    snapchat: 'Your Snapchat',
     x: '@youraccount',
     youtube: 'Your channel',
     linkedin: 'Your profile / page',
@@ -421,7 +436,7 @@ function App() {
     setWorkspaceFolders(savedFolders.some((folder) => folder.id === AI_GENERATIONS_FOLDER_ID)
       ? savedFolders
       : [...savedFolders, { id: AI_GENERATIONS_FOLDER_ID, name: 'AI Generations', parentId: 'folder-root', createdAt: new Date().toISOString(), system: true }])
-    setWorkspaceAssets(hydrateWorkspaceAssets(d.workspaceAssets ?? []))
+    setWorkspaceAssets(await hydrateWorkspaceAssets(d.workspaceAssets ?? []))
     try {
       const onboardingKey = `${getUserKey(user.id)}-onboarding`
       const savedOnboarding = JSON.parse(localStorage.getItem(onboardingKey) || 'null')
@@ -694,18 +709,13 @@ function App() {
         return
       }
 
-      const [requests, members, subscriptions, payments, seatData, supportTickets] = await Promise.all([
-        authService.getAccessRequests(),
+      const [members, subscriptions, payments, seatData, supportTickets] = await Promise.all([
         authService.getManagedUsers(),
         billingService.listSubscriptions(),
         billingService.listPayments(),
         authService.getCompanySeatData({ companyKey: user?.company }),
         authService.getSupportTickets(),
       ])
-
-      if (requests.length) {
-        setAccessRequests(requests)
-      }
 
       if (members.length) {
         setTeamMembers(members)
@@ -2223,8 +2233,22 @@ function App() {
     }
   }
 
-  const deleteAsset = (assetId) => {
-    setWorkspaceAssets((prev) => prev.filter((asset) => asset.id !== assetId))
+  const deleteAsset = async (assetId) => {
+    const assetToDelete = workspaceAssets.find((asset) => asset.id === assetId)
+    if (!assetToDelete) return
+
+    try {
+      if (isSupabaseConfigured && assetToDelete.storagePath) {
+        await removeStoredAsset({
+          asset: assetToDelete,
+          storageClient: supabase.storage,
+        })
+      }
+      setWorkspaceAssets((prev) => prev.filter((asset) => asset.id !== assetId))
+    } catch (error) {
+      console.error('Unable to remove asset', error)
+      setAdminError(error.message || 'Unable to delete this asset from storage.')
+    }
   }
 
   const handleAssetDragStart = () => {}
@@ -2876,22 +2900,6 @@ function App() {
     }
   }
 
-  const handleReviewAccessRequest = async (request, decision) => {
-    setAdminError('')
-    setAdminLoading(true)
-    try {
-      const result = await authService.reviewAccessRequest({ requestId: request.id, decision })
-      setAccessRequests((prev) => prev.map((item) => item.id === request.id ? result.request : item))
-      if (result.member) {
-        setTeamMembers((prev) => prev.map((member) => member.id === result.member.id ? { ...member, ...result.member } : member))
-      }
-    } catch (error) {
-      setAdminError(error.message)
-    } finally {
-      setAdminLoading(false)
-    }
-  }
-
   const handleOpenBillingPortal = async () => {
     setBillingPortalError('')
     setBillingPortalLoading(true)
@@ -3531,7 +3539,7 @@ function App() {
 
               {onboardingStep === 3 && (
                 <div className="onboarding-social-grid">
-                  {['instagram', 'tiktok', 'facebook', 'youtube', 'linkedin', 'x'].map((platform) => {
+                  {['instagram', 'facebook', 'youtube', 'linkedin', 'x'].map((platform) => {
                     const connected = connectedAccounts.some((account) => account.platform.toLowerCase() === platform && account.status === 'healthy')
                     return (
                       <button key={platform} type="button" className={`onboarding-social ${connected ? 'connected' : ''}`} onClick={() => startOnboardingConnection(platform)} disabled={connected}>
@@ -5566,8 +5574,6 @@ function App() {
             <AdminPanel
               teamMembers={teamMembers}
               setTeamMembers={setTeamMembers}
-              accessRequests={accessRequests}
-              setAccessRequests={setAccessRequests}
               alerts={alerts}
               setAlerts={setAlerts}
               licenses={licenses}
@@ -5598,7 +5604,6 @@ function App() {
               currentUser={session}
               handleToggleUserAccess={handleToggleUserAccess}
               handleUpdateUserRole={handleUpdateUserRole}
-              handleReviewAccessRequest={handleReviewAccessRequest}
               companySeatPackage={companySeatPackage}
               companySeats={companySeats}
               handleCreateCompanySeatPackage={handleCreateCompanySeatPackage}
@@ -5744,6 +5749,20 @@ function AppRoot() {
     return (
       <Suspense fallback={<div className="loading-panel">Loading privacy policy...</div>}>
         <PrivacyPolicy />
+      </Suspense>
+    )
+  }
+  if (normalizedPath === '/terms-of-service') {
+    return (
+      <Suspense fallback={<div className="loading-panel">Loading terms of service...</div>}>
+        <TermsOfService />
+      </Suspense>
+    )
+  }
+  if (normalizedPath === '/data-deletion') {
+    return (
+      <Suspense fallback={<div className="loading-panel">Loading data deletion instructions...</div>}>
+        <DataDeletion />
       </Suspense>
     )
   }

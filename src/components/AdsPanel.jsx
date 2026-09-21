@@ -6,7 +6,6 @@ import './AdsPanel.css'
 const PROVIDERS = [
   { id: 'meta', name: 'Meta Ads', description: 'Facebook and Instagram campaigns' },
   { id: 'google', name: 'Google Ads', description: 'Search, display, YouTube, and Performance Max' },
-  { id: 'tiktok', name: 'TikTok Ads', description: 'TikTok campaign performance' },
 ]
 
 const formatNumber = (value) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value || 0)

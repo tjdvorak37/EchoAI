@@ -146,7 +146,6 @@ const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(
 
 export function AdminPanel({
   teamMembers,
-  accessRequests,
   alerts, setAlerts,
   licenses, setLicenses,
   tickets, setTickets,
@@ -160,7 +159,7 @@ export function AdminPanel({
   taxRecords, setTaxRecords,
   refunds, setRefunds,
   financialTasks, setFinancialTasks,
-  handleToggleUserAccess, handleUpdateUserRole, handleReviewAccessRequest,
+  handleToggleUserAccess, handleUpdateUserRole,
   companySeatPackage, companySeats,
   handleCreateCompanySeatPackage, handleUpdateCompanySeatPackage, handleAssignCompanySeat, handleRevokeCompanySeat,
   handleProvisionCompanySeatsForCustomer,
@@ -832,7 +831,6 @@ export function AdminPanel({
                 { label: 'Open tickets', value: openTickets, color: '#3b82f6' },
                 { label: 'Total revenue', value: `$${totalRevenue}`, color: '#a855f7' },
                 { label: 'Total users', value: teamMembers.length, color: '#06b6d4' },
-                { label: 'Access requests', value: accessRequests.filter((r) => r.status === 'pending').length, color: '#f59e0b' },
               ].map((stat) => (
                 <div key={stat.label} className="it-stat-card" style={{ borderColor: stat.color }}>
                   <span className="it-stat-val" style={{ color: stat.color }}>{stat.value}</span>
@@ -1794,31 +1792,6 @@ export function AdminPanel({
                 </div>
               )}
             </Section>
-
-            {itTab === 'users' && <Section title="Access requests">
-              {accessRequests.length === 0 && <p className="muted">No pending access requests.</p>}
-              {accessRequests.map((req) => (
-                <div key={req.id} className="it-row">
-                  <div>
-                    <p>{req.fullName}</p>
-                    <span>{req.email} • {req.company || 'No company'} • {new Date(req.requestedAt).toLocaleDateString()}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <StatusBadge value={req.status} />
-                    {req.status === 'pending' && (
-                      <>
-                        <button type="button" className="primary-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} disabled={adminLoading} onClick={() => handleReviewAccessRequest(req, 'approved')}>
-                          Approve
-                        </button>
-                        <button type="button" className="ghost-button" style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }} disabled={adminLoading} onClick={() => handleReviewAccessRequest(req, 'denied')}>
-                          Deny
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </Section>}
 
           </div>
         )}

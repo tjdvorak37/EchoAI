@@ -6,7 +6,7 @@ const APP_URL = Deno.env.get('APP_URL')
   ?? (Deno.env.get('VERCEL_URL') ? `https://${Deno.env.get('VERCEL_URL')}` : 'http://localhost:5173')
 const FUNCTION_URL = `${Deno.env.get('SUPABASE_URL')}/functions/v1/social-oauth`
 
-type Platform = 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'x' | 'linkedin'
+type Platform = 'facebook' | 'instagram' | 'youtube' | 'x' | 'linkedin'
 
 type ProviderConfig = {
   authUrl: string
@@ -33,7 +33,7 @@ const META_SCOPES_BY_PLATFORM: Record<'facebook' | 'instagram', string[]> = {
   ],
 }
 
-const PROVIDERS: Record<'meta' | 'youtube' | 'tiktok' | 'x' | 'linkedin', ProviderConfig> = {
+const PROVIDERS: Record<'meta' | 'youtube' | 'x' | 'linkedin', ProviderConfig> = {
   meta: {
     authUrl: 'https://www.facebook.com/v21.0/dialog/oauth',
     tokenUrl: 'https://graph.facebook.com/v21.0/oauth/access_token',
@@ -55,14 +55,6 @@ const PROVIDERS: Record<'meta' | 'youtube' | 'tiktok' | 'x' | 'linkedin', Provid
     ],
     tokenAuth: 'body',
   },
-  tiktok: {
-    authUrl: 'https://www.tiktok.com/v2/auth/authorize/',
-    tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
-    clientId: Deno.env.get('TIKTOK_CLIENT_KEY') ?? '',
-    clientSecret: Deno.env.get('TIKTOK_CLIENT_SECRET') ?? '',
-    scopes: ['user.info.basic', 'video.publish'],
-    tokenAuth: 'body',
-  },
   x: {
     authUrl: 'https://x.com/i/oauth2/authorize',
     tokenUrl: 'https://api.x.com/2/oauth2/token',
@@ -82,10 +74,10 @@ const PROVIDERS: Record<'meta' | 'youtube' | 'tiktok' | 'x' | 'linkedin', Provid
 }
 
 const platformIsSupported = (value: string): value is Platform =>
-  ['facebook', 'instagram', 'youtube', 'tiktok', 'x', 'linkedin'].includes(value)
+  ['facebook', 'instagram', 'youtube', 'x', 'linkedin'].includes(value)
 
 const providerForPlatform = (platform: Platform) =>
-  platform === 'youtube' ? 'youtube' : platform === 'tiktok' ? 'tiktok' : platform === 'x' ? 'x' : platform === 'linkedin' ? 'linkedin' : 'meta'
+  platform === 'youtube' ? 'youtube' : platform === 'x' ? 'x' : platform === 'linkedin' ? 'linkedin' : 'meta'
 
 const scopesForPlatform = (platform: Platform, provider: ProviderConfig) => {
   if (platform === 'facebook' || platform === 'instagram') {
@@ -95,7 +87,7 @@ const scopesForPlatform = (platform: Platform, provider: ProviderConfig) => {
 }
 
 const scopeParamForPlatform = (platform: Platform, scopes: string[]) =>
-  (platform === 'facebook' || platform === 'instagram' || platform === 'tiktok')
+  (platform === 'facebook' || platform === 'instagram')
     ? scopes.join(',')
     : scopes.join(' ')
 
@@ -175,17 +167,6 @@ const queryProviderAccounts = async (platform: Platform, accessToken: string) =>
       url: '',
       publishingAccessToken: String(page.access_token ?? accessToken),
     }
-  }
-
-  if (platform === 'tiktok') {
-    const response = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    if (!response.ok) throw new Error('TikTok account discovery failed.')
-    const payload = await response.json()
-    const user = payload.data?.user
-    if (!user?.open_id) throw new Error('TikTok did not return an account.')
-    return { id: String(user.open_id), name: String(user.display_name ?? 'TikTok account'), url: '', publishingAccessToken: accessToken }
   }
 
   if (platform === 'x') {
@@ -301,10 +282,6 @@ Deno.serve(async (request) => {
         tokenHeaders.Authorization = `Basic ${btoa(`${provider.clientId}:${provider.clientSecret}`)}`
         delete tokenBody.client_secret
       }
-      if (platform === 'tiktok') {
-        tokenBody.client_key = provider.clientId
-        delete tokenBody.client_id
-      }
       const tokenResponse = await fetch(provider.tokenUrl, {
         method: 'POST',
         headers: tokenHeaders,
@@ -418,17 +395,15 @@ Deno.serve(async (request) => {
             oauthImplemented: true,
             publishing: 'YouTube video uploads',
           },
-          ...['tiktok', 'x', 'linkedin'].map((platform) => ({
+          ...['x', 'linkedin'].map((platform) => ({
             platform,
             provider: platform,
             oauthImplemented: true,
-            publishing: platform === 'tiktok' ? 'TikTok video publishing' : `${platform} text publishing`,
+            publishing: `${platform} text publishing`,
           })),
           ...[
-            ['threads', 'Threads publishing API integration is planned'],
             ['twitch', 'Twitch channel publishing target is being evaluated'],
             ['google_business', 'Google Business Profile publishing integration is planned'],
-            ['bluesky', 'Bluesky AT Protocol publishing integration is planned'],
             ['pinterest', 'Pinterest content publishing integration is planned'],
           ].map(([platform, publishing]) => ({
             platform,
@@ -480,7 +455,7 @@ Deno.serve(async (request) => {
 
     stage = 'building provider authorization URL'
     const authorizationUrl = new URL(provider.authUrl)
-    authorizationUrl.searchParams.set(platform === 'tiktok' ? 'client_key' : 'client_id', provider.clientId)
+    authorizationUrl.searchParams.set('client_id', provider.clientId)
     authorizationUrl.searchParams.set('redirect_uri', provider.redirectUri || FUNCTION_URL)
     authorizationUrl.searchParams.set('response_type', 'code')
     authorizationUrl.searchParams.set('scope', scopeParamForPlatform(platform, oauthScopes))

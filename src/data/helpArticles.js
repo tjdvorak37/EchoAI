@@ -43,7 +43,7 @@ export const HELP_ARTICLES = [
     category: 'Connections',
     title: 'Connect a social account',
     summary: 'Authorize EchoAI to publish to a channel you manage.',
-    keywords: ['oauth', 'connect', 'instagram', 'facebook', 'tiktok', 'youtube', 'x', 'linkedin'],
+    keywords: ['oauth', 'connect', 'instagram', 'facebook', 'youtube', 'x', 'linkedin'],
     steps: [
       'Open Connections.',
       'Choose a supported platform and select Connect or Authorize.',
@@ -51,7 +51,7 @@ export const HELP_ARTICLES = [
       'Return to EchoAI and confirm the account shows OAuth connected.',
       'Open Queue Studio to choose the connected account for a post.',
     ],
-    notes: ['Live publishing integrations are Instagram, Facebook, TikTok, YouTube, X, and LinkedIn. Threads, Twitch, Google Business Profile, Bluesky, Pinterest, and Snapchat are available for planning and preview only until their provider adapters are released.'],
+    notes: ['Live publishing integrations are Instagram, Facebook, YouTube, X, and LinkedIn. Twitch, Google Business Profile, and Pinterest are available for planning and preview only until their provider adapters are released.'],
   },
   {
     id: 'manage-brand-kit',
@@ -114,7 +114,7 @@ export const HELP_ARTICLES = [
     category: 'Queue Studio',
     title: 'Use the real-time social preview',
     summary: 'Review copy and visual direction across every social platform offered by EchoAI.',
-    keywords: ['preview', 'social preview', 'instagram', 'facebook', 'tiktok', 'platform'],
+    keywords: ['preview', 'social preview', 'instagram', 'facebook', 'platform'],
     steps: [
       'In Queue Studio, use the platform tabs in Real-Time Social Preview.',
       'Switch platforms to review your caption and visual brief in each presentation.',
@@ -126,11 +126,11 @@ export const HELP_ARTICLES = [
     id: 'ads-connect-and-report',
     category: 'Ads & analytics',
     title: 'Connect advertising accounts in Ads',
-    summary: 'Connect Meta Ads, Google Ads, or TikTok Ads and review verified performance data.',
-    keywords: ['ads', 'promote lab', 'meta ads', 'google ads', 'tiktok ads', 'campaign', 'performance'],
+    summary: 'Connect Meta Ads or Google Ads and review verified performance data.',
+    keywords: ['ads', 'promote lab', 'meta ads', 'google ads', 'campaign', 'performance'],
     steps: [
       'Open Promote Lab, which contains the Ads workspace.',
-      'Choose Meta Ads, Google Ads, or TikTok Ads and select Connect.',
+      'Choose Meta Ads or Google Ads and select Connect.',
       'Complete the provider authorization flow for the advertising account you manage.',
       'Select a reporting window and refresh the report.',
       'Use spend, impressions, clicks, CTR, conversions, cost per conversion, campaign results, and decision signals to compare performance.',

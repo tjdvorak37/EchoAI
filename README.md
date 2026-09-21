@@ -27,14 +27,13 @@ Publishing adapters currently available:
 
 - Facebook Pages
 - Instagram Professional accounts
-- TikTok
 - YouTube
 - X
 - LinkedIn
 
-The catalog also includes Threads, Twitch, Google Business Profile, Bluesky,
-and Pinterest as planned destinations. Availability still depends on each
-provider's OAuth approval, scopes, account type, and API permissions.
+The catalog also includes Twitch, Google Business Profile, and Pinterest as
+planned destinations. Availability still depends on each provider's OAuth
+approval, scopes, account type, and API permissions.
 
 ## Account Plans
 
