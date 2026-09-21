@@ -304,6 +304,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount, onPurchas
             <a href="#workflow" onClick={() => setMobileMenuOpen(false)}>How it works</a>
             <a href="#faq" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
             <button type="button" onClick={() => { setSupportOpen(true); setMobileMenuOpen(false) }}>Contact support</button>
+            <a href="/privacy-policy" onClick={() => setMobileMenuOpen(false)}>Privacy policy</a>
           </NavDropdown>
         </nav>
         <div className="landing-nav-actions">
