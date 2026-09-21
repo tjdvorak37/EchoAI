@@ -291,10 +291,29 @@ Deno.serve(async (request) => {
 
       const token = await tokenResponse.json()
       const tokenData = token.data ?? token
-      const accessToken = tokenData.access_token
+      let accessToken = tokenData.access_token
       if (!accessToken) throw new Error('OAuth provider did not return an access token.')
+      let expiresIn = tokenData.expires_in
+
+      // Meta's initial authorization-code exchange only returns a short-lived
+      // (~1-2 hour) user token. Without exchanging it for a long-lived
+      // (~60 day) token, the connection (and any Page token derived from it)
+      // expires almost immediately and there is no refresh_token grant to
+      // renew it, so the user appears to lose their connection.
+      if (providerForPlatform(platform) === 'meta') {
+        const longLivedResponse = await fetch(
+          `${provider.tokenUrl}?grant_type=fb_exchange_token&client_id=${encodeURIComponent(provider.clientId)}&client_secret=${encodeURIComponent(provider.clientSecret)}&fb_exchange_token=${encodeURIComponent(accessToken)}`,
+        )
+        if (longLivedResponse.ok) {
+          const longLived = await longLivedResponse.json()
+          if (longLived.access_token) {
+            accessToken = longLived.access_token
+            expiresIn = longLived.expires_in ?? expiresIn
+          }
+        }
+      }
+
       const account = await queryProviderAccounts(platform, accessToken)
-      const expiresIn = tokenData.expires_in
       const expiresAt = expiresIn
         ? new Date(Date.now() + Number(expiresIn) * 1000).toISOString()
         : null
