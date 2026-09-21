@@ -65,6 +65,8 @@ const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((modu
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
+const TermsOfService = lazy(() => import('./components/TermsOfService').then((module) => ({ default: module.TermsOfService })))
+const DataDeletion = lazy(() => import('./components/DataDeletion').then((module) => ({ default: module.DataDeletion })))
 const AdsPanel = lazy(() => import('./components/AdsPanel').then((module) => ({ default: module.AdsPanel })))
 const RepostHubPanel = lazy(() => import('./components/RepostHubPanel').then((module) => ({ default: module.RepostHubPanel })))
 const PostSchedulerPanel = lazy(() => import('./components/PostSchedulerPanel').then((module) => ({ default: module.PostSchedulerPanel })))
@@ -5747,6 +5749,20 @@ function AppRoot() {
     return (
       <Suspense fallback={<div className="loading-panel">Loading privacy policy...</div>}>
         <PrivacyPolicy />
+      </Suspense>
+    )
+  }
+  if (normalizedPath === '/terms-of-service') {
+    return (
+      <Suspense fallback={<div className="loading-panel">Loading terms of service...</div>}>
+        <TermsOfService />
+      </Suspense>
+    )
+  }
+  if (normalizedPath === '/data-deletion') {
+    return (
+      <Suspense fallback={<div className="loading-panel">Loading data deletion instructions...</div>}>
+        <DataDeletion />
       </Suspense>
     )
   }
