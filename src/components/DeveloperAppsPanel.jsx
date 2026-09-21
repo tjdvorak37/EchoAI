@@ -19,6 +19,7 @@ const draftFromRecord = (record, provider) => ({
   clientSecret: '',
   redirectUri: record?.redirect_uri || (provider.endsWith('_ads') ? ADS_REDIRECT : DEFAULT_REDIRECT),
   scopes: (record?.scopes || []).join(', '),
+  configId: record?.config_id || '',
   enabled: record?.enabled !== false,
 })
 
@@ -27,7 +28,7 @@ const normalizeRole = (role) => String(role ?? '').trim().toLowerCase().replace(
 export function DeveloperAppsPanel({ currentUser }) {
   const [records, setRecords] = useState([])
   const [selected, setSelected] = useState('youtube')
-  const [draft, setDraft] = useState({ appName: '', clientId: '', clientSecret: '', redirectUri: DEFAULT_REDIRECT, scopes: '', enabled: true })
+  const [draft, setDraft] = useState({ appName: '', clientId: '', clientSecret: '', redirectUri: DEFAULT_REDIRECT, scopes: '', configId: '', enabled: true })
   const [canEdit, setCanEdit] = useState(false)
   const [status, setStatus] = useState({ loading: true, saving: false, message: '', error: '' })
   const isAdmin = ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role))
@@ -87,6 +88,13 @@ export function DeveloperAppsPanel({ currentUser }) {
         <label>Client secret<input disabled={!canEdit} type="password" value={draft.clientSecret} onChange={(event) => setDraft((current) => ({ ...current, clientSecret: event.target.value }))} placeholder={record?.client_id ? 'Leave blank to keep current secret' : 'Enter secret once'} /></label>
         <label>Redirect URI<input disabled={!canEdit} type="url" value={draft.redirectUri} onChange={(event) => setDraft((current) => ({ ...current, redirectUri: event.target.value }))} /></label>
         <label>Scopes<input disabled={!canEdit} value={draft.scopes} onChange={(event) => setDraft((current) => ({ ...current, scopes: event.target.value }))} placeholder="scope.one, scope.two" /></label>
+        {selected === 'meta' && (
+          <label>
+            Facebook Login for Business Configuration ID
+            <input disabled={!canEdit} value={draft.configId} onChange={(event) => setDraft((current) => ({ ...current, configId: event.target.value }))} placeholder="e.g. 1412758157520850" />
+          </label>
+        )}
+        {selected === 'meta' && <p className="muted">When set, EchoAI sends this Configuration ID instead of raw scopes, matching the Page picker set up under Facebook Login for Business &gt; Configurations. Leave blank to fall back to plain scope-based login.</p>}
         <label><input disabled={!canEdit} type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} /> Provider enabled</label>
         {status.message && <p className="auth-message">{status.message}</p>}
         {status.error && <p className="auth-message auth-error">{status.error}</p>}

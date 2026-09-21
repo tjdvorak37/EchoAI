@@ -16,6 +16,9 @@ type ProviderConfig = {
   redirectUri?: string
   scopes: string[]
   tokenAuth: 'body' | 'basic'
+  // Facebook Login for Business apps authorize through a named Configuration
+  // instead of raw scopes; when set, config_id replaces the scope parameter.
+  configId?: string
 }
 
 const META_SCOPES_BY_PLATFORM: Record<'facebook' | 'instagram', string[]> = {
@@ -98,7 +101,7 @@ const providerConfig = async (providerKey: keyof typeof PROVIDERS) => {
   const fallback = PROVIDERS[providerKey]
   const { data } = await admin()
     .from('developer_app_credentials')
-    .select('client_id, client_secret, redirect_uri, scopes, enabled')
+    .select('client_id, client_secret, redirect_uri, scopes, enabled, config_id')
     .eq('provider', providerKey)
     .maybeSingle()
   if (!data || data.enabled === false) return fallback
@@ -108,6 +111,7 @@ const providerConfig = async (providerKey: keyof typeof PROVIDERS) => {
     clientSecret: data.client_secret || fallback.clientSecret,
     redirectUri: data.redirect_uri || FUNCTION_URL,
     scopes: Array.isArray(data.scopes) && data.scopes.length ? data.scopes : fallback.scopes,
+    configId: data.config_id || undefined,
   }
 }
 
@@ -477,7 +481,14 @@ Deno.serve(async (request) => {
     authorizationUrl.searchParams.set('client_id', provider.clientId)
     authorizationUrl.searchParams.set('redirect_uri', provider.redirectUri || FUNCTION_URL)
     authorizationUrl.searchParams.set('response_type', 'code')
-    authorizationUrl.searchParams.set('scope', scopeParamForPlatform(platform, oauthScopes))
+    // A Facebook Login for Business Configuration ID grants its own bundled
+    // permissions/Page picker; passing scope alongside it can suppress that
+    // Page-selection step and leave the account with zero authorized Pages.
+    if (providerForPlatform(platform) === 'meta' && provider.configId) {
+      authorizationUrl.searchParams.set('config_id', provider.configId)
+    } else {
+      authorizationUrl.searchParams.set('scope', scopeParamForPlatform(platform, oauthScopes))
+    }
     authorizationUrl.searchParams.set('state', state)
     if (platform === 'x') {
       const challenge = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier))
