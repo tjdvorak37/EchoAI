@@ -4723,14 +4723,225 @@ function App() {
             </p>
 
             <nav className="integrations-quick-nav" aria-label="Jump to a section">
-              <a href="#integrations-brand" className="chip">Brand kit</a>
+              <a href="#integrations-social" className="chip">Social accounts</a>
               <a href="#integrations-security" className="chip">Security</a>
               <a href="#integrations-billing" className="chip">Billing</a>
               <a href="#integrations-referral" className="chip">Refer &amp; earn</a>
               {session?.seatManager && companySeatPackage && <a href="#integrations-team" className="chip">Team seats</a>}
-              <a href="#integrations-social" className="chip">Social accounts</a>
+              <a href="#integrations-brand" className="chip">Brand kit</a>
               {canViewManagementBoard && <a href="#integrations-tools" className="chip">Third-party tools</a>}
             </nav>
+
+            <h3 className="section-label" id="integrations-social">Social media accounts</h3>
+            <article className="quick-connect-card">
+              <div className="quick-connect-heading">
+                <div>
+                  <p className="small-title">Quick connect</p>
+                  <h3>Connect your social accounts in one guided flow</h3>
+                </div>
+                <button type="button" className="primary-button" onClick={openQuickConnect}>
+                  {quickConnectOpen ? 'Quick connect open' : 'Start quick connect'}
+                </button>
+              </div>
+              <p className="muted">
+                EchoAI cannot search private social networks by email. We use these details to label your setup, then each provider confirms the account through its own secure OAuth sign-in.
+              </p>
+              {quickConnectOpen && (
+                <div className="quick-connect-wizard">
+                  <div className="quick-connect-fields">
+                    <label className="field-label">
+                      Your name
+                      <input value={quickConnectName} onChange={(event) => setQuickConnectName(event.target.value)} placeholder="Jordan Lee" />
+                    </label>
+                    <label className="field-label">
+                      Email used for your accounts
+                      <input type="email" value={quickConnectEmail} onChange={(event) => setQuickConnectEmail(event.target.value)} placeholder="you@example.com" />
+                    </label>
+                  </div>
+                  <div>
+                    <p className="small-title">Choose providers</p>
+                    <div className="quick-connect-providers">
+                      {PUBLISHING_PLATFORMS.map(({ key }) => {
+                        const meta = getPlatformMeta(key)
+                        const connected = connectedAccounts.some((account) => account.platform.toLowerCase() === key && account.status === 'healthy')
+                        const selected = quickConnectSelected.includes(key)
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className={`quick-connect-provider ${selected ? 'selected' : ''}`}
+                            onClick={() => setQuickConnectSelected((prev) => selected ? prev.filter((item) => item !== key) : [...prev, key])}
+                          >
+                            <span className="quick-connect-provider-icon" style={{ color: meta.color }}>{meta.icon}</span>
+                            <span>{meta.label}</span>
+                            <small>{connected ? 'Connected' : 'Available'}</small>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div className="quick-connect-footer">
+                    <span className="muted">Selected providers connect one at a time so each account can approve its own access.</span>
+                    <div className="integration-actions">
+                      <button type="button" className="ghost-button" onClick={() => setQuickConnectOpen(false)}>Close</button>
+                      <button type="button" className="primary-button" onClick={startQuickConnect}>Connect next selected account</button>
+                    </div>
+                  </div>
+                  {quickConnectNotice && <p className="auth-message">{quickConnectNotice}</p>}
+                </div>
+              )}
+            </article>
+            <div className="integration-grid">
+              {SOCIAL_PLATFORMS.map(({ key, accountPlaceholder, description, releaseStatus }) => {
+                const meta = getPlatformMeta(key)
+                const available = releaseStatus === 'available'
+                // A platform can have several connected accounts at once — for
+                // example managing more than one client's Facebook Page.
+                const linkedAccounts = connectedAccounts.filter((a) => a.platform.toLowerCase() === key)
+                const hasConnectedAccount = linkedAccounts.some((account) => account.status === 'healthy')
+                const placeholder = linkedAccounts.find((account) => account.status !== 'healthy')
+                const inputValue = accountHandleDrafts[key] ?? placeholder?.accountName ?? accountPlaceholder
+                const selectedScopes = accountScopeDrafts[key] ?? placeholder?.publishingScopes ?? ['posts']
+                return (
+                  <div
+                    key={key}
+                    className="integration-platform-card"
+                    style={{ borderColor: meta.border }}
+                  >
+                    <div className="integration-platform-header" style={{ background: meta.bg, borderColor: meta.border }}>
+                      <span className="integration-platform-icon" style={{ color: meta.color }}>{meta.icon}</span>
+                      <div>
+                        <strong style={{ color: meta.color }}>{meta.label}</strong>
+                        {linkedAccounts.length > 0 && (
+                          <span className="integration-linked-handle">
+                            {linkedAccounts.length === 1 ? linkedAccounts[0].accountName : `${linkedAccounts.length} accounts connected`}
+                          </span>
+                        )}
+                      </div>
+                      {!available && <span className="integration-status-badge warn">Planned</span>}
+                    </div>
+                    <div className="integration-platform-body">
+                      <p>{description}</p>
+
+                      {linkedAccounts.length > 0 && (
+                        <div className="integration-linked-accounts">
+                          {linkedAccounts.map((account) => (
+                            <div key={account.id} className="integration-linked-account-row">
+                              <span className={`integration-status-badge ${account.status === 'healthy' ? 'good' : 'warn'}`}>
+                                {account.status === 'healthy' ? '● OAuth connected' : 'OAuth access required'}
+                              </span>
+                              <strong>{account.accountName}</strong>
+                                              <div className="integration-actions">
+                                {available && (
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    onClick={() => connectSocialAccount({ platform: key, requestedScopes: account.publishingScopes ?? ['posts'] })}
+                                  >
+                                    {account.status === 'healthy' ? 'Reconnect OAuth' : `Authorize ${meta.label}`}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="ghost-button"
+                                  style={{ color: '#ef4444' }}
+                                  onClick={() => removeSocialAccount(account)}
+                                >
+                                  Remove account
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {(!hasConnectedAccount || !available) && (
+                        <>
+                          <label className="field-label">
+                            Handle / profile name
+                            <input
+                              type="text"
+                              value={inputValue}
+                              onChange={(event) => setAccountHandleDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
+                              placeholder={accountPlaceholder}
+                              disabled={!available}
+                            />
+                          </label>
+                          <div>
+                            <p className="small-title">Requested access</p>
+                            <div className="chip-row">
+                              {SOCIAL_PUBLISHING_SCOPES.map((scope) => {
+                                const selected = selectedScopes.includes(scope)
+                                return (
+                                  <button
+                                    key={scope}
+                                    type="button"
+                                    className={selected ? 'chip active' : 'chip'}
+                                    disabled={!available}
+                                    onClick={() => setAccountScopeDrafts((prev) => ({
+                                      ...prev,
+                                      [key]: selected
+                                        ? selectedScopes.filter((item) => item !== scope)
+                                        : [...selectedScopes, scope],
+                                    }))}
+                                  >
+                                    {scope}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                          <p className="muted">
+                            {available
+                              ? 'Your account profile and access preferences are private. Publishing stays disabled until this account completes OAuth authorization.'
+                              : 'This provider is on the EchoAI integration roadmap. Account connection will open after its OAuth and publishing review is complete.'}
+                          </p>
+                          <div className="integration-actions">
+                            {available && <button
+                              type="button"
+                              className="primary-button"
+                              style={{ background: meta.color, borderColor: meta.color }}
+                              onClick={() => saveSocialAccount({
+                                platform: key,
+                                accountName: inputValue,
+                                publishingScopes: selectedScopes,
+                              })}
+                            >
+                              Save account profile
+                            </button>}
+                            {available && (
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() => connectSocialAccount({
+                                  platform: key,
+                                  requestedScopes: selectedScopes,
+                                })}
+                              >
+                                {placeholder ? `Authorize ${meta.label}` : `Connect ${meta.label}`}
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+
+                      {hasConnectedAccount && available && (
+                        <div className="integration-actions">
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => connectSocialAccount({ platform: key, requestedScopes: ['posts', 'images', 'videos', 'analytics'] })}
+                          >
+                            + Connect another {meta.label} account
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {integrationError && <span className="field-error">{integrationError}</span>}
 
             <h3 className="section-label" id="integrations-brand">Your company brand kit</h3>
             <p className="panel-note">
@@ -5078,217 +5289,6 @@ function App() {
               </>
             )}
 
-            <h3 className="section-label" id="integrations-social">Social media accounts</h3>
-            <article className="quick-connect-card">
-              <div className="quick-connect-heading">
-                <div>
-                  <p className="small-title">Quick connect</p>
-                  <h3>Connect your social accounts in one guided flow</h3>
-                </div>
-                <button type="button" className="primary-button" onClick={openQuickConnect}>
-                  {quickConnectOpen ? 'Quick connect open' : 'Start quick connect'}
-                </button>
-              </div>
-              <p className="muted">
-                EchoAI cannot search private social networks by email. We use these details to label your setup, then each provider confirms the account through its own secure OAuth sign-in.
-              </p>
-              {quickConnectOpen && (
-                <div className="quick-connect-wizard">
-                  <div className="quick-connect-fields">
-                    <label className="field-label">
-                      Your name
-                      <input value={quickConnectName} onChange={(event) => setQuickConnectName(event.target.value)} placeholder="Jordan Lee" />
-                    </label>
-                    <label className="field-label">
-                      Email used for your accounts
-                      <input type="email" value={quickConnectEmail} onChange={(event) => setQuickConnectEmail(event.target.value)} placeholder="you@example.com" />
-                    </label>
-                  </div>
-                  <div>
-                    <p className="small-title">Choose providers</p>
-                    <div className="quick-connect-providers">
-                      {PUBLISHING_PLATFORMS.map(({ key }) => {
-                        const meta = getPlatformMeta(key)
-                        const connected = connectedAccounts.some((account) => account.platform.toLowerCase() === key && account.status === 'healthy')
-                        const selected = quickConnectSelected.includes(key)
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            className={`quick-connect-provider ${selected ? 'selected' : ''}`}
-                            onClick={() => setQuickConnectSelected((prev) => selected ? prev.filter((item) => item !== key) : [...prev, key])}
-                          >
-                            <span className="quick-connect-provider-icon" style={{ color: meta.color }}>{meta.icon}</span>
-                            <span>{meta.label}</span>
-                            <small>{connected ? 'Connected' : 'Available'}</small>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  <div className="quick-connect-footer">
-                    <span className="muted">Selected providers connect one at a time so each account can approve its own access.</span>
-                    <div className="integration-actions">
-                      <button type="button" className="ghost-button" onClick={() => setQuickConnectOpen(false)}>Close</button>
-                      <button type="button" className="primary-button" onClick={startQuickConnect}>Connect next selected account</button>
-                    </div>
-                  </div>
-                  {quickConnectNotice && <p className="auth-message">{quickConnectNotice}</p>}
-                </div>
-              )}
-            </article>
-            <div className="integration-grid">
-              {SOCIAL_PLATFORMS.map(({ key, accountPlaceholder, description, releaseStatus }) => {
-                const meta = getPlatformMeta(key)
-                const available = releaseStatus === 'available'
-                // A platform can have several connected accounts at once — for
-                // example managing more than one client's Facebook Page.
-                const linkedAccounts = connectedAccounts.filter((a) => a.platform.toLowerCase() === key)
-                const hasConnectedAccount = linkedAccounts.some((account) => account.status === 'healthy')
-                const placeholder = linkedAccounts.find((account) => account.status !== 'healthy')
-                const inputValue = accountHandleDrafts[key] ?? placeholder?.accountName ?? accountPlaceholder
-                const selectedScopes = accountScopeDrafts[key] ?? placeholder?.publishingScopes ?? ['posts']
-                return (
-                  <div
-                    key={key}
-                    className="integration-platform-card"
-                    style={{ borderColor: meta.border }}
-                  >
-                    <div className="integration-platform-header" style={{ background: meta.bg, borderColor: meta.border }}>
-                      <span className="integration-platform-icon" style={{ color: meta.color }}>{meta.icon}</span>
-                      <div>
-                        <strong style={{ color: meta.color }}>{meta.label}</strong>
-                        {linkedAccounts.length > 0 && (
-                          <span className="integration-linked-handle">
-                            {linkedAccounts.length === 1 ? linkedAccounts[0].accountName : `${linkedAccounts.length} accounts connected`}
-                          </span>
-                        )}
-                      </div>
-                      {!available && <span className="integration-status-badge warn">Planned</span>}
-                    </div>
-                    <div className="integration-platform-body">
-                      <p>{description}</p>
-
-                      {linkedAccounts.length > 0 && (
-                        <div className="integration-linked-accounts">
-                          {linkedAccounts.map((account) => (
-                            <div key={account.id} className="integration-linked-account-row">
-                              <span className={`integration-status-badge ${account.status === 'healthy' ? 'good' : 'warn'}`}>
-                                {account.status === 'healthy' ? '● OAuth connected' : 'OAuth access required'}
-                              </span>
-                              <strong>{account.accountName}</strong>
-                                              <div className="integration-actions">
-                                {available && (
-                                  <button
-                                    type="button"
-                                    className="ghost-button"
-                                    onClick={() => connectSocialAccount({ platform: key, requestedScopes: account.publishingScopes ?? ['posts'] })}
-                                  >
-                                    {account.status === 'healthy' ? 'Reconnect OAuth' : `Authorize ${meta.label}`}
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  className="ghost-button"
-                                  style={{ color: '#ef4444' }}
-                                  onClick={() => removeSocialAccount(account)}
-                                >
-                                  Remove account
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {(!hasConnectedAccount || !available) && (
-                        <>
-                          <label className="field-label">
-                            Handle / profile name
-                            <input
-                              type="text"
-                              value={inputValue}
-                              onChange={(event) => setAccountHandleDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
-                              placeholder={accountPlaceholder}
-                              disabled={!available}
-                            />
-                          </label>
-                          <div>
-                            <p className="small-title">Requested access</p>
-                            <div className="chip-row">
-                              {SOCIAL_PUBLISHING_SCOPES.map((scope) => {
-                                const selected = selectedScopes.includes(scope)
-                                return (
-                                  <button
-                                    key={scope}
-                                    type="button"
-                                    className={selected ? 'chip active' : 'chip'}
-                                    disabled={!available}
-                                    onClick={() => setAccountScopeDrafts((prev) => ({
-                                      ...prev,
-                                      [key]: selected
-                                        ? selectedScopes.filter((item) => item !== scope)
-                                        : [...selectedScopes, scope],
-                                    }))}
-                                  >
-                                    {scope}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                          <p className="muted">
-                            {available
-                              ? 'Your account profile and access preferences are private. Publishing stays disabled until this account completes OAuth authorization.'
-                              : 'This provider is on the EchoAI integration roadmap. Account connection will open after its OAuth and publishing review is complete.'}
-                          </p>
-                          <div className="integration-actions">
-                            {available && <button
-                              type="button"
-                              className="primary-button"
-                              style={{ background: meta.color, borderColor: meta.color }}
-                              onClick={() => saveSocialAccount({
-                                platform: key,
-                                accountName: inputValue,
-                                publishingScopes: selectedScopes,
-                              })}
-                            >
-                              Save account profile
-                            </button>}
-                            {available && (
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                onClick={() => connectSocialAccount({
-                                  platform: key,
-                                  requestedScopes: selectedScopes,
-                                })}
-                              >
-                                {placeholder ? `Authorize ${meta.label}` : `Connect ${meta.label}`}
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      )}
-
-                      {hasConnectedAccount && available && (
-                        <div className="integration-actions">
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => connectSocialAccount({ platform: key, requestedScopes: ['posts', 'images', 'videos', 'analytics'] })}
-                          >
-                            + Connect another {meta.label} account
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            {integrationError && <span className="field-error">{integrationError}</span>}
-
             {aiGenerationEnabled() && <h3 className="section-label" id="integrations-ai">AI providers &amp; API keys</h3>}
             {aiGenerationEnabled() && <article className="sub-panel tone-indigo" style={{ marginTop: '1.2rem', marginBottom: '1rem' }}>
               <div className="inhouse-engine-heading">
@@ -5630,7 +5630,6 @@ function App() {
               handleRefreshSocialPlatformReadiness={loadSocialPlatformReadiness}
               adminLoading={adminLoading}
               adminError={adminError}
-              currentUser={session}
             />
           </Suspense>
         )}
