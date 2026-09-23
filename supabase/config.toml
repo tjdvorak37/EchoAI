@@ -20,6 +20,27 @@ otp_length = 8
 enroll_enabled = true
 verify_enabled = true
 
+# Google and Facebook sign-in return "Unsupported provider: provider is not
+# enabled" until both of these blocks are enabled AND the referenced secrets
+# exist. This config alone does not turn the providers on — you must also:
+#   1. Create a Google OAuth client (console.cloud.google.com) and a Facebook
+#      Login app (developers.facebook.com), each with authorized redirect URI
+#      https://<project-ref>.supabase.co/auth/v1/callback
+#   2. supabase secrets set AUTH_GOOGLE_CLIENT_ID=... AUTH_GOOGLE_CLIENT_SECRET=... \
+#        AUTH_FACEBOOK_CLIENT_ID=... AUTH_FACEBOOK_CLIENT_SECRET=...
+#   3. supabase config push (or toggle+save the equivalent fields in
+#      Authentication -> Providers in the Supabase dashboard, which achieves
+#      the same result without the CLI).
+[auth.external.google]
+enabled = true
+client_id = "env(AUTH_GOOGLE_CLIENT_ID)"
+secret = "env(AUTH_GOOGLE_CLIENT_SECRET)"
+
+[auth.external.facebook]
+enabled = true
+client_id = "env(AUTH_FACEBOOK_CLIENT_ID)"
+secret = "env(AUTH_FACEBOOK_CLIENT_SECRET)"
+
 [functions.stripe-webhook]
 # Stripe signs requests itself; it cannot present a Supabase JWT.
 verify_jwt = false
