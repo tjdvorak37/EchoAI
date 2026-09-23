@@ -64,6 +64,7 @@ const CreativeBrief = lazy(() => import('./components/CreativeBrief').then((modu
 const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) => ({ default: module.HelpCenter })))
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
+const TermsOfService = lazy(() => import('./components/TermsOfService').then((module) => ({ default: module.TermsOfService })))
 const AdsPanel = lazy(() => import('./components/AdsPanel').then((module) => ({ default: module.AdsPanel })))
 const RepostHubPanel = lazy(() => import('./components/RepostHubPanel').then((module) => ({ default: module.RepostHubPanel })))
 const PostSchedulerPanel = lazy(() => import('./components/PostSchedulerPanel').then((module) => ({ default: module.PostSchedulerPanel })))
@@ -3431,7 +3432,7 @@ function App() {
                   </label>
                   <label className="auth-terms-check">
                     <input type="checkbox" required checked={authTermsAccepted} onChange={(event) => setAuthTermsAccepted(event.target.checked)} />
-                    <span>I agree to EchoAI&apos;s terms and privacy policy.</span>
+                    <span>I agree to EchoAI&apos;s <a href="/terms-of-service" target="_blank" rel="noreferrer">terms</a> and <a href="/privacy-policy" target="_blank" rel="noreferrer">privacy policy</a>.</span>
                   </label>
                   <button type="submit" disabled={authLoading}>
                     {authLoading ? 'Creating account...' : 'Create account'}
@@ -5760,6 +5761,13 @@ function AppRoot() {
     return (
       <Suspense fallback={<div className="loading-panel">Loading privacy policy...</div>}>
         <PrivacyPolicy />
+      </Suspense>
+    )
+  }
+  if (normalizedPath === '/terms-of-service') {
+    return (
+      <Suspense fallback={<div className="loading-panel">Loading terms of service...</div>}>
+        <TermsOfService />
       </Suspense>
     )
   }
