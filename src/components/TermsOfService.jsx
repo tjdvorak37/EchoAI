@@ -1,7 +1,7 @@
 import echoMascot from '../assets/echo-mascot.svg'
 import './PrivacyPolicy.css'
 
-const TERMS_UPDATED = 'September 23, 2026'
+const TERMS_UPDATED = 'September 21, 2026'
 
 export function TermsOfService() {
   return (
@@ -19,60 +19,48 @@ export function TermsOfService() {
         <h1>Terms of Service</h1>
         <p className="privacy-updated">Last updated: {TERMS_UPDATED}</p>
         <p className="privacy-lede">
-          These Terms of Service ("Terms") govern your access to and use of EchoAI, including our website, applications,
-          and related services (the "Service"). By creating an account or using the Service, you agree to these Terms.
+          These Terms govern your access to and use of EchoAI, a workspace for creating, managing, and publishing content.
         </p>
 
         <section>
-          <h2>1. Your account</h2>
-          <p>You must provide accurate information when creating an account and keep your login credentials confidential. You are responsible for activity that occurs under your account. Notify us right away if you suspect unauthorized use.</p>
+          <h2>1. Using EchoAI</h2>
+          <p>You may use EchoAI only if you can legally enter into these Terms. You are responsible for your account, the accuracy of information you provide, and activity performed through your account.</p>
         </section>
 
         <section>
-          <h2>2. Acceptable use</h2>
-          <p>You agree not to use the Service to: violate any law or third-party right; publish or generate content that is unlawful, infringing, or fraudulent; attempt to gain unauthorized access to accounts, systems, or data; interfere with or disrupt the Service; or use the Service to send spam or abusive content through a connected social or communication channel.</p>
+          <h2>2. Your content and connected accounts</h2>
+          <p>You retain ownership of content you submit or create through EchoAI. You authorize EchoAI to process that content to provide the features you request, including scheduling and publishing to connected services.</p>
+          <p>You must have the rights and permissions needed for content you upload and for every Facebook Page, Instagram account, or other service you connect. You can disconnect a service or revoke its authorization through that service.</p>
         </section>
 
         <section>
-          <h2>3. Your content</h2>
-          <p>You retain ownership of the files, briefs, brand assets, and other content you upload or create in your workspace ("Your Content"). You grant EchoAI a limited license to host, process, transform, and transmit Your Content solely to provide the Service you request, including publishing to social accounts you connect and authorize.</p>
-          <p>You are responsible for having the rights necessary to upload, edit, and publish Your Content, including any required licenses for media, fonts, or third-party material.</p>
+          <h2>3. Acceptable use</h2>
+          <p>You may not use EchoAI to break the law, infringe another person&apos;s rights, distribute malicious code, abuse connected services, bypass access controls, or interfere with the service or another user&apos;s workspace.</p>
         </section>
 
         <section>
-          <h2>4. Connected accounts and third-party services</h2>
-          <p>Features that connect to third-party services (including Facebook, Instagram, YouTube, X, LinkedIn, Google Drive, and Microsoft services) are subject to that provider's own terms and policies. EchoAI is not responsible for the availability, accuracy, or actions of third-party platforms, including changes to their APIs, review processes, or feature availability.</p>
+          <h2>4. Plans, payments, and availability</h2>
+          <p>Paid features are subject to the plan and pricing presented at purchase. Taxes, renewals, cancellations, and refunds are handled according to the applicable order or subscription terms. EchoAI may change, suspend, or discontinue features with reasonable notice when practical.</p>
         </section>
 
         <section>
-          <h2>5. Subscriptions and billing</h2>
-          <p>Paid plans are billed in advance on a monthly or annual basis through our payment provider. Fees are non-refundable except where required by law. We may change plan pricing or features going forward with notice; continued use after a change constitutes acceptance of the updated terms for that plan.</p>
-          <p>Free accounts are provided on an as-available basis and may have reduced features or limits compared to paid plans.</p>
+          <h2>5. Third-party services</h2>
+          <p>EchoAI connects to third-party services at your direction. Those services have their own terms, policies, availability, and permission requirements. EchoAI is not responsible for changes or actions taken by a third-party service.</p>
         </section>
 
         <section>
-          <h2>6. Suspension and termination</h2>
-          <p>We may suspend or terminate access to the Service if you violate these Terms, create risk or legal exposure for EchoAI, or if required by law. You may stop using the Service and request account deletion at any time.</p>
+          <h2>6. Termination</h2>
+          <p>You may stop using EchoAI at any time. We may suspend or terminate access if necessary to protect the service, comply with law, address abuse, or enforce these Terms. You may request deletion of your data using the <a href="/data-deletion">data deletion instructions</a>.</p>
         </section>
 
         <section>
-          <h2>7. Disclaimers</h2>
-          <p>The Service is provided "as is" and "as available" without warranties of any kind, express or implied, including warranties of merchantability, fitness for a particular purpose, and non-infringement. We do not guarantee that AI-generated content, analytics, or scheduled publishing will be error-free or uninterrupted.</p>
+          <h2>7. Disclaimers and liability</h2>
+          <p>EchoAI is provided as available. To the extent permitted by law, EchoAI disclaims warranties and will not be liable for indirect, incidental, special, consequential, or lost-profit damages arising from use of the service.</p>
         </section>
 
         <section>
-          <h2>8. Limitation of liability</h2>
-          <p>To the maximum extent permitted by law, EchoAI will not be liable for indirect, incidental, special, consequential, or punitive damages, or for lost profits, revenue, data, or goodwill, arising from your use of the Service.</p>
-        </section>
-
-        <section>
-          <h2>9. Changes to these terms</h2>
-          <p>We may update these Terms as EchoAI changes. We will post the updated version here and revise the date above. Continued use of the Service after an update means the revised Terms apply to your use of the Service.</p>
-        </section>
-
-        <section>
-          <h2>10. Contact us</h2>
-          <p>For questions about these Terms, contact EchoAI through the <a href="/?support=privacy">support form</a> on our landing page. See our <a href="/privacy-policy">Privacy Policy</a> for how we handle your information.</p>
+          <h2>8. Contact</h2>
+          <p>Questions about these Terms can be submitted through the <a href="/?support=legal">support form</a>. Our <a href="/privacy-policy">Privacy Policy</a> explains how information is handled.</p>
         </section>
       </article>
     </main>

@@ -44,6 +44,7 @@ import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAge
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
 import { UpgradeDialog } from './components/UpgradeDialog'
+import { removeStoredAsset } from './services/mediaAssets'
 
 const AI_PROMPT_IDEAS = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
@@ -65,6 +66,7 @@ const HelpCenter = lazy(() => import('./components/HelpCenter').then((module) =>
 const CalendarPopout = lazy(() => import('./components/CalendarPopout').then((module) => ({ default: module.CalendarPopout })))
 const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })))
 const TermsOfService = lazy(() => import('./components/TermsOfService').then((module) => ({ default: module.TermsOfService })))
+const DataDeletion = lazy(() => import('./components/DataDeletion').then((module) => ({ default: module.DataDeletion })))
 const AdsPanel = lazy(() => import('./components/AdsPanel').then((module) => ({ default: module.AdsPanel })))
 const RepostHubPanel = lazy(() => import('./components/RepostHubPanel').then((module) => ({ default: module.RepostHubPanel })))
 const PostSchedulerPanel = lazy(() => import('./components/PostSchedulerPanel').then((module) => ({ default: module.PostSchedulerPanel })))
@@ -256,7 +258,6 @@ function App() {
   })
   const localIdRef = useRef(3000)
   const [alerts, setAlerts] = useState([])
-  const [accessRequests, setAccessRequests] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminError, setAdminError] = useState('')
@@ -708,18 +709,13 @@ function App() {
         return
       }
 
-      const [requests, members, subscriptions, payments, seatData, supportTickets] = await Promise.all([
-        authService.getAccessRequests(),
+      const [members, subscriptions, payments, seatData, supportTickets] = await Promise.all([
         authService.getManagedUsers(),
         billingService.listSubscriptions(),
         billingService.listPayments(),
         authService.getCompanySeatData({ companyKey: user?.company }),
         authService.getSupportTickets(),
       ])
-
-      if (requests.length) {
-        setAccessRequests(requests)
-      }
 
       if (members.length) {
         setTeamMembers(members)
@@ -2237,8 +2233,22 @@ function App() {
     }
   }
 
-  const deleteAsset = (assetId) => {
-    setWorkspaceAssets((prev) => prev.filter((asset) => asset.id !== assetId))
+  const deleteAsset = async (assetId) => {
+    const assetToDelete = workspaceAssets.find((asset) => asset.id === assetId)
+    if (!assetToDelete) return
+
+    try {
+      if (isSupabaseConfigured && assetToDelete.storagePath) {
+        await removeStoredAsset({
+          asset: assetToDelete,
+          storageClient: supabase.storage,
+        })
+      }
+      setWorkspaceAssets((prev) => prev.filter((asset) => asset.id !== assetId))
+    } catch (error) {
+      console.error('Unable to remove asset', error)
+      setAdminError(error.message || 'Unable to delete this asset from storage.')
+    }
   }
 
   const handleAssetDragStart = () => {}
@@ -2882,22 +2892,6 @@ function App() {
       if (session?.id === updatedMember.id && nextStatus === 'deactivated') {
         await authService.signOut()
         setSession(null)
-      }
-    } catch (error) {
-      setAdminError(error.message)
-    } finally {
-      setAdminLoading(false)
-    }
-  }
-
-  const handleReviewAccessRequest = async (request, decision) => {
-    setAdminError('')
-    setAdminLoading(true)
-    try {
-      const result = await authService.reviewAccessRequest({ requestId: request.id, decision })
-      setAccessRequests((prev) => prev.map((item) => item.id === request.id ? result.request : item))
-      if (result.member) {
-        setTeamMembers((prev) => prev.map((member) => member.id === result.member.id ? { ...member, ...result.member } : member))
       }
     } catch (error) {
       setAdminError(error.message)
@@ -5584,8 +5578,6 @@ function App() {
             <AdminPanel
               teamMembers={teamMembers}
               setTeamMembers={setTeamMembers}
-              accessRequests={accessRequests}
-              setAccessRequests={setAccessRequests}
               alerts={alerts}
               setAlerts={setAlerts}
               licenses={licenses}
@@ -5616,7 +5608,6 @@ function App() {
               currentUser={session}
               handleToggleUserAccess={handleToggleUserAccess}
               handleUpdateUserRole={handleUpdateUserRole}
-              handleReviewAccessRequest={handleReviewAccessRequest}
               companySeatPackage={companySeatPackage}
               companySeats={companySeats}
               handleCreateCompanySeatPackage={handleCreateCompanySeatPackage}
@@ -5768,6 +5759,13 @@ function AppRoot() {
     return (
       <Suspense fallback={<div className="loading-panel">Loading terms of service...</div>}>
         <TermsOfService />
+      </Suspense>
+    )
+  }
+  if (normalizedPath === '/data-deletion') {
+    return (
+      <Suspense fallback={<div className="loading-panel">Loading data deletion instructions...</div>}>
+        <DataDeletion />
       </Suspense>
     )
   }
