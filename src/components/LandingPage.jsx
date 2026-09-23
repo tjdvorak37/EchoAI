@@ -305,6 +305,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount, onPurchas
             <a href="#faq" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
             <button type="button" onClick={() => { setSupportOpen(true); setMobileMenuOpen(false) }}>Contact support</button>
             <a href="/privacy-policy" onClick={() => setMobileMenuOpen(false)}>Privacy policy</a>
+            <a href="/terms-of-service" onClick={() => setMobileMenuOpen(false)}>Terms of service</a>
           </NavDropdown>
         </nav>
         <div className="landing-nav-actions">
@@ -527,6 +528,7 @@ export function LandingPage({ announcement, onSignIn, onCreateAccount, onPurchas
             Contact support
           </button>
           <a className="landing-support-link" href="/privacy-policy">Privacy policy</a>
+          <a className="landing-support-link" href="/terms-of-service">Terms of service</a>
           <button type="button" className="landing-admin-cta" onClick={onSignIn}>
             Admin Center
           </button>

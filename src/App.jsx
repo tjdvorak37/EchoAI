@@ -3426,7 +3426,7 @@ function App() {
                   </label>
                   <label className="auth-terms-check">
                     <input type="checkbox" required checked={authTermsAccepted} onChange={(event) => setAuthTermsAccepted(event.target.checked)} />
-                    <span>I agree to EchoAI&apos;s terms and privacy policy.</span>
+                    <span>I agree to EchoAI&apos;s <a href="/terms-of-service" target="_blank" rel="noreferrer">terms</a> and <a href="/privacy-policy" target="_blank" rel="noreferrer">privacy policy</a>.</span>
                   </label>
                   <button type="submit" disabled={authLoading}>
                     {authLoading ? 'Creating account...' : 'Create account'}
