@@ -970,7 +970,7 @@ function App() {
     setAuthError('')
     setAuthNotice('')
     if (!authTermsAccepted) {
-      setAuthError('Please accept the terms to create your account.')
+      setAuthError('Please check the box to accept the terms and privacy policy before creating your account.')
       return
     }
     setAuthLoading(true)
@@ -1019,8 +1019,8 @@ function App() {
     setAuthLoading(true)
     try {
       const result = await authService.resendSignupConfirmation(authState.email)
-      setAuthNotice(result?.alreadyConfirmed
-        ? 'This account is already confirmed. You can sign in now.'
+      setAuthNotice(result?.throttled
+        ? 'A confirmation email was just sent. Check your inbox and spam folder.'
         : 'Confirmation email resent. Check your inbox and spam folder.')
     } catch (error) {
       setAuthError(error.message)
@@ -3393,6 +3393,7 @@ function App() {
                     Full name
                     <input
                       type="text"
+                      required
                       value={authState.fullName}
                       onChange={(event) => handleAuthChange('fullName', event.target.value)}
                       placeholder="Alex Rivera"
@@ -3411,6 +3412,7 @@ function App() {
                     Email
                     <input
                       type="email"
+                      required
                       value={authState.email}
                       onChange={(event) => handleAuthChange('email', event.target.value)}
                       placeholder="you@company.com"
@@ -3420,13 +3422,15 @@ function App() {
                     Password
                     <input
                       type="password"
+                      required
+                      minLength={8}
                       value={authState.password}
                       onChange={(event) => handleAuthChange('password', event.target.value)}
                       placeholder="••••••••"
                     />
                   </label>
                   <label className="auth-terms-check">
-                    <input type="checkbox" checked={authTermsAccepted} onChange={(event) => setAuthTermsAccepted(event.target.checked)} />
+                    <input type="checkbox" required checked={authTermsAccepted} onChange={(event) => setAuthTermsAccepted(event.target.checked)} />
                     <span>I agree to EchoAI&apos;s terms and privacy policy.</span>
                   </label>
                   <button type="submit" disabled={authLoading}>

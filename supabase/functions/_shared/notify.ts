@@ -533,10 +533,10 @@ export const sendAccountConfirmationEmail = async (
   const sendgridApiKey = config.sendgrid_api_key || Deno.env.get('SENDGRID_API_KEY')
   const fromEmail = 'support@echoaipro.com'
   const fromName = 'EchoAI Support'
-  const subject = 'Confirm your EchoAI account'
-  const text = `Welcome to EchoAI. Confirm your email address to finish setting up your account:\n\n${actionLink}\n\nThis link is single-use. If you did not create this account, you can ignore this email.`
+  const subject = 'Welcome to EchoAI — confirm your email'
+  const text = `Welcome to EchoAI! We're glad you're here.\n\nConfirm your email address to finish setting up your account and sign in:\n\n${actionLink}\n\nThis link is single-use. If you did not create this account, you can ignore this email.`
   const safeLink = actionLink.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:600px;margin:auto"><h2 style="color:#173ea5">Confirm your EchoAI account</h2><p>Welcome to EchoAI. Confirm your email address to finish setting up your account.</p><p><a href="${safeLink}" style="display:inline-block;background:#2357d6;color:#fff;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:700">Confirm email address</a></p><p>This link is single-use. If you did not create this account, you can ignore this email.</p><p>EchoAI Support</p></div>`
+  const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:600px;margin:auto"><h2 style="color:#173ea5">Welcome to EchoAI!</h2><p>We're glad you're here. Confirm your email address to finish setting up your account and sign in.</p><p><a href="${safeLink}" style="display:inline-block;background:#2357d6;color:#fff;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:700">Confirm email address</a></p><p>This link is single-use. If you did not create this account, you can ignore this email.</p><p>EchoAI Support</p></div>`
 
   if (resendApiKey) {
     const response = await fetch('https://api.resend.com/emails', {
