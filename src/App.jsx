@@ -1566,7 +1566,7 @@ function App() {
   const handleSchedulePost = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim())
+    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim() || composer.mediaAssetIds?.length)
     if (!hasContent || !composer.scheduledAt || !composer.channels.length) {
       setSchedulerError('Write a caption or add an image brief, select at least one channel, and set a deployment date and time.')
       return
@@ -1609,7 +1609,7 @@ function App() {
 
   const handlePostToNextSlot = async () => {
     setSchedulerError('')
-    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim())
+    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim() || composer.mediaAssetIds?.length)
     if (!hasContent || !composer.channels.length) {
       setSchedulerError('Write a caption or add an image brief, and select at least one channel before queuing to the next slot.')
       return
@@ -1661,7 +1661,7 @@ function App() {
   const handlePostNow = async (event) => {
     event.preventDefault()
     setSchedulerError('')
-    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim())
+    const hasContent = Boolean(composer.message.trim() || composer.imageIdea.trim() || composer.mediaAssetIds?.length)
     if (!hasContent || !composer.channels.length) {
       setSchedulerError('Write a caption or add an image brief, and select at least one channel before posting.')
       return
@@ -2044,6 +2044,10 @@ function App() {
     }
 
     setWorkspaceAssets((prev) => [asset, ...prev])
+    setComposer((prev) => ({
+      ...prev,
+      mediaAssetIds: [...new Set([...(prev.mediaAssetIds || []), asset.id])],
+    }))
     event.target.value = ''
   }
 

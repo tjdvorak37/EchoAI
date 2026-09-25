@@ -181,6 +181,9 @@ export function PostSchedulerPanel({
   const charLimit = PLATFORM_LIMITS[previewPlatform] || 2200
   const charCount = composer.message.length
   const isOverCharLimit = charCount > charLimit
+  const selectedMedia = (composer.mediaAssetIds || [])
+    .map((assetId) => workspaceAssets.find((asset) => asset.id === assetId))
+    .filter(Boolean)
 
   const visibleEmojiGroups = useMemo(() => {
     const search = emojiSearch.trim().toLowerCase()
@@ -733,10 +736,17 @@ export function PostSchedulerPanel({
                   </div>
                 </div>
 
-                {composer.imageIdea ? (
+                {selectedMedia.length > 0 ? (
+                  <div className="mockup-media-container">
+                    {selectedMedia[0].type === 'video' ? (
+                      <video src={selectedMedia[0].previewUrl} muted controls />
+                    ) : (
+                      <img src={selectedMedia[0].previewUrl} alt={selectedMedia[0].name} />
+                    )}
+                  </div>
+                ) : composer.imageIdea ? (
                   <div className="mockup-media-container" style={{ background: '#f1f5f9', color: '#64748b', flexDirection: 'column', gap: '0.4rem', padding: '1.5rem', textAlign: 'center' }}>
-                    <span style={{ fontSize: '1.5rem' }}>🖼️</span>
-                    <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>[Visual Brief: {composer.imageIdea}]</span>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Visual brief: {composer.imageIdea}</span>
                   </div>
                 ) : null}
 
