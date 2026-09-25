@@ -295,7 +295,12 @@ export const fetchLiveMentions = async ({
           .map((item) => normalizeLiveMention({ mention: item, sourceType }))
           .filter(Boolean)
 
-        return { sourceType, mentions: normalizedMentions, error: null }
+        return {
+          sourceType,
+          mentions: normalizedMentions,
+          error: null,
+          sourceStatus: data?.connectionStatus ?? null,
+        }
       } catch (error) {
         return { sourceType, mentions: [], error: error.message }
       }
@@ -309,6 +314,7 @@ export const fetchLiveMentions = async ({
     mentions,
     usedLive: mentions.length > 0,
     errors,
+    sourceStatus: results.find((entry) => entry.sourceStatus)?.sourceStatus ?? null,
   }
 }
 

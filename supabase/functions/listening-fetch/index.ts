@@ -29,7 +29,7 @@ const buildQuery = (body: Record<string, unknown>) => {
     .filter(Boolean)
     .sort((left, right) => right.length - left.length)
 
-  return candidates[0] || 'marketing social media'
+  return candidates[0] || ''
 }
 
 const fetchJson = async (url: string) => {
@@ -256,6 +256,26 @@ const connectorFor = (sourceType: string) => ({
   apiKey: Deno.env.get(`LISTENING_${sourceType.toUpperCase()}_API_KEY`) ?? '',
 })
 
+const listeningConnectionStatus = async (userId: string) => {
+  const database = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    { auth: { persistSession: false } },
+  )
+  const { data } = await database
+    .from('social_oauth_credentials')
+    .select('platform')
+    .eq('user_id', userId)
+    .in('platform', ['facebook', 'instagram'])
+
+  const platforms = new Set((data ?? []).map((credential) => credential.platform))
+  return {
+    facebook: platforms.has('facebook'),
+    instagram: platforms.has('instagram'),
+    googleTrends: Boolean(connectorFor('trends').endpoint),
+  }
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: getCorsHeaders(request) })
@@ -284,9 +304,10 @@ Deno.serve(async (request) => {
     const body = await request.json()
     const requested: string[] = Array.isArray(body.sourceTypes) ? body.sourceTypes : []
     const active = requested.filter((type) => SOURCE_TYPES.includes(type))
+    const connectionStatus = await listeningConnectionStatus(userData.user.id)
 
     if (!active.length) {
-      return json({ results: [], configured: [] }, 200, request)
+      return json({ results: [], configured: [], connectionStatus }, 200, request)
     }
 
     const results = await Promise.all(
@@ -331,6 +352,7 @@ Deno.serve(async (request) => {
     return json({
       results,
       configured: SOURCE_TYPES,
+      connectionStatus,
     }, 200, request)
   } catch (error) {
     console.error('listening-fetch failed', error)

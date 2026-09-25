@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  INDUSTRY_PRESETS,
   SOURCE_TYPES_ALL,
   buildListeningSnapshot,
   classifyListeningSignal,
@@ -49,11 +48,11 @@ const formatPlatform = (platform) => {
 }
 
 const defaultConfig = {
-  brandTerms: 'EchoAI, Echo AI',
-  keywords: 'social listening, campaign analytics, creator workflow, customer feedback',
-  competitors: 'Hootsuite, Sprout Social, Buffer, Later, Brandwatch',
-  hashtags: '#socialmedia, #marketing, #brandwatch, #creator',
-  realtimeAlerts: true,
+  brandTerms: '',
+  keywords: '',
+  competitors: '',
+  hashtags: '',
+  realtimeAlerts: false,
   alertSensitivity: 'balanced',
   aiVisibilityGoal: 30,
 }
@@ -66,14 +65,13 @@ export function SocialListeningPanel({
 }) {
   const [config, setConfig] = useState(defaultConfig)
   const [activeTab, setActiveTab] = useState('overview') // 'overview' | 'feed' | 'product' | 'competitors' | 'crisis' | 'setup'
-  const [activePreset, setActivePreset] = useState('saas')
   const [windowKey, setWindowKey] = useState('7d')
   const [search, setSearch] = useState('')
   const [platformFilter, setPlatformFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [sentimentFilter, setSentimentFilter] = useState('all')
   const [sourceTypeToggles, setSourceTypeToggles] = useState(() =>
-    Object.fromEntries(SOURCE_TYPES_ALL.map((type) => [type, true])),
+    Object.fromEntries(SOURCE_TYPES_ALL.map((type) => [type, false])),
   )
   const [connectors] = useState(() => createDefaultListeningConnectors())
   const [useBuiltinAdapters] = useState(() => !isSupabaseConfigured)
@@ -82,11 +80,11 @@ export function SocialListeningPanel({
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [insights, setInsights] = useState([])
   const [scanWarnings, setScanWarnings] = useState([])
-  const [scanNotice, setScanNotice] = useState('Tracking terms active. Ready for live social intelligence scans.')
+  const [scanNotice, setScanNotice] = useState('Add tracking terms, choose sources, then run a scan.')
   const [lastScanMode, setLastScanMode] = useState('not_started')
   const [lastSyncedTime, setLastSyncedTime] = useState(() => new Date())
   const [statusMessage, setStatusMessage] = useState('')
-  const hasBootstrappedLiveRef = useRef(false)
+  const [sourceStatus, setSourceStatus] = useState(null)
 
   const brandTerms = useMemo(() => parseTrackedValues(config.brandTerms), [config.brandTerms])
   const competitorTerms = useMemo(() => parseTrackedValues(config.competitors), [config.competitors])
@@ -110,19 +108,7 @@ export function SocialListeningPanel({
     [sourceTypeToggles],
   )
 
-  const [mentions, setMentions] = useState(() =>
-    isSupabaseConfigured
-      ? []
-      : generateListeningMentions({
-          brandTerms: parseTrackedValues(defaultConfig.brandTerms),
-          competitorTerms: parseTrackedValues(defaultConfig.competitors),
-          keywordTerms: parseTrackedValues(defaultConfig.keywords),
-          hashtagTerms: parseTrackedValues(defaultConfig.hashtags),
-          connectedPlatforms,
-          enabledSourceTypes: SOURCE_TYPES_ALL,
-          count: 110,
-        }),
-  )
+  const [mentions, setMentions] = useState([])
 
   const filteredMentions = useMemo(
     () =>
@@ -157,24 +143,23 @@ export function SocialListeningPanel({
     setConfig((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleApplyPreset = (preset) => {
-    setActivePreset(preset.key)
-    setConfig((prev) => ({
-      ...prev,
-      brandTerms: preset.brandTerms,
-      keywords: preset.keywords,
-      competitors: preset.competitors,
-      hashtags: preset.hashtags,
-    }))
-    setStatusMessage(`Applied ${preset.label} preset. Starting refreshed scan...`)
-    setTimeout(() => setStatusMessage(''), 3500)
-  }
-
   const handleToggleSourceType = (sourceType) => {
     setSourceTypeToggles((prev) => ({ ...prev, [sourceType]: !prev[sourceType] }))
   }
 
   const refreshMentions = useCallback(async ({ silent = false } = {}) => {
+    const trackedTermCount = brandTerms.length + competitorTerms.length + keywordTerms.length + hashtagTerms.length
+    if (!trackedTermCount || !enabledSourceTypes.length) {
+      if (!silent) {
+        setMentions([])
+        setScanWarnings([])
+        setScanNotice(!trackedTermCount
+          ? 'Add at least one brand, keyword, competitor, or hashtag before scanning.'
+          : 'Choose at least one source before scanning.')
+      }
+      return
+    }
+
     if (!silent) {
       setScanLoading(true)
       setScanNotice('Refreshing mentions across connected sources...')
@@ -250,6 +235,7 @@ export function SocialListeningPanel({
 
       setScanWarnings(nextWarnings)
       setMentions(refreshedMentions)
+      setSourceStatus(liveResult.sourceStatus)
       setLastScanMode(mode)
       setLastSyncedTime(new Date())
       setInsights(
@@ -278,14 +264,6 @@ export function SocialListeningPanel({
     useBuiltinAdapters,
     windowKey,
   ])
-
-  useEffect(() => {
-    if (hasBootstrappedLiveRef.current) {
-      return
-    }
-    hasBootstrappedLiveRef.current = true
-    refreshMentions({ silent: true })
-  }, [refreshMentions])
 
   const runScan = async () => {
     await refreshMentions()
@@ -451,23 +429,6 @@ export function SocialListeningPanel({
               📥 Download data
             </button>
           </div>
-        </div>
-
-        {/* Quick Industry Presets Bar */}
-        <div className="listening-presets-bar">
-          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Fast-start views:
-          </span>
-          {INDUSTRY_PRESETS.map((preset) => (
-            <button
-              key={preset.key}
-              type="button"
-              className={`listening-preset-chip ${activePreset === preset.key ? 'active' : ''}`}
-              onClick={() => handleApplyPreset(preset)}
-            >
-              {preset.label}
-            </button>
-          ))}
         </div>
 
         {statusMessage && (
@@ -1144,7 +1105,7 @@ export function SocialListeningPanel({
                 EchoAI connects to live and managed public sources for all enabled categories. Active scan mode: <strong style={{ color: '#2563eb' }}>{lastScanMode.toUpperCase()}</strong>.
               </p>
               <p className="muted">
-                First-party social signals: <strong>{connectedSignalSources.length ? connectedSignalSources.join(', ') : 'No connected Facebook Page or Instagram Professional account'}</strong>. Google Trends is included when a licensed Trends provider is configured for this workspace.
+                Facebook: <strong>{sourceStatus ? (sourceStatus.facebook ? 'Included' : 'Not connected') : connectedSignalSources.includes('Facebook Page') ? 'Connected - run a scan to verify' : 'Not connected'}</strong> · Instagram: <strong>{sourceStatus ? (sourceStatus.instagram ? 'Included' : 'Not connected') : connectedSignalSources.includes('Instagram Professional') ? 'Connected - run a scan to verify' : 'Not connected'}</strong> · Google Trends: <strong>{sourceStatus ? (sourceStatus.googleTrends ? 'Included' : 'Provider not configured') : 'Run a scan to verify'}</strong>.
               </p>
             </div>
 
