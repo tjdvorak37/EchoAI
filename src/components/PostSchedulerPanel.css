@@ -1,6 +1,6 @@
 .scheduler-media-picker {
   margin: 0.8rem 0 1rem;
-  padding: 0.75rem;
+  padding: 0.9rem;
   border: 1px solid #dbe3ef;
   border-radius: 10px;
   background: #f8fafc;
@@ -23,6 +23,11 @@
   position: absolute;
   inset: 0;
   width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .scheduler-media-dropzone {
   display: flex;
   align-items: center;
@@ -70,37 +75,37 @@
 }
 
 .scheduler-current-media-grid {
-  opacity: 0;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
-}
-  margin-top: 0.5rem;
-.scheduler-media-grid {
   display: grid;
-.scheduler-current-media-item {
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
   gap: 0.55rem;
-  border: 1px solid #dbe3ef;
+  margin-top: 0.5rem;
+}
 
-.scheduler-media-option {
+.scheduler-current-media-item {
   overflow: hidden;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475569;
   font-size: 0.7rem;
 }
 
 .scheduler-current-media-item img,
 .scheduler-current-media-item video {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #2563eb) 18%, transparent);
-}
-  aspect-ratio: 4 / 3;
-.scheduler-media-option img,
-.scheduler-media-option video {
   display: block;
   width: 100%;
-.scheduler-current-media-item span {
+  aspect-ratio: 4 / 3;
   object-fit: cover;
   background: #e2e8f0;
+}
 
+.scheduler-current-media-item span {
+  display: block;
+  padding: 0.3rem 0.4rem 0.1rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 700;
 }
 
 .scheduler-current-media-item button {
@@ -110,11 +115,6 @@
   background: transparent;
   color: #b42318;
   cursor: pointer;
-  font-size: 0.7rem;
-  font-weight: 700;
-.scheduler-media-option span {
-  display: block;
-  padding: 0.3rem;
   font-size: 0.7rem;
   font-weight: 700;
 }
@@ -142,9 +142,13 @@
 }
 /* Post Scheduler Master Stylesheet */
 
+.panel-scheduler {
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 28%);
+}
+
 .scheduler-master-container {
   display: grid;
-  gap: 1.05rem;
+  gap: 1.2rem;
 }
 
 /* Hero Header */
@@ -154,11 +158,11 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
-  padding: 1.1rem 1.25rem;
-  background: linear-gradient(135deg, rgba(49, 94, 231, 0.08), rgba(139, 92, 246, 0.08), rgba(32, 185, 129, 0.04));
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: 0 6px 16px rgba(17, 27, 61, 0.03);
+  padding: 1.35rem 1.45rem;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid #dbe4f2;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.035);
 }
 
 .scheduler-hero-actions {
@@ -182,23 +186,24 @@
 /* KPI Scorecards */
 .scheduler-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.85rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
 }
 
 .scheduler-kpi-card {
-  background: rgba(255,255,255,0.85);
-  border: 1.5px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 0.95rem 1.05rem;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #dbe4f2;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.02);
+  gap: 0.35rem;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.025);
 }
 
 .scheduler-kpi-card span {
-  font-size: 0.76rem;
+  font-size: 0.7rem;
   font-weight: 700;
   color: #64748b;
   text-transform: uppercase;
@@ -206,7 +211,7 @@
 }
 
 .scheduler-kpi-card strong {
-  font-size: 1.55rem;
+  font-size: 1.7rem;
   font-weight: 900;
   color: #0f172a;
   line-height: 1.1;
@@ -215,23 +220,24 @@
 .scheduler-kpi-card small {
   font-size: 0.74rem;
   color: #475569;
+  line-height: 1.35;
 }
 
 /* Nav Tabs */
 .scheduler-nav-tabs {
   display: flex;
-  gap: 0.5rem;
-  border-bottom: 2px solid #e2e8f0;
-  padding-bottom: 0.5rem;
+  gap: 0.2rem;
+  border-bottom: 1px solid #dbe4f2;
+  padding: 0 0.25rem;
   overflow-x: auto;
 }
 
 .scheduler-tab-btn {
   background: transparent;
   border: none;
-  padding: 0.55rem 1rem;
-  border-radius: 8px;
-  font-size: 0.88rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 7px 7px 0 0;
+  font-size: 0.82rem;
   font-weight: 700;
   color: #64748b;
   cursor: pointer;
@@ -243,40 +249,40 @@
 }
 
 .scheduler-tab-btn:hover {
-  background: #f1f5f9;
+  background: #f8fafc;
   color: #0f172a;
 }
 
 .scheduler-tab-btn.active {
-  background: rgba(49, 94, 231, 0.08);
+  background: #eef4ff;
   color: var(--primary-strong);
-  box-shadow: inset 0 0 0 1px rgba(49, 94, 231, 0.14);
+  box-shadow: inset 0 -2px 0 var(--primary);
 }
 
 /* Composer & Live Preview Layout */
 .scheduler-composer-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
-  gap: 1.25rem;
+  gap: 1.4rem;
   align-items: start;
 }
 
 .scheduler-composer-card {
-  background: rgba(255,255,255,0.92);
-  border: 1.5px solid #dfe7f4;
-  border-radius: 14px;
-  padding: 1.15rem 1.2rem 1.1rem;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #dbe4f2;
+  border-radius: 12px;
+  padding: 1.35rem 1.4rem 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.024);
+  gap: 1.15rem;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.035);
 }
 
 .scheduler-preview-card {
-  background: linear-gradient(180deg, #f8fafc 0%, #fefaf6 100%);
-  border: 1.5px solid #e8d9c7;
-  border-radius: 14px;
-  padding: 1.05rem 1rem 1rem;
+  background: #ffffff;
+  border: 1px solid #dbe4f2;
+  border-radius: 12px;
+  padding: 1.2rem 1.1rem 1.1rem;
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
@@ -634,11 +640,28 @@
 }
 
 @media (max-width: 900px) {
+  .scheduler-kpi-grid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+    overflow-x: auto;
+  }
+
   .scheduler-composer-layout {
     grid-template-columns: 1fr;
   }
   .scheduler-preview-card {
     position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .scheduler-kpi-grid {
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+  }
+
+  .scheduler-hero-bar,
+  .scheduler-composer-card {
+    padding: 1rem;
   }
 }
 
