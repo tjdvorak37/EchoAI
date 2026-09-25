@@ -2,7 +2,7 @@ import { canUseAgentMode, runUserAiAgent } from './aiAgentService'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const SOCIAL_PLATFORMS = ['instagram', 'facebook', 'x', 'youtube', 'linkedin', 'reddit']
-const SOURCE_TYPES = ['social', 'news', 'forums', 'blogs', 'reviews', 'web']
+const SOURCE_TYPES = ['social', 'trends', 'news', 'forums', 'blogs', 'reviews', 'web']
 const ALERT_WINDOWS = {
   '24h': 24 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
@@ -65,6 +65,7 @@ const TREND_TERMS = ['trend', 'popular', 'viral', 'season', 'yearbook', 'sports'
 
 const BUILTIN_SOURCE_NAMES = {
   social: 'Open social adapters',
+  trends: 'Google Trends provider',
   news: 'Hacker News index',
   forums: 'Reddit search',
   blogs: 'Dev.to articles',
@@ -76,6 +77,7 @@ const BUILTIN_SOURCE_NAMES = {
 // only knows which source types exist, never how to reach them.
 export const createDefaultListeningConnectors = () => ({
   social: { enabled: isSupabaseConfigured, managed: true },
+  trends: { enabled: isSupabaseConfigured, managed: true },
   news: { enabled: isSupabaseConfigured, managed: true },
   forums: { enabled: isSupabaseConfigured, managed: true },
   blogs: { enabled: isSupabaseConfigured, managed: true },

@@ -25,13 +25,16 @@ const META_SCOPES_BY_PLATFORM: Record<'facebook' | 'instagram', string[]> = {
   facebook: [
     'pages_show_list',
     'pages_read_engagement',
+    'read_insights',
     'pages_manage_posts',
   ],
   instagram: [
     'pages_show_list',
     'pages_read_engagement',
+    'read_insights',
     'pages_manage_posts',
     'instagram_basic',
+    'instagram_manage_insights',
     'instagram_content_publish',
   ],
 }

@@ -24,6 +24,7 @@ const WINDOWS = [
 
 const SOURCE_LABELS = {
   social: 'Social',
+  trends: 'Google Trends',
   news: 'News',
   forums: 'Forums',
   blogs: 'Blogs',
@@ -96,6 +97,13 @@ export function SocialListeningPanel({
     () => connectedAccounts.map((account) => String(account.platform || '').toLowerCase()),
     [connectedAccounts],
   )
+
+  const connectedSignalSources = useMemo(() => {
+    const sources = []
+    if (connectedPlatforms.includes('facebook')) sources.push('Facebook Page')
+    if (connectedPlatforms.includes('instagram')) sources.push('Instagram Professional')
+    return sources
+  }, [connectedPlatforms])
 
   const enabledSourceTypes = useMemo(
     () => Object.entries(sourceTypeToggles).filter(([, enabled]) => enabled).map(([key]) => key),
@@ -1134,6 +1142,9 @@ export function SocialListeningPanel({
               <p className="small-title">Managed Intelligence Engine Status</p>
               <p className="muted">
                 EchoAI connects to live and managed public sources for all enabled categories. Active scan mode: <strong style={{ color: '#2563eb' }}>{lastScanMode.toUpperCase()}</strong>.
+              </p>
+              <p className="muted">
+                First-party social signals: <strong>{connectedSignalSources.length ? connectedSignalSources.join(', ') : 'No connected Facebook Page or Instagram Professional account'}</strong>. Google Trends is included when a licensed Trends provider is configured for this workspace.
               </p>
             </div>
 
