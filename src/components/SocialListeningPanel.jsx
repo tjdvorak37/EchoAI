@@ -70,6 +70,7 @@ export function SocialListeningPanel({
   const [platformFilter, setPlatformFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [sentimentFilter, setSentimentFilter] = useState('all')
+  const [selectedSocialPlatforms, setSelectedSocialPlatforms] = useState([])
   const [sourceTypeToggles, setSourceTypeToggles] = useState(() =>
     Object.fromEntries(SOURCE_TYPES_ALL.map((type) => [type, false])),
   )
@@ -96,12 +97,10 @@ export function SocialListeningPanel({
     [connectedAccounts],
   )
 
-  const connectedSignalSources = useMemo(() => {
-    const sources = []
-    if (connectedPlatforms.includes('facebook')) sources.push('Facebook Page')
-    if (connectedPlatforms.includes('instagram')) sources.push('Instagram Professional')
-    return sources
-  }, [connectedPlatforms])
+  const availableListeningPlatforms = useMemo(
+    () => ['facebook', 'instagram'].filter((platform) => connectedPlatforms.includes(platform)),
+    [connectedPlatforms],
+  )
 
   const enabledSourceTypes = useMemo(
     () => Object.entries(sourceTypeToggles).filter(([, enabled]) => enabled).map(([key]) => key),
@@ -147,15 +146,23 @@ export function SocialListeningPanel({
     setSourceTypeToggles((prev) => ({ ...prev, [sourceType]: !prev[sourceType] }))
   }
 
+  const handleToggleSocialPlatform = (platform) => {
+    setSelectedSocialPlatforms((prev) =>
+      prev.includes(platform) ? prev.filter((item) => item !== platform) : [...prev, platform],
+    )
+  }
+
   const refreshMentions = useCallback(async ({ silent = false } = {}) => {
     const trackedTermCount = brandTerms.length + competitorTerms.length + keywordTerms.length + hashtagTerms.length
-    if (!trackedTermCount || !enabledSourceTypes.length) {
+    if (!trackedTermCount || !enabledSourceTypes.length || (enabledSourceTypes.includes('social') && !selectedSocialPlatforms.length)) {
       if (!silent) {
         setMentions([])
         setScanWarnings([])
         setScanNotice(!trackedTermCount
           ? 'Add at least one brand, keyword, competitor, or hashtag before scanning.'
-          : 'Choose at least one source before scanning.')
+          : !enabledSourceTypes.length
+            ? 'Choose at least one source before scanning.'
+            : 'Select at least one connected social channel before scanning Social.')
       }
       return
     }
@@ -172,7 +179,7 @@ export function SocialListeningPanel({
           competitorTerms,
           keywordTerms,
           hashtagTerms,
-          connectedPlatforms,
+          connectedPlatforms: selectedSocialPlatforms,
           enabledSourceTypes,
           windowKey,
           maxPerSource: 120,
@@ -208,7 +215,7 @@ export function SocialListeningPanel({
             competitorTerms,
             keywordTerms,
             hashtagTerms,
-            connectedPlatforms,
+            connectedPlatforms: selectedSocialPlatforms,
             enabledSourceTypes,
             count: 120,
           })
@@ -257,10 +264,10 @@ export function SocialListeningPanel({
     brandTerms,
     competitorTerms,
     connectors,
-    connectedPlatforms,
     enabledSourceTypes,
     hashtagTerms,
     keywordTerms,
+    selectedSocialPlatforms,
     useBuiltinAdapters,
     windowKey,
   ])
@@ -1056,6 +1063,31 @@ export function SocialListeningPanel({
               </div>
             </div>
 
+            <div style={{ marginTop: '0.85rem' }}>
+              <p className="small-title">Connected Social Channels</p>
+              {availableListeningPlatforms.length > 0 ? (
+                <div className="chip-row">
+                  {availableListeningPlatforms.map((platform) => {
+                    const selected = selectedSocialPlatforms.includes(platform)
+                    const label = platform === 'facebook' ? 'Facebook Page' : 'Instagram Professional'
+                    return (
+                      <button
+                        key={platform}
+                        type="button"
+                        className={selected ? 'chip active' : 'chip'}
+                        aria-pressed={selected}
+                        onClick={() => handleToggleSocialPlatform(platform)}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="muted">Connect a Facebook Page or Instagram Professional account in Link Studio to include first-party social signals.</p>
+              )}
+            </div>
+
             <div className="listening-controls-row" style={{ marginTop: '0.85rem' }}>
               <label>
                 Alert sensitivity
@@ -1105,7 +1137,7 @@ export function SocialListeningPanel({
                 EchoAI connects to live and managed public sources for all enabled categories. Active scan mode: <strong style={{ color: '#2563eb' }}>{lastScanMode.toUpperCase()}</strong>.
               </p>
               <p className="muted">
-                Facebook: <strong>{sourceStatus ? (sourceStatus.facebook ? 'Included' : 'Not connected') : connectedSignalSources.includes('Facebook Page') ? 'Connected - run a scan to verify' : 'Not connected'}</strong> · Instagram: <strong>{sourceStatus ? (sourceStatus.instagram ? 'Included' : 'Not connected') : connectedSignalSources.includes('Instagram Professional') ? 'Connected - run a scan to verify' : 'Not connected'}</strong> · Google Trends: <strong>{sourceStatus ? (sourceStatus.googleTrends ? 'Included' : 'Provider not configured') : 'Run a scan to verify'}</strong>.
+                Facebook: <strong>{!availableListeningPlatforms.includes('facebook') ? 'Not connected' : !selectedSocialPlatforms.includes('facebook') ? 'Connected - not selected' : sourceStatus?.facebook ? 'Selected & included' : 'Selected - run a scan to verify'}</strong> · Instagram: <strong>{!availableListeningPlatforms.includes('instagram') ? 'Not connected' : !selectedSocialPlatforms.includes('instagram') ? 'Connected - not selected' : sourceStatus?.instagram ? 'Selected & included' : 'Selected - run a scan to verify'}</strong> · Google Trends: <strong>{!enabledSourceTypes.includes('trends') ? 'Not selected' : sourceStatus?.googleTrends ? 'Selected & included' : 'Selected - run a scan to verify'}</strong>.
               </p>
             </div>
 
