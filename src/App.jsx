@@ -1998,63 +1998,65 @@ function App() {
 
   const handleUploadAsset = async (event) => {
     const files = Array.from(
-      event instanceof FileList
-        ? event
-        : event?.target?.files || event?.dataTransfer?.files || [],
+      event?.target?.files || event?.dataTransfer?.files || event || [],
     ).filter((file) => file.type.startsWith('image/') || file.type.startsWith('video/'))
     if (!files.length) {
       return
     }
 
-    const uploadSizeMb = files.reduce((total, file) => total + file.size / 1024 / 1024, 0)
-    if (storageUsedMb + uploadSizeMb > storageQuotaMb) {
-      setAdminError('This upload exceeds your available storage quota.')
-      if (event?.target) event.target.value = ''
-      return
-    }
-
-    const uploadedAssets = []
-    for (const [index, file] of files.entries()) {
-      const assetType = file.type.startsWith('video/') ? 'video' : 'image'
-      const previewUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result)
-        reader.onerror = () => reject(new Error('Unable to read file'))
-        reader.readAsDataURL(file)
-      })
-
-      let storagePath = ''
-      if (isSupabaseConfigured) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error('Sign in before uploading media.')
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
-        storagePath = `${user.id}/${Date.now()}-${index}-${safeName}`
-        const { error } = await supabase.storage
-          .from('social-media')
-          .upload(storagePath, file, { contentType: file.type, upsert: false })
-        if (error) throw new Error(error.message)
+    try {
+      setSchedulerError('')
+      const uploadSizeMb = files.reduce((total, file) => total + file.size / 1024 / 1024, 0)
+      if (storageUsedMb + uploadSizeMb > storageQuotaMb) {
+        throw new Error('This upload exceeds your available storage quota.')
       }
 
-      uploadedAssets.push({
-        id: `asset_${Date.now()}_${index}`,
-        name: file.name,
-        type: assetType,
-        mime: file.type,
-        size: file.size,
-        folderId: selectedFolderId,
-        createdAt: new Date().toISOString(),
-        previewUrl,
-        storagePath,
-        summary: 'Uploaded from your device',
-      })
-    }
+      const uploadedAssets = []
+      for (const [index, file] of files.entries()) {
+        const assetType = file.type.startsWith('video/') ? 'video' : 'image'
+        const previewUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result)
+          reader.onerror = () => reject(new Error('Unable to read file'))
+          reader.readAsDataURL(file)
+        })
 
-    setWorkspaceAssets((prev) => [...uploadedAssets, ...prev])
-    setComposer((prev) => ({
-      ...prev,
-      mediaAssetIds: [...new Set([...(prev.mediaAssetIds || []), ...uploadedAssets.map((asset) => asset.id)])],
-    }))
-    if (event?.target) event.target.value = ''
+        let storagePath = ''
+        if (isSupabaseConfigured) {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) throw new Error('Sign in before uploading media.')
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+          storagePath = `${user.id}/${Date.now()}-${index}-${safeName}`
+          const { error } = await supabase.storage
+            .from('social-media')
+            .upload(storagePath, file, { contentType: file.type, upsert: false })
+          if (error) throw new Error(error.message)
+        }
+
+        uploadedAssets.push({
+          id: `asset_${Date.now()}_${index}`,
+          name: file.name,
+          type: assetType,
+          mime: file.type,
+          size: file.size,
+          folderId: selectedFolderId,
+          createdAt: new Date().toISOString(),
+          previewUrl,
+          storagePath,
+          summary: 'Uploaded from your device',
+        })
+      }
+
+      setWorkspaceAssets((prev) => [...uploadedAssets, ...prev])
+      setComposer((prev) => ({
+        ...prev,
+        mediaAssetIds: [...new Set([...(prev.mediaAssetIds || []), ...uploadedAssets.map((asset) => asset.id)])],
+      }))
+    } catch (error) {
+      setSchedulerError(error.message || 'Unable to add that media file.')
+    } finally {
+      if (event?.target) event.target.value = ''
+    }
   }
 
   // Prevent the browser from navigating to dropped files anywhere on the page.
