@@ -112,7 +112,9 @@ const providerConfig = async (providerKey: keyof typeof PROVIDERS) => {
     clientId: data.client_id || fallback.clientId,
     clientSecret: data.client_secret || fallback.clientSecret,
     redirectUri: data.redirect_uri || FUNCTION_URL,
-    scopes: Array.isArray(data.scopes) && data.scopes.length ? data.scopes : fallback.scopes,
+    scopes: providerKey === 'youtube'
+      ? fallback.scopes
+      : Array.isArray(data.scopes) && data.scopes.length ? data.scopes : fallback.scopes,
     configId: data.config_id || undefined,
   }
 }
@@ -140,17 +142,16 @@ const userFromRequest = async (request: Request) => {
 const queryProviderAccounts = async (platform: Platform, accessToken: string) => {
   if (platform === 'youtube') {
     const response = await fetch(
-      'https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true',
+      'https://openidconnect.googleapis.com/v1/userinfo',
       { headers: { Authorization: `Bearer ${accessToken}` } },
     )
-    if (!response.ok) throw new Error('YouTube account discovery failed.')
-    const payload = await response.json()
-    const channel = payload.items?.[0]
-    if (!channel?.id) throw new Error('No YouTube channel is available for this Google account.')
+    if (!response.ok) throw new Error('Google account discovery failed.')
+    const account = await response.json()
+    if (!account?.sub) throw new Error('Google did not return an account identity.')
     return {
-      id: String(channel.id),
-      name: String(channel.snippet?.title ?? 'YouTube channel'),
-      url: `https://www.youtube.com/channel/${channel.id}`,
+      id: `youtube-google-${String(account.sub)}`,
+      name: String(account.name || account.email || 'YouTube account'),
+      url: 'https://www.youtube.com',
       publishingAccessToken: accessToken,
     }
   }
