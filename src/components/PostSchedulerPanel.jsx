@@ -90,6 +90,7 @@ export function PostSchedulerPanel({
   const [dragPostId, setDragPostId] = useState('')
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
   const [emojiSearch, setEmojiSearch] = useState('')
+  const [mediaDropActive, setMediaDropActive] = useState(false)
   const messageInputRef = useRef(null)
   const messageSelectionRef = useRef({ start: 0, end: 0 })
 
@@ -333,6 +334,12 @@ export function PostSchedulerPanel({
     })
   }
 
+  const handleMediaDrop = (event) => {
+    event.preventDefault()
+    setMediaDropActive(false)
+    onUploadAsset?.(event.dataTransfer.files)
+  }
+
   const formatScheduleTime = (scheduledIso) => {
     if (!scheduledIso) return 'Not scheduled'
     const date = new Date(scheduledIso)
@@ -551,34 +558,40 @@ export function PostSchedulerPanel({
                 <div className="scheduler-media-picker-header">
                   <div>
                     <p className="small-title" style={{ margin: 0 }}>Post Image / Media</p>
-                    <small style={{ color: '#64748b' }}>Choose media from your workspace or upload a new file.</small>
+                    <small style={{ color: '#64748b' }}>Add the images or videos for this post.</small>
                   </div>
-                  <label className="ghost-button scheduler-upload-button">
-                    Add image/media
-                    <input type="file" accept="image/*,video/*" onChange={onUploadAsset} />
-                  </label>
                 </div>
-                {workspaceAssets.filter((asset) => ['image', 'video'].includes(asset.type)).length > 0 ? (
-                  <div className="scheduler-media-grid">
-                    {workspaceAssets.filter((asset) => ['image', 'video'].includes(asset.type)).slice(0, 12).map((asset) => {
-                      const selected = (composer.mediaAssetIds || []).includes(asset.id)
-                      return (
-                        <button
-                          key={asset.id}
-                          type="button"
-                          className={`scheduler-media-option ${selected ? 'selected' : ''}`}
-                          onClick={() => toggleMediaAsset(asset.id)}
-                          aria-pressed={selected}
-                          title={asset.name}
-                        >
+                <div
+                  className={`scheduler-media-dropzone ${mediaDropActive ? 'is-dragging' : ''}`}
+                  onDragEnter={(event) => { event.preventDefault(); setMediaDropActive(true) }}
+                  onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setMediaDropActive(true) }}
+                  onDragLeave={(event) => { if (event.currentTarget === event.target) setMediaDropActive(false) }}
+                  onDrop={handleMediaDrop}
+                >
+                  <strong>Drag images or videos here</strong>
+                  <span>or</span>
+                  <label className="ghost-button scheduler-upload-button">
+                    Choose files
+                    <input type="file" accept="image/*,video/*" multiple onChange={onUploadAsset} />
+                  </label>
+                  <small>Multiple files allowed</small>
+                </div>
+                {selectedMedia.length > 0 && (
+                  <div className="scheduler-current-media">
+                    <div className="scheduler-current-media-heading">
+                      <strong>{selectedMedia.length} attached to this post</strong>
+                      <small>These are the files that will be posted.</small>
+                    </div>
+                    <div className="scheduler-current-media-grid">
+                      {selectedMedia.map((asset) => (
+                        <div key={asset.id} className="scheduler-current-media-item">
                           {asset.type === 'video' ? <video src={asset.previewUrl} muted /> : <img src={asset.previewUrl} alt={asset.name} />}
-                          <span>{selected ? 'Selected' : 'Use media'}</span>
-                        </button>
-                      )
-                    })}
+                          <span title={asset.name}>{asset.name}</span>
+                          <button type="button" onClick={() => toggleMediaAsset(asset.id)} aria-label={`Remove ${asset.name}`}>Remove</button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ) : (
-                  <p className="muted" style={{ margin: '0.6rem 0 0', fontSize: '0.82rem' }}>No images or videos in your workspace yet.</p>
                 )}
               </div>
 

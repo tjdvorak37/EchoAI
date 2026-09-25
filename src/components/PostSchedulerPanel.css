@@ -23,42 +23,95 @@
   position: absolute;
   inset: 0;
   width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
+.scheduler-media-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 116px;
+  margin-top: 0.7rem;
+  padding: 1rem;
+  border: 1.5px dashed #b8c7dd;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #64748b;
+  text-align: center;
+  transition: border-color 150ms ease, background 150ms ease;
 }
 
-.scheduler-media-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
-  gap: 0.55rem;
+.scheduler-media-dropzone strong {
+  color: #334155;
+}
+
+.scheduler-media-dropzone small {
+  color: #94a3b8;
+}
+
+.scheduler-media-dropzone.is-dragging {
+  border-color: var(--primary, #2563eb);
+  background: #eef4ff;
+}
+
+.scheduler-current-media {
   margin-top: 0.7rem;
 }
 
+.scheduler-current-media-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: #334155;
+  font-size: 0.78rem;
+}
+
+.scheduler-current-media-heading small {
+  color: #64748b;
+}
+
+.scheduler-current-media-grid {
+  opacity: 0;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+}
+  margin-top: 0.5rem;
+.scheduler-media-grid {
+  display: grid;
+.scheduler-current-media-item {
+  gap: 0.55rem;
+  border: 1px solid #dbe3ef;
+
 .scheduler-media-option {
   overflow: hidden;
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: 8px;
-  background: #fff;
-  color: #475569;
-  cursor: pointer;
+  font-size: 0.7rem;
 }
 
-.scheduler-media-option.selected {
-  border-color: var(--primary, #2563eb);
+.scheduler-current-media-item img,
+.scheduler-current-media-item video {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #2563eb) 18%, transparent);
 }
-
+  aspect-ratio: 4 / 3;
 .scheduler-media-option img,
 .scheduler-media-option video {
   display: block;
   width: 100%;
-  aspect-ratio: 1;
+.scheduler-current-media-item span {
   object-fit: cover;
   background: #e2e8f0;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.scheduler-current-media-item button {
+  margin: 0.1rem 0.35rem 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #b42318;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 700;
 .scheduler-media-option span {
   display: block;
   padding: 0.3rem;
@@ -74,6 +127,17 @@
 
   .scheduler-upload-button {
     text-align: center;
+  }
+
+  .scheduler-media-dropzone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scheduler-current-media-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.15rem;
   }
 }
 /* Post Scheduler Master Stylesheet */
