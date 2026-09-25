@@ -6,7 +6,13 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
 
-const SOURCE_TYPES = ['social', 'news', 'forums', 'blogs', 'reviews', 'web']
+const SOURCE_TYPES = ['social', 'trends', 'news', 'forums', 'blogs', 'reviews', 'web']
+
+type MetaCredential = {
+  platform: 'facebook' | 'instagram'
+  external_account_id: string
+  access_token: string
+}
 
 const textValues = (value: unknown) => Array.isArray(value)
   ? value.filter((item): item is string => typeof item === 'string' && item.trim()).slice(0, 5)
@@ -40,6 +46,76 @@ const fetchText = async (url: string) => {
   })
   if (!response.ok) throw new Error(`source failed (${response.status})`)
   return response.text()
+}
+
+const numberValue = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0
+
+const fetchOwnedMetaItems = async (userId: string, limit: number) => {
+  const database = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    { auth: { persistSession: false } },
+  )
+  const { data, error } = await database
+    .from('social_oauth_credentials')
+    .select('platform, external_account_id, access_token')
+    .eq('user_id', userId)
+    .in('platform', ['facebook', 'instagram'])
+
+  if (error) throw new Error('Unable to load connected Meta accounts.')
+
+  const credentials = (data ?? []) as MetaCredential[]
+  const results = await Promise.all(credentials.map(async (credential) => {
+    try {
+      const accountId = encodeURIComponent(credential.external_account_id)
+      const token = encodeURIComponent(credential.access_token)
+      const endpoint = credential.platform === 'facebook'
+        ? `https://graph.facebook.com/v21.0/${accountId}/feed?fields=id,message,story,created_time,from{id,name},permalink_url,shares,comments.limit(0).summary(true),reactions.limit(0).summary(true)&limit=${limit}&access_token=${token}`
+        : `https://graph.facebook.com/v21.0/${accountId}/media?fields=id,caption,timestamp,permalink,media_type,like_count,comments_count&limit=${limit}&access_token=${token}`
+
+      const response = await fetch(endpoint)
+      if (!response.ok) throw new Error(`${credential.platform} account data is unavailable (${response.status}).`)
+      const payload = await response.json()
+
+      return (payload.data ?? []).map((item: Record<string, unknown>) => {
+        const text = String(item.message ?? item.story ?? item.caption ?? '').trim()
+        if (!text) return null
+        const comments = numberValue((item.comments as Record<string, unknown> | undefined)?.summary && ((item.comments as Record<string, unknown>).summary as Record<string, unknown>).total_count)
+        const reactions = numberValue((item.reactions as Record<string, unknown> | undefined)?.summary && ((item.reactions as Record<string, unknown>).summary as Record<string, unknown>).total_count)
+        const shares = numberValue((item.shares as Record<string, unknown> | undefined)?.count)
+        const likes = numberValue(item.like_count)
+        const directComments = numberValue(item.comments_count)
+        return {
+          id: `meta-${credential.platform}-${String(item.id ?? '')}`,
+          text,
+          sourceName: credential.platform === 'facebook' ? 'Connected Facebook Page' : 'Connected Instagram Professional account',
+          platform: credential.platform,
+          timestamp: item.created_time ?? item.timestamp ?? new Date().toISOString(),
+          author: String((item.from as Record<string, unknown> | undefined)?.name ?? credential.platform),
+          engagement: reactions + shares + comments + likes + directComments,
+          reach: 0,
+          sentiment: 'neutral',
+          permalink: item.permalink ?? item.permalink_url ?? '',
+        }
+      }).filter(Boolean)
+    } catch (error) {
+      console.warn(`Connected ${credential.platform} listening source is unavailable.`, error)
+      return []
+    }
+  }))
+
+  return results.flat()
+}
+
+const sourceItems = (value: unknown) => {
+  if (Array.isArray(value)) return value
+  if (value && typeof value === 'object') {
+    const payload = value as Record<string, unknown>
+    for (const key of ['items', 'mentions', 'results', 'data']) {
+      if (Array.isArray(payload[key])) return payload[key] as unknown[]
+    }
+  }
+  return []
 }
 
 const toGoogleNewsItems = async (query: string, sourceType: string, limit: number) => {
@@ -115,6 +191,10 @@ const managedItemsFor = async (sourceType: string, body: Record<string, unknown>
         return toHackerNewsDiscussionItems(query, sourceType, limit)
       }
     }
+  }
+
+  if (sourceType === 'trends') {
+    return []
   }
 
   if (sourceType === 'news') {
@@ -214,8 +294,12 @@ Deno.serve(async (request) => {
         const connector = connectorFor(sourceType)
 
         try {
+          const ownedMetaItems = sourceType === 'social'
+            ? await fetchOwnedMetaItems(userData.user.id, Math.min(30, Math.max(1, Number(body.limit) || 20)))
+            : []
           if (!connector.endpoint) {
-            return { sourceType, items: await managedItemsFor(sourceType, body), error: null, managed: true }
+            const managedItems = await managedItemsFor(sourceType, body)
+            return { sourceType, items: [...ownedMetaItems, ...managedItems], error: null, managed: true }
           }
           const upstream = await fetch(connector.endpoint, {
             method: 'POST',
@@ -237,7 +321,7 @@ Deno.serve(async (request) => {
             ? await upstream.json()
             : await upstream.text()
 
-          return { sourceType, items: parsed, error: null }
+          return { sourceType, items: [...ownedMetaItems, ...sourceItems(parsed)], error: null }
         } catch (error) {
           return { sourceType, items: [], error: (error as Error).message }
         }
