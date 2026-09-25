@@ -128,6 +128,7 @@ const AI_AGENT_CAPABILITIES = AGENT_CAPABILITIES
 // Staff accounts run the platform, so they get the top plan without paying for it.
 const STAFF_ROLES = ['admin', 'super_admin', 'it', 'accountant']
 const STAFF_PLAN = 'creator'
+const DEFAULT_STORAGE_QUOTA_MB = 2048
 const normalizeRole = (role) => String(role ?? '').trim().replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase().replace(/[\s-]+/g, '_')
 const isStaffRole = (role) => STAFF_ROLES.includes(normalizeRole(role))
 const aiGenerationEnabled = () => false
@@ -601,7 +602,7 @@ function App() {
     : isStaffRole(session?.role)
       ? getStorageMb(STAFF_PLAN)
       : Number(session?.storageQuotaMb ?? session?.storage_quota_mb ?? getStorageMb('standard')) ||
-        getStorageMb('standard')
+        DEFAULT_STORAGE_QUOTA_MB
 
   const upcomingPostCount = useMemo(
     () => scheduledPosts.filter((post) => post.status === 'scheduled').length,
