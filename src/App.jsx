@@ -1997,58 +1997,64 @@ function App() {
   }
 
   const handleUploadAsset = async (event) => {
-    const file = event.target.files?.[0]
-    if (!file) {
+    const files = Array.from(
+      event instanceof FileList
+        ? event
+        : event?.target?.files || event?.dataTransfer?.files || [],
+    ).filter((file) => file.type.startsWith('image/') || file.type.startsWith('video/'))
+    if (!files.length) {
       return
     }
 
-    const fileSizeMb = file.size / 1024 / 1024
-    if (storageUsedMb + fileSizeMb > storageQuotaMb) {
+    const uploadSizeMb = files.reduce((total, file) => total + file.size / 1024 / 1024, 0)
+    if (storageUsedMb + uploadSizeMb > storageQuotaMb) {
       setAdminError('This upload exceeds your available storage quota.')
-      event.target.value = ''
+      if (event?.target) event.target.value = ''
       return
     }
 
-    const assetType = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : 'document'
+    const uploadedAssets = []
+    for (const [index, file] of files.entries()) {
+      const assetType = file.type.startsWith('video/') ? 'video' : 'image'
+      const previewUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = () => reject(new Error('Unable to read file'))
+        reader.readAsDataURL(file)
+      })
 
-    const previewUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result)
-      reader.onerror = () => reject(new Error('Unable to read file'))
-      reader.readAsDataURL(file)
-    })
+      let storagePath = ''
+      if (isSupabaseConfigured) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('Sign in before uploading media.')
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+        storagePath = `${user.id}/${Date.now()}-${index}-${safeName}`
+        const { error } = await supabase.storage
+          .from('social-media')
+          .upload(storagePath, file, { contentType: file.type, upsert: false })
+        if (error) throw new Error(error.message)
+      }
 
-    let storagePath = ''
-    if (isSupabaseConfigured && ['image', 'video'].includes(assetType)) {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Sign in before uploading media.')
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
-      storagePath = `${user.id}/${Date.now()}-${safeName}`
-      const { error } = await supabase.storage
-        .from('social-media')
-        .upload(storagePath, file, { contentType: file.type, upsert: false })
-      if (error) throw new Error(error.message)
+      uploadedAssets.push({
+        id: `asset_${Date.now()}_${index}`,
+        name: file.name,
+        type: assetType,
+        mime: file.type,
+        size: file.size,
+        folderId: selectedFolderId,
+        createdAt: new Date().toISOString(),
+        previewUrl,
+        storagePath,
+        summary: 'Uploaded from your device',
+      })
     }
 
-    const asset = {
-      id: `asset_${Date.now()}`,
-      name: file.name,
-      type: assetType,
-      mime: file.type || 'application/octet-stream',
-      size: file.size,
-      folderId: selectedFolderId,
-      createdAt: new Date().toISOString(),
-      previewUrl,
-      storagePath,
-      summary: 'Uploaded from your device',
-    }
-
-    setWorkspaceAssets((prev) => [asset, ...prev])
+    setWorkspaceAssets((prev) => [...uploadedAssets, ...prev])
     setComposer((prev) => ({
       ...prev,
-      mediaAssetIds: [...new Set([...(prev.mediaAssetIds || []), asset.id])],
+      mediaAssetIds: [...new Set([...(prev.mediaAssetIds || []), ...uploadedAssets.map((asset) => asset.id)])],
     }))
-    event.target.value = ''
+    if (event?.target) event.target.value = ''
   }
 
   // Prevent the browser from navigating to dropped files anywhere on the page.
