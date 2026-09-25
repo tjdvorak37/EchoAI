@@ -59,6 +59,23 @@ const providerError = async (response: Response, fallback: string) => {
   return payload?.error?.message || fallback
 }
 
+const waitForInstagramContainer = async (containerId: string, accessToken: string) => {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const response = await fetch(`${GRAPH_URL}/${containerId}?fields=status_code&access_token=${encodeURIComponent(accessToken)}`)
+    if (!response.ok) throw new Error(await providerError(response, 'Unable to check Instagram media processing status.'))
+
+    const status = await response.json()
+    if (status.status_code === 'FINISHED') return
+    if (status.status_code === 'ERROR' || status.status_code === 'EXPIRED') {
+      throw new Error(`Instagram media processing failed (${status.status_code.toLowerCase()}).`)
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+  }
+
+  throw new Error('Instagram media processing timed out. Try publishing the post again.')
+}
+
 const publishFacebookPost = async (credential: Credential, message: string, media: ScheduledPost['media']) => {
   const attachment = media.find((item) => item.type === 'image' || item.type === 'video')
   if (attachment?.type === 'video') {
@@ -123,6 +140,7 @@ const publishInstagramImage = async (credential: Credential, message: string, me
   if (!containerResponse.ok) throw new Error(await providerError(containerResponse, 'Instagram media upload failed.'))
   const container = await containerResponse.json()
   if (!container.id) throw new Error('Instagram did not return a media container ID.')
+  await waitForInstagramContainer(String(container.id), credential.access_token)
 
   const publishResponse = await fetch(`${GRAPH_URL}/${credential.external_account_id}/media_publish`, {
     method: 'POST',
