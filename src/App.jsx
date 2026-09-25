@@ -597,12 +597,13 @@ function App() {
 
   // The subscribed tier is authoritative; the profile column is the fallback for
   // demo mode and for admins who have no subscription.
-  const storageQuotaMb = myEntitlement?.storageGb
+  const configuredStorageQuotaMb = myEntitlement?.storageGb
     ? myEntitlement.storageGb * 1024
     : isStaffRole(session?.role)
       ? getStorageMb(STAFF_PLAN)
       : Number(session?.storageQuotaMb ?? session?.storage_quota_mb ?? getStorageMb('standard')) ||
         DEFAULT_STORAGE_QUOTA_MB
+  const storageQuotaMb = Math.max(configuredStorageQuotaMb, DEFAULT_STORAGE_QUOTA_MB)
 
   const upcomingPostCount = useMemo(
     () => scheduledPosts.filter((post) => post.status === 'scheduled').length,
