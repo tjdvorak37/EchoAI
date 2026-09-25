@@ -50,7 +50,7 @@ const fetchText = async (url: string) => {
 
 const numberValue = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0
 
-const fetchOwnedMetaItems = async (userId: string, limit: number) => {
+const fetchOwnedMetaItems = async (userId: string, limit: number, selectedPlatforms: string[]) => {
   const database = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -64,7 +64,8 @@ const fetchOwnedMetaItems = async (userId: string, limit: number) => {
 
   if (error) throw new Error('Unable to load connected Meta accounts.')
 
-  const credentials = (data ?? []) as MetaCredential[]
+  const credentials = (data ?? [])
+    .filter((credential): credential is MetaCredential => selectedPlatforms.includes(String(credential.platform)))
   const results = await Promise.all(credentials.map(async (credential) => {
     try {
       const accountId = encodeURIComponent(credential.external_account_id)
@@ -316,7 +317,11 @@ Deno.serve(async (request) => {
 
         try {
           const ownedMetaItems = sourceType === 'social'
-            ? await fetchOwnedMetaItems(userData.user.id, Math.min(30, Math.max(1, Number(body.limit) || 20)))
+            ? await fetchOwnedMetaItems(
+                userData.user.id,
+                Math.min(30, Math.max(1, Number(body.limit) || 20)),
+                Array.isArray(body.platforms) ? body.platforms.filter((platform): platform is string => typeof platform === 'string') : [],
+              )
             : []
           if (!connector.endpoint) {
             const managedItems = await managedItemsFor(sourceType, body)
