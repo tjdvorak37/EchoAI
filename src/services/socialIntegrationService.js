@@ -43,33 +43,6 @@ export const socialIntegrationService = {
     return (data ?? []).map(normalizeAccount)
   },
 
-  async saveAccount({ platform, accountName, accountType, publishingScopes }) {
-    if (!isSupabaseConfigured) return null
-
-    const { data: sessionData } = await supabase.auth.getSession()
-    const userId = sessionData?.session?.user?.id
-    if (!userId) {
-      throw new Error('Please sign in before saving a social account profile.')
-    }
-
-    const { data, error } = await supabase
-      .from('user_social_accounts')
-      .upsert({
-        user_id: userId,
-        platform,
-        account_name: accountName.trim(),
-        account_type: accountType,
-        external_account_id: '',
-        publishing_scopes: publishingScopes,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,platform,external_account_id' })
-      .select('*')
-      .single()
-
-    if (error) throw new Error(error.message)
-    return normalizeAccount(data)
-  },
-
   async removeAccount(accountId) {
     if (!isSupabaseConfigured) return
 

@@ -598,28 +598,33 @@ export function PostSchedulerPanel({
                     No channels connected. Go to <strong>Integrations</strong> to link your social accounts.
                   </p>
                 ) : (
-                  <div className="chip-row">
-                    {connectedAccounts.map((account) => {
-                      const meta = getPlatformMeta(account.platform)
-                      const key = account.platform.toLowerCase()
-                      // When several accounts share a platform (managing more than one
-                      // brand/client), only the chip for the currently targeted account
-                      // shows as active; clicking another account's chip retargets it.
-                      const active = composer.channels.includes(key)
-                        && (composer.channelAccounts?.[key] ?? account.id) === account.id
-                      return (
-                        <button
-                          key={account.id}
-                          type="button"
-                          className={`chip ${active ? 'active' : ''}`}
-                          style={active ? { borderColor: meta.color, color: meta.color, background: meta.bg } : {}}
-                          onClick={() => toggleChannel(key, account.id)}
-                        >
-                          <span>{meta.icon}</span> {meta.label} ({account.accountName})
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <>
+                    <p className="muted" style={{ margin: '0 0 0.45rem', fontSize: '0.8rem' }}>
+                      Choose one account for each platform. Selecting another account on the same platform changes that post&apos;s destination.
+                    </p>
+                    <div className="chip-row">
+                      {connectedAccounts.map((account) => {
+                        const meta = getPlatformMeta(account.platform)
+                        const key = account.platform.toLowerCase()
+                        // When several accounts share a platform (managing more than one
+                        // brand/client), only the chip for the currently targeted account
+                        // shows as active; clicking another account's chip retargets it.
+                        const active = composer.channels.includes(key)
+                          && (composer.channelAccounts?.[key] ?? account.id) === account.id
+                        return (
+                          <button
+                            key={account.id}
+                            type="button"
+                            className={`chip ${active ? 'active' : ''}`}
+                            style={active ? { borderColor: meta.color, color: meta.color, background: meta.bg } : {}}
+                            onClick={() => toggleChannel(key, account.id)}
+                          >
+                            <span>{meta.icon}</span> {meta.label} ({account.accountName})
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -1229,11 +1234,16 @@ export function PostSchedulerPanel({
                       <span className="badge risk">⚠️ No publishing channels selected!</span>
                     ) : (
                       <div className="chip-row">
-                        {composer.channels.map((ch) => (
-                          <span key={ch} className="badge info" style={{ padding: '0.3rem 0.6rem', fontSize: '0.82rem' }}>
-                            {getPlatformMeta(ch)?.icon} {getPlatformMeta(ch)?.label}
-                          </span>
-                        ))}
+                        {composer.channels.map((ch) => {
+                          const accountId = composer.channelAccounts?.[ch]
+                            ?? connectedAccounts.find((account) => account.platform.toLowerCase() === ch)?.id
+                          const account = connectedAccounts.find((item) => item.id === accountId)
+                          return (
+                            <span key={ch} className="badge info" style={{ padding: '0.3rem 0.6rem', fontSize: '0.82rem' }}>
+                              {getPlatformMeta(ch)?.icon} {getPlatformMeta(ch)?.label}{account ? ` · ${account.accountName}` : ''}
+                            </span>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

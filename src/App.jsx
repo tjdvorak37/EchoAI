@@ -81,8 +81,6 @@ const readUserData = (userId) => {
 
 const getPlatformMeta = getSocialPlatform
 
-const SOCIAL_PUBLISHING_SCOPES = ['posts', 'images', 'videos', 'comments', 'analytics']
-
 const createDefaultAiAgentConfig = () => ({
   enabled: true,
   name: 'EchoAI Hosted AI',
@@ -286,14 +284,6 @@ function App() {
     mediaAssetIds: [],
   })
   const [schedulerError, setSchedulerError] = useState('')
-  const [accountHandleDrafts, setAccountHandleDrafts] = useState(() => ({
-    instagram: '@youraccount',
-    facebook: 'Your page name',
-    x: '@youraccount',
-    youtube: 'Your channel',
-    linkedin: 'Your profile / page',
-  }))
-  const [accountScopeDrafts, setAccountScopeDrafts] = useState({})
   const [quickConnectOpen, setQuickConnectOpen] = useState(() => {
     const status = new URLSearchParams(window.location.search).get('social')
     return status === 'connected' || status === 'failed' || status === 'provider_error'
@@ -1464,47 +1454,6 @@ function App() {
   const handleComposerChange = (field, value) => {
     setComposer((prev) => ({ ...prev, [field]: value }))
   }
-
-  const saveSocialAccount = async ({ platform, accountName, accountType = 'profile', publishingScopes = [] }) => {
-    setIntegrationError('')
-    const normalizedPlatform = platform.toLowerCase()
-    const normalizedName = accountName.trim()
-
-    if (!normalizedName) {
-      setIntegrationError(`Enter a ${getPlatformMeta(normalizedPlatform).label} account label before saving.`)
-      return
-    }
-
-    try {
-      const saved = await socialIntegrationService.saveAccount({
-        platform: normalizedPlatform,
-        accountName: normalizedName,
-        accountType,
-        publishingScopes,
-      })
-      const nextAccount = saved ?? {
-        id: nextLocalId('acc'),
-        platform: getPlatformMeta(normalizedPlatform).label,
-        accountName: normalizedName,
-        accountType,
-        publishingScopes,
-        status: 'oauth required',
-        connectionStatus: 'profile_saved',
-      }
-      // Update the matching account by id when editing, and only replace an
-      // unconnected placeholder for this platform — never a different,
-      // already-connected account for the same platform.
-      setConnectedAccounts((prev) => [
-        ...prev.filter((account) => account.id !== nextAccount.id
-          && !(account.platform.toLowerCase() === normalizedPlatform && account.status !== 'healthy')),
-        nextAccount,
-      ])
-      setAccountHandleDrafts((prev) => ({ ...prev, [normalizedPlatform]: normalizedName }))
-    } catch (error) {
-      setIntegrationError(error.message)
-    }
-  }
-
 
   const removeSocialAccount = async (account) => {
     setIntegrationError('')
@@ -4791,16 +4740,13 @@ function App() {
               )}
             </article>
             <div className="integration-grid">
-              {SOCIAL_PLATFORMS.map(({ key, accountPlaceholder, description, releaseStatus }) => {
+              {SOCIAL_PLATFORMS.map(({ key, description, releaseStatus }) => {
                 const meta = getPlatformMeta(key)
                 const available = releaseStatus === 'available'
                 // A platform can have several connected accounts at once — for
                 // example managing more than one client's Facebook Page.
                 const linkedAccounts = connectedAccounts.filter((a) => a.platform.toLowerCase() === key)
                 const hasConnectedAccount = linkedAccounts.some((account) => account.status === 'healthy')
-                const placeholder = linkedAccounts.find((account) => account.status !== 'healthy')
-                const inputValue = accountHandleDrafts[key] ?? placeholder?.accountName ?? accountPlaceholder
-                const selectedScopes = accountScopeDrafts[key] ?? placeholder?.publishingScopes ?? ['posts']
                 return (
                   <div
                     key={key}
@@ -4854,84 +4800,18 @@ function App() {
                         </div>
                       )}
 
-                      {(!hasConnectedAccount || !available) && (
-                        <>
-                          <label className="field-label">
-                            Handle / profile name
-                            <input
-                              type="text"
-                              value={inputValue}
-                              onChange={(event) => setAccountHandleDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
-                              placeholder={accountPlaceholder}
-                              disabled={!available}
-                            />
-                          </label>
-                          <div>
-                            <p className="small-title">Requested access</p>
-                            <div className="chip-row">
-                              {SOCIAL_PUBLISHING_SCOPES.map((scope) => {
-                                const selected = selectedScopes.includes(scope)
-                                return (
-                                  <button
-                                    key={scope}
-                                    type="button"
-                                    className={selected ? 'chip active' : 'chip'}
-                                    disabled={!available}
-                                    onClick={() => setAccountScopeDrafts((prev) => ({
-                                      ...prev,
-                                      [key]: selected
-                                        ? selectedScopes.filter((item) => item !== scope)
-                                        : [...selectedScopes, scope],
-                                    }))}
-                                  >
-                                    {scope}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                          <p className="muted">
-                            {available
-                              ? 'Your account profile and access preferences are private. Publishing stays disabled until this account completes OAuth authorization.'
-                              : 'This provider is on the EchoAI integration roadmap. Account connection will open after its OAuth and publishing review is complete.'}
-                          </p>
-                          <div className="integration-actions">
-                            {available && <button
-                              type="button"
-                              className="primary-button"
-                              style={{ background: meta.color, borderColor: meta.color }}
-                              onClick={() => saveSocialAccount({
-                                platform: key,
-                                accountName: inputValue,
-                                publishingScopes: selectedScopes,
-                              })}
-                            >
-                              Save account profile
-                            </button>}
-                            {available && (
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                onClick={() => connectSocialAccount({
-                                  platform: key,
-                                  requestedScopes: selectedScopes,
-                                })}
-                              >
-                                {placeholder ? `Authorize ${meta.label}` : `Connect ${meta.label}`}
-                              </button>
-                            )}
-                          </div>
-                        </>
+                      {!available && (
+                        <p className="muted">This provider is on the EchoAI integration roadmap. Account connection will open after its OAuth and publishing review is complete.</p>
                       )}
 
-                      {hasConnectedAccount && available && (
+                      {available && (
                         <div className="integration-actions">
                           <button
                             type="button"
                             className="ghost-button"
                             onClick={() => connectSocialAccount({ platform: key, requestedScopes: ['posts', 'images', 'videos', 'analytics'] })}
                           >
-                            + Connect another {meta.label} account
+                            {hasConnectedAccount ? `+ Connect another ${meta.label} account` : `Connect ${meta.label}`}
                           </button>
                         </div>
                       )}
