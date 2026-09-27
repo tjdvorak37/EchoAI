@@ -62,7 +62,7 @@ const providerError = async (response: Response, fallback: string) => {
 const getVideoClipWindow = (video: ScheduledPost['media'][number], channel: string) => {
   const duration = Number(video.durationSeconds ?? 0)
   const start = Number(video.trimStartSeconds ?? 0)
-  const end = Number(video.trimEndSeconds ?? duration || 0)
+  const end = Number(video.trimEndSeconds ?? (duration || 0))
   const platformCap = channel === 'instagram' ? 180 : channel === 'facebook' ? 480 : Number.POSITIVE_INFINITY
   const normalizedStart = Number.isFinite(start) ? Math.max(0, start) : 0
   const normalizedEnd = Number.isFinite(end) && end > normalizedStart ? Math.max(normalizedStart, end) : duration
