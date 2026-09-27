@@ -16,6 +16,23 @@ const cleanQuery = (value: unknown, fallback: string) => {
 
 const pageNumber = (value: unknown) => Math.max(1, Math.min(50, Math.floor(Number(value) || 1)))
 
+// A key saved from IT / Management (Vault) wins over the PIXABAY_API_KEY server secret.
+let cachedKey: { value: string, expires: number } | null = null
+const pixabayKey = async () => {
+  if (cachedKey && cachedKey.expires > Date.now()) return cachedKey.value
+  let value = ''
+  try {
+    const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', { auth: { persistSession: false } })
+    const { data } = await admin.rpc('get_integration_secret', { p_name: 'pixabay_api_key' })
+    value = typeof data === 'string' ? data : ''
+  } catch (error) {
+    console.error('pixabay key lookup failed', error)
+  }
+  value = value || Deno.env.get('PIXABAY_API_KEY') || ''
+  cachedKey = { value, expires: Date.now() + 60_000 }
+  return value
+}
+
 const searchSounds = async (query: string, page: number) => {
   const params = new URLSearchParams({
     q: query,
@@ -53,7 +70,7 @@ const searchSounds = async (query: string, page: number) => {
 }
 
 const searchVideos = async (query: string, page: number) => {
-  const key = Deno.env.get('PIXABAY_API_KEY')
+  const key = await pixabayKey()
   if (!key) return { configured: false, items: [], hasMore: false, provider: 'Pixabay' }
   const params = new URLSearchParams({ key, q: query, page: String(page), per_page: String(PAGE_SIZE), safesearch: 'true' })
   const response = await fetch(`https://pixabay.com/api/videos/?${params}`)
