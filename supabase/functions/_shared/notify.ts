@@ -52,11 +52,11 @@ export const getNotificationConfig = async (adminClient?: any): Promise<Notifica
   )
 
   try {
-    const { data, error } = await client
-      .from('support_ticket_notifications')
-      .select('*')
-      .eq('id', 'default')
-      .maybeSingle()
+    const [{ data, error }, { data: secrets }] = await Promise.all([
+      client.from('support_ticket_notifications').select('*').eq('id', 'default').maybeSingle(),
+      // Secrets live in a separate service-role-only table (see 202609270001 migration).
+      client.from('support_ticket_notification_secrets').select('*').eq('id', 'default').maybeSingle(),
+    ])
 
     if (data && !error) {
       return {
@@ -75,9 +75,9 @@ export const getNotificationConfig = async (adminClient?: any): Promise<Notifica
         smtp_port: data.smtp_port || 587,
         smtp_encryption: data.smtp_encryption || 'STARTTLS',
         smtp_user: data.smtp_user || 'support@echoaipro.com',
-        smtp_password: data.smtp_password || '',
-        resend_api_key: data.resend_api_key || '',
-        sendgrid_api_key: data.sendgrid_api_key || '',
+        smtp_password: secrets?.smtp_password || '',
+        resend_api_key: secrets?.resend_api_key || '',
+        sendgrid_api_key: secrets?.sendgrid_api_key || '',
       }
     }
   } catch (err) {

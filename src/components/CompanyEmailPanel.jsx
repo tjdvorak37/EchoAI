@@ -65,6 +65,8 @@ export function CompanyEmailPanel({
   const [showPassword, setShowPassword] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
   const [hasExistingPassword, setHasExistingPassword] = useState(false)
+  const [hasExistingResendKey, setHasExistingResendKey] = useState(false)
+  const [hasExistingSendgridKey, setHasExistingSendgridKey] = useState(false)
   const [notifyLoading, setNotifyLoading] = useState(false)
   const [notifySaving, setNotifySaving] = useState(false)
   const [notifyStatus, setNotifyStatus] = useState({ message: '', error: '' })
@@ -105,11 +107,14 @@ export function CompanyEmailPanel({
           smtp_port: config.smtp_port || 587,
           smtp_encryption: config.smtp_encryption || 'STARTTLS',
           smtp_user: config.smtp_user || 'support@echoaipro.com',
-          smtp_password: config.smtp_password || '',
-          resend_api_key: config.resend_api_key || '',
-          sendgrid_api_key: config.sendgrid_api_key || '',
+          // Raw secrets are never returned by the server; only "has_*" flags are.
+          smtp_password: '',
+          resend_api_key: '',
+          sendgrid_api_key: '',
         }))
-        setHasExistingPassword(Boolean(config.smtp_password))
+        setHasExistingPassword(Boolean(config.has_smtp_password))
+        setHasExistingResendKey(Boolean(config.has_resend_api_key))
+        setHasExistingSendgridKey(Boolean(config.has_sendgrid_api_key))
       }
     } catch (err) {
       setNotifyStatus({ message: '', error: err.message })
@@ -163,8 +168,10 @@ export function CompanyEmailPanel({
         sendgridApiKey: notifyConfig.sendgrid_api_key,
       })
       if (saved) {
-        setNotifyConfig((prev) => ({ ...prev, ...saved }))
-        if (saved.smtp_password) setHasExistingPassword(true)
+        setNotifyConfig((prev) => ({ ...prev, ...saved, smtp_password: '', resend_api_key: '', sendgrid_api_key: '' }))
+        if (saved.has_smtp_password) setHasExistingPassword(true)
+        if (saved.has_resend_api_key) setHasExistingResendKey(true)
+        if (saved.has_sendgrid_api_key) setHasExistingSendgridKey(true)
       }
       setNotifyStatus({ message: 'Ticket email notification parameters saved successfully.', error: '' })
       setTimeout(() => setNotifyStatus((prev) => ({ ...prev, message: '' })), 4000)
@@ -200,8 +207,10 @@ export function CompanyEmailPanel({
         sendgridApiKey: notifyConfig.sendgrid_api_key,
       })
       if (saved) {
-        setNotifyConfig((prev) => ({ ...prev, ...saved }))
-        if (notifyConfig.smtp_password || saved.smtp_password) setHasExistingPassword(true)
+        setNotifyConfig((prev) => ({ ...prev, ...saved, smtp_password: '', resend_api_key: '', sendgrid_api_key: '' }))
+        if (notifyConfig.smtp_password || saved.has_smtp_password) setHasExistingPassword(true)
+        if (notifyConfig.resend_api_key || saved.has_resend_api_key) setHasExistingResendKey(true)
+        if (notifyConfig.sendgrid_api_key || saved.has_sendgrid_api_key) setHasExistingSendgridKey(true)
       }
       setSmtpStatus({ saving: false, message: 'Email password & SMTP credentials saved successfully.', error: '' })
       setTimeout(() => setSmtpStatus((prev) => ({ ...prev, message: '' })), 4000)
@@ -562,7 +571,7 @@ export function CompanyEmailPanel({
                       disabled={!canEdit}
                       value={notifyConfig.resend_api_key}
                       onChange={(e) => setNotifyConfig((prev) => ({ ...prev, resend_api_key: e.target.value }))}
-                      placeholder="re_123456789..."
+                      placeholder={hasExistingResendKey ? '•••••••••••• (key saved)' : 're_123456789...'}
                     />
                     <button
                       type="button"
@@ -573,6 +582,11 @@ export function CompanyEmailPanel({
                       {showApiKey ? 'Hide' : 'Show'}
                     </button>
                   </div>
+                  <small className="muted">
+                    {hasExistingResendKey && !notifyConfig.resend_api_key
+                      ? 'Key is saved. Leave blank to keep current, or enter a new one to update.'
+                      : ''}
+                  </small>
                 </label>
 
                 <label>
@@ -582,8 +596,13 @@ export function CompanyEmailPanel({
                     disabled={!canEdit}
                     value={notifyConfig.sendgrid_api_key}
                     onChange={(e) => setNotifyConfig((prev) => ({ ...prev, sendgrid_api_key: e.target.value }))}
-                    placeholder="SG.123456789..."
+                    placeholder={hasExistingSendgridKey ? '•••••••••••• (key saved)' : 'SG.123456789...'}
                   />
+                  <small className="muted">
+                    {hasExistingSendgridKey && !notifyConfig.sendgrid_api_key
+                      ? 'Key is saved. Leave blank to keep current, or enter a new one to update.'
+                      : ''}
+                  </small>
                 </label>
               </div>
             </div>
