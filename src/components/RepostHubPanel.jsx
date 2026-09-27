@@ -159,7 +159,7 @@ export function RepostHubPanel({
         <div className="repost-hero-bar">
           <div>
             <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.45rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <span>📢</span> Broadcast Hub
+              <span>📢</span> Repost
             </h2>
             <p className="panel-note" style={{ margin: 0, fontSize: '0.86rem' }}>
               Pick up approved company stories, make them yours, and send them to the channels you manage.

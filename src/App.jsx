@@ -3853,8 +3853,8 @@ function App() {
           <span className="main-nav-label">Plan</span>
           {[
             ['dashboard', 'Home Base', LayoutDashboard],
-            ['scheduler', 'Queue Studio', CalendarDays],
-            ['repost', 'Broadcast Hub', Repeat2],
+            ['scheduler', 'Post Creation', CalendarDays],
+            ['repost', 'Repost', Repeat2],
           ].map(([key, label, Icon]) => (
             <button
               key={key}
@@ -3871,7 +3871,7 @@ function App() {
           {[
             ['photo', 'Image Lab', ImagePlus],
             ['studio', 'Motion Lab', Video],
-            ['listening', 'Signal Watch', ChartNoAxesCombined],
+            ['listening', 'Analytics', ChartNoAxesCombined],
           ].map(([key, label, Icon]) => (
             <button
               key={key}
@@ -3907,12 +3907,12 @@ function App() {
       <div className="workspace-content">
       <nav className="workspace-top-nav" aria-label="Primary workspace areas">
         {[
-          ['listening', 'Signal Desk', ChartNoAxesCombined],
-          ['dashboard', 'Pulse Reports', BarChart3],
-          ['repost', 'Reply Room', Repeat2],
-          ['scheduler', 'Campaign Flow', CalendarDays],
-          ['integrations', 'Link Studio', Link2],
-          ['credits', 'Promote Lab', ImagePlus],
+          ['listening', 'Analytics', ChartNoAxesCombined],
+          ['dashboard', 'Growth', BarChart3],
+          ['repost', 'Repost', Repeat2],
+          ['scheduler', 'Post Creation', CalendarDays],
+          ['integrations', 'Socials', Link2],
+          ['credits', 'Ad Watch', ImagePlus],
         ].map(([key, label, Icon]) => (
           <button key={key} type="button" className={`workspace-top-link ${activeTab === key ? 'active' : ''}`} onClick={() => requestWorkspaceTab(key)}>
             <Icon size={17} aria-hidden="true" />{label}
@@ -4270,6 +4270,31 @@ function App() {
               </div>
             </div>
 
+            {myEntitlement?.entitled === false && (
+              <div className="dashboard-free-plan-card" aria-live="polite">
+                <div className="dashboard-free-plan-header">
+                  <div>
+                    <span className="dashboard-free-plan-kicker">Free plan</span>
+                    <h3>Monthly free posting allowance</h3>
+                  </div>
+                  <button type="button" className="ghost-button" onClick={() => setUpgradePrompt('unlimited posting')}>
+                    Upgrade for unlimited
+                  </button>
+                </div>
+                <div className="dashboard-free-plan-summary">
+                  <strong>{Math.max(0, FREE_POSTING_ALLOWANCE - freePostingUsage)}</strong>
+                  <span>free posts remaining this month</span>
+                </div>
+                <div className="dashboard-free-plan-meter" aria-label={`Used ${freePostingUsage} of ${FREE_POSTING_ALLOWANCE} free posts`}>
+                  <span style={{ width: `${Math.min(100, (freePostingUsage / FREE_POSTING_ALLOWANCE) * 100)}%` }} />
+                </div>
+                <div className="dashboard-free-plan-footer">
+                  <small>Used {freePostingUsage} / {FREE_POSTING_ALLOWANCE}</small>
+                  <small>Resets monthly • no rollover</small>
+                </div>
+              </div>
+            )}
+
             <div className="stats-grid">
               {stats.map((item) => (
                 <article key={item.label} className="stat-card">
@@ -4433,7 +4458,7 @@ function App() {
                     Open Motion Lab
                   </button>
                     <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('scheduler')}>
-                    Open Queue Studio
+                    Open Post Creation
                   </button>
                 </div>
                 {canViewManagementBoard && (
