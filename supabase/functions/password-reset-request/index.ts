@@ -39,6 +39,7 @@ Deno.serve(async (request) => {
     ])
 
     if ((emailCount ?? 0) >= MAX_PER_EMAIL_PER_HOUR || (ipCount ?? 0) >= MAX_PER_IP_PER_HOUR) {
+      console.warn(`Password reset rate-limited for email_hash=${emailHash} ip_hash=${ipHash ?? 'none'}`)
       return json({ ok: true }, 200, request)
     }
     await adminClient.from('password_reset_throttle').insert({ email_hash: emailHash, ip_hash: ipHash })
@@ -50,9 +51,14 @@ Deno.serve(async (request) => {
       options: { redirectTo: `${appUrl}/?recovery=1` },
     })
 
-    if (!linkError && link?.properties?.action_link) {
+    // Never reveal to the caller whether the account exists or delivery
+    // failed (email enumeration) — but always log the real reason so
+    // support can diagnose "I never got my reset email" reports.
+    if (linkError || !link?.properties?.action_link) {
+      console.warn(`Password reset link generation failed for email_hash=${emailHash}:`, linkError?.message || 'no action_link returned (account may not exist)')
+    } else {
       const result = await sendPasswordResetEmail(cleanEmail, link.properties.action_link, adminClient)
-      if (!result.success) console.error('Password reset delivery failed:', result.error)
+      if (!result.success) console.error(`Password reset delivery failed for email_hash=${emailHash}:`, result.error)
     }
 
     return json({ ok: true }, 200, request)

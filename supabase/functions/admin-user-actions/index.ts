@@ -120,7 +120,18 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'get-ticket-notification-config') {
-      const config = await getNotificationConfig(adminClient)
+      const fullConfig = await getNotificationConfig(adminClient)
+      // Never return raw secrets to the browser — only whether one is set.
+      const { smtp_password, resend_api_key, sendgrid_api_key, ...safeConfig } = fullConfig
+      const config = {
+        ...safeConfig,
+        smtp_password: '',
+        resend_api_key: '',
+        sendgrid_api_key: '',
+        has_smtp_password: Boolean(smtp_password),
+        has_resend_api_key: Boolean(resend_api_key),
+        has_sendgrid_api_key: Boolean(sendgrid_api_key),
+      }
       return json({ config, canEdit: canEditEmail }, 200, request)
     }
 
@@ -242,28 +253,37 @@ Deno.serve(async (request) => {
         updated_at: new Date().toISOString(),
       }
 
-      const { data: existing } = await adminClient
-        .from('support_ticket_notifications')
+      // Secrets live in a separate service-role-only table; a blank field
+      // means "keep the current value", never wipe it out on unrelated saves.
+      const { data: existingSecrets } = await adminClient
+        .from('support_ticket_notification_secrets')
         .select('smtp_password, resend_api_key, sendgrid_api_key')
         .eq('id', 'default')
         .maybeSingle()
 
+      const secretUpdate: Record<string, unknown> = {
+        id: 'default',
+        smtp_password: existingSecrets?.smtp_password || '',
+        resend_api_key: existingSecrets?.resend_api_key || '',
+        sendgrid_api_key: existingSecrets?.sendgrid_api_key || '',
+        updated_at: new Date().toISOString(),
+      }
       if (typeof smtpPassword === 'string' && smtpPassword.trim()) {
-        updateData.smtp_password = smtpPassword.trim()
-      } else if (existing?.smtp_password) {
-        updateData.smtp_password = existing.smtp_password
+        secretUpdate.smtp_password = smtpPassword.trim()
+      }
+      if (typeof resendApiKey === 'string' && resendApiKey.trim()) {
+        secretUpdate.resend_api_key = resendApiKey.trim()
+      }
+      if (typeof sendgridApiKey === 'string' && sendgridApiKey.trim()) {
+        secretUpdate.sendgrid_api_key = sendgridApiKey.trim()
       }
 
-      if (typeof resendApiKey === 'string') {
-        updateData.resend_api_key = resendApiKey.trim()
-      } else if (existing?.resend_api_key) {
-        updateData.resend_api_key = existing.resend_api_key
-      }
+      const { error: secretSaveError } = await adminClient
+        .from('support_ticket_notification_secrets')
+        .upsert(secretUpdate, { onConflict: 'id' })
 
-      if (typeof sendgridApiKey === 'string') {
-        updateData.sendgrid_api_key = sendgridApiKey.trim()
-      } else if (existing?.sendgrid_api_key) {
-        updateData.sendgrid_api_key = existing.sendgrid_api_key
+      if (secretSaveError) {
+        return json({ error: secretSaveError.message }, 500, request)
       }
 
       const { data: savedConfig, error: saveError } = await adminClient
@@ -283,7 +303,17 @@ Deno.serve(async (request) => {
         detail: { recipient_email: updateData.recipient_email, enabled: updateData.enabled },
       })
 
-      return json({ config: savedConfig }, 200, request)
+      return json({
+        config: {
+          ...savedConfig,
+          smtp_password: '',
+          resend_api_key: '',
+          sendgrid_api_key: '',
+          has_smtp_password: Boolean(secretUpdate.smtp_password),
+          has_resend_api_key: Boolean(secretUpdate.resend_api_key),
+          has_sendgrid_api_key: Boolean(secretUpdate.sendgrid_api_key),
+        },
+      }, 200, request)
     }
 
     if (action === 'test-ticket-notification') {

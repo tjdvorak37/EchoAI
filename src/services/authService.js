@@ -1257,29 +1257,20 @@ export const authService = {
       return defaultConfig
     }
 
-    // Try direct DB select
-    try {
-      const { data, error } = await supabase
-        .from('support_ticket_notifications')
-        .select('*')
-        .eq('id', 'default')
-        .maybeSingle()
-
-      if (data && !error) {
-        const merged = { ...defaultConfig, ...data }
-        try { localStorage.setItem(LOCAL_CONFIG_KEY, JSON.stringify(merged)) } catch { /* ignore */ }
-        return merged
-      }
-    } catch {
-      // Table fallback
-    }
-
-    // Try edge function
+    // Secrets (smtp_password/resend_api_key/sendgrid_api_key) never come back from
+    // this call — the edge function only reports has_smtp_password/has_resend_api_key/
+    // has_sendgrid_api_key booleans, since raw values must never reach the browser.
     try {
       const result = await this.adminUserAction({ action: 'get-ticket-notification-config' })
       if (result?.config) {
-        const merged = { ...defaultConfig, ...result.config }
-        try { localStorage.setItem(LOCAL_CONFIG_KEY, JSON.stringify(merged)) } catch { /* ignore */ }
+        const merged = { ...defaultConfig, ...localSaved, ...result.config }
+        try {
+          const cacheable = { ...merged }
+          delete cacheable.smtp_password
+          delete cacheable.resend_api_key
+          delete cacheable.sendgrid_api_key
+          localStorage.setItem(LOCAL_CONFIG_KEY, JSON.stringify(cacheable))
+        } catch { /* ignore */ }
         return merged
       }
     } catch {
@@ -1310,17 +1301,8 @@ export const authService = {
       smtp_user: config.smtpUser || config.smtp_user || 'support@echoaipro.com',
       updated_at: new Date().toISOString(),
     }
-    if (config.smtpPassword || config.smtp_password) {
-      updatePayload.smtp_password = config.smtpPassword || config.smtp_password
-    }
-    if (typeof config.resendApiKey === 'string') {
-      updatePayload.resend_api_key = config.resendApiKey
-    }
-    if (typeof config.sendgridApiKey === 'string') {
-      updatePayload.sendgrid_api_key = config.sendgridApiKey
-    }
 
-    // Always persist to localStorage so settings are never lost
+    // Never cache raw secrets in localStorage — only non-secret fields.
     try {
       localStorage.setItem(LOCAL_CONFIG_KEY, JSON.stringify(updatePayload))
     } catch {
@@ -1331,31 +1313,14 @@ export const authService = {
       return updatePayload
     }
 
-    // Try direct database update
-    try {
-      const { data, error } = await supabase
-        .from('support_ticket_notifications')
-        .upsert(updatePayload, { onConflict: 'id' })
-        .select('*')
-        .single()
-
-      if (data && !error) {
-        return data
-      }
-    } catch {
-      // Fallback
-    }
-
-    // Try edge function
-    try {
-      const result = await this.adminUserAction({
-        action: 'update-ticket-notification-config',
-        ...config,
-      })
-      if (result?.config) return result.config
-    } catch {
-      // Edge function may not have the latest action deployed yet; return local/persisted payload
-    }
+    // Secrets (smtpPassword/resendApiKey/sendgridApiKey) are written via the
+    // service-role-only edge function, never via a direct client update — the
+    // client has no way to update support_ticket_notification_secrets directly.
+    const result = await this.adminUserAction({
+      action: 'update-ticket-notification-config',
+      ...config,
+    })
+    if (result?.config) return result.config
 
     return updatePayload
   },
