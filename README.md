@@ -10,7 +10,7 @@ application.
 - Dashboard for workspace activity, connected accounts, announcements, and
   account status.
 - Create Desk for campaign copy, briefs, personas, and hosted AI workflows.
-- Image Lab and Motion Lab for image and video editing and export.
+- Photo Editor and Video Editor for image and video editing and export.
 - Post Creation for scheduling posts and managing publishing work.
 - Analytics for social listening and external-source monitoring.
 - Repost for company post distribution and repost workflows.

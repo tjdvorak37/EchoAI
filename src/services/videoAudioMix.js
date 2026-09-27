@@ -140,6 +140,199 @@ export const updateCleanupChain = (chain, enabled) => {
   chain.lowpass.frequency.value = enabled ? 11000 : 22000
 }
 
+export const VOICE_EFFECTS = {
+  none: { label: 'Original', icon: '○' },
+  deep: { label: 'Deep voice', icon: '⬇' },
+  high: { label: 'Chipmunk', icon: '⬆' },
+  monster: { label: 'Monster', icon: '👹' },
+  robot: { label: 'Robot', icon: '🤖' },
+  telephone: { label: 'Telephone', icon: '☎' },
+  radio: { label: 'Old radio', icon: '📻' },
+  megaphone: { label: 'Megaphone', icon: '📣' },
+  echo: { label: 'Echo', icon: '〜' },
+  hall: { label: 'Big hall', icon: '🏛' },
+}
+
+const filter = (context, type, frequency, extra = {}) => {
+  const node = context.createBiquadFilter()
+  node.type = type
+  node.frequency.value = frequency
+  if (extra.Q !== undefined) node.Q.value = extra.Q
+  if (extra.gain !== undefined) node.gain.value = extra.gain
+  return node
+}
+
+const distortion = (context, amount) => {
+  const shaper = context.createWaveShaper()
+  const curve = new Float32Array(1024)
+  for (let index = 0; index < curve.length; index += 1) {
+    const x = (index * 2) / curve.length - 1
+    curve[index] = ((3 + amount) * x * 20 * (Math.PI / 180)) / (Math.PI + amount * Math.abs(x))
+  }
+  shaper.curve = curve
+  shaper.oversample = '4x'
+  return shaper
+}
+
+const series = (nodes) => {
+  nodes.reduce((previous, next) => {
+    previous.connect(next)
+    return next
+  })
+  return { input: nodes[0], output: nodes[nodes.length - 1] }
+}
+
+// Delay-line pitch shifter (two crossfaded, sawtooth-modulated delays); works in real time and offline.
+const createPitchShifter = (context, offset, sources) => {
+  const delayTime = 0.1
+  const fadeTime = 0.05
+  const bufferTime = 0.1
+  const rate = context.sampleRate
+  const length = Math.floor(bufferTime * rate)
+  const fadeLength = fadeTime * rate
+
+  const fadeBuffer = context.createBuffer(1, length, rate)
+  const fadeData = fadeBuffer.getChannelData(0)
+  for (let index = 0; index < length; index += 1) {
+    fadeData[index] = index < fadeLength
+      ? Math.sqrt(index / fadeLength)
+      : index >= length - fadeLength ? Math.sqrt(1 - (index - (length - fadeLength)) / fadeLength) : 1
+  }
+  const rampBuffer = context.createBuffer(1, length, rate)
+  const rampData = rampBuffer.getChannelData(0)
+  for (let index = 0; index < length; index += 1) {
+    rampData[index] = offset > 0 ? (length - index) / length : index / length
+  }
+
+  const input = context.createGain()
+  const output = context.createGain()
+  const start = context.currentTime + 0.02
+  ;[0, bufferTime - fadeTime].forEach((phase) => {
+    const delay = context.createDelay(1)
+    const mix = context.createGain()
+    mix.gain.value = 0
+    const depth = context.createGain()
+    depth.gain.value = 0.5 * delayTime * Math.abs(offset)
+    const ramp = context.createBufferSource()
+    ramp.buffer = rampBuffer
+    ramp.loop = true
+    const fade = context.createBufferSource()
+    fade.buffer = fadeBuffer
+    fade.loop = true
+    ramp.connect(depth)
+    depth.connect(delay.delayTime)
+    fade.connect(mix.gain)
+    input.connect(delay)
+    delay.connect(mix)
+    mix.connect(output)
+    ramp.start(start + phase)
+    fade.start(start + phase)
+    sources.push(ramp, fade)
+  })
+  return { input, output }
+}
+
+const impulseResponse = (context, seconds, decay) => {
+  const length = Math.floor(seconds * context.sampleRate)
+  const buffer = context.createBuffer(2, length, context.sampleRate)
+  for (let channel = 0; channel < 2; channel += 1) {
+    const data = buffer.getChannelData(channel)
+    for (let index = 0; index < length; index += 1) {
+      data[index] = (Math.random() * 2 - 1) * (1 - index / length) ** decay
+    }
+  }
+  return buffer
+}
+
+const withWet = (context, wetNode, wetLevel) => {
+  const input = context.createGain()
+  const output = context.createGain()
+  const wet = context.createGain()
+  wet.gain.value = wetLevel
+  input.connect(output)
+  input.connect(wetNode.input)
+  wetNode.output.connect(wet)
+  wet.connect(output)
+  return { input, output }
+}
+
+// Returns { input, output, stop } so the preview can swap effects without rebuilding the clip chain.
+export const createVoiceEffect = (context, key) => {
+  const sources = []
+  let chain = null
+
+  if (key === 'deep') chain = createPitchShifter(context, -0.45, sources)
+  else if (key === 'high') chain = createPitchShifter(context, 0.7, sources)
+  else if (key === 'monster') {
+    const shifter = createPitchShifter(context, -0.85, sources)
+    const grit = series([distortion(context, 12), filter(context, 'lowpass', 3500)])
+    shifter.output.connect(grit.input)
+    chain = { input: shifter.input, output: grit.output }
+  } else if (key === 'robot') {
+    const ring = context.createGain()
+    ring.gain.value = 0
+    const carrier = context.createOscillator()
+    carrier.frequency.value = 55
+    carrier.connect(ring.gain)
+    carrier.start()
+    sources.push(carrier)
+    const comb = context.createDelay(0.1)
+    comb.delayTime.value = 0.011
+    const feedback = context.createGain()
+    feedback.gain.value = 0.45
+    ring.connect(comb)
+    comb.connect(feedback)
+    feedback.connect(comb)
+    const output = context.createGain()
+    output.gain.value = 1.6
+    ring.connect(output)
+    comb.connect(output)
+    chain = { input: ring, output }
+  } else if (key === 'telephone') {
+    chain = series([filter(context, 'highpass', 450), filter(context, 'lowpass', 3200), filter(context, 'peaking', 1500, { Q: 1, gain: 6 })])
+  } else if (key === 'radio') {
+    chain = series([filter(context, 'highpass', 300), filter(context, 'lowpass', 4500), distortion(context, 8), filter(context, 'peaking', 2000, { Q: 0.8, gain: 4 })])
+  } else if (key === 'megaphone') {
+    chain = series([filter(context, 'highpass', 700), filter(context, 'lowpass', 3500), filter(context, 'peaking', 1800, { Q: 1.2, gain: 8 }), distortion(context, 40)])
+  } else if (key === 'echo') {
+    const delay = context.createDelay(2)
+    delay.delayTime.value = 0.3
+    const feedback = context.createGain()
+    feedback.gain.value = 0.38
+    delay.connect(feedback)
+    feedback.connect(delay)
+    chain = withWet(context, { input: delay, output: delay }, 0.55)
+  } else if (key === 'hall') {
+    const convolver = context.createConvolver()
+    convolver.buffer = impulseResponse(context, 2.8, 2.5)
+    chain = withWet(context, { input: convolver, output: convolver }, 0.5)
+  }
+
+  if (!chain) {
+    const passthrough = context.createGain()
+    chain = { input: passthrough, output: passthrough }
+  }
+
+  // Band-limited effects lose energy and ring/feedback effects gain it; even them out.
+  const makeup = { monster: 2, robot: 0.4, telephone: 2.4, radio: 2.2, megaphone: 2.4, echo: 0.7, hall: 0.85 }[key]
+  if (makeup) {
+    const level = context.createGain()
+    level.gain.value = makeup
+    chain.output.connect(level)
+    chain = { input: chain.input, output: level }
+  }
+
+  return {
+    ...chain,
+    stop: () => {
+      sources.forEach((source) => {
+        try { source.stop() } catch { /* already stopped */ }
+      })
+      chain.output.disconnect()
+    },
+  }
+}
+
 export const createMasterBus = (context, master) => {
   const settings = { ...DEFAULT_MASTER_AUDIO, ...(master ?? {}) }
   const input = context.createGain()
@@ -199,11 +392,13 @@ export const renderTimelineMix = async ({ tracks, master, duration, decode, samp
     source.buffer = buffer
     source.playbackRate.value = clip.speed ?? 1
     const cleanup = createCleanupChain(context, clip.noiseRemoval)
+    const voice = createVoiceEffect(context, clip.voiceFx ?? 'none')
     const eq = createEqChain(context, clip.eq)
     const gain = context.createGain()
     gain.gain.setValueCurveAtTime(sampleGainCurve((time) => clipGainAt(clip, time), length), start, length)
     source.connect(cleanup.input)
-    cleanup.output.connect(eq.input)
+    cleanup.output.connect(voice.input)
+    voice.output.connect(eq.input)
     eq.output.connect(gain)
     gain.connect(bus.input)
     source.start(start, clip.trim?.start ?? 0, length * (clip.speed ?? 1))

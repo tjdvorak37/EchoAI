@@ -3869,8 +3869,8 @@ function App() {
         <div className="main-nav-group">
           <span className="main-nav-label">Studio &amp; insights</span>
           {[
-            ['photo', 'Image Lab', ImagePlus],
-            ['studio', 'Motion Lab', Video],
+            ['photo', 'Photo Editor', ImagePlus],
+            ['studio', 'Video Editor', Video],
             ['listening', 'Analytics', ChartNoAxesCombined],
           ].map(([key, label, Icon]) => (
             <button
@@ -4452,10 +4452,10 @@ function App() {
                 <h3>Quick actions</h3>
                 <div className="action-row">
                     <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('photo')}>
-                    Open Image Lab
+                    Open Photo Editor
                   </button>
                     <button type="button" className="primary-button" onClick={() => requestWorkspaceTab('studio')}>
-                    Open Motion Lab
+                    Open Video Editor
                   </button>
                     <button type="button" className="ghost-button" onClick={() => requestWorkspaceTab('scheduler')}>
                     Open Post Creation
@@ -4931,7 +4931,7 @@ function App() {
             <h3 className="section-label">Manage company brand kit</h3>
             <p className="panel-note">
               Your company&apos;s colours, licensed fonts, and logos. Everything here is available in
-              Image Lab and Motion Lab so every post stays on brand.
+              Photo Editor and Video Editor so every post stays on brand.
             </p>
 
             <div className="list-row">
