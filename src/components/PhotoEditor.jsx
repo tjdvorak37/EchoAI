@@ -913,9 +913,10 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
       y: 50,
       fontSize: 34,
       weight: 700,
-      color: '#f8fafc',
+      // White with a shadow reads on photos; on a blank light canvas it would vanish.
+      color: selectedImageSrc ? '#f8fafc' : '#0f172a',
       align: 'left',
-      effect: 'shadow',
+      effect: selectedImageSrc ? 'shadow' : 'none',
       outlineWidth: 0,
       outlineColor: '#020617',
       shadowBlur: 18,
@@ -2427,7 +2428,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                 </div>
               ) : null}
 
-              {(selectedImageSrc || layers.length || brushStrokes.length) && (
+              {(selectedImageSrc || layers.length > 0 || brushStrokes.length > 0) && (
                 <>
                   <div className="photo-stage-vignette" style={{ opacity: clamp(filters.vignette / 100, 0.18, 0.7) }} />
                   <div className="photo-stage-noise" style={{ opacity: clamp(filters.grain / 80, 0.05, 0.22) }} />
@@ -2871,7 +2872,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
             {[...layers].reverse().map((layer) => (
               <div
                 key={`manage-${layer.id}`}
-                className={`it-row ${layer.id === resolvedActiveLayerId ? 'active' : ''}`}
+                className={`it-row photo-layer-row ${layer.id === resolvedActiveLayerId ? 'active' : ''}`}
                 style={{ gap: '0.35rem', alignItems: 'center' }}
               >
                 <button

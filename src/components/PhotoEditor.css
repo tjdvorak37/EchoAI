@@ -1239,10 +1239,114 @@
   object-fit: contain;
   background: #ffffff;
 }
+
+/* Light theme text: the base styles were written for a dark shell. */
+.photo-creator-shell .section-label,
+.photo-creator-shell .small-title,
+.photo-creator-shell .option-group-title {
+  color: #1d4ed8;
+}
+
+.photo-creator-shell .menu-item-compact {
+  color: #1e293b;
+  font-weight: 650;
+}
+
+.photo-creator-shell .menu-item-compact:hover,
+.photo-creator-shell .menu-item-compact.active {
+  color: #1d4ed8;
+  background: #eef2ff;
+}
+
+.photo-creator-shell .menu-tools-toggle {
+  color: #334155;
+}
+
+.photo-creator-shell .editor-options-bar span,
+.photo-creator-shell .editor-options-bar label {
+  color: #334155;
+}
+
+.photo-creator-shell .status-pill {
+  color: #0e7490;
+  background: #cffafe;
+}
+
+.photo-creator-shell .tool-group {
+  background: #1e293b;
+}
+
+.photo-creator-shell .tool-group-label {
+  color: #cbd5e1;
+}
+
+.photo-creator-shell .panel-block,
+.photo-creator-shell .concept-card {
+  color: #172033;
+  background: #f8fafc;
+  border: 1px solid #d7e1f1;
+}
+
+.photo-creator-shell .panel-block label,
+.photo-creator-shell .panel-block strong,
+.photo-creator-shell .panel-block span,
+.photo-creator-shell .concept-card strong,
+.photo-creator-shell .concept-card span {
+  color: #1e293b;
+}
+
+.photo-creator-shell .panel-block .panel-note,
+.photo-creator-shell .panel-block .muted,
+.photo-creator-shell .panel-block small,
+.photo-creator-shell .concept-card small,
+.photo-creator-shell .concept-card p {
+  color: #475569;
+}
+
+.photo-creator-shell .panel-block select,
+.photo-creator-shell .panel-block textarea,
+.photo-creator-shell .panel-block input:not([type='range']):not([type='color']):not([type='checkbox']),
+.photo-creator-shell .concept-card textarea {
+  color: #172033;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.photo-creator-shell .panel-block input[type='range'] {
+  accent-color: #1d4ed8;
+}
+
+.photo-creator-shell .photo-layer-row {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  padding: 0.35rem 0.25rem;
+}
+
+.photo-creator-shell .photo-layer-row .text-button {
+  flex: 1 1 100% !important;
+  min-width: 0;
+  overflow: hidden;
+  color: #1e293b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-creator-shell .photo-layer-row .chip {
+  flex: 0 0 auto;
+  min-width: 1.9rem;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.72rem;
+}
+
+.photo-creator-shell .photo-layer-row.active {
+  border-radius: 0.4rem;
+  background: #eef2ff;
+}
 .dock-actions .photo-stock-chip {
   width: 100%;
-  border-color: rgba(245, 158, 11, 0.55);
-  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  border-color: rgba(180, 83, 9, 0.6);
+  background: linear-gradient(135deg, #b45309, #9a3412);
   color: #fff;
 }
 
