@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import { Clapperboard, Eye, EyeOff, Film, Lock, MonitorPlay, Music2, PanelsTopLeft, Play, RotateCcw, Scissors, SlidersHorizontal, Type, Unlock, Volume2, VolumeX } from 'lucide-react'
+import { Clapperboard, Download, Eye, EyeOff, Film, Lock, MonitorPlay, Music2, PanelsTopLeft, Play, RotateCcw, Scissors, SlidersHorizontal, Type, Unlock, Volume2, VolumeX } from 'lucide-react'
 import { canUseAgentMode, runCreativeAgentJob } from '../services/aiAgentService'
 import {
   DEFAULT_MASTER_AUDIO,
@@ -1432,9 +1432,6 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           <button type="button" className="toolbar-btn" onClick={redo} disabled={historyCounts.future === 0}>
             ↷
           </button>
-          <button type="button" className="toolbar-btn" onClick={exportTimeline} disabled={isExporting}>
-            {isExporting ? `Exporting ${exportProgress}%` : '⬇ Export video'}
-          </button>
           {statusMessage && <span className="muted">{statusMessage}</span>}
         </div>
 
@@ -1458,6 +1455,10 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
               {label}
             </button>
           ))}
+          <button type="button" className="toolbar-btn toolbar-btn-export" onClick={exportTimeline} disabled={isExporting}>
+            <Download size={17} aria-hidden="true" />
+            {isExporting ? `Exporting ${exportProgress}%` : 'Export video'}
+          </button>
         </div>
       </div>
 
