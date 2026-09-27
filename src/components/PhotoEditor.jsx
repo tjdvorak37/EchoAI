@@ -36,6 +36,7 @@ import { PhotoShortcutsOverlay } from './PhotoShortcutsOverlay'
 import { EditorFocusToggle } from './EditorFocusMode'
 import { useEditorFocusMode } from './useEditorFocusMode'
 import { downloadMediaLibraryDataUrl } from '../services/mediaLibraryService'
+import { createPhotoProject, parsePhotoProject } from '../services/photoProject'
 import {
   combineMasks,
   defaultHueSat,
@@ -241,7 +242,6 @@ const DEFAULT_FILTERS = {
   grain: 18,
 }
 
-// Flattening bakes the current look into pixels, so the look must not apply twice.
 const NEUTRAL_FILTERS = {
   brightness: 100,
   contrast: 100,
@@ -859,6 +859,22 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 })
   const [openMenu, setOpenMenu] = useState(null)
   const [menuHost, setMenuHost] = useState(null)
+  useEffect(() => {
+    if (!openMenu) return undefined
+    const dismissOutside = (event) => {
+      if (event.target instanceof Element && event.target.closest('.sidebar-menu-bar')) return
+      setOpenMenu(null)
+    }
+    const dismissEscape = (event) => {
+      if (event.key === 'Escape') setOpenMenu(null)
+    }
+    document.addEventListener('pointerdown', dismissOutside)
+    document.addEventListener('keydown', dismissEscape)
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside)
+      document.removeEventListener('keydown', dismissEscape)
+    }
+  }, [openMenu])
   const stageRef = useRef(null)
   const stageViewportRef = useRef(null)
   const paintCanvasRef = useRef(null)
@@ -886,6 +902,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const [layerMenu, setLayerMenu] = useState(null)
   const [renamingLayerId, setRenamingLayerId] = useState('')
   const [busy, setBusy] = useState('')
+    const [projectFileHandle, setProjectFileHandle] = useState(null)
   const focusMode = useEditorFocusMode()
   const maskIdRef = useRef(0)
   // Handlers declared later in the component, reached from earlier keyboard/menu code.
@@ -1553,16 +1570,43 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   
   // FILE MENU
   const handleFileNew = () => {
-    if (confirm('Create a new canvas? Current work will remain in history.')) {
-      commitHistory()
-      setBrushStrokes([])
-      setUploadedImage('')
-      setGeneratedImageSrc('')
-      setSelectedAssetId('')
-      setLayers(defaultLayers())
-      setActiveLayerId('headline')
-      setCanvasPan({ x: 0, y: 0 })
-      setNotice('New canvas created.')
+    if (confirm('Create a new canvas? Unsaved project changes will be cleared.')) resetDocument('New canvas created.')
+    setOpenMenu(null)
+  }
+
+  const resetDocument = (message) => {
+    commitHistory()
+    setUploadedImage('')
+    setGeneratedImageSrc('')
+    setSelectedAssetId('')
+    setLayers([])
+    setActiveLayerId('')
+    setActiveTool('select')
+    setPrompt(DEFAULT_PROMPT)
+    setHeadline('')
+    setSubcopy('')
+    setPresetId('aurora')
+    setAspectRatio('4:5')
+    setFilters(DEFAULT_FILTERS)
+    setBrushStrokes([])
+    setMaskShape('none')
+    setCropRect({ x: 0, y: 0, w: 100, h: 100 })
+    setCanvasBackground('#ffffff')
+    setHueSat(defaultHueSat())
+    setLayerMask(null)
+    setSelection(null)
+    setSelectionMode('new')
+    setSelectionFeather(0)
+    setProjectFileHandle(null)
+    setCanvasPan({ x: 0, y: 0 })
+    setCanvasZoom(100)
+    setNotice(message)
+  }
+
+  const handleFileClose = () => {
+    const hasDocument = Boolean(selectedImageSrc || layers.length || brushStrokes.length || layerMask)
+    if (!hasDocument || confirm('Close this document? Save any project changes before closing.')) {
+      resetDocument('Document closed.')
     }
     setOpenMenu(null)
   }
@@ -1697,6 +1741,55 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setOpenMenu(null)
   }
 
+  const handleLayerMergeDown = () => {
+    const index = layers.findIndex((layer) => layer.id === resolvedActiveLayerId)
+    if (index <= 0) {
+      setNotice('Select a layer with another layer beneath it to merge down.')
+      setOpenMenu(null)
+      return
+    }
+    const lower = layers[index - 1]
+    const upper = layers[index]
+    withBusy('Merging layers…', async () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = aspect.canvasWidth
+      canvas.height = aspect.canvasHeight
+      const mergeMetrics = { width: canvas.width, height: canvas.height }
+      const mergedSrc = await renderComposition({
+        canvas,
+        imageSrc: '',
+        maskShape: 'none',
+        filters: NEUTRAL_FILTERS,
+        preset,
+        backgroundColor: 'transparent',
+        layers: [lower, upper],
+        brushStrokes: [],
+        stageMetrics: mergeMetrics,
+      })
+      const merged = {
+        id: nextLayerId('merged'),
+        type: 'image',
+        label: `${lower.label} + ${upper.label}`,
+        src: mergedSrc,
+        x: 50,
+        y: 50,
+        width: 100,
+        opacity: 100,
+        rotation: 0,
+        blendMode: 'source-over',
+      }
+      commitHistory()
+      setLayers((current) => {
+        const next = [...current]
+        next.splice(index - 1, 2, merged)
+        return next
+      })
+      setActiveLayerId(merged.id)
+      setNotice(`Merged ${upper.label} down into ${lower.label}.`)
+    })
+    setOpenMenu(null)
+  }
+
   // FILTER MENU
   const handleFilterBlur = () => {
     commitHistory()
@@ -1721,44 +1814,148 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   }
 
   // EXPANDED FILE MENU
-  const handleFileSave = () => {
-    const projectData = JSON.stringify({ layers, filters, preset: presetId, aspect: aspectRatio })
-    const link = document.createElement('a')
-    link.href = `data:text/json,${encodeURIComponent(projectData)}`
-    link.download = `project-${Date.now()}.echoai`
-    link.click()
-    setNotice('Project saved.')
-    setOpenMenu(null)
+  const embedProjectImage = async (src) => {
+    if (!src || src.startsWith('data:')) return src || ''
+    const image = await loadImage(src)
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Could not embed the project image.')
+    context.drawImage(image, 0, 0)
+    return canvas.toDataURL('image/png')
   }
 
-  const handleFileOpenProject = () => {
+  const buildProjectFile = async () => {
+    const [imageSrc, savedLayers] = await Promise.all([
+      embedProjectImage(selectedImageSrc),
+      Promise.all(layers.map(async (layer) => layer.type === 'image' && layer.src
+        ? { ...layer, src: await embedProjectImage(layer.src) }
+        : { ...layer })),
+    ])
+    return JSON.stringify(createPhotoProject({
+      imageSrc,
+      prompt,
+      headline,
+      subcopy,
+      presetId,
+      aspectRatio,
+      canvasBackground,
+      maskShape,
+      cropRect,
+      filters,
+      hueSat,
+      layerMask,
+      brushStrokes,
+      layers: savedLayers,
+      selection: selection ? { src: maskToDataUrl(selection.mask, selection.width, selection.height), width: selection.width, height: selection.height } : null,
+      exportFormat,
+      exportQuality,
+    }))
+  }
+
+  const handleFileSave = async (saveAs = false) => {
+    setOpenMenu(null)
+    try {
+      const suggestedName = `${slugify(headline || 'echoai-photo-project')}.echoai`
+      let handle = !saveAs ? projectFileHandle : null
+      if (!handle && window.showSaveFilePicker) {
+        try {
+          handle = await window.showSaveFilePicker({
+            suggestedName,
+            types: [{ description: 'EchoAI Photo Project', accept: { 'application/json': ['.echoai'] } }],
+          })
+        } catch (error) {
+          if (error.name === 'AbortError') return
+          throw error
+        }
+      }
+      const contents = await buildProjectFile()
+      if (handle) {
+        const writable = await handle.createWritable()
+        await writable.write(contents)
+        await writable.close()
+        setProjectFileHandle(handle)
+        setNotice(`Saved ${handle.name}.`)
+        return
+      }
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(new Blob([contents], { type: 'application/json' }))
+      link.download = suggestedName
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+      setNotice('Downloaded a complete EchoAI project copy.')
+    } catch (error) {
+      if (error.name === 'AbortError') return
+      setNotice(`Could not save project: ${error.message}`)
+    }
+  }
+
+  const loadProjectFile = (file, handle = null) => {
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      void (async () => {
+        try {
+          const project = parsePhotoProject(event.target?.result || '{}')
+          let restoredSelection = null
+          if (project.selection?.src) {
+            const mask = await dataUrlToMask(project.selection.src, project.selection.width, project.selection.height)
+            restoredSelection = { mask, width: project.selection.width, height: project.selection.height, ...selectionOverlayUrls(mask, project.selection.width, project.selection.height) }
+          }
+          commitHistory()
+          setLayers(project.layers)
+          setActiveLayerId(project.layers[0]?.id ?? '')
+          setFilters({ ...DEFAULT_FILTERS, ...project.filters })
+          setPresetId(project.presetId)
+          setAspectRatio(project.aspectRatio)
+          setGeneratedImageSrc(project.imageSrc)
+          setUploadedImage('')
+          setSelectedAssetId('')
+          setPrompt(project.prompt)
+          setHeadline(project.headline)
+          setSubcopy(project.subcopy)
+          setCanvasBackground(project.canvasBackground)
+          setMaskShape(project.maskShape)
+          setCropRect(project.cropRect)
+          setHueSat(project.hueSat ?? defaultHueSat())
+          setLayerMask(project.layerMask)
+          setBrushStrokes(project.brushStrokes)
+          setSelection(restoredSelection)
+          setExportFormat(project.exportFormat)
+          setExportQuality(project.exportQuality)
+          setProjectFileHandle(handle)
+          setNotice('Project opened with editable layers, image, masks, and adjustments.')
+        } catch (error) {
+          setNotice(`Could not open project: ${error.message}`)
+        }
+      })()
+    }
+    reader.onerror = () => setNotice('Could not read that project file.')
+    reader.readAsText(file)
+  }
+
+  const handleFileOpenProject = async () => {
+    setOpenMenu(null)
+    if (window.showOpenFilePicker) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          multiple: false,
+          types: [{ description: 'EchoAI Photo Project', accept: { 'application/json': ['.echoai', '.json'] } }],
+        })
+        loadProjectFile(await handle.getFile(), handle)
+      } catch (error) {
+        if (error.name !== 'AbortError') setNotice(`Could not open project: ${error.message}`)
+      }
+      return
+    }
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.echoai,application/json'
-    input.onchange = (e) => {
-      const file = e.target.files?.[0]
-      if (file) {
-        const reader = new FileReader()
-        reader.onload = (evt) => {
-          try {
-            const project = JSON.parse(evt.target?.result || '{}')
-            if (project.layers && project.filters) {
-              commitHistory()
-              setLayers(project.layers)
-              setFilters(project.filters)
-              setPresetId(project.preset || 'aurora')
-              setAspectRatio(project.aspect || '4:5')
-              setNotice('Project loaded successfully.')
-            }
-          } catch {
-            setNotice('Failed to load project file.')
-          }
-        }
-        reader.readAsText(file)
-      }
+    input.onchange = (event) => {
+      const file = event.target.files?.[0]
+      if (file) loadProjectFile(file)
     }
     input.click()
-    setOpenMenu(null)
   }
 
   // EXPANDED EDIT MENU
@@ -2561,6 +2758,69 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setNotice(`Exported ${exportName} and sent it to your workspace.`)
   }
 
+  const handlePrint = () => {
+    setOpenMenu(null)
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      setNotice('Allow pop-ups for this site to print your artwork.')
+      return
+    }
+    void (async () => {
+      try {
+        if (document.fonts?.ready) await document.fonts.ready
+        const stageCanvas = document.createElement('canvas')
+        stageCanvas.width = stageMetrics.width
+        stageCanvas.height = stageMetrics.height
+        const stageDataUrl = await renderComposition({
+          canvas: stageCanvas,
+          imageSrc: displayImageSrc,
+          maskShape,
+          filters,
+          preset,
+          backgroundColor: canvasBackground,
+          layers,
+          brushStrokes,
+          stageMetrics,
+        })
+        const output = document.createElement('canvas')
+        output.width = aspect.canvasWidth
+        output.height = aspect.canvasHeight
+        const context = output.getContext('2d')
+        if (!context) throw new Error('Print rendering is unavailable in this browser.')
+        context.fillStyle = '#ffffff'
+        context.fillRect(0, 0, output.width, output.height)
+        const image = await loadImage(stageDataUrl)
+        context.drawImage(
+          image,
+          (cropRect.x / 100) * stageMetrics.width,
+          (cropRect.y / 100) * stageMetrics.height,
+          (cropRect.w / 100) * stageMetrics.width,
+          (cropRect.h / 100) * stageMetrics.height,
+          0,
+          0,
+          output.width,
+          output.height,
+        )
+        printWindow.document.title = headline || 'EchoAI Photo Editor'
+        printWindow.document.body.replaceChildren()
+        printWindow.document.body.style.cssText = 'margin:0;display:grid;place-items:center;min-height:100vh;background:#fff'
+        const printImage = printWindow.document.createElement('img')
+        printImage.alt = headline || 'Photo Editor artwork'
+        printImage.style.cssText = 'display:block;max-width:100vw;max-height:100vh;object-fit:contain'
+        printImage.onload = () => {
+          printWindow.focus()
+          printWindow.print()
+          printWindow.onafterprint = () => printWindow.close()
+        }
+        printImage.src = output.toDataURL('image/png')
+        printWindow.document.body.append(printImage)
+      } catch (error) {
+        printWindow.close()
+        setNotice(`Could not prepare print: ${error.message}`)
+      }
+    })()
+  }
+
   useEffect(() => {
     lateActionsRef.current = { exportCanvas, resetCanvasView }
   })
@@ -2716,11 +2976,15 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                   <button onClick={handleFileNew}>New</button>
                   <button onClick={handleFileOpen}>Open Image</button>
                   <button onClick={handleFileOpenProject}>Open Project</button>
-                  <button onClick={handleFileSave}>Save Project</button>
+                  <button onClick={() => handleFileSave(false)}>Save Project</button>
+                  <button onClick={() => handleFileSave(true)}>Save Project As…</button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={() => handleExport('png')}>Export PNG</button>
                   <button onClick={() => handleExport('jpeg')}>Export JPEG</button>
                   <button onClick={() => handleExport('webp')}>Export WebP</button>
+                  <button onClick={handlePrint}>Print…</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleFileClose}>Close document</button>
                 </div>
               )}
             </div>
@@ -2825,6 +3089,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                   <button onClick={() => { toggleLayerMask(); setOpenMenu(null) }} disabled={!layerMask}>{layerMask?.enabled === false ? 'Enable' : 'Disable'} layer mask</button>
                   <button onClick={() => { deleteLayerMask(); setOpenMenu(null) }} disabled={!layerMask}>Delete layer mask</button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleLayerMergeDown} disabled={layers.findIndex((layer) => layer.id === resolvedActiveLayerId) <= 0}>Merge Down</button>
                   <button onClick={handleImageFlatten}>Flatten image</button>
                 </div>
               )}
