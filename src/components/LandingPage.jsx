@@ -73,14 +73,14 @@ const showcaseFeatures = [
 const workflowSteps = [
   [Link2, 'Connect', 'Link the channels and ad accounts your team already manages.', 'Connections'],
   [Image, 'Create', 'Bring an image from your device into Image Lab and refine it.', 'Image Lab'],
-  [CalendarDays, 'Queue', 'Write the post, inspect each social preview, and choose the right moment.', 'Queue Studio'],
-  [ChartNoAxesCombined, 'Improve', 'Use audience signals and paid-media results to guide the next campaign.', 'Signal Watch + Ads'],
+  [CalendarDays, 'Queue', 'Write the post, inspect each social preview, and choose the right moment.', 'Post Creation'],
+  [ChartNoAxesCombined, 'Improve', 'Use audience signals and paid-media results to guide the next campaign.', 'Analytics + Ad Watch'],
 ]
 
 const premiumHighlights = [
-  ['Publish with confidence', 'Queue Studio, live social previews, and connected-channel publishing.'],
+  ['Publish with confidence', 'Post Creation, live social previews, and connected-channel publishing.'],
   ['Create without the clutter', 'Image Lab and Motion Lab work directly with files from your device.'],
-  ['Make sharper decisions', 'Signal Watch and Ads show the conversations and outcomes worth acting on.'],
+  ['Make sharper decisions', 'Analytics and Ad Watch show the conversations and outcomes worth acting on.'],
 ]
 
 const audiences = [

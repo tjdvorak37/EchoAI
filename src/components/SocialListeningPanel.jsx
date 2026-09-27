@@ -399,7 +399,7 @@ export function SocialListeningPanel({
         <div className="listening-header-hero">
           <div>
             <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <span>📡</span> Signal Watch
+              <span>📡</span> Analytics
             </h2>
             <p className="panel-note" style={{ margin: 0, fontSize: '0.86rem' }}>
               Track audience signals, sentiment shifts, market movement, and the conversations shaping your next move.
@@ -1084,7 +1084,7 @@ export function SocialListeningPanel({
                   })}
                 </div>
               ) : (
-                <p className="muted">Connect a Facebook Page or Instagram Professional account in Link Studio to include first-party social signals.</p>
+                <p className="muted">Connect a Facebook Page or Instagram Professional account in Socials to include first-party social signals.</p>
               )}
             </div>
 

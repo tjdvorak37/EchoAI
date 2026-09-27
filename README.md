@@ -11,9 +11,9 @@ application.
   account status.
 - Create Desk for campaign copy, briefs, personas, and hosted AI workflows.
 - Image Lab and Motion Lab for image and video editing and export.
-- Queue Studio for scheduling posts and managing publishing work.
-- Signal Watch for social listening and external-source monitoring.
-- Broadcast Hub for company post distribution and repost workflows.
+- Post Creation for scheduling posts and managing publishing work.
+- Analytics for social listening and external-source monitoring.
+- Repost for company post distribution and repost workflows.
 - Connections for social accounts, cloud drives, AI providers, and billing.
 - Brand kits for company colors, fonts, logos, and creative defaults.
 - Analytics, advertising, finance, board, and administrative workspaces for
