@@ -357,7 +357,7 @@ export function SocialListeningPanel({
 
   const handleCopyMemo = () => {
     const text = [
-      `📊 EchoAI Social Listening Executive Briefing (${windowKey.toUpperCase()})`,
+      `📊 EchoAI Analytics Executive Briefing (${windowKey.toUpperCase()})`,
       `Audited: ${new Date().toLocaleString()}`,
       `Total Mentions: ${numberFmt.format(snapshot.totalMentions)} (Trend: ${snapshot.trend.deltaPct >= 0 ? '+' : ''}${snapshot.trend.deltaPct}%)`,
       `Net Sentiment Score: ${snapshot.netSentimentScore >= 0 ? `+${snapshot.netSentimentScore}` : snapshot.netSentimentScore} / 100`,
@@ -1084,7 +1084,7 @@ export function SocialListeningPanel({
                   })}
                 </div>
               ) : (
-                <p className="muted">Connect a Facebook Page or Instagram Professional account in Socials to include first-party social signals.</p>
+                <p className="muted">Connect a Facebook Page or Instagram Professional account in Connections to include first-party social signals.</p>
               )}
             </div>
 

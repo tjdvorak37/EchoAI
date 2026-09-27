@@ -47,19 +47,19 @@ const SUPPORT_CATEGORIES = [
 
 const PRODUCT_LINKS = [
   ['Workspace files', '#tools'],
-  ['Photo Creator', '#tools'],
-  ['Video Editor', '#tools'],
-  ['Post Scheduler', '#workflow'],
-  ['Social Listening', '#tools'],
+  ['Image Lab', '#tools'],
+  ['Motion Lab', '#tools'],
+  ['Post Creation', '#workflow'],
+  ['Analytics', '#tools'],
   ['Brand & Cloud Workspace', '#tools'],
 ]
 
 const toolRibbon = [
   ['social', Send, 'Social Media', echoSocial],
   ['workspace', Layers3, 'Workspace', echoAiTools],
-  ['photo', Image, 'Photo Editor', echoPhoto],
-  ['video', Video, 'Video Editor', echoVideo],
-  ['schedule', CalendarDays, 'Scheduler', echoScheduler],
+  ['photo', Image, 'Image Lab', echoPhoto],
+  ['video', Video, 'Motion Lab', echoVideo],
+  ['schedule', CalendarDays, 'Post Creation', echoScheduler],
   ['analytics', BarChart3, 'Analytics', echoAnalytics],
 ]
 
