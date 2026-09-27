@@ -22,7 +22,10 @@ import {
   Type,
   Upload,
   ZoomIn,
+  Images,
 } from 'lucide-react'
+import { StockLibrary } from './StockLibrary'
+import { downloadMediaLibraryDataUrl } from '../services/mediaLibraryService'
 import './PhotoEditor.css'
 
 const ASPECT_RATIOS = {
@@ -736,6 +739,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [uploadedImage, setUploadedImage] = useState('')
+  const [stockLibraryOpen, setStockLibraryOpen] = useState(false)
   const [generatedImageSrc, setGeneratedImageSrc] = useState(initialProject?.imageSrc || '')
   const [prompt, setPrompt] = useState(initialProject?.visualPrompt || DEFAULT_PROMPT)
   const [presetId, setPresetId] = useState('aurora')
@@ -1880,6 +1884,34 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setNotice('New blank workspace ready for upload.')
   }
 
+  const addFromStockLibrary = async (item, placement) => {
+    const extension = item.url.split('?')[0].split('.').pop().toLowerCase()
+    const dataUrl = await downloadMediaLibraryDataUrl(item.url, extension === 'png' ? 'image/png' : 'image/jpeg')
+    const label = item.title.split(',')[0].trim() || 'Stock image'
+    if (placement === 'background') {
+      commitHistory()
+      setUploadedImage(dataUrl)
+      setGeneratedImageSrc('')
+      setSelectedAssetId('')
+      setNotice(`Using "${label}" from Pixabay as the background.`)
+    } else {
+      addLayer({
+        id: nextLayerId('stock'),
+        type: 'image',
+        label,
+        src: dataUrl,
+        value: label,
+        x: 50,
+        y: 50,
+        width: 50,
+        opacity: 100,
+        rotation: 0,
+      })
+      setNotice(`Added "${label}" as a layer. Drag it to position and resize it in the layer panel.`)
+    }
+    setStockLibraryOpen(false)
+  }
+
   const addLogoLayer = (logo) => {
     addLayer({
       id: nextLayerId('logo'),
@@ -2312,6 +2344,10 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                   <span>Upload</span>
                   <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleUpload} />
                 </label>
+                <button type="button" className="photo-upload-chip compact-upload photo-stock-chip" onClick={() => setStockLibraryOpen(true)} title="Free stock photos, illustrations, and vectors">
+                  <Images size={17} aria-hidden="true" />
+                  <span>Stock images</span>
+                </button>
               </div>
             </>
           )}
@@ -2380,12 +2416,13 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                 <div className="photo-stage-empty photo-stage-onboarding">
                   <p className="small-title">Start with your own media</p>
                   <ol>
-                    <li><strong>Add a photo</strong> — upload an image from your device.</li>
+                    <li><strong>Add a photo</strong> — upload an image from your device, or pick a free stock image.</li>
                     <li><strong>Add text, stickers, or shapes</strong> — use the toolbar on the left.</li>
                     <li><strong>Export</strong> when it looks right, using the button in the top right.</li>
                   </ol>
                   <div className="photo-stage-onboarding-actions">
                     <button type="button" className="primary-button" onClick={() => uploadInputRef.current?.click()}>Upload a photo</button>
+                    <button type="button" className="ghost-button photo-stock-button" onClick={() => setStockLibraryOpen(true)}><Images size={16} aria-hidden="true" /> Browse stock images</button>
                   </div>
                 </div>
               ) : null}
@@ -2956,6 +2993,10 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
           )}
         </aside>
       </div>
+      {stockLibraryOpen && createPortal(
+        <StockLibrary initialKind="image" kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />,
+        document.body,
+      )}
     </section>
   )
 }

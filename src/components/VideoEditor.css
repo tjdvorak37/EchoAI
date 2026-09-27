@@ -2003,3 +2003,35 @@
     grid-template-columns: 1fr;
   }
 }
+
+.stock-image-grid {
+  columns: 2 180px;
+  column-gap: 0.6rem;
+  margin-top: 0.7rem;
+}
+
+.stock-image-card {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+  padding: 0.4rem;
+  break-inside: avoid;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.6rem;
+}
+
+.stock-image-card img {
+  width: 100%;
+  border-radius: 0.4rem;
+  background: #f1f5f9;
+}
+
+.stock-image-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+}
+
+.stock-add-alt {
+  background: linear-gradient(90deg, #6d28d9, #db2777);
+}

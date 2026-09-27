@@ -1,11 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import { Clapperboard, Loader2, Music2, Pause, Play, Plus, Search, X } from 'lucide-react'
+import { Clapperboard, ImageIcon, Layers, Loader2, Music2, Pause, Play, Plus, Search, X } from 'lucide-react'
 import { searchMediaLibrary } from '../services/mediaLibraryService'
 
 const CATEGORIES = {
   sound: ['Whoosh', 'Swoosh', 'Impact', 'Riser', 'Pop', 'Click', 'Glitch', 'Notification', 'Applause', 'Laugh', 'Camera shutter', 'Typing'],
   video: ['Transition', 'Light leak', 'Glitch', 'Smoke', 'Particles', 'Ink', 'Countdown', 'Film burn', 'Bokeh', 'Abstract background'],
+  image: ['Background', 'Nature', 'Business', 'Food', 'Technology', 'People', 'Texture', 'Abstract', 'Travel', 'Sky', 'Flowers', 'Fitness'],
 }
+
+const DEFAULT_QUERY = { sound: 'Whoosh', video: 'Transition', image: 'Background' }
+
+const IMAGE_TYPES = [
+  ['all', 'All'],
+  ['photo', 'Photos'],
+  ['illustration', 'Illustrations'],
+  ['vector', 'Vectors'],
+]
 
 const QUALITIES = [
   ['uhd', '4K'],
@@ -21,9 +31,10 @@ const formatDuration = (seconds) => {
 
 const formatSize = (bytes) => (bytes ? `${(bytes / (1024 * 1024)).toFixed(bytes > 100 * 1024 * 1024 ? 0 : 1)} MB` : '')
 
-export function StockLibrary({ initialKind = 'sound', onClose, onAdd }) {
+export function StockLibrary({ initialKind = 'sound', kinds = ['sound', 'video'], onClose, onAdd }) {
   const [kind, setKind] = useState(initialKind)
-  const [query, setQuery] = useState(initialKind === 'sound' ? 'Whoosh' : 'Transition')
+  const [query, setQuery] = useState(DEFAULT_QUERY[initialKind])
+  const [imageType, setImageType] = useState('all')
   const [results, setResults] = useState([])
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
@@ -42,12 +53,12 @@ export function StockLibrary({ initialKind = 'sound', onClose, onAdd }) {
     onCloseRef.current = onClose
   })
 
-  const runSearch = (nextKind, nextQuery, nextPage = 1) => {
+  const runSearch = (nextKind, nextQuery, nextPage = 1, nextImageType = imageType) => {
     const requestId = (requestRef.current += 1)
     setLoading(true)
     setError('')
     if (nextPage === 1) setResults([])
-    return searchMediaLibrary({ kind: nextKind, query: nextQuery, page: nextPage })
+    return searchMediaLibrary({ kind: nextKind, query: nextQuery, page: nextPage, imageType: nextImageType })
       .then((data) => {
         if (requestId !== requestRef.current) return
         setConfigured(data.configured !== false)
@@ -65,7 +76,7 @@ export function StockLibrary({ initialKind = 'sound', onClose, onAdd }) {
 
   useEffect(() => {
     const requestId = (requestRef.current += 1)
-    searchMediaLibrary({ kind: initialKind, query: initialKind === 'sound' ? 'Whoosh' : 'Transition', page: 1 })
+    searchMediaLibrary({ kind: initialKind, query: DEFAULT_QUERY[initialKind], page: 1 })
       .then((data) => {
         if (requestId !== requestRef.current) return
         setConfigured(data.configured !== false)
@@ -96,7 +107,7 @@ export function StockLibrary({ initialKind = 'sound', onClose, onAdd }) {
   const switchKind = (nextKind) => {
     if (nextKind === kind) return
     stopPreview()
-    const nextQuery = nextKind === 'sound' ? 'Whoosh' : 'Transition'
+    const nextQuery = DEFAULT_QUERY[nextKind]
     setKind(nextKind)
     setQuery(nextQuery)
     runSearch(nextKind, nextQuery)
@@ -113,11 +124,11 @@ export function StockLibrary({ initialKind = 'sound', onClose, onAdd }) {
     audio.play().then(() => setPlayingId(item.id)).catch(() => setError('This preview could not be played.'))
   }
 
-  const addItem = async (item) => {
+  const addItem = async (item, option = quality) => {
     setAddingId(item.id)
     setError('')
     try {
-      await onAdd(item, quality)
+      await onAdd(item, option)
       stopPreview()
     } catch (addError) {
       setError(addError.message)
@@ -134,21 +145,33 @@ export function StockLibrary({ initialKind = 'sound', onClose, onAdd }) {
         <header className="stock-library-head">
           <div>
             <h3>Stock library</h3>
-            <p>Royalty-free sound effects and stock videos. Pick one to drop it at the playhead.</p>
+            <p>{kinds.includes('image') ? 'Millions of royalty-free photos, illustrations, and vectors. Use one as your background or add it as a layer.' : 'Royalty-free sound effects and stock videos. Pick one to drop it at the playhead.'}</p>
           </div>
           <button type="button" className="stock-library-close" onClick={onClose} aria-label="Close stock library"><X size={18} /></button>
         </header>
 
-        <div className="stock-library-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={kind === 'sound'} className={kind === 'sound' ? 'active' : ''} onClick={() => switchKind('sound')}><Music2 size={15} /> Sound effects</button>
-          <button type="button" role="tab" aria-selected={kind === 'video'} className={kind === 'video' ? 'active' : ''} onClick={() => switchKind('video')}><Clapperboard size={15} /> Transitions &amp; stock video</button>
-        </div>
+        {kinds.length > 1 && (
+          <div className="stock-library-tabs" role="tablist">
+            {kinds.includes('sound') && <button type="button" role="tab" aria-selected={kind === 'sound'} className={kind === 'sound' ? 'active' : ''} onClick={() => switchKind('sound')}><Music2 size={15} /> Sound effects</button>}
+            {kinds.includes('video') && <button type="button" role="tab" aria-selected={kind === 'video'} className={kind === 'video' ? 'active' : ''} onClick={() => switchKind('video')}><Clapperboard size={15} /> Transitions &amp; stock video</button>}
+            {kinds.includes('image') && <button type="button" role="tab" aria-selected={kind === 'image'} className={kind === 'image' ? 'active' : ''} onClick={() => switchKind('image')}><ImageIcon size={15} /> Stock images</button>}
+          </div>
+        )}
 
         <form className="stock-library-search" onSubmit={(event) => { event.preventDefault(); stopPreview(); runSearch(kind, query) }}>
           <Search size={16} aria-hidden="true" />
-          <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={kind === 'sound' ? 'Search sounds, e.g. whoosh, door, crowd' : 'Search videos, e.g. transition, smoke, city'} aria-label="Search the stock library" />
+          <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={{ sound: 'Search sounds, e.g. whoosh, door, crowd', video: 'Search videos, e.g. transition, smoke, city', image: 'Search images, e.g. coffee, sunset, office' }[kind]} aria-label="Search the stock library" />
           <button type="submit">Search</button>
         </form>
+
+        {kind === 'image' && configured && (
+          <div className="stock-library-quality" role="radiogroup" aria-label="Image type">
+            <span>Type</span>
+            {IMAGE_TYPES.map(([key, label]) => (
+              <button key={key} type="button" role="radio" aria-checked={imageType === key} className={imageType === key ? 'active' : ''} onClick={() => { setImageType(key); runSearch(kind, query, 1, key) }}>{label}</button>
+            ))}
+          </div>
+        )}
 
         <div className="stock-library-chips">
           {CATEGORIES[kind].map((category) => (
@@ -170,8 +193,8 @@ export function StockLibrary({ initialKind = 'sound', onClose, onAdd }) {
           {error && <p className="stock-library-error">{error}</p>}
           {!configured && (
             <div className="stock-library-empty">
-              <strong>Stock videos aren&apos;t switched on yet.</strong>
-              <p>The video library needs a free Pixabay API key. An administrator can add it as the <code>PIXABAY_API_KEY</code> Supabase secret.</p>
+              <strong>Stock {kind === 'image' ? 'images' : 'videos'} aren&apos;t switched on yet.</strong>
+              <p>This library needs a free Pixabay API key. An administrator can add it in IT / Management → Integrations → Stock media library.</p>
             </div>
           )}
           {configured && !loading && !error && results.length === 0 && (
@@ -226,6 +249,30 @@ export function StockLibrary({ initialKind = 'sound', onClose, onAdd }) {
             </div>
           )}
 
+          {kind === 'image' && (
+            <div className="stock-image-grid">
+              {results.map((item) => (
+                <article key={item.id} className="stock-image-card">
+                  <img src={item.thumbnail} alt={item.title} loading="lazy" />
+                  <div className="stock-video-meta">
+                    <strong title={item.title}>{item.title}</strong>
+                    <small>{item.width && item.height ? `${item.width}×${item.height}` : ''} · {item.type}</small>
+                  </div>
+                  <div className="stock-image-actions">
+                    {addingId === item.id ? (
+                      <span className="stock-library-loading"><Loader2 size={14} className="spin" /> Adding…</span>
+                    ) : (
+                      <>
+                        <button type="button" className="stock-add" disabled={Boolean(addingId)} onClick={() => addItem(item, 'background')} title="Replace the canvas background with this image"><ImageIcon size={13} /> Background</button>
+                        <button type="button" className="stock-add stock-add-alt" disabled={Boolean(addingId)} onClick={() => addItem(item, 'layer')} title="Place this image as a movable layer"><Layers size={13} /> Layer</button>
+                      </>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
           {loading && <p className="stock-library-loading"><Loader2 size={16} className="spin" /> Loading…</p>}
           {hasMore && !loading && <button type="button" className="stock-library-more" onClick={() => runSearch(kind, query, page + 1)}>Load more</button>}
         </div>
@@ -233,7 +280,7 @@ export function StockLibrary({ initialKind = 'sound', onClose, onAdd }) {
         <footer className="stock-library-foot">
           {kind === 'sound'
             ? <>Sounds from <a href="https://freesound.org" target="_blank" rel="noreferrer">Freesound</a> via <a href="https://openverse.org" target="_blank" rel="noreferrer">Openverse</a> · CC0, free for commercial use</>
-            : <>Videos from <a href="https://pixabay.com" target="_blank" rel="noreferrer">Pixabay</a> · free under the Pixabay Content License</>}
+            : <>{kind === 'image' ? 'Images' : 'Videos'} from <a href="https://pixabay.com" target="_blank" rel="noreferrer">Pixabay</a> · free under the Pixabay Content License</>}
         </footer>
         <audio ref={audioRef} onEnded={() => setPlayingId('')} />
       </aside>

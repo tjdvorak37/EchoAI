@@ -1239,3 +1239,20 @@
   object-fit: contain;
   background: #ffffff;
 }
+.dock-actions .photo-stock-chip {
+  width: 100%;
+  border-color: rgba(245, 158, 11, 0.55);
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  color: #fff;
+}
+
+.dock-actions .photo-stock-chip:hover {
+  border-color: #fde68a;
+  color: #fff;
+}
+
+.photo-stock-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}

@@ -5,7 +5,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders, json } from '../_shared/cors.ts'
 
-const DOWNLOAD_HOSTS = new Set(['cdn.pixabay.com', 'cdn.freesound.org'])
+const DOWNLOAD_HOSTS = new Set(['cdn.pixabay.com', 'cdn.freesound.org', 'pixabay.com'])
 const MAX_DOWNLOAD_BYTES = 400 * 1024 * 1024
 const PAGE_SIZE = 20
 
@@ -69,6 +69,38 @@ const searchSounds = async (query: string, page: number) => {
   return { configured: true, items, hasMore: page < Number(payload.page_count ?? 0), provider: 'Freesound via Openverse' }
 }
 
+const IMAGE_TYPES = new Set(['all', 'photo', 'illustration', 'vector'])
+
+const searchImages = async (query: string, page: number, imageType: unknown) => {
+  const key = await pixabayKey()
+  if (!key) return { configured: false, items: [], hasMore: false, provider: 'Pixabay' }
+  const params = new URLSearchParams({
+    key,
+    q: query,
+    page: String(page),
+    per_page: String(PAGE_SIZE),
+    safesearch: 'true',
+    image_type: IMAGE_TYPES.has(String(imageType)) ? String(imageType) : 'all',
+  })
+  const response = await fetch(`https://pixabay.com/api/?${params}`)
+  if (!response.ok) throw new Error(`Image search failed (${response.status}).`)
+  const payload = await response.json()
+  const items = (payload.hits ?? []).map((hit: Record<string, unknown>) => ({
+    id: `image-${hit.id}`,
+    kind: 'image',
+    title: String(hit.tags ?? 'Stock image'),
+    creator: String(hit.user ?? 'Pixabay contributor'),
+    thumbnail: String(hit.webformatURL ?? hit.previewURL ?? ''),
+    url: String(hit.largeImageURL ?? hit.webformatURL ?? ''),
+    width: Number(hit.imageWidth ?? 0),
+    height: Number(hit.imageHeight ?? 0),
+    type: String(hit.type ?? 'photo'),
+    pageUrl: String(hit.pageURL ?? ''),
+    license: 'Pixabay Content License (free, no attribution required)',
+  }))
+  return { configured: true, items, hasMore: page * PAGE_SIZE < Number(payload.totalHits ?? 0), provider: 'Pixabay' }
+}
+
 const searchVideos = async (query: string, page: number) => {
   const key = await pixabayKey()
   if (!key) return { configured: false, items: [], hasMore: false, provider: 'Pixabay' }
@@ -117,7 +149,7 @@ const download = async (rawUrl: unknown, request: Request) => {
     return json({ error: `The media file could not be downloaded (${upstream.status}).` }, 502, request)
   }
   const type = upstream.headers.get('content-type') ?? ''
-  if (!type.startsWith('audio/') && !type.startsWith('video/')) {
+  if (!type.startsWith('audio/') && !type.startsWith('video/') && !type.startsWith('image/')) {
     return json({ error: 'The media source returned an unexpected file type.' }, 502, request)
   }
   const size = Number(upstream.headers.get('content-length') ?? 0)
@@ -160,6 +192,7 @@ Deno.serve(async (request) => {
       const page = pageNumber(body.page)
       if (body.kind === 'sound') return json(await searchSounds(cleanQuery(body.query, 'whoosh'), page), 200, request)
       if (body.kind === 'video') return json(await searchVideos(cleanQuery(body.query, 'transition'), page), 200, request)
+      if (body.kind === 'image') return json(await searchImages(cleanQuery(body.query, 'nature'), page, body.imageType), 200, request)
     }
     return json({ error: 'Unknown request.' }, 400, request)
   } catch (error) {
