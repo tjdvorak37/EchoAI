@@ -545,7 +545,7 @@ export function RepostHubPanel({
             <div className="repost-post-card" style={{ padding: '1.75rem' }}>
               <h3 style={{ margin: '0 0 0.35rem', fontSize: '1.25rem' }}>📢 Create &amp; Broadcast Company Main Post</h3>
               <p className="muted" style={{ margin: '0 0 1.25rem', fontSize: '0.85rem' }}>
-                Publish official brand content that will automatically distribute to all team members&apos; Repost Hub streams.
+                Publish official brand content that will automatically distribute to all team members&apos; Repost streams.
               </p>
 
               <form onSubmit={handleAdminPublishSubmit} className="composer" style={{ display: 'grid', gap: '1rem' }}>

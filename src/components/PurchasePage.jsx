@@ -9,11 +9,11 @@ import {
 } from '../data/plans'
 
 const CORE_FEATURES = [
-  'Social Listening intelligence with sentiment, trend, and crisis visibility',
+  'Analytics with sentiment, trend, and crisis visibility',
   'Brand mentions, keywords, competitors, hashtags, and conversation tracking',
   'AI-powered recommendations and personal AI agent endpoint sync',
-  'Immersive Photo Creator and timeline-based Video Studio',
-  'Multi-channel scheduler, repost workflows, and team collaboration',
+  'Image Lab and timeline-based Motion Lab',
+  'Multi-channel Post Creation, Repost workflows, and team collaboration',
 ]
 
 export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode, billingLive, initialPlan = 'premium' }) {
@@ -277,7 +277,7 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
         {step === 'pay' && (
           <>
             <h2>Complete your order</h2>
-            <p className="muted">Your purchase unlocks Social Listening, AI agent sync, Photo Creator, Video Studio, and scheduler workflows.</p>
+            <p className="muted">Your purchase unlocks Analytics, AI agent sync, Image Lab, Motion Lab, and Post Creation workflows.</p>
 
             {/* Promo code section — always shown first */}
             <div className="promo-code-section">
