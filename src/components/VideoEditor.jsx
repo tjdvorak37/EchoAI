@@ -1,6 +1,22 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import { Clapperboard, Eye, EyeOff, Film, Lock, MonitorPlay, Music2, PanelsTopLeft, Play, RotateCcw, Scissors, Type, Unlock, Volume2, VolumeX } from 'lucide-react'
+import { Clapperboard, Eye, EyeOff, Film, Lock, MonitorPlay, Music2, PanelsTopLeft, Play, RotateCcw, Scissors, SlidersHorizontal, Type, Unlock, Volume2, VolumeX } from 'lucide-react'
 import { canUseAgentMode, runCreativeAgentJob } from '../services/aiAgentService'
+import {
+  DEFAULT_MASTER_AUDIO,
+  clipGainAt,
+  clipPeakGainDb,
+  computePeaks,
+  createCleanupChain,
+  createEqChain,
+  createMasterBus,
+  masterGainAt,
+  normalizeEq,
+  renderTimelineMix,
+  setMasterLimiter,
+  updateCleanupChain,
+  updateEqChain,
+} from '../services/videoAudioMix'
+import { ClipAudioControls, MasterAudioControls } from './VideoAudioMixer'
 
 const FILTER_PRESETS = {
   none: { label: 'None', css: '' },
@@ -125,6 +141,15 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   const [projectSettings, setProjectSettings] = useState({ aspectRatio: '16:9', frameRate: 30, previewScale: 100 })
   const [editTool, setEditTool] = useState('select')
   const [inspectorTab, setInspectorTab] = useState('video')
+  const [masterAudio, setMasterAudio] = useState(DEFAULT_MASTER_AUDIO)
+  const [masterLevel, setMasterLevel] = useState(-Infinity)
+  const [waveforms, setWaveforms] = useState({})
+  const audioCtxRef = useRef(null)
+  const masterBusRef = useRef(null)
+  const analyserRef = useRef(null)
+  const mediaChainsRef = useRef(new WeakMap())
+  const audioElementsRef = useRef(new Map())
+  const decodedAudioRef = useRef(new Map())
   const clipCounter = useRef(0)
   const timelineRef = useRef(null)
   const timelineHeaderRef = useRef(null)
@@ -191,8 +216,115 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
       if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop()
+      audioCtxRef.current?.close().catch(() => {})
     }
   }, [])
+
+  // Must run inside a click handler: browsers only allow audio to start from a user gesture.
+  const ensureAudioContext = () => {
+    if (audioCtxRef.current) {
+      audioCtxRef.current.resume().catch(() => {})
+      return audioCtxRef.current
+    }
+    const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext
+    if (!AudioContextClass) return null
+    const context = new AudioContextClass()
+    const bus = createMasterBus(context, masterAudio)
+    const analyser = context.createAnalyser()
+    analyser.fftSize = 1024
+    bus.output.connect(analyser)
+    analyser.connect(context.destination)
+    audioCtxRef.current = context
+    masterBusRef.current = bus
+    analyserRef.current = analyser
+    return context
+  }
+
+  const routeMediaElement = (element) => {
+    const context = audioCtxRef.current
+    if (!context || !element) return null
+    const existing = mediaChainsRef.current.get(element)
+    if (existing) return existing
+    try {
+      const source = context.createMediaElementSource(element)
+      const cleanup = createCleanupChain(context, false)
+      const eq = createEqChain(context, null)
+      const gain = context.createGain()
+      gain.gain.value = 0
+      source.connect(cleanup.input)
+      cleanup.output.connect(eq.input)
+      eq.output.connect(gain)
+      gain.connect(masterBusRef.current.input)
+      element.volume = 1
+      const chain = { cleanup, eq, gain, eqKey: '', noise: false }
+      mediaChainsRef.current.set(element, chain)
+      return chain
+    } catch {
+      return null
+    }
+  }
+
+  const applyClipAudio = (element, clip, gainValue) => {
+    const chain = routeMediaElement(element)
+    if (!chain) {
+      element.volume = Math.max(0, Math.min(1, gainValue))
+      return
+    }
+    const context = audioCtxRef.current
+    const eqKey = normalizeEq(clip.eq).join(',')
+    if (chain.eqKey !== eqKey) {
+      updateEqChain(chain.eq, clip.eq, context)
+      chain.eqKey = eqKey
+    }
+    if (chain.noise !== Boolean(clip.noiseRemoval)) {
+      updateCleanupChain(chain.cleanup, clip.noiseRemoval)
+      chain.noise = Boolean(clip.noiseRemoval)
+    }
+    chain.gain.gain.setTargetAtTime(gainValue, context.currentTime, 0.015)
+  }
+
+  const decodeAudioSource = (src) => {
+    if (!src) return Promise.resolve(null)
+    const cache = decodedAudioRef.current
+    if (!cache.has(src)) {
+      cache.set(src, (async () => {
+        try {
+          const response = await fetch(src)
+          const data = await response.arrayBuffer()
+          return await new OfflineAudioContext(1, 1, 44100).decodeAudioData(data)
+        } catch {
+          return null
+        }
+      })())
+    }
+    return cache.get(src)
+  }
+
+  const requestWaveform = (src) => {
+    if (!src || waveforms[src]) return
+    decodeAudioSource(src).then((buffer) => {
+      if (buffer) setWaveforms((current) => (current[src] ? current : { ...current, [src]: computePeaks(buffer) }))
+    })
+  }
+
+  const togglePlayback = () => {
+    if (isPlaying) {
+      setIsPlaying(false)
+      setMasterLevel(-Infinity)
+      return
+    }
+    ensureAudioContext()
+    setIsPlaying(true)
+  }
+
+  const updateMasterAudio = (patch) => setMasterAudio((current) => ({ ...current, ...patch }))
+
+  useEffect(() => {
+    const bus = masterBusRef.current
+    if (!bus) return
+    updateEqChain(bus.eq, masterAudio.eq, audioCtxRef.current)
+    setMasterLimiter(bus, masterAudio.limiter)
+  }, [masterAudio])
 
   const startScreenRecord = async (withAudio) => {
     setRecordingError('')
@@ -370,8 +502,11 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
       filter: 'none',
       effects: { ...DEFAULT_EFFECTS },
       transition: 'none',
-      volume: track?.type === 'audio' ? 100 : 100,
-      pitch: 0,
+      volume: 100,
+      fadeIn: 0,
+      fadeOut: 0,
+      eq: normalizeEq(null),
+      zones: [],
       noiseRemoval: false,
       speed: 1,
       transform: { ...DEFAULT_TRANSFORM },
@@ -383,6 +518,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
         item.id === trackId ? { ...item, clips: [...item.clips, newClip] } : item,
       ),
     )
+    if (asset.type !== 'image') requestWaveform(source)
   }
 
   const addAssetAtPlayhead = (asset) => {
@@ -447,6 +583,49 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
   const updateTrack = (trackId, patch) => {
     setTracks((current) => current.map((track) => track.id === trackId ? { ...track, ...patch } : track))
+  }
+
+  const detachSelectedAudio = () => {
+    const clip = selectedClip
+    const owner = clip && tracks.find((track) => track.clips.some((item) => item.id === clip.id))
+    if (!clip || owner?.type !== 'video' || clip.audioDetached) return
+    if (owner.locked) {
+      setStatusMessage('Unlock this track before detaching audio.')
+      return
+    }
+    const source = clipSource(clip)
+    const audioClip = {
+      ...clip,
+      id: `clip-${(clipCounter.current += 1)}`,
+      assetName: `${clip.assetName} (audio)`,
+      previewUrl: source,
+      audioDetached: false,
+      detachedFrom: clip.id,
+      transform: { ...DEFAULT_TRANSFORM },
+    }
+    const audioTrack = tracks.find((track) => track.type === 'audio' && !track.locked)
+
+    commitHistory()
+    setTracks((current) => {
+      const next = current.map((track) => {
+        if (track.id === owner.id) return { ...track, clips: track.clips.map((item) => (item.id === clip.id ? { ...item, audioDetached: true } : item)) }
+        if (track.id === audioTrack?.id) return { ...track, clips: [...track.clips, audioClip] }
+        return track
+      })
+      if (audioTrack) return next
+      return [...next, {
+        id: `audio-${(clipCounter.current += 1)}`,
+        type: 'audio',
+        name: `Audio Track ${current.filter((track) => track.type === 'audio').length + 1}`,
+        clips: [audioClip],
+        muted: false,
+        locked: false,
+        visible: true,
+      }]
+    })
+    setSelectedClip(audioClip)
+    requestWaveform(source)
+    setStatusMessage('Detached the audio to its own track. The video clip is now silent.')
   }
 
   const removeSelectedClip = (ripple = false) => {
@@ -780,9 +959,17 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
     if (!isPlaying) return undefined
 
     let last = performance.now()
+    let frame = 0
+    const meterData = new Float32Array(1024)
     const tick = (now) => {
       const delta = (now - last) / 1000
       last = now
+      frame += 1
+      if (analyserRef.current && frame % 4 === 0) {
+        analyserRef.current.getFloatTimeDomainData(meterData)
+        const peak = meterData.reduce((max, value) => Math.max(max, Math.abs(value)), 0)
+        setMasterLevel(peak > 0 ? 20 * Math.log10(peak) : -Infinity)
+      }
       setPlaybackTime((prev) => {
         const next = prev + delta
         if (next >= duration) {
@@ -811,7 +998,42 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
     if (isPlaying && video.paused) video.play().catch(() => {})
     if (!isPlaying && !video.paused) video.pause()
     video.playbackRate = activeVisualClip.speed ?? 1
-  }, [playbackTime, isPlaying, activeVisualClip])
+
+    if (audioCtxRef.current) {
+      const owner = tracks.find((track) => track.clips.some((clip) => clip.id === activeVisualClip.id))
+      const silent = owner?.muted || activeVisualClip.audioDetached
+      applyClipAudio(video, activeVisualClip, silent ? 0 : clipGainAt(activeVisualClip, playbackTime - activeVisualClip.startTime))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackTime, isPlaying, activeVisualClip, tracks])
+
+  useEffect(() => {
+    const context = audioCtxRef.current
+    if (context && masterBusRef.current) {
+      masterBusRef.current.gain.gain.setTargetAtTime(masterGainAt(masterAudio, playbackTime, duration), context.currentTime, 0.015)
+    }
+
+    tracks.forEach((track) => {
+      if (track.type !== 'audio') return
+      track.clips.forEach((clip) => {
+        const element = audioElementsRef.current.get(clip.id)
+        if (!element) return
+        const localTime = playbackTime - clip.startTime
+        const active = localTime >= 0 && localTime < clip.duration
+        if (!active || !isPlaying) {
+          if (!element.paused) element.pause()
+          return
+        }
+        const speed = clip.speed ?? 1
+        const target = localTime * speed + (clip.trim?.start ?? 0)
+        if (Math.abs(element.currentTime - target) > 0.3 && Number.isFinite(target)) element.currentTime = Math.max(0, target)
+        element.playbackRate = speed
+        applyClipAudio(element, clip, track.muted ? 0 : clipGainAt(clip, localTime))
+        if (element.paused) element.play().catch(() => {})
+      })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackTime, isPlaying, tracks, masterAudio, duration])
 
   const activeTransition = activeVisualClip
     ? transitionStateAt(activeVisualClip, playbackTime - activeVisualClip.startTime)
@@ -832,8 +1054,8 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
     return Math.max(0, nearest ?? value)
   }
 
-  // Renders the timeline frame by frame onto a canvas and records the canvas
-  // stream. This produces a real .webm file rather than a description of one.
+  // Renders the timeline onto a canvas in real time and records it together with
+  // the offline-rendered audio mix, both driven by the same clock so they stay in sync.
   const exportTimeline = async () => {
     const hasContent = tracks.some((track) => track.clips.length > 0)
     if (!hasContent) {
@@ -846,10 +1068,15 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
       return
     }
 
+    // Created before any await so the click still counts as the user gesture for audio.
+    const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext
+    const exportAudio = AudioContextClass ? new AudioContextClass() : null
+    exportAudio?.resume().catch(() => {})
+
     setIsExporting(true)
     setExportProgress(0)
     setIsPlaying(false)
-    setStatusMessage('Rendering timeline...')
+    setStatusMessage('Mixing audio...')
 
     const preset = PROJECT_PRESETS[projectSettings.aspectRatio]
     const width = preset.width
@@ -872,6 +1099,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           const src = clipSource(clip)
           if (!src || videoElements.has(clip.id)) return
           const element = document.createElement('video')
+          element.crossOrigin = 'anonymous'
           element.src = src
           element.muted = true
           element.playsInline = true
@@ -883,8 +1111,29 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
         }),
       )
 
-      const stream = canvas.captureStream(fps)
-      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' })
+      const mix = await renderTimelineMix({ tracks, master: masterAudio, duration, decode: decodeAudioSource })
+      setStatusMessage('Rendering timeline...')
+
+      const canvasStream = canvas.captureStream(fps)
+      let clock = null
+      let mixSource = null
+      const streamTracks = [...canvasStream.getVideoTracks()]
+      if (mix && exportAudio) {
+        await exportAudio.resume().catch(() => {})
+        if (exportAudio.state === 'running') {
+          const destination = exportAudio.createMediaStreamDestination()
+          mixSource = exportAudio.createBufferSource()
+          mixSource.buffer = mix
+          mixSource.connect(destination)
+          streamTracks.push(...destination.stream.getAudioTracks())
+        } else {
+          setStatusMessage('The browser blocked audio for this export. Click Export again to include sound.')
+        }
+      }
+      const stream = new MediaStream(streamTracks)
+      const withAudio = Boolean(mixSource)
+      const preferredType = withAudio ? 'video/webm;codecs=vp9,opus' : 'video/webm;codecs=vp9'
+      const recorder = new MediaRecorder(stream, MediaRecorder.isTypeSupported?.(preferredType) ? { mimeType: preferredType } : undefined)
       const chunks = []
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunks.push(event.data)
@@ -895,25 +1144,31 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
       })
 
       recorder.start()
+      if (withAudio) {
+        const startAt = exportAudio.currentTime + 0.05
+        mixSource.start(startAt)
+        clock = () => exportAudio.currentTime - startAt
+      } else {
+        const startAt = performance.now()
+        clock = () => (performance.now() - startAt) / 1000
+      }
 
-      const totalFrames = Math.ceil(duration * fps)
-      const seekTo = (element, time) =>
-        new Promise((resolve) => {
-          if (!element || Math.abs(element.currentTime - time) < 0.01) {
-            resolve()
-            return
-          }
-          const done = () => {
-            element.removeEventListener('seeked', done)
-            resolve()
-          }
-          element.addEventListener('seeked', done)
-          element.currentTime = Math.max(0, time)
-          setTimeout(done, 120)
-        })
+      const syncElement = (element, clip, time) => {
+        if (!element) return
+        const localTime = (time - clip.startTime) * (clip.speed ?? 1) + (clip.trim?.start ?? 0)
+        element.playbackRate = clip.speed ?? 1
+        if (element.paused) {
+          element.currentTime = Math.max(0, localTime)
+          element.play().catch(() => {})
+        } else if (Math.abs(element.currentTime - localTime) > 0.25) {
+          element.currentTime = Math.max(0, localTime)
+        }
+      }
 
-      for (let frame = 0; frame < totalFrames; frame += 1) {
-        const time = frame / fps
+      let lastProgress = -1
+      for (;;) {
+        const time = Math.max(0, clock())
+        if (time >= duration) break
 
         ctx.fillStyle = '#000000'
         ctx.fillRect(0, 0, width, height)
@@ -921,13 +1176,13 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
         const frameClip = visualClips.find(
           (clip) => time >= clip.startTime && time < clipEnd(clip),
         )
+        videoElements.forEach((element, clipId) => {
+          if (clipId !== frameClip?.id && !element.paused) element.pause()
+        })
 
         if (frameClip) {
           const element = videoElements.get(frameClip.id)
-          const localTime = (time - frameClip.startTime) * (frameClip.speed ?? 1) + (frameClip.trim?.start ?? 0)
-          if (element && element.readyState >= 2) {
-            await seekTo(element, localTime)
-          }
+          syncElement(element, frameClip, time)
 
           const transition = transitionStateAt(frameClip, time - frameClip.startTime)
           ctx.save()
@@ -994,15 +1249,17 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             ctx.restore()
           })
 
-        if (frame % 5 === 0) {
-          setExportProgress(Math.round((frame / totalFrames) * 100))
+        const progress = Math.round((time / duration) * 100)
+        if (progress !== lastProgress) {
+          lastProgress = progress
+          setExportProgress(progress)
         }
 
-        // Give the recorder a chance to sample this frame.
         await new Promise((resolve) => setTimeout(resolve, 1000 / fps))
       }
 
       recorder.stop()
+      mixSource?.stop()
       const blob = await finished
       const url = URL.createObjectURL(blob)
       const exportName = `${nextLocalId('echoai-timeline')}.webm`
@@ -1020,19 +1277,83 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
         sizeBytes: blob.size,
         tracks,
         totalClips: tracks.reduce((sum, track) => sum + track.clips.length, 0),
-        summary: `Video timeline exported at ${width}x${height} at ${fps} fps.`,
+        summary: `Video timeline exported at ${width}x${height} at ${fps} fps${withAudio ? ' with mixed audio' : ''}.`,
       })
 
-      setStatusMessage(`Exported ${exportName}.`)
+      setStatusMessage(`Exported ${exportName}${withAudio ? ' with audio' : ''}.`)
     } catch (error) {
       setStatusMessage(`Export failed: ${error.message}`)
     } finally {
       videoElements.forEach((element) => {
+        element.pause()
         element.src = ''
       })
+      exportAudio?.close().catch(() => {})
       setIsExporting(false)
       setExportProgress(0)
     }
+  }
+
+  const selectedOwner = selectedClip ? tracks.find((track) => track.clips.some((clip) => clip.id === selectedClip.id)) : null
+  const selectedIsVideoClip = selectedOwner?.type === 'video' && selectedClip?.type !== 'text' && (assetById.get(selectedClip?.assetId)?.type ?? 'video') === 'video'
+  const audioEditableClip = selectedOwner?.type === 'audio' || selectedIsVideoClip ? selectedClip : null
+  const openAudioMixer = () => {
+    setActiveToolbar('audio')
+    setInspectorTab('audio')
+  }
+  const stageRatio = PROJECT_PRESETS[projectSettings.aspectRatio].width / PROJECT_PRESETS[projectSettings.aspectRatio].height
+  const clipAudioControls = (
+    <ClipAudioControls
+      clip={audioEditableClip}
+      isVideoClip={selectedIsVideoClip}
+      localPlayhead={audioEditableClip ? playbackTime - audioEditableClip.startTime : 0}
+      peakDb={audioEditableClip ? clipPeakGainDb(audioEditableClip) : -Infinity}
+      onCommit={commitHistory}
+      onChange={(patch) => audioEditableClip && updateClip(audioEditableClip.id, patch)}
+      onDetach={detachSelectedAudio}
+    />
+  )
+
+  const renderClipAudioOverlay = (track, clip) => {
+    if (track.type !== 'audio' && !(track.type === 'video' && clip.type !== 'text')) return null
+    const waveform = waveforms[clipSource(clip)]
+    const speed = clip.speed ?? 1
+    const bars = []
+    if (waveform && !(track.type === 'video' && clip.audioDetached)) {
+      const count = Math.max(8, Math.min(160, Math.round(clip.duration * timelinePixelsPerSecond / 4)))
+      for (let index = 0; index < count; index += 1) {
+        const local = ((index + 0.5) / count) * clip.duration
+        const sourceTime = (clip.trim?.start ?? 0) + local * speed
+        const bucket = Math.floor((sourceTime / waveform.duration) * waveform.peaks.length)
+        const level = (waveform.peaks[bucket] ?? 0) * clipGainAt(clip, local) * (track.muted ? 0 : 1)
+        bars.push({ index, level: Math.min(1, level), hot: level >= 0.98 })
+      }
+    }
+    const fadeIn = Math.min(clip.fadeIn ?? 0, clip.duration)
+    const fadeOut = Math.min(clip.fadeOut ?? 0, clip.duration)
+    return (
+      <div className="clip-audio-overlay" aria-hidden="true">
+        {bars.length > 0 && (
+          <svg className="clip-waveform" viewBox={`0 0 ${bars.length} 100`} preserveAspectRatio="none">
+            {bars.map((bar) => (
+              <rect key={bar.index} x={bar.index + 0.15} width="0.7" y={50 - bar.level * 48} height={Math.max(1, bar.level * 96)} className={bar.hot ? 'hot' : ''} />
+            ))}
+          </svg>
+        )}
+        {(clip.zones ?? []).map((zone) => (
+          <span
+            key={zone.id}
+            className={`clip-zone ${zone.gainDb < 0 ? 'quieter' : 'louder'}`}
+            style={{ left: `${(zone.start / clip.duration) * 100}%`, width: `${((zone.end - zone.start) / clip.duration) * 100}%` }}
+          >
+            {zone.gainDb > 0 ? '+' : ''}{zone.gainDb}
+          </span>
+        ))}
+        {fadeIn > 0 && <span className="clip-fade in" style={{ width: `${(fadeIn / clip.duration) * 100}%` }} />}
+        {fadeOut > 0 && <span className="clip-fade out" style={{ width: `${(fadeOut / clip.duration) * 100}%` }} />}
+        {track.type === 'video' && clip.audioDetached && <span className="clip-audio-badge">audio detached</span>}
+      </div>
+    )
   }
 
   return (
@@ -1076,6 +1397,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           <button type="button" className="toolbar-btn" title="Crop and zoom" onClick={() => { setInspectorTab('video'); setStatusMessage('Use Scale and Position in Video properties to crop and zoom.') }}><PanelsTopLeft size={17} /> Crop</button>
           <button type="button" className="toolbar-btn" title="Match color from another clip" onClick={matchSelectedColor}>Color match</button>
           <button type="button" className="toolbar-btn" title="Speed controls" onClick={() => setInspectorTab('video')}><Film size={17} /> Speed</button>
+          <button type="button" className={`toolbar-btn toolbar-btn-audio ${activeToolbar === 'audio' ? 'active' : ''}`} title="Volume, equalizer, fades, and loud/quiet spots" onClick={openAudioMixer}><SlidersHorizontal size={17} /> Audio mixer</button>
           <span className="time-display">
             {Math.floor(playbackTime)}s / {duration}s
           </span>
@@ -1118,22 +1440,22 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
         <div className="toolbar-groups">
           {[
-            ['media', 'Add your uploaded photos, video, or audio'],
-            ['transitions', 'Fades and wipes between clips'],
-            ['effects', 'Position, scale, opacity, and blend'],
-            ['filters', 'Color looks like Vintage or B&W'],
-            ['text', 'Titles, subtitles, and captions'],
-            ['audio', 'Volume, mute, and music'],
-            ['elements', 'Callout badges and graphic markers'],
-          ].map(([tool, hint]) => (
+            ['media', 'Media', 'Add your uploaded photos, video, or audio'],
+            ['transitions', 'Transitions', 'Fades and wipes between clips'],
+            ['effects', 'Effects', 'Position, scale, opacity, and blend'],
+            ['filters', 'Filters', 'Color looks like Vintage or B&W'],
+            ['text', 'Text', 'Titles, subtitles, and captions'],
+            ['audio', 'Audio & EQ', 'Mixer, equalizer, fades, and loud/quiet spots'],
+            ['elements', 'Elements', 'Callout badges and graphic markers'],
+          ].map(([tool, label, hint]) => (
             <button
               key={tool}
               type="button"
               className={`toolbar-group-btn ${activeToolbar === tool ? 'active' : ''}`}
               title={hint}
-              onClick={() => setActiveToolbar(tool)}
+              onClick={() => (tool === 'audio' ? openAudioMixer() : setActiveToolbar(tool))}
             >
-              {tool.charAt(0).toUpperCase() + tool.slice(1)}
+              {label}
             </button>
           ))}
         </div>
@@ -1355,28 +1677,14 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           )}
 
           {activeToolbar === 'audio' && (
-            <div className="tool-panel">
-              <h3>Audio</h3>
-              <p className="muted">
-                {selectedClip ? `Editing ${selectedClip.assetName}` : 'Select a clip to adjust.'}
-              </p>
-              <label className="tool-item">
-                <span>Clip volume {selectedClip?.volume ?? 100}%</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  disabled={!selectedClip}
-                  value={selectedClip?.volume ?? 100}
-                  onPointerDown={commitHistory}
-                  onChange={(event) => updateClip(selectedClip.id, { volume: Number(event.target.value) })}
-                />
-              </label>
+            <div className="tool-panel audio-mixer-panel">
+              <h3>Audio mixer</h3>
+              <p className="muted">Press play to hear changes live. Everything here is included when you export.</p>
+              <MasterAudioControls master={masterAudio} onChange={updateMasterAudio} level={masterLevel} duration={duration} />
+              <p className="audio-hint audio-clip-pointer">Selected-clip volume, EQ, fades, and loud/quiet spots are in the <strong>Audio</strong> tab of Clip properties.</p>
+              <div className="audio-clip-in-panel">{clipAudioControls}</div>
               <button type="button" className="tool-button" onClick={() => handleAddTrack('audio')}>
                 Add audio track
-              </button>
-              <button type="button" className="tool-button" onClick={() => handleAddTrack('text')}>
-                Add text track
               </button>
             </div>
           )}
@@ -1400,16 +1708,18 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             </div>
           )}
           <div className="preview-area">
-            <div className="preview-stage-shell" ref={stageRef} style={{ aspectRatio: projectSettings.aspectRatio.replace(':', ' / '), width: `${projectSettings.previewScale}%` }}>
+            <div className="preview-stage-shell" ref={stageRef} style={{ aspectRatio: projectSettings.aspectRatio.replace(':', ' / '), width: `min(${projectSettings.previewScale}%, calc(62vh * ${stageRatio}))`, '--stage-ratio': stageRatio }}>
               <div className="preview-stage-toolbar">
                 <span>{activeVisualClip?.assetName || 'Video canvas'}</span>
                 <span>{projectSettings.aspectRatio} · {Math.floor(playbackTime)}s</span>
               </div>
               {previewSrc && previewType === 'video' ? (
               <video
-                key={`${activeVisualClip.id}-${activeVisualClip.volume ?? 100}-${activeVisualClip.speed ?? 1}`}
+                key={activeVisualClip.id}
                 ref={videoRef}
                 src={previewSrc}
+                crossOrigin="anonymous"
+                muted={Boolean(activeVisualClip.audioDetached)}
                 className="preview-video"
                 style={{
                   filter: buildClipFilter(activeVisualClip),
@@ -1423,7 +1733,6 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                 onLoadedMetadata={(event) => {
                   const localTime = (playbackTime - (activeVisualClip?.startTime ?? 0)) * (activeVisualClip?.speed ?? 1) + (activeVisualClip?.trim?.start ?? 0)
                   event.currentTarget.currentTime = Math.max(0, localTime)
-                  event.currentTarget.volume = Math.max(0, Math.min(1, (activeVisualClip?.volume ?? 100) / 100))
                   event.currentTarget.playbackRate = activeVisualClip?.speed ?? 1
                 }}
                 onError={() => setStatusMessage('This video could not be decoded by the browser. Try re-uploading it or use a current Chromium browser.')}
@@ -1488,11 +1797,23 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
               })}
               <div className="preview-controls">
                 <button type="button" onClick={() => setPlaybackTime((current) => Math.max(0, current - 1))} title="Step back">‹</button>
-                <button type="button" onClick={() => setIsPlaying((current) => !current)} title={isPlaying ? 'Pause' : 'Play'}>{isPlaying ? '❚❚' : <Play size={16} fill="currentColor" />}</button>
+                <button type="button" onClick={togglePlayback} title={isPlaying ? 'Pause' : 'Play'}>{isPlaying ? '❚❚' : <Play size={16} fill="currentColor" />}</button>
                 <button type="button" onClick={() => { setIsPlaying(false); setPlaybackTime(0) }} title="Stop">■</button>
                 <button type="button" onClick={saveSnapshot} title="Save snapshot">▣</button>
                 <button type="button" onClick={toggleFullscreen} title="Fullscreen">⛶</button>
               </div>
+              {tracks.filter((track) => track.type === 'audio').flatMap((track) => track.clips).filter((clip) => clip.previewUrl).map((clip) => (
+                <audio
+                  key={clip.id}
+                  src={clip.previewUrl}
+                  crossOrigin="anonymous"
+                  preload="auto"
+                  ref={(element) => {
+                    if (element) audioElementsRef.current.set(clip.id, element)
+                    else audioElementsRef.current.delete(clip.id)
+                  }}
+                />
+              ))}
             </div>
           </div>
 
@@ -1544,7 +1865,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                     {track.clips.map((clip) => (
                       <div
                         key={clip.id}
-                        className={`clip ${selectedClip?.id === clip.id ? 'selected' : ''}`}
+                        className={`clip ${track.type === 'audio' ? 'clip-audio' : ''} ${selectedClip?.id === clip.id ? 'selected' : ''}`}
                         style={{
                           left: `${clip.startTime * timelinePixelsPerSecond}px`,
                           width: `${clip.duration * timelinePixelsPerSecond}px`,
@@ -1571,6 +1892,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                           }
                         }}
                       >
+                        {renderClipAudioOverlay(track, clip)}
                         <div className="clip-content">
                           <span className="clip-name">{clip.assetName}</span>
                           <button
@@ -1605,6 +1927,13 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                 >
                   + Audio
                 </button>
+                <button
+                  type="button"
+                  className="add-track-btn"
+                  onClick={() => handleAddTrack('text')}
+                >
+                  + Text
+                </button>
               </div>
             </div>
 
@@ -1622,7 +1951,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           </div>
           {!selectedClip && inspectorTab === 'video' && <div className="prop-section"><label>Project format<select value={projectSettings.aspectRatio} onChange={(event) => setProjectSettings((current) => ({ ...current, aspectRatio: event.target.value }))}>{Object.entries(PROJECT_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label} ({key})</option>)}</select></label><label>Frame rate<select value={projectSettings.frameRate} onChange={(event) => setProjectSettings((current) => ({ ...current, frameRate: Number(event.target.value) }))}><option value={24}>24 fps</option><option value={30}>30 fps</option><option value={60}>60 fps</option></select></label><label>Preview scale {projectSettings.previewScale}%<input type="range" min="60" max="100" value={projectSettings.previewScale} onChange={(event) => setProjectSettings((current) => ({ ...current, previewScale: Number(event.target.value) }))} /></label></div>}
           {selectedClip && inspectorTab === 'video' && <div className="properties-stack"><div className="prop-grid"><label>Position X<input type="number" value={getClipTransform(selectedClip).x} onChange={(event) => updateSelectedTransform('x', Number(event.target.value))} /></label><label>Position Y<input type="number" value={getClipTransform(selectedClip).y} onChange={(event) => updateSelectedTransform('y', Number(event.target.value))} /></label><label>Scale {getClipTransform(selectedClip).scale}%<input type="range" min="25" max="250" value={getClipTransform(selectedClip).scale} onPointerDown={commitHistory} onChange={(event) => updateSelectedTransform('scale', Number(event.target.value))} /></label><label>Rotation<input type="number" min="-360" max="360" value={getClipTransform(selectedClip).rotation} onChange={(event) => updateSelectedTransform('rotation', Number(event.target.value))} /></label><label>Opacity {getClipTransform(selectedClip).opacity}%<input type="range" min="0" max="100" value={getClipTransform(selectedClip).opacity} onPointerDown={commitHistory} onChange={(event) => updateSelectedTransform('opacity', Number(event.target.value))} /></label><label>Blend mode<select value={getClipTransform(selectedClip).blendMode} onChange={(event) => updateSelectedTransform('blendMode', event.target.value)}><option value="normal">Normal</option><option value="multiply">Multiply</option><option value="screen">Screen</option><option value="overlay">Overlay</option><option value="lighten">Lighten</option></select></label><label>Trim in<input type="number" min="0" step="0.1" value={selectedClip.trim?.start ?? 0} onChange={(event) => handleTrimClip(tracks.find((track) => track.clips.some((clip) => clip.id === selectedClip.id))?.id, selectedClip.id, Number(event.target.value), selectedClip.trim?.end ?? selectedClip.duration)} /></label><label>Trim out<input type="number" min="0" step="0.1" value={selectedClip.trim?.end ?? selectedClip.duration} onChange={(event) => handleTrimClip(tracks.find((track) => track.clips.some((clip) => clip.id === selectedClip.id))?.id, selectedClip.id, selectedClip.trim?.start ?? 0, Number(event.target.value))} /></label></div><label className="prop-section">Speed {selectedClip.speed ?? 1}x<input type="range" min="0.25" max="3" step="0.25" value={selectedClip.speed ?? 1} onPointerDown={commitHistory} onChange={(event) => updateSelectedClip({ speed: Number(event.target.value) })} /></label></div>}
-          {selectedClip && inspectorTab === 'audio' && <div className="properties-stack"><label className="prop-section">Volume {selectedClip.volume ?? 100}%<input type="range" min="0" max="100" value={selectedClip.volume ?? 100} onPointerDown={commitHistory} onChange={(event) => updateSelectedClip({ volume: Number(event.target.value) })} /></label><label className="prop-section">Pitch {selectedClip.pitch ?? 0} semitones<input type="range" min="-12" max="12" value={selectedClip.pitch ?? 0} onPointerDown={commitHistory} onChange={(event) => updateSelectedClip({ pitch: Number(event.target.value) })} /></label><label className="property-toggle"><input type="checkbox" checked={selectedClip.noiseRemoval ?? false} onChange={(event) => updateSelectedClip({ noiseRemoval: event.target.checked })} /> Reduce background noise</label></div>}
+          {inspectorTab === 'audio' && <div className="properties-stack audio-mixer-panel">{clipAudioControls}</div>}
           {selectedClip && inspectorTab === 'color' && <div className="properties-stack"><label className="prop-section">Brightness {(selectedClip.effects ?? DEFAULT_EFFECTS).brightness}<input type="range" min="0" max="200" value={(selectedClip.effects ?? DEFAULT_EFFECTS).brightness} onPointerDown={commitHistory} onChange={(event) => updateSelectedEffect('brightness', Number(event.target.value))} /></label><label className="prop-section">Temperature (warm / cool)<input type="range" min="-180" max="180" value={(selectedClip.effects ?? DEFAULT_EFFECTS).hue} onPointerDown={commitHistory} onChange={(event) => updateSelectedEffect('hue', Number(event.target.value))} /></label><button type="button" className="tool-button" onClick={matchSelectedColor}>Match another clip</button></div>}
           {selectedClip && inspectorTab === 'animation' && <div className="properties-stack"><p className="muted">Animate clip entrances and exits with a transition. Transform values stay editable for precise motion planning.</p><label className="prop-section">Transition<select value={selectedClip.transition ?? 'none'} onChange={(event) => updateSelectedClip({ transition: event.target.value })}>{Object.entries(TRANSITIONS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><button type="button" className="tool-button" onClick={() => updateSelectedClip({ transform: { ...DEFAULT_TRANSFORM } })}>Reset transform</button></div>}
           {selectedClip && <button type="button" className="primary-button" onClick={() => removeSelectedClip(false)}>Delete clip</button>}
