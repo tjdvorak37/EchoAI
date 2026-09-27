@@ -1,5 +1,6 @@
 import { useRef, useState, useMemo } from 'react'
 import { PUBLISHING_PLATFORMS, PUBLISHING_PLATFORM_KEYS, SOCIAL_PLATFORMS } from '../data/socialPlatforms'
+import { getVideoTrimForChannel, SOCIAL_VIDEO_CLIP_LIMITS } from '../services/mediaUploadPolicy'
 import './PostSchedulerPanel.css'
 
 const PLATFORM_LIMITS = Object.fromEntries(
@@ -73,6 +74,11 @@ export function PostSchedulerPanel({
   connectedAccounts = [],
   workspaceAssets = [],
   onUploadAsset,
+  onUpdateMediaTrim,
+  mediaUploadProgress,
+  mediaStorageRemainingMb,
+  maxMediaFileMb = 2048,
+  maxVideoDurationMinutes = 8,
   getPlatformMeta,
   getStatusBadgeClass,
   schedulerError,
@@ -93,6 +99,7 @@ export function PostSchedulerPanel({
   const [mediaDropActive, setMediaDropActive] = useState(false)
   const messageInputRef = useRef(null)
   const messageSelectionRef = useRef({ start: 0, end: 0 })
+  const previewVideoRef = useRef(null)
 
   const connectedPlatforms = useMemo(
     () => connectedAccounts
@@ -185,6 +192,26 @@ export function PostSchedulerPanel({
   const selectedMedia = (composer.mediaAssetIds || [])
     .map((assetId) => workspaceAssets.find((asset) => asset.id === assetId))
     .filter(Boolean)
+
+  const selectedVideo = selectedMedia.find((asset) => asset.type === 'video') || null
+  const videoDuration = Number(selectedVideo?.durationSeconds || selectedVideo?.duration || 0) || 0
+  const channels = composer.channels || []
+  const videoTrimTargets = selectedVideo
+    ? (channels.length ? channels : [previewPlatform]).map((channel) => ({
+      channel,
+      trim: getVideoTrimForChannel(selectedVideo, channel),
+      limit: SOCIAL_VIDEO_CLIP_LIMITS[channel] ?? Number.POSITIVE_INFINITY,
+    }))
+    : []
+  const previewTrim = selectedVideo ? getVideoTrimForChannel(selectedVideo, previewPlatform) : null
+  const previewClipLength = previewTrim?.durationSeconds ?? 0
+  const previewPlatformCap = SOCIAL_VIDEO_CLIP_LIMITS[previewPlatform] ?? Number.POSITIVE_INFINITY
+  const formatSeconds = (value) => {
+    const seconds = Math.max(0, Number(value) || 0)
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.round(seconds % 60)
+    return `${mins}:${String(secs).padStart(2, '0')}`
+  }
 
   const visibleEmojiGroups = useMemo(() => {
     const search = emojiSearch.trim().toLowerCase()
@@ -576,6 +603,61 @@ export function PostSchedulerPanel({
                   </label>
                   <small>Multiple files allowed</small>
                 </div>
+                <p className="scheduler-media-limits">
+                  Videos up to {maxVideoDurationMinutes} minutes and {maxMediaFileMb} MB per file. {mediaStorageRemainingMb} MB of plan storage available.
+                </p>
+                {mediaUploadProgress && (
+                  <div className="scheduler-media-upload-progress" role="status" aria-live="polite">
+                    <div><strong>{mediaUploadProgress.fileName}</strong><span>{mediaUploadProgress.percent}%</span></div>
+                    <progress max="100" value={mediaUploadProgress.percent} aria-label={`Uploading ${mediaUploadProgress.fileName}`} />
+                    <small>Uploading file {mediaUploadProgress.index + 1} of {mediaUploadProgress.total}</small>
+                  </div>
+                )}
+                {selectedVideo && (
+                  <div className="scheduler-video-trim-panel" style={{ marginTop: '0.75rem' }}>
+                    <div className="scheduler-current-media-heading" style={{ marginBottom: '0.45rem' }}>
+                      <strong>Clip for each selected social</strong>
+                      <small>One upload, separate start/end per destination</small>
+                    </div>
+                    {videoTrimTargets.map(({ channel, trim, limit }) => {
+                      const clipMax = Math.min(videoDuration || limit, limit)
+                      const trimEndMax = Math.min(videoDuration || limit, trim.startSeconds + limit)
+                      return (
+                        <div className="scheduler-platform-trim" key={channel}>
+                          <div className="scheduler-platform-trim-heading">
+                            <strong>{getPlatformMeta(channel)?.label || channel}</strong>
+                            <span>{formatSeconds(trim.durationSeconds)} / {Number.isFinite(limit) ? formatSeconds(limit) : formatSeconds(videoDuration)}</span>
+                          </div>
+                          <div className="scheduler-video-trim-row">
+                            <label htmlFor={`trim-start-${selectedVideo.id}-${channel}`}>Start <span>{formatSeconds(trim.startSeconds)}</span></label>
+                            <input
+                              id={`trim-start-${selectedVideo.id}-${channel}`}
+                              type="range"
+                              min="0"
+                              max={Math.max(0, Math.min(videoDuration - 1, clipMax ? videoDuration - 1 : videoDuration))}
+                              step="1"
+                              value={Math.min(trim.startSeconds, Math.max(0, trim.endSeconds - 1))}
+                              onChange={(event) => onUpdateMediaTrim?.(selectedVideo.id, channel, { startSeconds: Number(event.target.value), endSeconds: trim.endSeconds })}
+                            />
+                          </div>
+                          <div className="scheduler-video-trim-row">
+                            <label htmlFor={`trim-end-${selectedVideo.id}-${channel}`}>End <span>{formatSeconds(trim.endSeconds)}</span></label>
+                            <input
+                              id={`trim-end-${selectedVideo.id}-${channel}`}
+                              type="range"
+                              min={Math.min(videoDuration || 1, trim.startSeconds + 1)}
+                              max={Math.max(1, trimEndMax)}
+                              step="1"
+                              value={Math.max(1, Math.min(trim.endSeconds, trimEndMax))}
+                              onChange={(event) => onUpdateMediaTrim?.(selectedVideo.id, channel, { startSeconds: trim.startSeconds, endSeconds: Number(event.target.value) })}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                    <small className="muted">Each destination gets its own rendered clip. YouTube can use the full 8-minute source; Instagram Reels is capped at 3 minutes.</small>
+                  </div>
+                )}
                 {selectedMedia.length > 0 && (
                   <div className="scheduler-current-media">
                     <div className="scheduler-current-media-heading">
@@ -750,11 +832,37 @@ export function PostSchedulerPanel({
                 </div>
 
                 {selectedMedia.length > 0 ? (
-                  <div className="mockup-media-container">
-                    {selectedMedia[0].type === 'video' ? (
-                      <video src={selectedMedia[0].previewUrl} muted controls />
-                    ) : (
-                      <img src={selectedMedia[0].previewUrl} alt={selectedMedia[0].name} />
+                  <div>
+                    <div className="mockup-media-container">
+                      {selectedMedia[0].type === 'video' ? (
+                        <video
+                          key={`${selectedMedia[0].id}-${previewPlatform}-${previewTrim?.startSeconds}-${previewTrim?.endSeconds}`}
+                          ref={previewVideoRef}
+                          src={selectedMedia[0].previewUrl}
+                          muted
+                          controls
+                          onLoadedMetadata={(event) => {
+                            const video = event.currentTarget
+                            const trimStart = Math.max(0, Number(previewTrim?.startSeconds) || 0)
+                            const trimEnd = Math.max(trimStart + 0.1, Number(previewTrim?.endSeconds) || video.duration || trimStart)
+                            video.currentTime = trimStart
+                            const handleTrimPreview = () => {
+                              if (video.currentTime >= trimEnd) {
+                                video.currentTime = trimStart
+                              }
+                            }
+                            video.onTimeUpdate = handleTrimPreview
+                          }}
+                        />
+                      ) : (
+                        <img src={selectedMedia[0].previewUrl} alt={selectedMedia[0].name} />
+                      )}
+                    </div>
+                    {selectedMedia[0].type === 'video' && (
+                      <div className="scheduler-preview-platform-tag">
+                        <span>{getPlatformMeta(previewPlatform)?.label || previewPlatform} · {Number.isFinite(previewPlatformCap) ? `${formatSeconds(previewPlatformCap)} max` : 'full source'}</span>
+                        <strong>{formatSeconds(previewClipLength)} selected</strong>
+                      </div>
                     )}
                   </div>
                 ) : composer.imageIdea ? (
