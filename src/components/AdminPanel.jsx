@@ -9,6 +9,7 @@ import { AnalyticsPanel } from './AnalyticsPanel'
 import { InternalForumPanel } from './InternalForumPanel'
 import { ProjectBoardPanel } from './ProjectBoardPanel'
 import { AiOperationsPanel } from './AiOperationsPanel'
+import { StockMediaKeyPanel } from './StockMediaKeyPanel'
 import { internalForumService } from '../services/internalForumService'
 import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
@@ -1875,6 +1876,9 @@ export function AdminPanel({
 
         {itTab === 'integrations' && (
           <div>
+            <Section title="Stock media library">
+              <StockMediaKeyPanel />
+            </Section>
             <Section title="Social publishing readiness">
               <p className="muted">Platform-level setup only. Customer handles, pages, tokens, and post content are never shown here.</p>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
