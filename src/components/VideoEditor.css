@@ -19,6 +19,10 @@
 }
 
 .video-editor-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   padding: 0.7rem 0.9rem 0;
 }
 

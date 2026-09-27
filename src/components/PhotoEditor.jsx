@@ -15,7 +15,6 @@ import {
   PaintBucket,
   PanelRightOpen,
   PenTool,
-  ScanSearch,
   SmilePlus,
   Square,
   Triangle,
@@ -23,9 +22,46 @@ import {
   Upload,
   ZoomIn,
   Images,
+  Sparkles,
+  Wand,
+  Eye,
+  EyeOff,
+  Lock,
+  Keyboard,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { StockLibrary } from './StockLibrary'
+import { PhotoHueSaturationDialog } from './PhotoHueSaturationDialog'
+import { PhotoShortcutsOverlay } from './PhotoShortcutsOverlay'
+import { EditorFocusToggle } from './EditorFocusMode'
+import { useEditorFocusMode } from './useEditorFocusMode'
 import { downloadMediaLibraryDataUrl } from '../services/mediaLibraryService'
+import {
+  combineMasks,
+  defaultHueSat,
+  featherMask,
+  invertMask,
+  isNeutralHueSat,
+  magicWandMask,
+  maskCoverage,
+  paintBucket,
+  polygonMask,
+  rectMask,
+  selectSubjectMask,
+  sharpen,
+} from '../services/photoPixelOps'
+import {
+  canvasToObjectUrl,
+  cloneImageData,
+  dataUrlToMask,
+  fitContain,
+  imageDataToDataUrl,
+  loadWorkImage,
+  maskToDataUrl,
+  renderProcessedBase,
+  selectionOverlayUrls,
+  transformImageSrc,
+} from '../services/photoCanvasOps'
 import './PhotoEditor.css'
 
 const ASPECT_RATIOS = {
@@ -93,38 +129,75 @@ const MASK_SHAPES = {
 }
 
 const TOOLS = {
-  select: 'Select',
-  heal: 'Heal',
+  select: 'Move / select',
+  move: 'Move',
+  heal: 'Healing brush',
   brush: 'Brush',
   eraser: 'Eraser',
+  fill: 'Paint bucket',
   remove: 'Remove area',
   crop: 'Crop',
+  'rect-select': 'Rectangular marquee',
+  lasso: 'Lasso',
+  polygon: 'Polygonal lasso',
+  'object-select': 'Object selection',
+  'magic-wand': 'Magic wand',
 }
+
+const SELECTION_TOOLS = new Set(['rect-select', 'lasso', 'polygon', 'object-select', 'magic-wand'])
+
+const SELECTION_MODES = [
+  ['new', 'New'],
+  ['add', 'Add'],
+  ['subtract', 'Subtract'],
+  ['intersect', 'Intersect'],
+]
+
+const BLEND_MODES = {
+  'source-over': 'Normal',
+  multiply: 'Multiply',
+  screen: 'Screen',
+  overlay: 'Overlay',
+  darken: 'Darken',
+  lighten: 'Lighten',
+  'color-dodge': 'Color dodge',
+  'color-burn': 'Color burn',
+  'hard-light': 'Hard light',
+  'soft-light': 'Soft light',
+  difference: 'Difference',
+  exclusion: 'Exclusion',
+  hue: 'Hue',
+  saturation: 'Saturation',
+  color: 'Color',
+  luminosity: 'Luminosity',
+}
+
+const cssBlend = (mode) => (!mode || mode === 'source-over' ? 'normal' : mode)
 
 const KRITA_TOOL_GROUPS = [
   {
     heading: 'Navigation',
     tools: [
-      { key: 'select', label: 'Select', icon: MousePointer2 },
-      { key: 'crop', label: 'Crop', icon: Crop },
+      { key: 'select', label: 'Move / select', shortcut: 'V', icon: MousePointer2 },
+      { key: 'crop', label: 'Crop', shortcut: 'C', icon: Crop },
       { key: 'move', label: 'Move', icon: Move },
-      { key: 'zoom', label: 'Zoom', icon: ZoomIn },
+      { key: 'zoom', label: 'Zoom in', shortcut: 'Ctrl +', icon: ZoomIn },
     ],
   },
   {
     heading: 'Painting',
     tools: [
-      { key: 'brush', label: 'Brush', icon: Paintbrush },
-      { key: 'eraser', label: 'Eraser', icon: Eraser },
-      { key: 'heal', label: 'Heal', icon: Bandage },
-      { key: 'fill', label: 'Fill', icon: PaintBucket },
+      { key: 'brush', label: 'Brush', shortcut: 'B', icon: Paintbrush },
+      { key: 'eraser', label: 'Eraser', shortcut: 'E', icon: Eraser },
+      { key: 'heal', label: 'Healing brush', shortcut: 'J', icon: Bandage },
+      { key: 'fill', label: 'Paint bucket', shortcut: 'G', icon: PaintBucket },
     ],
   },
   {
     heading: 'Shapes',
     tools: [
       { key: 'line', label: 'Line', icon: Minus },
-      { key: 'rectangle', label: 'Rectangle', icon: Square },
+      { key: 'rectangle', label: 'Rectangle', shortcut: 'U', icon: Square },
       { key: 'ellipse', label: 'Ellipse', icon: Circle },
       { key: 'triangle', label: 'Triangle', icon: Triangle },
     ],
@@ -132,10 +205,11 @@ const KRITA_TOOL_GROUPS = [
   {
     heading: 'Selection',
     tools: [
-      { key: 'rect-select', label: 'Rectangular selection', icon: BoxSelect },
-      { key: 'lasso', label: 'Freehand selection', icon: LassoSelect },
-      { key: 'path', label: 'Path selection', icon: PenTool },
-      { key: 'similar', label: 'Similar color selection', icon: ScanSearch },
+      { key: 'object-select', label: 'Object selection', shortcut: 'W', icon: Sparkles },
+      { key: 'magic-wand', label: 'Magic wand', shortcut: 'Shift+W', icon: Wand },
+      { key: 'rect-select', label: 'Rectangular marquee', shortcut: 'M', icon: BoxSelect },
+      { key: 'lasso', label: 'Lasso', shortcut: 'L', icon: LassoSelect },
+      { key: 'polygon', label: 'Polygonal lasso', shortcut: 'Shift+L', icon: PenTool },
     ],
   },
 ]
@@ -165,6 +239,21 @@ const DEFAULT_FILTERS = {
   invert: 0,
   vignette: 38,
   grain: 18,
+}
+
+// Flattening bakes the current look into pixels, so the look must not apply twice.
+const NEUTRAL_FILTERS = {
+  brightness: 100,
+  contrast: 100,
+  saturation: 100,
+  exposure: 100,
+  blur: 0,
+  hue: 0,
+  sepia: 0,
+  grayscale: 0,
+  invert: 0,
+  vignette: 0,
+  grain: 0,
 }
 
 // Preview and export must agree, so both read this one string.
@@ -591,7 +680,6 @@ const renderComposition = async ({
   backgroundColor,
   layers,
   brushStrokes,
-  stageMetrics,
 }) => {
   const ctx = canvas.getContext('2d')
   if (!ctx) {
@@ -602,30 +690,22 @@ const renderComposition = async ({
   const height = canvas.height
 
   ctx.clearRect(0, 0, width, height)
-  ctx.fillStyle = backgroundColor || preset.base
-  ctx.fillRect(0, 0, width, height)
+  if (backgroundColor !== 'transparent') {
+    ctx.fillStyle = backgroundColor || preset.base
+    ctx.fillRect(0, 0, width, height)
+  }
 
   if (imageSrc) {
     try {
       const image = await loadImage(imageSrc)
-      const stageImageWidth = stageMetrics.width
-      const stageImageHeight = stageMetrics.height
-      const imageRatio = image.width / image.height
-      const stageRatio = stageImageWidth / stageImageHeight
-      let drawWidth = stageImageWidth
-      let drawHeight = stageImageHeight
-      let offsetX = 0
-      let offsetY = 0
-
-      if (imageRatio > stageRatio) {
-        drawHeight = stageImageHeight
-        drawWidth = imageRatio * drawHeight
-        offsetX = (stageImageWidth - drawWidth) / 2
-      } else {
-        drawWidth = stageImageWidth
-        drawHeight = drawWidth / imageRatio
-        offsetY = (stageImageHeight - drawHeight) / 2
+      // Same object-fit: contain placement as the on-screen preview.
+      const fit = {
+        scale: Math.min(width / image.width, height / image.height),
       }
+      const drawWidth = image.width * fit.scale
+      const drawHeight = image.height * fit.scale
+      const offsetX = (width - drawWidth) / 2
+      const offsetY = (height - drawHeight) / 2
 
       ctx.save()
       if (maskShape !== 'none') {
@@ -649,20 +729,27 @@ const renderComposition = async ({
     }
   }
 
-  if (imageSrc || layers.length || brushStrokes.length) {
+  if ((imageSrc || layers.length || brushStrokes.length) && filters.vignette > 0) {
     const vignette = ctx.createRadialGradient(width / 2, height / 2, width * 0.18, width / 2, height / 2, width * 0.72)
     vignette.addColorStop(0, 'rgba(0, 0, 0, 0)')
-    vignette.addColorStop(1, 'rgba(2, 6, 23, 0.55)')
+    vignette.addColorStop(1, `rgba(2, 6, 23, ${(0.62 * Math.min(100, filters.vignette)) / 100})`)
+    ctx.save()
+    // source-atop keeps transparent areas transparent.
+    ctx.globalCompositeOperation = 'source-atop'
     ctx.fillStyle = vignette
     ctx.fillRect(0, 0, width, height)
+    ctx.restore()
   }
 
   if ((imageSrc || layers.length || brushStrokes.length) && filters.grain > 0) {
     const dotCount = Math.round((width * height * filters.grain) / 110000)
+    ctx.save()
+    ctx.globalCompositeOperation = 'source-atop'
     ctx.fillStyle = 'rgba(255, 255, 255, 0.18)'
     for (let index = 0; index < dotCount; index += 1) {
       ctx.fillRect(Math.random() * width, Math.random() * height, 1, 1)
     }
+    ctx.restore()
   }
 
   // Logo layers need decoding before the synchronous draw pass below.
@@ -684,6 +771,7 @@ const renderComposition = async ({
 
     const x = (layer.x / 100) * width
     const y = (layer.y / 100) * height
+    ctx.globalCompositeOperation = layer.blendMode || 'source-over'
 
     if (layer.type === 'image') {
       const image = logoImages.get(layer.id)
@@ -731,6 +819,7 @@ const renderComposition = async ({
     drawTextLayer(ctx, layer, x, y, width * 0.48)
     ctx.restore()
   })
+  ctx.globalCompositeOperation = 'source-over'
 
   return canvas.toDataURL('image/png')
 }
@@ -781,6 +870,27 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const layerIdRef = useRef(0)
   const uploadInputRef = useRef(null)
   const [stageViewportSize, setStageViewportSize] = useState({ width: 900, height: 720 })
+  const [hueSat, setHueSat] = useState(defaultHueSat)
+  const [hueSatDialog, setHueSatDialog] = useState(null)
+  const [layerMask, setLayerMask] = useState(null)
+  const [work, setWork] = useState(null)
+  const [processed, setProcessed] = useState(null)
+  const [selection, setSelection] = useState(null)
+  const [selectionMode, setSelectionMode] = useState('new')
+  const [selectionFeather, setSelectionFeather] = useState(0)
+  const [wandTolerance, setWandTolerance] = useState(32)
+  const [wandContiguous, setWandContiguous] = useState(true)
+  const [marquee, setMarquee] = useState(null)
+  const [lassoPoints, setLassoPoints] = useState([])
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [layerMenu, setLayerMenu] = useState(null)
+  const [renamingLayerId, setRenamingLayerId] = useState('')
+  const [busy, setBusy] = useState('')
+  const focusMode = useEditorFocusMode()
+  const maskIdRef = useRef(0)
+  // Handlers declared later in the component, reached from earlier keyboard/menu code.
+  const lateActionsRef = useRef({})
+  const selectionDragRef = useRef(null)
 
   const selectedAsset = imageAssets.find((asset) => asset.id === selectedAssetId) ?? null
   const selectedImageSrc = generatedImageSrc || uploadedImage || selectedAsset?.previewUrl || ''
@@ -790,6 +900,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     ? activeLayerId
     : (layers[0]?.id ?? '')
   const activeTextLayer = layers.find((layer) => layer.id === resolvedActiveLayerId && layer.type === 'text') ?? null
+  const activeLayer = layers.find((layer) => layer.id === resolvedActiveLayerId) ?? null
   const stageClipPath =
     maskShape === 'circle'
       ? 'circle(44% at 50% 50%)'
@@ -841,6 +952,8 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     uploadedImage,
     selectedAssetId,
     canvasBackground,
+    hueSat,
+    layerMask,
   })
 
   const applySnapshot = (snapshot) => {
@@ -855,6 +968,8 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setUploadedImage(snapshot.uploadedImage)
     setSelectedAssetId(snapshot.selectedAssetId)
     setCanvasBackground(snapshot.canvasBackground || '#ffffff')
+    setHueSat(snapshot.hueSat ?? defaultHueSat())
+    setLayerMask(snapshot.layerMask ?? null)
   }
 
   const syncHistoryCounts = () => {
@@ -1007,6 +1122,433 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setNotice('Adjustments reset.')
   }
 
+  // --- Pro editing: pixel pipeline, selections, layer mask ----------------
+  useEffect(() => {
+    if (!selectedImageSrc) return undefined
+    let cancelled = false
+    loadWorkImage(selectedImageSrc)
+      .then((next) => {
+        if (!cancelled) setWork(next)
+      })
+      .catch(() => {
+        if (!cancelled) setNotice('That image could not be read for pixel editing.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedImageSrc])
+
+  const activeWork = work?.src === selectedImageSrc ? work : null
+  const maskActive = Boolean(layerMask?.src && layerMask.enabled !== false)
+  const needsProcessing = Boolean(activeWork && (maskActive || !isNeutralHueSat(hueSat)))
+  const processKey = needsProcessing ? `${JSON.stringify(hueSat)}|${maskActive ? layerMask.id : 'none'}` : ''
+
+  useEffect(() => {
+    if (!needsProcessing || !activeWork) return undefined
+    let cancelled = false
+    const timer = setTimeout(() => {
+      renderProcessedBase({ work: activeWork, hueSat, layerMask: maskActive ? layerMask : null })
+        .then(canvasToObjectUrl)
+        .then((url) => {
+          if (cancelled) {
+            URL.revokeObjectURL(url)
+            return
+          }
+          setProcessed((previous) => {
+            if (previous?.url && previous.url !== url) setTimeout(() => URL.revokeObjectURL(previous.url), 1500)
+            return { key: processKey, src: activeWork.src, url }
+          })
+        })
+        .catch(() => {})
+    }, 40)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [activeWork, hueSat, layerMask, maskActive, needsProcessing, processKey])
+
+  // While a new render is in flight keep showing the last one, never the unmasked original.
+  const displayImageSrc = !needsProcessing
+    ? selectedImageSrc
+    : processed?.src === selectedImageSrc
+      ? processed.url
+      : maskActive ? '' : selectedImageSrc
+
+  const imageFit = activeWork ? fitContain(activeWork.width, activeWork.height, stageDisplaySize.width, stageDisplaySize.height) : null
+  const stageToWork = (point) => ({
+    x: (((point.x / 100) * stageDisplaySize.width - imageFit.x) / imageFit.width) * activeWork.width,
+    y: (((point.y / 100) * stageDisplaySize.height - imageFit.y) / imageFit.height) * activeWork.height,
+  })
+  const isInsideWork = (point) => point.x >= 0 && point.y >= 0 && point.x < activeWork.width && point.y < activeWork.height
+
+  const withBusy = (label, task) => {
+    setBusy(label)
+    // Let the busy indicator paint before the synchronous pixel work blocks the thread.
+    setTimeout(async () => {
+      try {
+        await task()
+      } catch (error) {
+        setNotice(error.message || 'That operation failed.')
+      } finally {
+        setBusy('')
+      }
+    }, 30)
+  }
+
+  const requireWork = () => {
+    if (activeWork) return true
+    setNotice(selectedImageSrc ? 'Still reading the image, try again in a moment.' : 'Add a photo first. Selections and masks work on the photo.')
+    return false
+  }
+
+  const selectTool = (key) => {
+    setActiveTool(key)
+    setLassoPoints([])
+    setMarquee(null)
+    if (SELECTION_TOOLS.has(key)) {
+      setNotice(`${TOOLS[key]}: ${{
+        'object-select': 'click the photo to select the main subject.',
+        'magic-wand': 'click a color to select similar pixels.',
+        'rect-select': 'drag a box.',
+        lasso: 'drag around an area.',
+        polygon: 'click corner points, then click the first point or press Enter.',
+      }[key]} Shift adds, Alt subtracts.`)
+    } else if (TOOLS[key]) {
+      setNotice(`${TOOLS[key]} tool selected.`)
+    }
+  }
+
+  const commitSelection = (mask, mode, label) => {
+    if (!activeWork) return
+    const { width, height } = activeWork
+    const current = selection?.width === width && selection?.height === height ? selection.mask : null
+    let next = combineMasks(current, mask, mode)
+    if (selectionFeather > 0) next = featherMask(next, width, height, selectionFeather)
+    const coverage = maskCoverage(next)
+    if (coverage < 0.0005) {
+      setSelection(null)
+      setNotice('Nothing is selected.')
+      return
+    }
+    setSelection({ mask: next, width, height, ...selectionOverlayUrls(next, width, height) })
+    setNotice(`${label}: ${Math.max(1, Math.round(coverage * 100))}% of the photo selected.`)
+  }
+
+  const modeFromEvent = (event) => {
+    if (event.shiftKey && event.altKey) return 'intersect'
+    if (event.shiftKey) return 'add'
+    if (event.altKey) return 'subtract'
+    return selectionMode
+  }
+
+  const runSelectSubject = (mode) => {
+    const result = selectSubjectMask(activeWork.imageData)
+    if (result.confidence === 'low') {
+      setNotice('No clear subject found. Try the Magic wand (Shift+W) on the background, then Select → Inverse.')
+      return
+    }
+    commitSelection(result.mask, mode, 'Subject selected')
+    if (result.confidence === 'medium') {
+      setNotice('Subject selected. The background is busy, so check the edges and refine with Shift/Alt + Lasso.')
+    }
+  }
+
+  const selectSubject = () => {
+    if (!requireWork()) return
+    withBusy('Finding the subject…', () => runSelectSubject(selectionMode))
+  }
+
+  const selectAll = () => {
+    if (!requireWork()) return
+    commitSelection(new Uint8Array(activeWork.width * activeWork.height).fill(255), 'new', 'Select all')
+  }
+
+  const deselect = () => {
+    setSelection(null)
+    setLassoPoints([])
+    setMarquee(null)
+  }
+
+  const invertSelection = () => {
+    if (!selection) {
+      setNotice('Make a selection first.')
+      return
+    }
+    commitSelection(invertMask(selection.mask), 'new', 'Inverse')
+  }
+
+  const closePolygon = (mode, points = lassoPoints) => {
+    if (points.length >= 3 && activeWork) {
+      commitSelection(polygonMask(activeWork.width, activeWork.height, points.map(stageToWork)), mode, 'Polygonal lasso')
+    }
+    setLassoPoints([])
+  }
+
+  const startSelection = (event) => {
+    if (!requireWork()) return
+    event.preventDefault()
+    event.stopPropagation()
+    const mode = modeFromEvent(event)
+    const point = getStagePoint(event)
+
+    if (activeTool === 'object-select') {
+      withBusy('Finding the subject…', () => runSelectSubject(mode))
+      return
+    }
+    if (activeTool === 'magic-wand') {
+      const seed = stageToWork(point)
+      if (!isInsideWork(seed)) {
+        setNotice('Click on the photo to pick a color.')
+        return
+      }
+      withBusy('Selecting…', () => commitSelection(magicWandMask(activeWork.imageData, seed.x, seed.y, { tolerance: wandTolerance, contiguous: wandContiguous }), mode, 'Magic wand'))
+      return
+    }
+    if (activeTool === 'polygon') {
+      const first = lassoPoints[0]
+      if (lassoPoints.length >= 3 && (event.detail >= 2 || Math.hypot(first.x - point.x, first.y - point.y) < 1.5)) {
+        closePolygon(mode)
+      } else {
+        setLassoPoints((current) => [...current, point])
+      }
+      return
+    }
+
+    const tool = activeTool
+    selectionDragRef.current = { mode, start: point, last: point, points: [point] }
+    if (tool === 'rect-select') setMarquee({ x: point.x, y: point.y, w: 0, h: 0 })
+    else setLassoPoints([point])
+
+    const move = (moveEvent) => {
+      const drag = selectionDragRef.current
+      if (!drag) return
+      const next = getStagePoint(moveEvent)
+      drag.last = next
+      if (tool === 'rect-select') {
+        setMarquee({ x: Math.min(drag.start.x, next.x), y: Math.min(drag.start.y, next.y), w: Math.abs(next.x - drag.start.x), h: Math.abs(next.y - drag.start.y) })
+      } else {
+        drag.points.push(next)
+        setLassoPoints([...drag.points])
+      }
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      const drag = selectionDragRef.current
+      selectionDragRef.current = null
+      if (!drag) return
+      if (tool === 'rect-select') {
+        setMarquee(null)
+        if (Math.abs(drag.last.x - drag.start.x) < 0.4 && Math.abs(drag.last.y - drag.start.y) < 0.4) {
+          if (drag.mode === 'new') deselect()
+          return
+        }
+        const a = stageToWork(drag.start)
+        const b = stageToWork(drag.last)
+        commitSelection(rectMask(activeWork.width, activeWork.height, { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y }), drag.mode, 'Rectangle')
+      } else {
+        setLassoPoints([])
+        if (drag.points.length >= 3) {
+          commitSelection(polygonMask(activeWork.width, activeWork.height, drag.points.map(stageToWork)), drag.mode, 'Lasso')
+        }
+      }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+
+  const saveLayerMask = (mask, message) => {
+    commitHistory()
+    maskIdRef.current += 1
+    setLayerMask({ id: maskIdRef.current, src: maskToDataUrl(mask, activeWork.width, activeWork.height), enabled: true })
+    setRightSidebarCollapsed(false)
+    setNotice(message)
+  }
+
+  const currentMaskPixels = async () => (layerMask?.src && activeWork
+    ? dataUrlToMask(layerMask.src, activeWork.width, activeWork.height)
+    : new Uint8Array(activeWork.width * activeWork.height).fill(255))
+
+  const addLayerMaskFromSelection = () => {
+    if (!requireWork()) return
+    if (!selection) {
+      setNotice('Make a selection first (W selects the subject), then add the mask.')
+      return
+    }
+    saveLayerMask(selection.mask, 'Layer mask added. Everything outside the selection is hidden. Pick a Fill in the Layers panel.')
+    setSelection(null)
+  }
+
+  const removeBackground = () => {
+    if (!requireWork()) return
+    withBusy('Removing background…', () => {
+      const result = selectSubjectMask(activeWork.imageData)
+      if (result.confidence === 'low') {
+        setNotice('No clear subject found. Select the subject by hand (Lasso or Magic wand) and use Add mask.')
+        return
+      }
+      saveLayerMask(
+        featherMask(result.mask, activeWork.width, activeWork.height, 1),
+        result.confidence === 'medium'
+          ? 'Background removed. The scene is busy, so check the edges; refine with a selection and Add mask.'
+          : 'Background removed. Choose a Fill color in the Layers panel, or keep it transparent for PNG.',
+      )
+      setSelection(null)
+    })
+  }
+
+  const deleteSelectedArea = async () => {
+    const current = await currentMaskPixels()
+    saveLayerMask(combineMasks(current, selection.mask, 'subtract'), 'Deleted the selected area. It is hidden by the layer mask, so you can bring it back by deleting the mask.')
+    setSelection(null)
+  }
+
+  const toggleLayerMask = () => {
+    if (!layerMask) return
+    commitHistory()
+    setLayerMask({ ...layerMask, enabled: layerMask.enabled === false })
+    setNotice(layerMask.enabled === false ? 'Layer mask enabled.' : 'Layer mask disabled. The full photo is showing.')
+  }
+
+  const invertLayerMask = async () => {
+    if (!layerMask || !requireWork()) return
+    saveLayerMask(invertMask(await currentMaskPixels()), 'Layer mask inverted.')
+  }
+
+  const deleteLayerMask = () => {
+    if (!layerMask) return
+    commitHistory()
+    setLayerMask(null)
+    setNotice('Layer mask deleted. The full photo is back.')
+  }
+
+  const replaceBaseImage = (src, message) => {
+    commitHistory()
+    setGeneratedImageSrc(src)
+    setUploadedImage('')
+    setSelectedAssetId('')
+    setNotice(message)
+  }
+
+  const hexToRgb = (hex) => {
+    const value = normalizeColorInputValue(hex, '#000000').slice(1)
+    return [0, 2, 4].map((offset) => parseInt(value.slice(offset, offset + 2), 16))
+  }
+
+  const applyPaintBucket = (event) => {
+    event.preventDefault()
+    if (!selectedImageSrc) {
+      commitHistory()
+      setCanvasBackground(brushColor)
+      setNotice('Filled the canvas background.')
+      return
+    }
+    if (!requireWork()) return
+    const seed = stageToWork(getStagePoint(event))
+    if (!isInsideWork(seed)) {
+      commitHistory()
+      setCanvasBackground(brushColor)
+      setNotice('Filled the canvas background around the photo.')
+      return
+    }
+    withBusy('Filling…', () => {
+      const pixels = cloneImageData(activeWork.imageData)
+      const count = paintBucket(pixels, seed.x, seed.y, hexToRgb(brushColor), { tolerance: wandTolerance, contiguous: wandContiguous })
+      replaceBaseImage(imageDataToDataUrl(pixels), `Filled ${count.toLocaleString()} pixels.`)
+    })
+  }
+
+  const sharpenBase = () => {
+    if (!requireWork()) return
+    withBusy('Sharpening…', () => {
+      const pixels = cloneImageData(activeWork.imageData)
+      sharpen(pixels, 0.5)
+      replaceBaseImage(imageDataToDataUrl(pixels), 'Sharpened the photo.')
+    })
+    setOpenMenu(null)
+  }
+
+  const transformBase = (kind, message) => {
+    setOpenMenu(null)
+    if (!selectedImageSrc) {
+      setNotice('Add a photo first.')
+      return
+    }
+    withBusy('Transforming…', async () => {
+      const src = await transformImageSrc(selectedImageSrc, kind)
+      const maskSrc = layerMask?.src ? await transformImageSrc(layerMask.src, kind) : null
+      replaceBaseImage(src, message)
+      if (maskSrc) {
+        maskIdRef.current += 1
+        setLayerMask({ ...layerMask, id: maskIdRef.current, src: maskSrc })
+      }
+      setSelection(null)
+    })
+  }
+
+  const flattenImage = () => {
+    setOpenMenu(null)
+    withBusy('Flattening…', async () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = stageMetrics.width
+      canvas.height = stageMetrics.height
+      const src = await renderComposition({ canvas, imageSrc: displayImageSrc, maskShape, filters, preset, backgroundColor: canvasBackground, layers, brushStrokes, stageMetrics })
+      replaceBaseImage(src, 'Flattened everything into a single photo.')
+      setLayers([])
+      setBrushStrokes([])
+      setHueSat(defaultHueSat())
+      setLayerMask(null)
+      setFilters(NEUTRAL_FILTERS)
+      setMaskShape('none')
+      setSelection(null)
+    })
+  }
+
+  const quickExportLayer = async (layer) => {
+    setLayerMenu(null)
+    const canvas = document.createElement('canvas')
+    canvas.width = stageMetrics.width
+    canvas.height = stageMetrics.height
+    const src = await renderComposition({ canvas, imageSrc: '', maskShape: 'none', filters: NEUTRAL_FILTERS, preset, backgroundColor: 'transparent', layers: [{ ...layer, hidden: false }], brushStrokes: [], stageMetrics })
+    const link = document.createElement('a')
+    link.href = src
+    link.download = `${slugify(layer.label || 'layer')}.png`
+    link.click()
+    setNotice(`Exported ${layer.label} as a transparent PNG.`)
+  }
+
+  const openHueSat = () => {
+    setOpenMenu(null)
+    setLayerMenu(null)
+    if (!selectedImageSrc) {
+      setNotice('Add a photo first. Hue/Saturation adjusts the photo.')
+      return
+    }
+    setHueSatDialog({ initial: hueSat })
+  }
+
+  const applyHueSat = (next) => {
+    historyRef.current.past.push({ ...buildSnapshot(), hueSat: hueSatDialog.initial })
+    if (historyRef.current.past.length > 60) historyRef.current.past.shift()
+    historyRef.current.future = []
+    syncHistoryCounts()
+    setHueSat(next)
+    setHueSatDialog(null)
+    setNotice(isNeutralHueSat(next) ? 'Hue/Saturation cleared.' : 'Hue/Saturation applied. Press Ctrl+U to adjust it again.')
+  }
+
+  const cancelHueSat = () => {
+    setHueSat(hueSatDialog.initial)
+    setHueSatDialog(null)
+  }
+
+  const setBackgroundFill = (value) => {
+    commitHistory()
+    setCanvasBackground(value)
+  }
+
   // --- Menu Handlers -------------------------------------------------------
   
   // FILE MENU
@@ -1051,17 +1593,8 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   }
 
   const handleExport = (format = exportFormat) => {
-    if (!stageRef.current) return
-    const canvas = stageRef.current.querySelector('canvas')
-    if (!canvas) {
-      setNotice('No canvas to export.')
-      return
-    }
-    const link = document.createElement('a')
-    link.href = canvas.toDataURL(EXPORT_FORMATS[format].mime, exportQuality / 100)
-    link.download = `export.${EXPORT_FORMATS[format].extension}`
-    link.click()
-    setNotice(`Exported as ${EXPORT_FORMATS[format].label}.`)
+    setExportFormat(format)
+    lateActionsRef.current.exportCanvas?.(format)
     setOpenMenu(null)
   }
 
@@ -1111,8 +1644,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   }
 
   const handleEditSelectAll = () => {
-    setLayers((prev) => prev.map((l) => ({ ...l, selected: true })))
-    setNotice('All layers selected.')
+    selectAll()
     setOpenMenu(null)
   }
 
@@ -1139,35 +1671,11 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   }
 
   // IMAGE MENU
-  const handleImageRotate = () => {
-    commitHistory()
-    setLayers((prev) =>
-      prev.map((layer) => ({
-        ...layer,
-        rotation: ((layer.rotation || 0) + 90) % 360,
-      }))
-    )
-    setNotice('Image rotated 90°.')
-    setOpenMenu(null)
-  }
+  const handleImageRotate = () => transformBase('rotate-cw', 'Rotated the photo 90° clockwise.')
 
-  const handleImageFlip = () => {
-    commitHistory()
-    setLayers((prev) =>
-      prev.map((layer) => ({
-        ...layer,
-        flipX: !layer.flipX,
-      }))
-    )
-    setNotice('Image flipped horizontally.')
-    setOpenMenu(null)
-  }
+  const handleImageFlip = () => transformBase('flip-h', 'Flipped the photo horizontally.')
 
-  const handleImageFlatten = () => {
-    commitHistory()
-    setNotice('Image flattened. All layers merged.')
-    setOpenMenu(null)
-  }
+  const handleImageFlatten = () => flattenImage()
 
   // LAYER MENU
   const handleLayerNew = () => {
@@ -1189,16 +1697,6 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setOpenMenu(null)
   }
 
-  const handleLayerMergeDown = () => {
-    const idx = layers.findIndex((l) => l.id === resolvedActiveLayerId)
-    if (idx > 0) {
-      commitHistory()
-      setLayers((prev) => prev.filter((_, i) => i !== idx))
-      setNotice('Layers merged.')
-    }
-    setOpenMenu(null)
-  }
-
   // FILTER MENU
   const handleFilterBlur = () => {
     commitHistory()
@@ -1207,12 +1705,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setOpenMenu(null)
   }
 
-  const handleFilterSharpen = () => {
-    commitHistory()
-    setFilters((prev) => ({ ...prev, contrast: Math.min(prev.contrast + 10, 150) }))
-    setNotice('Sharpened.')
-    setOpenMenu(null)
-  }
+  const handleFilterSharpen = () => sharpenBase()
 
   const handleFilterGrayscale = () => {
     commitHistory()
@@ -1223,8 +1716,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
 
   // TOOLS MENU
   const handleToolSelect = (tool) => {
-    setActiveTool(tool)
-    setNotice(`${TOOLS[tool]} tool selected.`)
+    selectTool(tool)
     setOpenMenu(null)
   }
 
@@ -1326,20 +1818,9 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   }
 
   // EXPANDED IMAGE MENU
-  const handleImageScale = () => {
-    commitHistory()
-    setNotice('Scale image dialog would open (custom dimensions).')
-    setOpenMenu(null)
-  }
-
   const handleImageCrop = () => {
     setActiveTool('crop')
     setNotice('Crop tool activated. Drag on canvas to define crop area.')
-    setOpenMenu(null)
-  }
-
-  const handleImageResizeCanvas = () => {
-    setNotice('Canvas size dialog would open (width × height settings).')
     setOpenMenu(null)
   }
 
@@ -1489,25 +1970,63 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
         }
       }
 
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+      if (hueSatDialog || stockLibraryOpen || shortcutsOpen) return
+
+      const mod = event.metaKey || event.ctrlKey
+      const code = event.code
+      const run = (action) => {
         event.preventDefault()
-        if (event.shiftKey) redo()
-        else undo()
+        action()
+      }
+
+      if (mod) {
+        if (code === 'KeyZ') return run(() => (event.shiftKey ? redo() : undo()))
+        if (code === 'KeyY') return run(redo)
+        if (code === 'KeyJ') return run(() => resolvedActiveLayerId && duplicateLayer(resolvedActiveLayerId))
+        if (code === 'KeyD') return run(deselect)
+        if (code === 'KeyA') return run(selectAll)
+        if (code === 'KeyI' && event.shiftKey) return run(invertSelection)
+        if (code === 'KeyU') return run(openHueSat)
+        if (code === 'KeyE' && event.shiftKey) return run(flattenImage)
+        if (code === 'KeyW' && event.shiftKey && event.altKey) return run(() => lateActionsRef.current.exportCanvas?.())
+        if (code === 'Equal' || code === 'NumpadAdd') return run(() => setCanvasZoom((value) => clamp(value + 10, 25, 400)))
+        if (code === 'Minus' || code === 'NumpadSubtract') return run(() => setCanvasZoom((value) => clamp(value - 10, 25, 400)))
+        if (code === 'Digit0' || code === 'Numpad0') return run(() => lateActionsRef.current.resetCanvasView?.())
         return
       }
 
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd' && resolvedActiveLayerId) {
-        event.preventDefault()
-        duplicateLayer(resolvedActiveLayerId)
+      if (event.key === '?') return run(() => setShortcutsOpen(true))
+      if (event.key === 'Escape') {
+        setLassoPoints([])
+        setMarquee(null)
+        setLayerMenu(null)
+        return
+      }
+      if (event.key === 'Enter' && activeTool === 'polygon' && lassoPoints.length >= 3) return run(() => closePolygon(selectionMode))
+      if (event.key === '[') return run(() => setBrushSize((value) => clamp(value - 4, 4, 96)))
+      if (event.key === ']') return run(() => setBrushSize((value) => clamp(value + 4, 4, 96)))
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (selection && activeWork) return run(deleteSelectedArea)
+        if (resolvedActiveLayerId) return run(() => deleteLayer(resolvedActiveLayerId))
         return
       }
 
-      if ((event.key !== 'Delete' && event.key !== 'Backspace') || !resolvedActiveLayerId) {
-        return
+      if (event.altKey) return
+      const toolKeys = {
+        KeyV: 'select',
+        KeyM: 'rect-select',
+        KeyL: event.shiftKey ? 'polygon' : 'lasso',
+        KeyW: event.shiftKey ? 'magic-wand' : 'object-select',
+        KeyC: 'crop',
+        KeyB: 'brush',
+        KeyE: 'eraser',
+        KeyJ: 'heal',
+        KeyG: 'fill',
       }
-
-      event.preventDefault()
-      deleteLayer(resolvedActiveLayerId)
+      if (toolKeys[code]) return run(() => selectTool(toolKeys[code]))
+      if (code === 'KeyT') return run(addTextLayer)
+      if (code === 'KeyU') return run(() => addShapeLayer('rectangle'))
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -1527,7 +2046,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   }
 
   const beginDrag = (layer, event) => {
-    if (activeTool !== 'select') return
+    if (activeTool !== 'select' && activeTool !== 'move') return
     if (!stageRef.current) return
     event.preventDefault()
     const stageRect = stageRef.current.getBoundingClientRect()
@@ -1575,7 +2094,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     const healing = activeTool === 'heal'
     const point = getStagePoint(event)
     const stroke = {
-      id: `stroke-${Date.now()}`,
+      id: nextLayerId('stroke'),
       erase,
       healing,
       color: brushColor,
@@ -1966,7 +2485,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     updateLayer(activeTextLayer.id, patch)
   }
 
-  const exportCanvas = async () => {
+  const exportCanvas = async (formatKey) => {
     // Canvas silently falls back to a default face if a brand font is still
     // loading, so wait for the font set to settle first.
     if (document.fonts?.ready) {
@@ -1978,7 +2497,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     stageCanvas.height = stageMetrics.height
     const stageDataUrl = await renderComposition({
       canvas: stageCanvas,
-      imageSrc: selectedImageSrc,
+      imageSrc: displayImageSrc,
       maskShape,
       filters,
       preset,
@@ -1999,7 +2518,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     }
 
     exportCtx.fillStyle = canvasBackground || preset.base
-    exportCtx.fillRect(0, 0, exportCanvasEl.width, exportCanvasEl.height)
+    if (canvasBackground !== 'transparent') exportCtx.fillRect(0, 0, exportCanvasEl.width, exportCanvasEl.height)
 
     const stageImage = await loadImage(stageDataUrl)
     const sourceX = (cropRect.x / 100) * stageMetrics.width
@@ -2008,12 +2527,12 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     const sourceHeight = (cropRect.h / 100) * stageMetrics.height
     exportCtx.drawImage(stageImage, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, exportCanvasEl.width, exportCanvasEl.height)
 
-    const format = EXPORT_FORMATS[exportFormat] ?? EXPORT_FORMATS.png
+    const format = EXPORT_FORMATS[typeof formatKey === 'string' ? formatKey : exportFormat] ?? EXPORT_FORMATS.png
 
     // JPEG has no alpha, so anything transparent would render black without this.
     if (format.mime === 'image/jpeg') {
       exportCtx.globalCompositeOperation = 'destination-over'
-      exportCtx.fillStyle = preset.base
+      exportCtx.fillStyle = canvasBackground === 'transparent' ? '#ffffff' : preset.base
       exportCtx.fillRect(0, 0, exportCanvasEl.width, exportCanvasEl.height)
       exportCtx.globalCompositeOperation = 'source-over'
     }
@@ -2042,9 +2561,19 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setNotice(`Exported ${exportName} and sent it to your workspace.`)
   }
 
+  useEffect(() => {
+    lateActionsRef.current = { exportCanvas, resetCanvasView }
+  })
+
+  const runMenuAction = (action) => {
+    setLayerMenu(null)
+    action()
+  }
+  const menuLayer = layerMenu && layerMenu.layerId !== '__photo' ? layers.find((item) => item.id === layerMenu.layerId) ?? null : null
+
   return (
     <section
-      className={`photo-creator-shell ${compactMode ? 'compact' : ''}`}
+      className={`photo-creator-shell ${compactMode ? 'compact' : ''} ${focusMode.focused ? 'editor-focus' : ''}`}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault()
@@ -2058,6 +2587,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
           <p className="panel-note">Upload a photo, add text and graphics, retouch it, then export.</p>
         </div>
         <div className="photo-creator-actions">
+          <EditorFocusToggle focused={focusMode.focused} onToggle={focusMode.toggle} fullscreen={focusMode.fullscreen} onToggleFullscreen={focusMode.toggleFullscreen} label="photo editor" />
           {/* Quick Access - Only essential buttons */}
           <button
             type="button"
@@ -2088,33 +2618,87 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
       <div className="editor-options-bar" aria-label="Tool options">
         <div className="option-group">
           <span className="option-group-title">{TOOLS[activeTool] || 'Tool'}</span>
-          <label title="Brush color">
-            <span>Color</span>
-            <input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} />
-          </label>
-          <label>
-            <span>Size {brushSize}</span>
-            <input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} />
-          </label>
-          <label>
-            <span>Opacity {Math.round(brushOpacity * 100)}%</span>
-            <input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} />
-          </label>
-          <label>
-            <span>Mask</span>
-            <select value={maskShape} onChange={(event) => setMaskShape(event.target.value)}>
-              {Object.entries(MASK_SHAPES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-            </select>
-          </label>
+          {SELECTION_TOOLS.has(activeTool) ? (
+            <>
+              <div className="option-segmented" role="radiogroup" aria-label="Selection mode">
+                {SELECTION_MODES.map(([key, label]) => (
+                  <button key={key} type="button" role="radio" aria-checked={selectionMode === key} className={selectionMode === key ? 'active' : ''} onClick={() => setSelectionMode(key)} title={`${label} selection${key === 'add' ? ' (hold Shift)' : key === 'subtract' ? ' (hold Alt)' : ''}`}>{label}</button>
+                ))}
+              </div>
+              <label title="Softens the selection edge">
+                <span>Feather {selectionFeather}px</span>
+                <input type="range" min="0" max="40" value={selectionFeather} onChange={(event) => setSelectionFeather(Number(event.target.value))} />
+              </label>
+              {activeTool === 'magic-wand' && (
+                <>
+                  <label>
+                    <span>Tolerance {wandTolerance}</span>
+                    <input type="range" min="0" max="150" value={wandTolerance} onChange={(event) => setWandTolerance(Number(event.target.value))} />
+                  </label>
+                  <label className="option-check">
+                    <input type="checkbox" checked={wandContiguous} onChange={(event) => setWandContiguous(event.target.checked)} />
+                    <span>Contiguous</span>
+                  </label>
+                </>
+              )}
+              <button type="button" className="option-action" onClick={selectSubject}>Select subject</button>
+              {selection && (
+                <>
+                  <button type="button" className="option-action" onClick={invertSelection}>Invert</button>
+                  <button type="button" className="option-action" onClick={deselect}>Deselect</button>
+                  <button type="button" className="option-action primary" onClick={addLayerMaskFromSelection}>Add mask</button>
+                </>
+              )}
+            </>
+          ) : activeTool === 'fill' ? (
+            <>
+              <label title="Fill color">
+                <span>Color</span>
+                <input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} />
+              </label>
+              <label>
+                <span>Tolerance {wandTolerance}</span>
+                <input type="range" min="0" max="150" value={wandTolerance} onChange={(event) => setWandTolerance(Number(event.target.value))} />
+              </label>
+              <label className="option-check">
+                <input type="checkbox" checked={wandContiguous} onChange={(event) => setWandContiguous(event.target.checked)} />
+                <span>Contiguous</span>
+              </label>
+            </>
+          ) : (
+            <>
+              <label title="Brush color">
+                <span>Color</span>
+                <input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} />
+              </label>
+              <label title="[ and ] change the size">
+                <span>Size {brushSize}</span>
+                <input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} />
+              </label>
+              <label>
+                <span>Opacity {Math.round(brushOpacity * 100)}%</span>
+                <input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} />
+              </label>
+              <label title="Crop the whole design to a shape">
+                <span>Frame</span>
+                <select value={maskShape} onChange={(event) => setMaskShape(event.target.value)}>
+                  {Object.entries(MASK_SHAPES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                </select>
+              </label>
+            </>
+          )}
         </div>
 
         <div className="option-group editor-actions">
+          <button type="button" onClick={removeBackground} title="Select the subject and hide the background with a layer mask">Remove background</button>
+          <button type="button" onClick={openHueSat} title="Hue/Saturation (Ctrl+U)"><SlidersHorizontal size={13} aria-hidden="true" /> Hue/Sat</button>
           <button type="button" onClick={useLibraryImage}>Library</button>
           <button type="button" onClick={clearBaseImage}>Clear image</button>
           <button type="button" onClick={resetEditor}>New canvas</button>
           <button type="button" onClick={() => setCompactMode((value) => !value)} aria-pressed={compactMode}>
             {compactMode ? 'Comfortable' : 'Compact'}
           </button>
+          <button type="button" onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><Keyboard size={14} aria-hidden="true" /></button>
         </div>
       </div>
 
@@ -2192,14 +2776,35 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
               </button>
               {openMenu === 'Image' && (
                 <div className="menu-dropdown menu-dropdown-compact">
-                  <button onClick={handleImageScale}>Scale...</button>
-                  <button onClick={handleImageResizeCanvas}>Canvas Size...</button>
+                  <button onClick={openHueSat}>Hue/Saturation… <kbd>Ctrl+U</kbd></button>
+                  <button onClick={sharpenBase}>Sharpen</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={handleImageCrop}>Crop</button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleImageRotate}>Rotate 90°</button>
-                  <button onClick={handleImageFlip}>Flip</button>
+                  <button onClick={handleImageRotate}>Rotate 90° clockwise</button>
+                  <button onClick={() => transformBase('rotate-ccw', 'Rotated the photo 90° counter-clockwise.')}>Rotate 90° counter-clockwise</button>
+                  <button onClick={handleImageFlip}>Flip horizontal</button>
+                  <button onClick={() => transformBase('flip-v', 'Flipped the photo vertically.')}>Flip vertical</button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleImageFlatten}>Flatten</button>
+                  <button onClick={handleImageFlatten}>Flatten image <kbd>Ctrl+Shift+E</kbd></button>
+                </div>
+              )}
+            </div>
+
+            {/* SELECT MENU */}
+            <div className="menu-container">
+              <button type="button" className="menu-item-compact" title="Select" onClick={() => setOpenMenu(openMenu === 'Select' ? null : 'Select')}>
+                Select
+              </button>
+              {openMenu === 'Select' && (
+                <div className="menu-dropdown menu-dropdown-compact">
+                  <button onClick={() => { selectAll(); setOpenMenu(null) }}>All <kbd>Ctrl+A</kbd></button>
+                  <button onClick={() => { deselect(); setOpenMenu(null) }} disabled={!selection}>Deselect <kbd>Ctrl+D</kbd></button>
+                  <button onClick={() => { invertSelection(); setOpenMenu(null) }} disabled={!selection}>Inverse <kbd>Ctrl+Shift+I</kbd></button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={() => { selectSubject(); setOpenMenu(null) }}>Subject</button>
+                  <button onClick={() => { removeBackground(); setOpenMenu(null) }}>Remove background</button>
+                  <button onClick={() => { addLayerMaskFromSelection(); setOpenMenu(null) }} disabled={!selection}>Add layer mask from selection</button>
                 </div>
               )}
             </div>
@@ -2211,12 +2816,16 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
               </button>
               {openMenu === 'Layer' && (
                 <div className="menu-dropdown menu-dropdown-compact">
-                  <button onClick={handleLayerNew}>New</button>
+                  <button onClick={handleLayerNew}>New text layer <kbd>T</kbd></button>
                   <button onClick={handleLayerRenameActive} disabled={!resolvedActiveLayerId}>Rename</button>
-                  <button onClick={handleLayerDuplicate} disabled={!resolvedActiveLayerId}>Duplicate</button>
+                  <button onClick={handleLayerDuplicate} disabled={!resolvedActiveLayerId}>Duplicate <kbd>Ctrl+J</kbd></button>
                   <button onClick={handleLayerDelete} disabled={layers.length <= 1}>Delete</button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleLayerMergeDown}>Merge Down</button>
+                  <button onClick={() => { addLayerMaskFromSelection(); setOpenMenu(null) }} disabled={!selection}>Add layer mask</button>
+                  <button onClick={() => { toggleLayerMask(); setOpenMenu(null) }} disabled={!layerMask}>{layerMask?.enabled === false ? 'Enable' : 'Disable'} layer mask</button>
+                  <button onClick={() => { deleteLayerMask(); setOpenMenu(null) }} disabled={!layerMask}>Delete layer mask</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleImageFlatten}>Flatten image</button>
                 </div>
               )}
             </div>
@@ -2228,15 +2837,24 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
               </button>
               {openMenu === 'Tools' && (
                 <div className="menu-dropdown menu-dropdown-compact">
-                  <button onClick={() => handleToolSelect('select')}>Select</button>
-                  <button onClick={() => handleToolSelect('brush')}>Brush</button>
-                  <button onClick={() => handleToolSelect('eraser')}>Eraser</button>
-                  <button onClick={() => handleToolSelect('heal')}>Heal</button>
-                  <button onClick={handleToolCrop}>Crop</button>
+                  <button onClick={() => handleToolSelect('select')}>Move / select <kbd>V</kbd></button>
+                  <button onClick={() => handleToolSelect('brush')}>Brush <kbd>B</kbd></button>
+                  <button onClick={() => handleToolSelect('eraser')}>Eraser <kbd>E</kbd></button>
+                  <button onClick={() => handleToolSelect('heal')}>Healing brush <kbd>J</kbd></button>
+                  <button onClick={() => handleToolSelect('fill')}>Paint bucket <kbd>G</kbd></button>
+                  <button onClick={handleToolCrop}>Crop <kbd>C</kbd></button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleToolText}>Text</button>
-                  <button onClick={() => handleToolShape('rectangle')}>Rectangle</button>
+                  <button onClick={() => handleToolSelect('object-select')}>Object selection <kbd>W</kbd></button>
+                  <button onClick={() => handleToolSelect('magic-wand')}>Magic wand <kbd>Shift+W</kbd></button>
+                  <button onClick={() => handleToolSelect('rect-select')}>Rectangular marquee <kbd>M</kbd></button>
+                  <button onClick={() => handleToolSelect('lasso')}>Lasso <kbd>L</kbd></button>
+                  <button onClick={() => handleToolSelect('polygon')}>Polygonal lasso <kbd>Shift+L</kbd></button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={handleToolText}>Text <kbd>T</kbd></button>
+                  <button onClick={() => handleToolShape('rectangle')}>Rectangle <kbd>U</kbd></button>
                   <button onClick={() => handleToolShape('ellipse')}>Ellipse</button>
+                  <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
+                  <button onClick={() => { setShortcutsOpen(true); setOpenMenu(null) }}>Keyboard shortcuts <kbd>?</kbd></button>
                 </div>
               )}
             </div>
@@ -2297,8 +2915,8 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                           else if (tool.key === 'select') setActiveTool('select')
                           else if (tool.key === 'heal') setActiveTool('heal')
                           else if (tool.key === 'eraser') setActiveTool('eraser')
-                          else if (tool.key === 'zoom') setCanvasZoom((value) => clamp(value + 10, 50, 200))
-                          else setActiveTool(tool.key)
+                          else if (tool.key === 'zoom') setCanvasZoom((value) => clamp(value + 10, 25, 400))
+                          else selectTool(tool.key)
                         }
 
                         return (
@@ -2307,7 +2925,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                             type="button"
                             className={isActive ? 'tool-button active' : 'tool-button'}
                             onClick={primaryAction}
-                            title={tool.label}
+                            title={tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label}
                             aria-label={tool.label}
                           >
                             <ToolIcon size={17} strokeWidth={1.8} aria-hidden="true" />
@@ -2382,37 +3000,44 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
           >
             <div
               ref={stageRef}
-              className="photo-stage"
+              className={`photo-stage ${canvasBackground === 'transparent' ? 'photo-stage-transparent' : ''}`}
               onPointerDown={(event) => {
                 if (activeTool === 'remove') startRemoveArea(event)
+                else if (SELECTION_TOOLS.has(activeTool)) startSelection(event)
+                else if (activeTool === 'fill') applyPaintBucket(event)
                 else startBrushStroke(event)
               }}
               style={{
                 width: `${stageDisplaySize.width}px`,
                 height: `${stageDisplaySize.height}px`,
                 aspectRatio: aspect.css,
-                background: canvasBackground,
+                background: canvasBackground === 'transparent' ? undefined : canvasBackground,
                 transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${canvasZoom / 100})`,
                 cursor:
-                  activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal'
+                  activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal' || SELECTION_TOOLS.has(activeTool)
                     ? 'crosshair'
                     : activeTool === 'remove'
                       ? 'crosshair'
-                    : activeTool === 'crop'
+                    : activeTool === 'fill'
+                      ? 'cell'
+                    : activeTool === 'crop' || activeTool === 'move'
                       ? 'move'
                       : 'default',
                 clipPath: stageClipPath,
               }}
             >
               {selectedImageSrc ? (
-                <img
-                  className="photo-stage-image"
-                  src={selectedImageSrc}
-                  alt="Selected composition"
-                  style={{
-                    filter: buildFilterString(filters),
-                  }}
-                />
+                displayImageSrc ? (
+                  <img
+                    className="photo-stage-image"
+                    src={displayImageSrc}
+                    alt="Selected composition"
+                    draggable={false}
+                    style={{
+                      filter: buildFilterString(filters),
+                    }}
+                  />
+                ) : null
               ) : layers.length === 0 && brushStrokes.length === 0 ? (
                 <div className="photo-stage-empty photo-stage-onboarding">
                   <p className="small-title">Start with your own media</p>
@@ -2428,10 +3053,10 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                 </div>
               ) : null}
 
-              {(selectedImageSrc || layers.length > 0 || brushStrokes.length > 0) && (
+              {(selectedImageSrc || layers.length > 0 || brushStrokes.length > 0) && canvasBackground !== 'transparent' && (
                 <>
-                  <div className="photo-stage-vignette" style={{ opacity: clamp(filters.vignette / 100, 0.18, 0.7) }} />
-                  <div className="photo-stage-noise" style={{ opacity: clamp(filters.grain / 80, 0.05, 0.22) }} />
+                  {filters.vignette > 0 && <div className="photo-stage-vignette" style={{ opacity: clamp(filters.vignette / 100, 0, 1) }} />}
+                  {filters.grain > 0 && <div className="photo-stage-noise" style={{ opacity: clamp(filters.grain / 80, 0, 0.22) }} />}
                 </>
               )}
               <canvas ref={paintCanvasRef} className="photo-paint-layer" aria-hidden="true" />
@@ -2479,6 +3104,34 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                 </div>
               )}
 
+              {selection && imageFit && selection.width === activeWork?.width && (
+                <div
+                  className="photo-selection"
+                  aria-hidden="true"
+                  style={{
+                    left: `${(imageFit.x / stageDisplaySize.width) * 100}%`,
+                    top: `${(imageFit.y / stageDisplaySize.height) * 100}%`,
+                    width: `${(imageFit.width / stageDisplaySize.width) * 100}%`,
+                    height: `${(imageFit.height / stageDisplaySize.height) * 100}%`,
+                  }}
+                >
+                  <img src={selection.tintUrl} alt="" draggable={false} />
+                  <img className="photo-selection-ants" src={selection.edgeUrl} alt="" draggable={false} />
+                </div>
+              )}
+              {marquee && (
+                <div className="photo-marquee" aria-hidden="true" style={{ left: `${marquee.x}%`, top: `${marquee.y}%`, width: `${marquee.w}%`, height: `${marquee.h}%` }} />
+              )}
+              {lassoPoints.length > 0 && (
+                <svg className="photo-lasso" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline points={lassoPoints.map((point) => `${point.x},${point.y}`).join(' ')} vectorEffect="non-scaling-stroke" />
+                  {activeTool === 'polygon' && lassoPoints.map((point, index) => (
+                    <circle key={index} cx={point.x} cy={point.y} r={index === 0 ? 1.1 : 0.6} className={index === 0 ? 'first' : ''} />
+                  ))}
+                </svg>
+              )}
+              {busy && <div className="photo-busy" role="status"><span className="photo-busy-spinner" />{busy}</div>}
+
               {layers.filter((layer) => !layer.hidden).map((layer) => (
                 <button
                   key={layer.id}
@@ -2488,6 +3141,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                     left: `${layer.x}%`,
                     top: `${layer.y}%`,
                     opacity: (layer.opacity ?? 100) / 100,
+                    mixBlendMode: cssBlend(layer.blendMode),
                     transform: `${
                       layer.type === 'sticker' || layer.type === 'shape' || layer.type === 'image'
                         ? 'translate(-50%, -50%)'
@@ -2566,6 +3220,107 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
             </button>
           ) : (
             <>
+          <div className="panel-block photo-layers-panel">
+            <div className="photo-sidebar-toolbar">
+              <p className="section-label">Layers</p>
+              <span className="muted">Top is in front · right-click for options</span>
+            </div>
+            {activeLayer && (
+              <div className="photo-layers-props">
+                <select aria-label="Blend mode" title="Blend mode" value={activeLayer.blendMode || 'source-over'} onChange={(event) => { commitHistory(); updateLayer(activeLayer.id, { blendMode: event.target.value }) }}>
+                  {Object.entries(BLEND_MODES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                </select>
+                <label>
+                  <span>Opacity</span>
+                  <input type="number" min="0" max="100" value={activeLayer.opacity ?? 100} onFocus={commitHistory} onChange={(event) => updateLayer(activeLayer.id, { opacity: clamp(Number(event.target.value) || 0, 0, 100) })} />
+                </label>
+              </div>
+            )}
+            <ul className="photo-layers-list">
+              {[...layers].reverse().map((layer) => (
+                <li
+                  key={`manage-${layer.id}`}
+                  className={`${layer.id === resolvedActiveLayerId ? 'active' : ''} ${layer.hidden ? 'is-hidden' : ''}`}
+                  onClick={() => setActiveLayerId(layer.id)}
+                  onDoubleClick={() => setRenamingLayerId(layer.id)}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    setActiveLayerId(layer.id)
+                    setLayerMenu({ x: event.clientX, y: event.clientY, layerId: layer.id })
+                  }}
+                >
+                  <button type="button" className="photo-layer-eye" title={layer.hidden ? 'Show layer' : 'Hide layer'} aria-label={layer.hidden ? `Show ${layer.label}` : `Hide ${layer.label}`} onClick={(event) => { event.stopPropagation(); toggleLayerVisibility(layer.id) }}>
+                    {layer.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                  <span className="photo-layer-thumb" aria-hidden="true">
+                    {layer.type === 'image' ? <img src={layer.src} alt="" /> : layer.type === 'shape' ? <span style={{ background: layer.color, borderRadius: layer.shape === 'ellipse' ? '50%' : 3 }} /> : layer.type === 'sticker' ? layer.value : <strong style={{ color: normalizeColorInputValue(layer.color, '#0f172a') }}>T</strong>}
+                  </span>
+                  {renamingLayerId === layer.id ? (
+                    <input
+                      className="photo-layer-rename"
+                      autoFocus
+                      defaultValue={layer.label}
+                      onClick={(event) => event.stopPropagation()}
+                      onBlur={(event) => {
+                        const label = event.target.value.trim()
+                        if (label && label !== layer.label) {
+                          commitHistory()
+                          updateLayer(layer.id, { label })
+                        }
+                        setRenamingLayerId('')
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') event.currentTarget.blur()
+                        if (event.key === 'Escape') setRenamingLayerId('')
+                      }}
+                    />
+                  ) : (
+                    <span className="photo-layer-name" title="Double-click to rename">{layer.label}</span>
+                  )}
+                  {layer.blendMode && layer.blendMode !== 'source-over' && <small className="photo-layer-blend">{BLEND_MODES[layer.blendMode]}</small>}
+                </li>
+              ))}
+              {selectedImageSrc && (
+                <li
+                  className="photo-layer-base"
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    setLayerMenu({ x: event.clientX, y: event.clientY, layerId: '__photo' })
+                  }}
+                >
+                  <span className="photo-layer-eye" aria-hidden="true"><Eye size={14} /></span>
+                  <span className="photo-layer-thumb" aria-hidden="true"><img src={displayImageSrc || selectedImageSrc} alt="" /></span>
+                  {layerMask && (
+                    <button type="button" className={`photo-mask-thumb ${layerMask.enabled === false ? 'disabled' : ''}`} title={layerMask.enabled === false ? 'Layer mask is off. Click to turn it on.' : 'Layer mask. Click to turn it off; right-click for more.'} onClick={toggleLayerMask}>
+                      <img src={layerMask.src} alt="Layer mask" />
+                    </button>
+                  )}
+                  <span className="photo-layer-name">Photo{!isNeutralHueSat(hueSat) ? ' · Hue/Sat' : ''}</span>
+                  <Lock size={12} aria-label="Position locked" />
+                </li>
+              )}
+              <li className="photo-layer-fill">
+                <span className="photo-layer-eye" aria-hidden="true" />
+                <span className={`photo-layer-thumb ${canvasBackground === 'transparent' ? 'is-transparent' : ''}`} style={canvasBackground === 'transparent' ? undefined : { background: canvasBackground }} aria-hidden="true" />
+                <span className="photo-layer-name">Fill</span>
+                <input type="color" aria-label="Fill color" title="Solid color fill behind everything" value={canvasBackground === 'transparent' ? '#ffffff' : normalizeColorInputValue(canvasBackground, '#ffffff')} onPointerDown={commitHistory} onChange={(event) => setCanvasBackground(event.target.value)} />
+                <button type="button" className="chip" onClick={() => setBackgroundFill(canvasBackground === 'transparent' ? '#000000' : 'transparent')} title="Transparent exports as a PNG with no background">
+                  {canvasBackground === 'transparent' ? 'Solid' : 'None'}
+                </button>
+              </li>
+            </ul>
+            <div className="photo-layers-footer" aria-label="Layer actions">
+              <button type="button" title="Add layer mask from selection" onClick={addLayerMaskFromSelection} disabled={!selection}><span className="photo-mask-icon" aria-hidden="true" /></button>
+              <button type="button" title="Remove background" onClick={removeBackground} disabled={!selectedImageSrc}><Sparkles size={14} /></button>
+              <button type="button" title="Hue/Saturation (Ctrl+U)" onClick={openHueSat} disabled={!selectedImageSrc}><SlidersHorizontal size={14} /></button>
+              <button type="button" title="New text layer (T)" onClick={addTextLayer}><Type size={14} /></button>
+              <button type="button" title="Bring forward" onClick={() => activeLayer && moveLayerOrder(activeLayer.id, 1)} disabled={!activeLayer}>↑</button>
+              <button type="button" title="Send backward" onClick={() => activeLayer && moveLayerOrder(activeLayer.id, -1)} disabled={!activeLayer}>↓</button>
+              <button type="button" title="Duplicate layer (Ctrl+J)" onClick={() => activeLayer && duplicateLayer(activeLayer.id)} disabled={!activeLayer}>⧉</button>
+              <button type="button" title="Delete layer" onClick={() => activeLayer && deleteLayer(activeLayer.id)} disabled={!activeLayer}>✕</button>
+            </div>
+          </div>
+
           <div className="panel-block">
             <p className="section-label">Inspector</p>
             <label>
@@ -2575,10 +3330,6 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
                   <option key={key} value={key}>{value.label}</option>
                 ))}
               </select>
-            </label>
-            <label>
-              Canvas background
-              <input type="color" value={canvasBackground} onChange={(event) => setCanvasBackground(event.target.value)} />
             </label>
             <label>
               Active layer
@@ -2867,47 +3618,6 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
           </div>
 
           <div className="panel-block">
-            <p className="section-label">Layers</p>
-            <p className="panel-note">Top of this list draws first; the bottom entry sits in front.</p>
-            {[...layers].reverse().map((layer) => (
-              <div
-                key={`manage-${layer.id}`}
-                className={`it-row photo-layer-row ${layer.id === resolvedActiveLayerId ? 'active' : ''}`}
-                style={{ gap: '0.35rem', alignItems: 'center' }}
-              >
-                <button
-                  type="button"
-                  className="text-button"
-                  style={{ flex: 1, textAlign: 'left', opacity: layer.hidden ? 0.45 : 1 }}
-                  onClick={() => setActiveLayerId(layer.id)}
-                >
-                  {layer.type === 'sticker' ? layer.value : layer.label}
-                </button>
-                <button
-                  type="button"
-                  className="chip"
-                  title={layer.hidden ? 'Show layer' : 'Hide layer'}
-                  onClick={() => toggleLayerVisibility(layer.id)}
-                >
-                  {layer.hidden ? 'Show' : 'Hide'}
-                </button>
-                <button type="button" className="chip" title="Bring forward" onClick={() => moveLayerOrder(layer.id, 1)}>
-                  ↑
-                </button>
-                <button type="button" className="chip" title="Send backward" onClick={() => moveLayerOrder(layer.id, -1)}>
-                  ↓
-                </button>
-                <button type="button" className="chip" title="Duplicate" onClick={() => duplicateLayer(layer.id)}>
-                  Copy
-                </button>
-                <button type="button" className="chip" title="Delete" onClick={() => deleteLayer(layer.id)}>
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className="panel-block">
             <p className="section-label">Brand kit</p>
             {(brandKit?.colors?.length || brandKit?.fonts?.length || brandKit?.logos?.length) ? (
               <>
@@ -2996,6 +3706,46 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
       </div>
       {stockLibraryOpen && createPortal(
         <StockLibrary initialKind="image" kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />,
+        document.body,
+      )}
+      {hueSatDialog && createPortal(
+        <PhotoHueSaturationDialog initial={hueSatDialog.initial} onPreview={setHueSat} onApply={applyHueSat} onCancel={cancelHueSat} />,
+        document.body,
+      )}
+      {shortcutsOpen && createPortal(<PhotoShortcutsOverlay onClose={() => setShortcutsOpen(false)} />, document.body)}
+      {layerMenu && createPortal(
+        <div className="photo-context-backdrop" onClick={() => setLayerMenu(null)} onContextMenu={(event) => { event.preventDefault(); setLayerMenu(null) }}>
+          <div className="photo-context-menu" role="menu" style={{ left: Math.min(layerMenu.x, window.innerWidth - 240), top: Math.min(layerMenu.y, window.innerHeight - 320) }} onClick={(event) => event.stopPropagation()}>
+            {layerMenu.layerId === '__photo' ? (
+              <>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(openHueSat)}>Hue/Saturation… <kbd>Ctrl+U</kbd></button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(removeBackground)}>Remove background</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(addLayerMaskFromSelection)} disabled={!selection}>Add layer mask from selection</button>
+                <hr />
+                <button type="button" role="menuitem" onClick={() => runMenuAction(toggleLayerMask)} disabled={!layerMask}>{layerMask?.enabled === false ? 'Enable' : 'Disable'} layer mask</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(invertLayerMask)} disabled={!layerMask}>Invert layer mask</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(deleteLayerMask)} disabled={!layerMask}>Delete layer mask</button>
+                <hr />
+                <button type="button" role="menuitem" onClick={() => runMenuAction(() => transformBase('flip-h', 'Flipped the photo horizontally.'))}>Flip horizontal</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(flattenImage)}>Flatten image <kbd>Ctrl+Shift+E</kbd></button>
+              </>
+            ) : menuLayer ? (
+              <>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(() => duplicateLayer(menuLayer.id))}>Duplicate layer <kbd>Ctrl+J</kbd></button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(() => setRenamingLayerId(menuLayer.id))}>Rename layer…</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(() => toggleLayerVisibility(menuLayer.id))}>{menuLayer.hidden ? 'Show' : 'Hide'} layer</button>
+                <hr />
+                <button type="button" role="menuitem" onClick={() => runMenuAction(() => moveLayerOrder(menuLayer.id, 1))}>Bring forward</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(() => moveLayerOrder(menuLayer.id, -1))}>Send backward</button>
+                <hr />
+                <button type="button" role="menuitem" onClick={() => quickExportLayer(menuLayer)}>Quick export as PNG</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(flattenImage)}>Flatten image</button>
+                <hr />
+                <button type="button" role="menuitem" className="danger" onClick={() => runMenuAction(() => deleteLayer(menuLayer.id))}>Delete layer</button>
+              </>
+            ) : null}
+          </div>
+        </div>,
         document.body,
       )}
     </section>
