@@ -6,7 +6,7 @@ const ACCEPTED_FILES = '.pdf,.docx,.pptx,.xlsx,.csv,.json,.txt,.md,image/*,video
 const OUTPUT_TYPES = [
   ['flyer', 'Flyer', 'A single polished graphic with headline, offer, and design — ready to post or print.'],
   ['image', 'Social image', 'A square or vertical image sized for Instagram or Facebook.'],
-  ['video', 'Video plan', 'A scene-by-scene storyboard you can open and build out in Motion Lab.'],
+  ['video', 'Video plan', 'A scene-by-scene storyboard you can open and build out in Video Editor.'],
   ['post', 'Post package', 'A caption, headline, and image bundled together, ready to send to Post Creation.'],
 ]
 

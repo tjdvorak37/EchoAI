@@ -6,6 +6,7 @@ import {
   EQ_PRESETS,
   ZONE_MAX_DB,
   ZONE_MIN_DB,
+  VOICE_EFFECTS,
   formatBand,
   normalizeEq,
 } from '../services/videoAudioMix'
@@ -226,6 +227,24 @@ export function ClipAudioControls({ clip, isVideoClip, localPlayhead, peakDb, on
           </label>
           {peakDb > 0 && <p className="audio-warning">Boosted above 100% — the limiter keeps it from distorting, but lower it if it sounds harsh.</p>}
           <FadeControls fadeIn={clip.fadeIn} fadeOut={clip.fadeOut} max={fadeMax} onChange={onChange} onCommit={onCommit} />
+
+          <div className="voice-fx">
+            <strong>Voice changer</strong>
+            <div className="voice-fx-grid" role="radiogroup" aria-label="Voice changer">
+              {Object.entries(VOICE_EFFECTS).map(([key, effect]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={(clip.voiceFx ?? 'none') === key}
+                  className={(clip.voiceFx ?? 'none') === key ? 'active' : ''}
+                  onClick={() => { onCommit(); onChange({ voiceFx: key }) }}
+                >
+                  <span aria-hidden="true">{effect.icon}</span>{effect.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="audio-zones">
             <div className="audio-zones-head">

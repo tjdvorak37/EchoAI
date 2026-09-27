@@ -47,8 +47,8 @@ const SUPPORT_CATEGORIES = [
 
 const PRODUCT_LINKS = [
   ['Workspace files', '#tools'],
-  ['Image Lab', '#tools'],
-  ['Motion Lab', '#tools'],
+  ['Photo Editor', '#tools'],
+  ['Video Editor', '#tools'],
   ['Post Creation', '#workflow'],
   ['Analytics', '#tools'],
   ['Brand & Cloud Workspace', '#tools'],
@@ -57,8 +57,8 @@ const PRODUCT_LINKS = [
 const toolRibbon = [
   ['social', Send, 'Social Media', echoSocial],
   ['workspace', Layers3, 'Workspace', echoAiTools],
-  ['photo', Image, 'Image Lab', echoPhoto],
-  ['video', Video, 'Motion Lab', echoVideo],
+  ['photo', Image, 'Photo Editor', echoPhoto],
+  ['video', Video, 'Video Editor', echoVideo],
   ['schedule', CalendarDays, 'Post Creation', echoScheduler],
   ['analytics', BarChart3, 'Analytics', echoAnalytics],
 ]
@@ -72,14 +72,14 @@ const showcaseFeatures = [
 
 const workflowSteps = [
   [Link2, 'Connect', 'Link the channels and ad accounts your team already manages.', 'Connections'],
-  [Image, 'Create', 'Bring an image from your device into Image Lab and refine it.', 'Image Lab'],
+  [Image, 'Create', 'Bring an image from your device into Photo Editor and refine it.', 'Photo Editor'],
   [CalendarDays, 'Queue', 'Write the post, inspect each social preview, and choose the right moment.', 'Post Creation'],
   [ChartNoAxesCombined, 'Improve', 'Use audience signals and paid-media results to guide the next campaign.', 'Analytics + Ad Watch'],
 ]
 
 const premiumHighlights = [
   ['Publish with confidence', 'Post Creation, live social previews, and connected-channel publishing.'],
-  ['Create without the clutter', 'Image Lab and Motion Lab work directly with files from your device.'],
+  ['Create without the clutter', 'Photo Editor and Video Editor work directly with files from your device.'],
   ['Make sharper decisions', 'Analytics and Ad Watch show the conversations and outcomes worth acting on.'],
 ]
 

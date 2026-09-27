@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import { Clapperboard, Download, Eye, EyeOff, Film, Lock, MonitorPlay, Music2, PanelsTopLeft, Play, RotateCcw, Scissors, SlidersHorizontal, Type, Unlock, Volume2, VolumeX } from 'lucide-react'
+import { Clapperboard, Download, Eye, EyeOff, Film, Library, Lock, MonitorPlay, Music2, PanelsTopLeft, Play, RotateCcw, Scissors, SlidersHorizontal, Type, Unlock, Volume2, VolumeX } from 'lucide-react'
 import { canUseAgentMode, runCreativeAgentJob } from '../services/aiAgentService'
 import {
   DEFAULT_MASTER_AUDIO,
@@ -10,6 +10,7 @@ import {
   createCleanupChain,
   createEqChain,
   createMasterBus,
+  createVoiceEffect,
   masterGainAt,
   normalizeEq,
   renderTimelineMix,
@@ -18,6 +19,8 @@ import {
   updateEqChain,
 } from '../services/videoAudioMix'
 import { ClipAudioControls, MasterAudioControls, VoiceOverRecorder } from './VideoAudioMixer'
+import { StockLibrary } from './StockLibrary'
+import { downloadMediaLibraryFile } from '../services/mediaLibraryService'
 
 const FILTER_PRESETS = {
   none: { label: 'None', css: '' },
@@ -160,6 +163,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   const [voiceDeviceId, setVoiceDeviceId] = useState('')
   const [voicePlayAlong, setVoicePlayAlong] = useState(true)
   const [voiceLastTake, setVoiceLastTake] = useState(null)
+  const [libraryKind, setLibraryKind] = useState(null)
   const voiceRef = useRef({ recorder: null, stream: null, timer: null, meterFrame: 0, startTime: 0, startedAt: 0, cancelled: false })
   const clipCounter = useRef(0)
   const timelineRef = useRef(null)
@@ -265,15 +269,19 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
     try {
       const source = context.createMediaElementSource(element)
       const cleanup = createCleanupChain(context, false)
+      const fxIn = context.createGain()
+      const fxOut = context.createGain()
       const eq = createEqChain(context, null)
       const gain = context.createGain()
       gain.gain.value = 0
       source.connect(cleanup.input)
-      cleanup.output.connect(eq.input)
+      cleanup.output.connect(fxIn)
+      fxIn.connect(fxOut)
+      fxOut.connect(eq.input)
       eq.output.connect(gain)
       gain.connect(masterBusRef.current.input)
       element.volume = 1
-      const chain = { cleanup, eq, gain, eqKey: '', noise: false }
+      const chain = { cleanup, fxIn, fxOut, fx: null, fxKey: 'none', eq, gain, eqKey: '', noise: false }
       mediaChainsRef.current.set(element, chain)
       return chain
     } catch {
@@ -296,6 +304,19 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
     if (chain.noise !== Boolean(clip.noiseRemoval)) {
       updateCleanupChain(chain.cleanup, clip.noiseRemoval)
       chain.noise = Boolean(clip.noiseRemoval)
+    }
+    const fxKey = clip.voiceFx ?? 'none'
+    if (chain.fxKey !== fxKey) {
+      chain.fxIn.disconnect()
+      chain.fx?.stop()
+      chain.fx = fxKey === 'none' ? null : createVoiceEffect(context, fxKey)
+      if (chain.fx) {
+        chain.fxIn.connect(chain.fx.input)
+        chain.fx.output.connect(chain.fxOut)
+      } else {
+        chain.fxIn.connect(chain.fxOut)
+      }
+      chain.fxKey = fxKey
     }
     chain.gain.gain.setTargetAtTime(gainValue, context.currentTime, 0.015)
   }
@@ -661,14 +682,16 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
       setStatusMessage('Unlock this track before adding media.')
       return
     }
+    const clipDuration = Math.max(0.1, Number(asset.duration) || (asset.type === 'video' ? 3 : 5))
     const newClip = {
       id: `clip-${(clipCounter.current += 1)}`,
       assetId: asset.id,
       assetName: asset.name,
       previewUrl: source,
+      credit: asset.credit,
       startTime: playbackTime,
-      duration: asset.type === 'video' ? 3 : 5,
-      trim: { start: 0, end: asset.type === 'video' ? 3 : 5 },
+      duration: clipDuration,
+      trim: { start: 0, end: clipDuration },
       filter: 'none',
       effects: { ...DEFAULT_EFFECTS },
       transition: 'none',
@@ -688,6 +711,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
         item.id === trackId ? { ...item, clips: [...item.clips, newClip] } : item,
       ),
     )
+    setDuration((current) => Math.max(current, Math.ceil(playbackTime + clipDuration)))
     if (asset.type !== 'image') requestWaveform(source)
   }
 
@@ -708,6 +732,24 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
     setStatusMessage(`Added ${asset.name} at ${playbackTime.toFixed(1)}s.`)
   }
 
+  const addFromStockLibrary = async (item, quality) => {
+    const isSound = item.kind === 'sound'
+    const rendition = isSound ? null : item.renditions?.[quality] ?? item.renditions?.hd ?? item.renditions?.sd
+    if (!isSound && !rendition) throw new Error('This video has no downloadable version.')
+    const mime = isSound ? 'audio/mpeg' : 'video/mp4'
+    setStatusMessage(`Downloading ${item.title}…`)
+    const previewUrl = await downloadMediaLibraryFile(isSound ? item.url : rendition.url, mime)
+    addAssetAtPlayhead({
+      id: nextLocalId('stock'),
+      name: item.title,
+      type: isSound ? 'audio' : 'video',
+      mime,
+      previewUrl,
+      duration: item.duration,
+      credit: `${item.title} by ${item.creator} — ${item.license}`,
+    })
+  }
+
   const handleUploadVideo = (event) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -724,7 +766,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
       mime: file.type,
       previewUrl: URL.createObjectURL(file),
       size: file.size,
-      summary: 'Uploaded directly to Motion Lab',
+      summary: 'Uploaded directly to Video Editor',
     }
     onAddAsset?.(asset)
     addAssetAtPlayhead(asset)
@@ -1529,7 +1571,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   return (
     <div className="video-editor">
       <div className="video-editor-intro">
-        <p className="small-title">Motion Lab</p>
+        <p className="small-title">Video Editor</p>
         <p className="panel-note">Upload clips, arrange them on the timeline, add text and effects, then export.</p>
       </div>
       {brief && (
@@ -1569,6 +1611,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           <button type="button" className="toolbar-btn" title="Match color from another clip" onClick={matchSelectedColor}>Color match</button>
           <button type="button" className="toolbar-btn" title="Speed controls" onClick={() => setInspectorTab('video')}><Film size={17} /> Speed</button>
           <button type="button" className={`toolbar-btn toolbar-btn-audio ${activeToolbar === 'audio' ? 'active' : ''}`} title="Volume, equalizer, fades, and loud/quiet spots" onClick={openAudioMixer}><SlidersHorizontal size={17} /> Audio mixer</button>
+          <button type="button" className="toolbar-btn toolbar-btn-library" title="Royalty-free sound effects, transitions, and stock video" onClick={() => setLibraryKind('sound')}><Library size={17} /> Stock library</button>
           <span className="time-display">
             {Math.floor(playbackTime)}s / {duration}s
           </span>
@@ -1689,6 +1732,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           {activeToolbar === 'media' && (
             <div className="tool-panel">
               <h3>Media</h3>
+              <button type="button" className="tool-button stock-library-launch" onClick={() => setLibraryKind('video')}><Clapperboard size={15} /> Browse transitions &amp; stock video</button>
               <p className="muted">Tap an image, video, or audio file to add it at the playhead.</p>
               <label className="video-direct-upload">
                 <strong>Upload video to timeline</strong>
@@ -1851,6 +1895,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           {activeToolbar === 'audio' && (
             <div className="tool-panel audio-mixer-panel">
               <h3>Audio mixer</h3>
+              <button type="button" className="tool-button stock-library-launch" onClick={() => setLibraryKind('sound')}><Music2 size={15} /> Browse sound effects</button>
               <p className="muted">Press play to hear changes live. Everything here is included when you export.</p>
               <VoiceOverRecorder
                 status={voiceStatus}
@@ -2154,6 +2199,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           {tracks.reduce((sum, t) => sum + t.clips.length, 0)} clips • {duration}s duration
         </span>
       </div>
+      {libraryKind && <StockLibrary initialKind={libraryKind} onClose={() => setLibraryKind(null)} onAdd={addFromStockLibrary} />}
     </div>
   )
 }
