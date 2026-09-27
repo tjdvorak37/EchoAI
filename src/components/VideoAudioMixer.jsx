@@ -1,4 +1,4 @@
-import { AudioLines, Scissors, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AudioLines, Mic, Scissors, SlidersHorizontal, Square, Trash2 } from 'lucide-react'
 import {
   EQ_BANDS,
   EQ_MAX_DB,
@@ -89,6 +89,61 @@ export function LevelMeter({ level }) {
       <div className={`audio-meter-fill ${state}`} style={{ width: `${width}%` }} />
       <span>{Number.isFinite(level) && level > -60 ? `${Math.round(level)} dB` : 'Silent'}</span>
     </div>
+  )
+}
+
+export function VoiceOverRecorder({ status, countdown, seconds, level, error, devices, deviceId, onDeviceChange, playAlong, onPlayAlongChange, onStart, onStop, onCancel, lastTake }) {
+  const busy = status !== 'idle'
+  const clock = `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`
+  return (
+    <section className={`audio-section voice-over ${status === 'recording' ? 'is-recording' : ''}`}>
+      <header>
+        <Mic size={15} aria-hidden="true" />
+        <div>
+          <h4>Record voice-over</h4>
+          <small>Records your microphone onto an audio track, starting at the playhead.</small>
+        </div>
+      </header>
+
+      {devices.length > 1 && (
+        <label className="audio-slider">
+          <span>Microphone</span>
+          <select className="voice-over-device" value={deviceId} disabled={busy} onChange={(event) => onDeviceChange(event.target.value)}>
+            {devices.map((device, index) => <option key={device.deviceId || index} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>)}
+          </select>
+        </label>
+      )}
+      <label className="property-toggle">
+        <input type="checkbox" checked={playAlong} disabled={busy} onChange={(event) => onPlayAlongChange(event.target.checked)} />
+        Play the video while I record
+      </label>
+      {playAlong && <p className="audio-hint">Wear headphones so the speakers don&apos;t get recorded too.</p>}
+
+      {status === 'countdown' && <div className="voice-over-countdown" aria-live="assertive">Recording in {countdown}…</div>}
+      {status === 'recording' && (
+        <>
+          <div className="voice-over-live" aria-live="polite"><span className="rec-dot" /> Recording {clock}</div>
+          <LevelMeter level={level} />
+        </>
+      )}
+
+      {status === 'idle' ? (
+        <button type="button" className="tool-button voice-over-start" onClick={onStart}>
+          <Mic size={15} aria-hidden="true" /> Start recording
+        </button>
+      ) : (
+        <div className="voice-over-actions">
+          <button type="button" className="tool-button voice-over-stop" onClick={onStop} disabled={status !== 'recording'}>
+            <Square size={13} aria-hidden="true" /> Stop &amp; add to timeline
+          </button>
+          <button type="button" className="toolbar-btn" onClick={onCancel}>Cancel</button>
+        </div>
+      )}
+      {error && <p className="audio-warning">{error}</p>}
+      {lastTake && status === 'idle' && (
+        <a className="voice-over-download" href={lastTake.url} download={lastTake.name}>Download last take ({lastTake.name})</a>
+      )}
+    </section>
   )
 }
 

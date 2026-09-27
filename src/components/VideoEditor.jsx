@@ -3,6 +3,7 @@ import { Clapperboard, Download, Eye, EyeOff, Film, Lock, MonitorPlay, Music2, P
 import { canUseAgentMode, runCreativeAgentJob } from '../services/aiAgentService'
 import {
   DEFAULT_MASTER_AUDIO,
+  EQ_PRESETS,
   clipGainAt,
   clipPeakGainDb,
   computePeaks,
@@ -16,7 +17,7 @@ import {
   updateCleanupChain,
   updateEqChain,
 } from '../services/videoAudioMix'
-import { ClipAudioControls, MasterAudioControls } from './VideoAudioMixer'
+import { ClipAudioControls, MasterAudioControls, VoiceOverRecorder } from './VideoAudioMixer'
 
 const FILTER_PRESETS = {
   none: { label: 'None', css: '' },
@@ -150,6 +151,16 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   const mediaChainsRef = useRef(new WeakMap())
   const audioElementsRef = useRef(new Map())
   const decodedAudioRef = useRef(new Map())
+  const [voiceStatus, setVoiceStatus] = useState('idle')
+  const [voiceCountdown, setVoiceCountdown] = useState(0)
+  const [voiceSeconds, setVoiceSeconds] = useState(0)
+  const [voiceLevel, setVoiceLevel] = useState(-Infinity)
+  const [voiceError, setVoiceError] = useState('')
+  const [voiceDevices, setVoiceDevices] = useState([])
+  const [voiceDeviceId, setVoiceDeviceId] = useState('')
+  const [voicePlayAlong, setVoicePlayAlong] = useState(true)
+  const [voiceLastTake, setVoiceLastTake] = useState(null)
+  const voiceRef = useRef({ recorder: null, stream: null, timer: null, meterFrame: 0, startTime: 0, startedAt: 0, cancelled: false })
   const clipCounter = useRef(0)
   const timelineRef = useRef(null)
   const timelineHeaderRef = useRef(null)
@@ -213,10 +224,16 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   }
 
   useEffect(() => {
+    const voice = voiceRef.current
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
       if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop()
       audioCtxRef.current?.close().catch(() => {})
+      clearInterval(voice.timer)
+      cancelAnimationFrame(voice.meterFrame)
+      voice.cancelled = true
+      if (voice.recorder?.state === 'recording') voice.recorder.stop()
+      voice.stream?.getTracks().forEach((track) => track.stop())
     }
   }, [])
 
@@ -318,6 +335,159 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   }
 
   const updateMasterAudio = (patch) => setMasterAudio((current) => ({ ...current, ...patch }))
+
+  const releaseVoiceInput = () => {
+    const voice = voiceRef.current
+    clearInterval(voice.timer)
+    cancelAnimationFrame(voice.meterFrame)
+    voice.stream?.getTracks().forEach((track) => track.stop())
+    voice.stream = null
+    setVoiceLevel(-Infinity)
+  }
+
+  const addVoiceTake = (blob, startTime, length) => {
+    const url = URL.createObjectURL(blob)
+    const takeNumber = (clipCounter.current += 1)
+    const name = `Voice-over ${takeNumber}.webm`
+    const clip = {
+      id: `clip-${takeNumber}`,
+      assetId: `voice-${takeNumber}`,
+      assetName: `Voice-over ${takeNumber}`,
+      previewUrl: url,
+      startTime,
+      duration: length,
+      trim: { start: 0, end: length },
+      filter: 'none',
+      effects: { ...DEFAULT_EFFECTS },
+      transition: 'none',
+      volume: 100,
+      fadeIn: 0,
+      fadeOut: 0,
+      eq: [...EQ_PRESETS.voice.gains],
+      zones: [],
+      noiseRemoval: true,
+      speed: 1,
+      transform: { ...DEFAULT_TRANSFORM },
+    }
+    const overlaps = (track) => track.clips.some((item) => item.startTime < startTime + length && clipEnd(item) > startTime)
+    const target = tracks.find((track) => track.type === 'audio' && !track.locked && !overlaps(track))
+
+    commitHistory()
+    setTracks((current) => (target
+      ? current.map((track) => (track.id === target.id ? { ...track, clips: [...track.clips, clip] } : track))
+      : [...current, { id: `audio-${(clipCounter.current += 1)}`, type: 'audio', name: `Voice-over Track ${current.filter((track) => track.type === 'audio').length + 1}`, clips: [clip], muted: false, locked: false, visible: true }]))
+    setDuration((current) => Math.max(current, Math.ceil(startTime + length)))
+    setSelectedClip(clip)
+    setVoiceLastTake({ url, name })
+    requestWaveform(url)
+    setStatusMessage(`Added ${clip.assetName} (${length.toFixed(1)}s) at ${startTime.toFixed(1)}s. Voice clarity EQ applied — adjust it in the Audio tab.`)
+  }
+
+  // The recorder's onstop fires long after the render that started it; always use the newest tracks.
+  const addVoiceTakeRef = useRef(addVoiceTake)
+  useEffect(() => {
+    addVoiceTakeRef.current = addVoiceTake
+  })
+
+  const beginVoiceRecording = () => {
+    const voice = voiceRef.current
+    if (voice.cancelled || !voice.stream) return
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported?.(type))
+    const recorder = new MediaRecorder(voice.stream, mimeType ? { mimeType } : undefined)
+    const chunks = []
+    recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data) }
+    recorder.onstop = () => {
+      const length = (performance.now() - voice.startedAt) / 1000
+      releaseVoiceInput()
+      setVoiceStatus('idle')
+      if (voice.cancelled) return
+      if (length < 0.3 || !chunks.length) {
+        setVoiceError('The recording was too short. Try again.')
+        return
+      }
+      addVoiceTakeRef.current(new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }), voice.startTime, Number(length.toFixed(2)))
+    }
+    voice.recorder = recorder
+    voice.startTime = playbackTime
+    voice.startedAt = performance.now()
+    recorder.start(250)
+    setVoiceStatus('recording')
+    setVoiceSeconds(0)
+    voice.timer = setInterval(() => setVoiceSeconds((performance.now() - voice.startedAt) / 1000), 200)
+    if (voicePlayAlong) setIsPlaying(true)
+  }
+
+  const startVoiceOver = async () => {
+    setVoiceError('')
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setVoiceError('This browser cannot record audio. Try a current Chrome, Edge, or Safari.')
+      return
+    }
+    const context = voicePlayAlong ? ensureAudioContext() : null
+    setIsPlaying(false)
+    const voice = voiceRef.current
+    voice.cancelled = false
+    try {
+      voice.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: voiceDeviceId ? { exact: voiceDeviceId } : undefined, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
+    } catch (error) {
+      setVoiceError(error.name === 'NotAllowedError'
+        ? 'Microphone access was blocked. Allow the microphone in your browser\'s site settings, then try again.'
+        : error.name === 'NotFoundError' ? 'No microphone was found. Plug one in and try again.' : `Could not start the microphone: ${error.message}`)
+      return
+    }
+
+    navigator.mediaDevices.enumerateDevices()
+      .then((devices) => setVoiceDevices(devices.filter((device) => device.kind === 'audioinput')))
+      .catch(() => {})
+
+    const meterContext = context ?? ensureAudioContext()
+    if (meterContext) {
+      const analyser = meterContext.createAnalyser()
+      analyser.fftSize = 1024
+      meterContext.createMediaStreamSource(voice.stream).connect(analyser)
+      const data = new Float32Array(analyser.fftSize)
+      const readMeter = () => {
+        analyser.getFloatTimeDomainData(data)
+        const peak = data.reduce((max, value) => Math.max(max, Math.abs(value)), 0)
+        setVoiceLevel(peak > 0 ? 20 * Math.log10(peak) : -Infinity)
+        voice.meterFrame = requestAnimationFrame(readMeter)
+      }
+      voice.meterFrame = requestAnimationFrame(readMeter)
+    }
+
+    let remaining = 3
+    setVoiceCountdown(remaining)
+    setVoiceStatus('countdown')
+    voice.timer = setInterval(() => {
+      remaining -= 1
+      if (remaining > 0) {
+        setVoiceCountdown(remaining)
+        return
+      }
+      clearInterval(voice.timer)
+      beginVoiceRecording()
+    }, 1000)
+  }
+
+  const stopVoiceOver = () => {
+    const recorder = voiceRef.current.recorder
+    if (recorder?.state === 'recording') recorder.stop()
+    if (voicePlayAlong) setIsPlaying(false)
+  }
+
+  const cancelVoiceOver = () => {
+    const voice = voiceRef.current
+    voice.cancelled = true
+    if (voice.recorder?.state === 'recording') voice.recorder.stop()
+    else {
+      releaseVoiceInput()
+      setVoiceStatus('idle')
+    }
+    setIsPlaying(false)
+    setStatusMessage('Voice-over recording cancelled.')
+  }
 
   useEffect(() => {
     const bus = masterBusRef.current
@@ -1383,6 +1553,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             <span className="rec-title">Screen Capture</span>
             <button type="button" className="rec-btn" onClick={() => startScreenRecord(false)}>🖥 Record screen</button>
             <button type="button" className="rec-btn rec-btn-audio" onClick={() => startScreenRecord(true)}>🎙 Record with audio</button>
+            <button type="button" className="rec-btn rec-btn-voice" onClick={openAudioMixer}>🎤 Record voice-over</button>
             {recordingError && <span className="rec-error">{recordingError}</span>}
           </>
         )}
@@ -1681,6 +1852,22 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             <div className="tool-panel audio-mixer-panel">
               <h3>Audio mixer</h3>
               <p className="muted">Press play to hear changes live. Everything here is included when you export.</p>
+              <VoiceOverRecorder
+                status={voiceStatus}
+                countdown={voiceCountdown}
+                seconds={voiceSeconds}
+                level={voiceLevel}
+                error={voiceError}
+                devices={voiceDevices}
+                deviceId={voiceDeviceId}
+                onDeviceChange={setVoiceDeviceId}
+                playAlong={voicePlayAlong}
+                onPlayAlongChange={setVoicePlayAlong}
+                onStart={startVoiceOver}
+                onStop={stopVoiceOver}
+                onCancel={cancelVoiceOver}
+                lastTake={voiceLastTake}
+              />
               <MasterAudioControls master={masterAudio} onChange={updateMasterAudio} level={masterLevel} duration={duration} />
               <p className="audio-hint audio-clip-pointer">Selected-clip volume, EQ, fades, and loud/quiet spots are in the <strong>Audio</strong> tab of Clip properties.</p>
               <div className="audio-clip-in-panel">{clipAudioControls}</div>
