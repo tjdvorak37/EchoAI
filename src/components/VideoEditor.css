@@ -118,7 +118,31 @@
 
 .toolbar-groups {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.4rem;
+  width: 100%;
+}
+
+.toolbar-btn-export {
+  margin-left: auto;
+  padding-inline: 1.1rem;
+  border-color: #0891b2;
+  background: linear-gradient(90deg, #059669, #0891b2 55%, #2563eb);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(8, 145, 178, 0.28);
+}
+
+.toolbar-btn-export:hover:not(:disabled) {
+  border-color: #0e7490;
+  background: linear-gradient(90deg, #047857, #0e7490 55%, #1d4ed8);
+  box-shadow: 0 8px 20px rgba(8, 145, 178, 0.38);
+}
+
+.toolbar-btn-export:disabled {
+  cursor: progress;
+  opacity: 0.85;
 }
 
 .toolbar-group-btn {
