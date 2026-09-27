@@ -74,14 +74,14 @@ Deno.serve(async (request) => {
 
     let { data: callerProfile } = await adminClient
       .from('profiles')
-      .select('role, company_email_edit_access, email')
+      .select('role, company_email_edit_access, integrations_edit_access, email')
       .eq('id', caller.user.id)
       .maybeSingle()
 
     if (!callerProfile && callerEmail) {
       const { data: profileByEmail } = await adminClient
         .from('profiles')
-        .select('role, company_email_edit_access, email')
+        .select('role, company_email_edit_access, integrations_edit_access, email')
         .ilike('email', callerEmail)
         .maybeSingle()
       callerProfile = profileByEmail
@@ -114,9 +114,67 @@ Deno.serve(async (request) => {
       'notify-ticket-created',
       'get-ticket-inbound-config',
       'update-ticket-inbound-config',
+      'get-stock-media-config',
+      'update-stock-media-key',
+      'clear-stock-media-key',
     ])
     if (!action || (!globalActions.has(action) && !userId)) {
       return json({ error: 'An action and userId are required.' }, 400, request)
+    }
+
+    const canEditIntegrations = isSuperAdmin || userRole === 'it' || callerProfile?.integrations_edit_access === true
+    const stockMediaStatus = async () => {
+      const { data: status } = await adminClient
+        .from('integration_secret_status')
+        .select('key_hint, updated_at, updated_by')
+        .eq('name', 'pixabay_api_key')
+        .maybeSingle()
+      let updatedByName = ''
+      if (status?.updated_by) {
+        const { data: updater } = await adminClient.from('profiles').select('full_name, email').eq('id', status.updated_by).maybeSingle()
+        updatedByName = updater?.full_name || updater?.email || ''
+      }
+      return {
+        provider: 'pixabay',
+        savedInApp: Boolean(status),
+        keyHint: status?.key_hint ?? '',
+        updatedAt: status?.updated_at ?? null,
+        updatedBy: updatedByName,
+        serverSecretSet: Boolean(Deno.env.get('PIXABAY_API_KEY')),
+        canEdit: canEditIntegrations,
+      }
+    }
+
+    if (action === 'get-stock-media-config') {
+      return json({ config: await stockMediaStatus() }, 200, request)
+    }
+
+    if (action === 'update-stock-media-key' || action === 'clear-stock-media-key') {
+      if (!canEditIntegrations) {
+        return json({ error: 'Super Admin, IT, or Integrations editing access is required.' }, 403, request)
+      }
+      if (action === 'update-stock-media-key') {
+        const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : ''
+        if (!/^[A-Za-z0-9-]{16,80}$/.test(apiKey)) {
+          return json({ error: 'That does not look like a Pixabay API key. Copy it from pixabay.com/api/docs while signed in.' }, 400, request)
+        }
+        const probe = await fetch(`https://pixabay.com/api/videos/?${new URLSearchParams({ key: apiKey, q: 'transition', per_page: '3' })}`)
+        if (!probe.ok) {
+          return json({ error: probe.status === 400 || probe.status === 401 ? 'Pixabay rejected this key. Check it and try again.' : `Pixabay could not be reached (${probe.status}). Try again shortly.` }, 400, request)
+        }
+        const { error: saveError } = await adminClient.rpc('set_integration_secret', { p_name: 'pixabay_api_key', p_value: apiKey, p_actor: caller.user.id })
+        if (saveError) return json({ error: 'The key could not be saved securely.' }, 500, request)
+      } else {
+        const { error: clearError } = await adminClient.rpc('clear_integration_secret', { p_name: 'pixabay_api_key' })
+        if (clearError) return json({ error: 'The key could not be removed.' }, 500, request)
+      }
+      await adminClient.from('admin_user_audit').insert({
+        actor_id: caller.user.id,
+        target_user_id: null,
+        action: action === 'update-stock-media-key' ? 'set_pixabay_api_key' : 'cleared_pixabay_api_key',
+        detail: {},
+      })
+      return json({ config: await stockMediaStatus() }, 200, request)
     }
 
     if (action === 'get-ticket-notification-config') {
