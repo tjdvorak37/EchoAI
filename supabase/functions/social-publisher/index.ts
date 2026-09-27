@@ -7,7 +7,7 @@ type ScheduledPost = {
   message: string
   channels: string[]
   channel_accounts?: Record<string, string>
-  media: Array<{ type?: string; mime?: string; name?: string; storagePath?: string; webUrl?: string }>
+  media: Array<{ type?: string; mime?: string; name?: string; size?: number; durationSeconds?: number; trimStartSeconds?: number; trimEndSeconds?: number; targetPlatform?: string; storagePath?: string; webUrl?: string }>
 }
 
 type Credential = {
@@ -59,6 +59,28 @@ const providerError = async (response: Response, fallback: string) => {
   return payload?.error?.message || fallback
 }
 
+const getVideoClipWindow = (video: ScheduledPost['media'][number], channel: string) => {
+  const duration = Number(video.durationSeconds ?? 0)
+  const start = Number(video.trimStartSeconds ?? 0)
+  const end = Number(video.trimEndSeconds ?? duration || 0)
+  const platformCap = channel === 'instagram' ? 180 : channel === 'facebook' ? 480 : Number.POSITIVE_INFINITY
+  const normalizedStart = Number.isFinite(start) ? Math.max(0, start) : 0
+  const normalizedEnd = Number.isFinite(end) && end > normalizedStart ? Math.max(normalizedStart, end) : duration
+  const clipLength = Math.min(Math.max(normalizedEnd - normalizedStart, 0), platformCap)
+  const safeEnd = normalizedStart + clipLength
+  return {
+    start: normalizedStart,
+    end: Math.min(normalizedEnd, safeEnd),
+    duration: Math.max(0, Math.min(clipLength, Math.max(normalizedEnd - normalizedStart, 0))),
+  }
+}
+
+const signedMediaUrl = async (storagePath: string) => {
+  const { data, error } = await admin().storage.from('social-media').createSignedUrl(storagePath, 60 * 60)
+  if (error || !data?.signedUrl) throw new Error('Unable to create a temporary media URL for publishing.')
+  return data.signedUrl
+}
+
 const waitForInstagramContainer = async (containerId: string, accessToken: string) => {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const response = await fetch(`${GRAPH_URL}/${containerId}?fields=status_code&access_token=${encodeURIComponent(accessToken)}`)
@@ -79,7 +101,24 @@ const waitForInstagramContainer = async (containerId: string, accessToken: strin
 const publishFacebookPost = async (credential: Credential, message: string, media: ScheduledPost['media']) => {
   const attachment = media.find((item) => item.type === 'image' || item.type === 'video')
   if (attachment?.type === 'video') {
-    throw new Error('Facebook video publishing is not available yet. Remove the video or publish an image instead.')
+    if (!attachment.storagePath) throw new Error('Re-upload the selected video before publishing it to Facebook.')
+    const clip = getVideoClipWindow(attachment, 'facebook')
+    const fileUrl = await signedMediaUrl(attachment.storagePath)
+    const response = await fetch(`${GRAPH_URL}/${credential.external_account_id}/videos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        file_url: fileUrl,
+        description: message,
+        title: (attachment.name || 'EchoAI video').slice(0, 255),
+        access_token: credential.access_token,
+        ...(clip.duration > 0 ? { clip_length: String(Math.round(clip.duration)) } : {}),
+      }),
+    })
+    if (!response.ok) throw new Error(await providerError(response, 'Facebook video publishing failed.'))
+    const payload = await response.json()
+    if (!payload.id) throw new Error('Facebook did not return a video ID.')
+    return String(payload.id)
   }
 
   if (attachment?.type === 'image' && !attachment.storagePath) {
@@ -153,14 +192,56 @@ const publishInstagramImage = async (credential: Credential, message: string, me
   return String(published.id)
 }
 
+const publishInstagramReel = async (credential: Credential, message: string, media: ScheduledPost['media']) => {
+  const video = media.find((item) => item.type === 'video' && item.storagePath)
+  if (!video?.storagePath) throw new Error('Instagram Reels publishing requires an uploaded video attached to the post.')
+  const clip = getVideoClipWindow(video, 'instagram')
+  if (clip.duration > 180) {
+    throw new Error('Instagram Reels can be up to 3 minutes. This video can still be scheduled to YouTube or Facebook.')
+  }
+  if (video.size && video.size > 1024 * 1024 * 1024) {
+    throw new Error('Instagram Reels videos must be 1 GB or smaller.')
+  }
+  const videoUrl = await signedMediaUrl(video.storagePath)
+  const containerResponse = await fetch(`${GRAPH_URL}/${credential.external_account_id}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      media_type: 'REELS',
+      video_url: videoUrl,
+      caption: message,
+      share_to_feed: 'true',
+      access_token: credential.access_token,
+    }),
+  })
+  if (!containerResponse.ok) throw new Error(await providerError(containerResponse, 'Instagram Reel upload failed.'))
+  const container = await containerResponse.json()
+  if (!container.id) throw new Error('Instagram did not return a Reel container ID.')
+  await waitForInstagramContainer(String(container.id), credential.access_token)
+
+  const publishResponse = await fetch(`${GRAPH_URL}/${credential.external_account_id}/media_publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ creation_id: String(container.id), access_token: credential.access_token }),
+  })
+  if (!publishResponse.ok) throw new Error(await providerError(publishResponse, 'Instagram Reel publishing failed.'))
+  const published = await publishResponse.json()
+  if (!published.id) throw new Error('Instagram did not return a Reel ID.')
+  return String(published.id)
+}
+
 const publishYouTubeVideo = async (credential: Credential, post: ScheduledPost) => {
   const video = post.media.find((item) => item.type === 'video' && item.storagePath)
   if (!video?.storagePath) {
     throw new Error('YouTube publishing requires an uploaded video attached to the post.')
   }
 
-  const { data: file, error: downloadError } = await admin().storage.from('social-media').download(video.storagePath)
-  if (downloadError || !file) throw new Error('Unable to retrieve the selected video for YouTube publishing.')
+  const clipWindow = getVideoClipWindow(video, 'youtube')
+  const sourceUrl = await signedMediaUrl(video.storagePath)
+  const sourceHead = await fetch(sourceUrl, { method: 'HEAD' })
+  if (!sourceHead.ok) throw new Error('Unable to retrieve the selected video for YouTube publishing.')
+  const fileSize = Number(video.size || sourceHead.headers.get('content-length'))
+  if (!Number.isFinite(fileSize) || fileSize <= 0) throw new Error('Could not determine the uploaded video size for YouTube.')
 
   const metadataResponse = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
     method: 'POST',
@@ -168,7 +249,7 @@ const publishYouTubeVideo = async (credential: Credential, post: ScheduledPost) 
       Authorization: `Bearer ${credential.access_token}`,
       'Content-Type': 'application/json; charset=UTF-8',
       'X-Upload-Content-Type': video.mime || 'video/mp4',
-      'X-Upload-Content-Length': String(file.size),
+      'X-Upload-Content-Length': String(fileSize),
     },
     body: JSON.stringify({
       snippet: {
@@ -183,19 +264,35 @@ const publishYouTubeVideo = async (credential: Credential, post: ScheduledPost) 
   const uploadUrl = metadataResponse.headers.get('location')
   if (!uploadUrl) throw new Error('YouTube did not return an upload URL.')
 
-  const uploadResponse = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${credential.access_token}`,
-      'Content-Type': video.mime || 'video/mp4',
-      'Content-Length': String(file.size),
-    },
-    body: file,
-  })
-  if (!uploadResponse.ok) throw new Error(await providerError(uploadResponse, 'YouTube video upload failed.'))
-  const uploaded = await uploadResponse.json()
-  if (!uploaded.id) throw new Error('YouTube did not return a video ID.')
-  return String(uploaded.id)
+  const chunkBytes = 8 * 1024 * 1024
+  for (let start = 0; start < fileSize;) {
+    const end = Math.min(start + chunkBytes, fileSize) - 1
+    const source = await fetch(sourceUrl, { headers: { Range: `bytes=${start}-${end}` } })
+    const isSingleWholeFile = start === 0 && end === fileSize - 1 && fileSize <= chunkBytes && source.status === 200
+    if (source.status !== 206 && !isSingleWholeFile) throw new Error('Storage did not honor the video range request; refusing to buffer the whole video in memory.')
+    const chunk = await source.arrayBuffer()
+    if (!chunk.byteLength) throw new Error('Storage returned an empty video chunk.')
+    const actualEnd = start + chunk.byteLength - 1
+    const upload = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${credential.access_token}`,
+        'Content-Type': video.mime || 'video/mp4',
+        'Content-Length': String(chunk.byteLength),
+        'Content-Range': `bytes ${start}-${actualEnd}/${fileSize}`,
+      },
+      body: chunk,
+    })
+    if (upload.status === 308) {
+      start = actualEnd + 1
+      continue
+    }
+    if (!upload.ok) throw new Error(await providerError(upload, 'YouTube video upload failed.'))
+    const uploaded = await upload.json()
+    if (!uploaded.id) throw new Error('YouTube did not return a video ID.')
+    return String(uploaded.id)
+  }
+  throw new Error('YouTube upload ended without a completed video response.')
 }
 
 const publishXPost = async (credential: Credential, post: ScheduledPost) => {
@@ -296,11 +393,17 @@ const refreshCredential = async (credential: Credential, userId: string) => {
 }
 
 const publishChannel = async (post: ScheduledPost, channel: string, credential: Credential) => {
-  if (channel === 'facebook') return publishFacebookPost(credential, post.message, post.media ?? [])
-  if (channel === 'instagram') return publishInstagramImage(credential, post.message, post.media ?? [])
-  if (channel === 'youtube') return publishYouTubeVideo(credential, post)
-  if (channel === 'x') return publishXPost(credential, post)
-  if (channel === 'linkedin') return publishLinkedInPost(credential, post)
+  const channelMedia = (post.media ?? []).filter((item) => !item.targetPlatform || item.targetPlatform === channel)
+  const channelPost = { ...post, media: channelMedia }
+  if (channel === 'facebook') return publishFacebookPost(credential, post.message, channelMedia)
+  if (channel === 'instagram') {
+    return channelMedia.some((item) => item.type === 'video')
+      ? publishInstagramReel(credential, post.message, channelMedia)
+      : publishInstagramImage(credential, post.message, channelMedia)
+  }
+  if (channel === 'youtube') return publishYouTubeVideo(credential, channelPost)
+  if (channel === 'x') return publishXPost(credential, channelPost)
+  if (channel === 'linkedin') return publishLinkedInPost(credential, channelPost)
   throw new Error(`${channel} publishing is not deployed yet.`)
 }
 

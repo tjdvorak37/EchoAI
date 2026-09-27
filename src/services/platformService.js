@@ -4,6 +4,40 @@ import { consumeFreePostingAllowance } from './freePostingAllowance'
 
 const randomId = () => `post_${Math.random().toString(36).slice(2, 10)}`
 
+const mediaForStorage = (media = []) => media.map((item) => {
+  const stored = { ...item }
+  delete stored.previewUrl
+  delete stored.dataUrl
+  return stored
+})
+
+const withSignedMediaPreviews = async (posts) => {
+  const paths = [...new Set((posts ?? []).flatMap((post) => (post.media ?? []).map((item) => item.storagePath).filter(Boolean)))]
+  if (!paths.length) return posts
+  const { data, error } = await supabase.storage.from('social-media').createSignedUrls(paths, 60 * 60 * 24)
+  if (error || !data) return posts
+  const signedUrls = new Map(data.map((item) => [item.path, item.signedUrl]))
+  return posts.map((post) => ({
+    ...post,
+    media: (post.media ?? []).map((item) => ({
+      ...item,
+      previewUrl: item.storagePath ? signedUrls.get(item.storagePath) || '' : item.previewUrl || '',
+    })),
+  }))
+}
+
+const normalizePost = (post) => ({
+  id: post.id,
+  campaign: post.campaign,
+  message: post.message,
+  imageIdea: post.image_idea,
+  scheduledAt: post.scheduled_at,
+  channels: post.channels,
+  channelAccounts: post.channel_accounts ?? {},
+  media: post.media ?? [],
+  status: post.status,
+})
+
 const getCurrentUserId = async () => {
   const { data, error } = await supabase.auth.getUser()
   if (error) throw new Error(error.message)
@@ -71,17 +105,7 @@ export const platformService = {
 
     if (error) throw new Error(error.message)
 
-    return (data ?? []).map((post) => ({
-      id: post.id,
-      campaign: post.campaign,
-      message: post.message,
-      imageIdea: post.image_idea,
-      scheduledAt: post.scheduled_at,
-      channels: post.channels,
-      channelAccounts: post.channel_accounts ?? {},
-      media: post.media ?? [],
-      status: post.status,
-    }))
+    return withSignedMediaPreviews((data ?? []).map(normalizePost))
   },
 
   async schedulePost(payload) {
@@ -109,7 +133,7 @@ export const platformService = {
         scheduled_at: payload.scheduledAt,
         channels: payload.channels,
         channel_accounts: payload.channelAccounts ?? {},
-        media: payload.media ?? [],
+        media: mediaForStorage(payload.media),
         status: 'scheduled',
       })
       .select('*')
@@ -119,17 +143,7 @@ export const platformService = {
       throw new Error(error.message)
     }
 
-    return {
-      id: data.id,
-      campaign: data.campaign,
-      message: data.message,
-      imageIdea: data.image_idea,
-      scheduledAt: data.scheduled_at,
-      channels: data.channels,
-      channelAccounts: data.channel_accounts ?? {},
-      media: data.media ?? [],
-      status: data.status,
-    }
+    return (await withSignedMediaPreviews([normalizePost(data)]))[0]
   },
 
   async reschedulePost(postId, scheduledAtIso) {
@@ -195,7 +209,7 @@ export const platformService = {
         scheduled_at: publishedAt,
         channels: payload.channels,
         channel_accounts: payload.channelAccounts ?? {},
-        media: payload.media ?? [],
+        media: mediaForStorage(payload.media),
         status: 'scheduled',
       })
       .select('*')
@@ -221,17 +235,7 @@ export const platformService = {
       throw new Error(publishResult?.error || 'The social provider did not confirm publication.')
     }
 
-    return {
-      id: data.id,
-      campaign: data.campaign,
-      message: data.message,
-      imageIdea: data.image_idea,
-      scheduledAt: data.scheduled_at,
-      channels: data.channels,
-      channelAccounts: data.channel_accounts ?? {},
-      media: data.media ?? [],
-      status: publishResult.status,
-    }
+    return { ...(await withSignedMediaPreviews([normalizePost(data)]))[0], status: publishResult.status }
   },
 
   async generateMessageIdeas(prompt, agentConfig) {

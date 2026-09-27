@@ -45,6 +45,8 @@ import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
 import { UpgradeDialog } from './components/UpgradeDialog'
 import { removeStoredAsset } from './services/mediaAssets'
+import { createTrimmedVideoClip, getVideoDuration, makeMediaPreview, uploadMediaFile, validateMediaFile, MAX_MEDIA_FILE_BYTES, VIDEO_MAX_DURATION_SECONDS } from './services/mediaUploadService'
+import { getVideoPostError, getVideoTrimForChannel, SOCIAL_VIDEO_CLIP_LIMITS } from './services/mediaUploadPolicy'
 
 const AI_PROMPT_IDEAS = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
@@ -285,6 +287,7 @@ function App() {
     mediaAssetIds: [],
   })
   const [schedulerError, setSchedulerError] = useState('')
+  const [mediaUploadProgress, setMediaUploadProgress] = useState(null)
   const [quickConnectOpen, setQuickConnectOpen] = useState(() => {
     const status = new URLSearchParams(window.location.search).get('social')
     return status === 'connected' || status === 'failed' || status === 'provider_error'
@@ -1563,7 +1566,46 @@ function App() {
   const getComposerMedia = () => (composer.mediaAssetIds || [])
     .map((assetId) => workspaceAssets.find((asset) => asset.id === assetId))
     .filter(Boolean)
-    .map(({ id, name, type, mime, previewUrl, storagePath }) => ({ id, name, type, mime, previewUrl, storagePath }))
+    .map(({ id, name, type, mime, previewUrl, storagePath, size, durationSeconds, trimByPlatform }) => ({
+      id,
+      name,
+      type,
+      mime,
+      previewUrl,
+      storagePath,
+      size,
+      durationSeconds,
+      trimByPlatform,
+    }))
+
+  const updateMediaTrim = (assetId, platform, trimPatch) => {
+    setWorkspaceAssets((previous) => previous.map((asset) => {
+      if (asset.id !== assetId) return asset
+      const duration = Math.max(Number(asset.durationSeconds || asset.duration || 0), 0)
+      const current = getVideoTrimForChannel(asset, platform)
+      const cap = SOCIAL_VIDEO_CLIP_LIMITS[platform] ?? duration
+      const nextStart = Number.isFinite(trimPatch.startSeconds) ? Number(trimPatch.startSeconds) : current.startSeconds
+      const startSeconds = Math.min(Math.max(nextStart, 0), duration || nextStart)
+      const maximumEnd = Math.min(duration || Number.POSITIVE_INFINITY, startSeconds + cap)
+      const nextEnd = Number.isFinite(trimPatch.endSeconds) ? Number(trimPatch.endSeconds) : current.endSeconds
+      const endSeconds = Math.min(Math.max(nextEnd, startSeconds + 1), maximumEnd)
+      return {
+        ...asset,
+        trimByPlatform: {
+          ...(asset.trimByPlatform ?? {}),
+          [platform]: { startSeconds, endSeconds },
+        },
+      }
+    }))
+  }
+
+  const validateVideoPostDestinations = () => {
+    const media = getComposerMedia()
+    const message = getVideoPostError({ media, channels: composer.channels, supabaseConfigured: isSupabaseConfigured })
+    if (!message) return true
+    setSchedulerError(message)
+    return false
+  }
 
   const handleSchedulePost = async (event) => {
     event.preventDefault()
@@ -1573,6 +1615,7 @@ function App() {
       setSchedulerError('Write a caption or add an image brief, select at least one channel, and set a deployment date and time.')
       return
     }
+    if (!validateVideoPostDestinations()) return
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
@@ -1586,27 +1629,33 @@ function App() {
 
     const defaultTitle = composer.campaign.trim() || 'Social Post'
 
-    const newPost = await platformService.schedulePost({
-      campaign: defaultTitle,
-      message: composer.message,
-      imageIdea: composer.imageIdea,
-      scheduledAt: composer.scheduledAt,
-      channels: composer.channels,
-      channelAccounts: composer.channelAccounts,
-      media: getComposerMedia(),
-    })
+    try {
+      const preparedMedia = await prepareMediaForPublish(getComposerMedia(), composer.channels)
 
-    setScheduledPosts((prev) => [newPost, ...prev])
-    await syncPostToCalendar(newPost)
-    setComposer({
-      campaign: '',
-      message: '',
-      imageIdea: '',
-      scheduledAt: '',
-      channels: [],
-      channelAccounts: {},
-      mediaAssetIds: [],
-    })
+      const newPost = await platformService.schedulePost({
+        campaign: defaultTitle,
+        message: composer.message,
+        imageIdea: composer.imageIdea,
+        scheduledAt: composer.scheduledAt,
+        channels: composer.channels,
+        channelAccounts: composer.channelAccounts,
+        media: preparedMedia,
+      })
+
+      setScheduledPosts((prev) => [newPost, ...prev])
+      await syncPostToCalendar(newPost)
+      setComposer({
+        campaign: '',
+        message: '',
+        imageIdea: '',
+        scheduledAt: '',
+        channels: [],
+        channelAccounts: {},
+        mediaAssetIds: [],
+      })
+    } catch (error) {
+      setSchedulerError(error.message || 'Unable to schedule this post.')
+    }
   }
 
   const handlePostToNextSlot = async () => {
@@ -1616,6 +1665,7 @@ function App() {
       setSchedulerError('Write a caption or add an image brief, and select at least one channel before queuing to the next slot.')
       return
     }
+    if (!validateVideoPostDestinations()) return
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
@@ -1634,6 +1684,8 @@ function App() {
         return
       }
 
+      const preparedMedia = await prepareMediaForPublish(getComposerMedia(), composer.channels)
+
       const newPost = await platformService.schedulePost({
         campaign: composer.campaign.trim() || 'Social Post',
         message: composer.message,
@@ -1641,7 +1693,7 @@ function App() {
         scheduledAt: nextSlot.toISOString(),
         channels: composer.channels,
         channelAccounts: composer.channelAccounts,
-        media: getComposerMedia(),
+        media: preparedMedia,
       })
 
       setScheduledPosts((prev) => [newPost, ...prev])
@@ -1668,6 +1720,7 @@ function App() {
       setSchedulerError('Write a caption or add an image brief, and select at least one channel before posting.')
       return
     }
+    if (!validateVideoPostDestinations()) return
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
@@ -1682,13 +1735,14 @@ function App() {
     const defaultTitle = composer.campaign.trim() || 'Instant Post'
 
     try {
+      const preparedMedia = await prepareMediaForPublish(getComposerMedia(), composer.channels)
       const newPost = await platformService.postNow({
         campaign: defaultTitle,
         message: composer.message,
         imageIdea: composer.imageIdea,
         channels: composer.channels,
         channelAccounts: composer.channelAccounts,
-        media: getComposerMedia(),
+        media: preparedMedia,
       })
 
       setScheduledPosts((prev) => [newPost, ...prev])
@@ -1998,67 +2052,195 @@ function App() {
     setSelectedFolderId(folder.id)
   }
 
-  const handleUploadAsset = async (event) => {
-    const files = Array.from(
-      event?.target?.files || event?.dataTransfer?.files || event || [],
-    ).filter((file) => file.type.startsWith('image/') || file.type.startsWith('video/'))
-    if (!files.length) {
-      return
+  const uploadMediaToWorkspace = async (file, { availableQuotaBytes, onProgress }) => {
+    const durationSeconds = file.type.startsWith('video/') ? await getVideoDuration(file) : undefined
+    validateMediaFile({ file, durationSeconds, availableQuotaBytes })
+    let userId = ''
+    if (isSupabaseConfigured) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Sign in before uploading media.')
+      userId = user.id
+    }
+    const storagePath = await uploadMediaFile({ file, userId, onProgress })
+    const previewUrl = await makeMediaPreview({ file, useEphemeralUrl: isSupabaseConfigured })
+    return {
+      id: `asset_${crypto.randomUUID()}`,
+      name: file.name,
+      type: file.type.startsWith('video/') ? 'video' : 'image',
+      mime: file.type,
+      size: file.size,
+      durationSeconds,
+      folderId: selectedFolderId,
+      createdAt: new Date().toISOString(),
+      previewUrl,
+      storagePath,
+      summary: 'Uploaded from your device',
+    }
+  }
+
+  const prepareMediaForPublish = async (mediaItems, channels) => {
+    const videos = mediaItems.filter((item) => item.type === 'video')
+    const nonVideos = mediaItems.filter((item) => item.type !== 'video')
+    if (!videos.length) return [...mediaItems]
+
+    const prepared = []
+    const generatedAssets = []
+    const uploadedPaths = []
+    let remainingQuotaBytes = Math.max(0, (storageQuotaMb - storageUsedMb) * 1024 * 1024)
+    let userId = ''
+    if (isSupabaseConfigured) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Sign in before preparing video clips.')
+      userId = user.id
     }
 
     try {
-      setSchedulerError('')
-      const uploadSizeMb = files.reduce((total, file) => total + file.size / 1024 / 1024, 0)
-      if (storageUsedMb + uploadSizeMb > storageQuotaMb) {
-        throw new Error('This upload exceeds your available storage quota.')
-      }
-
-      const uploadedAssets = []
-      for (const [index, file] of files.entries()) {
-        const assetType = file.type.startsWith('video/') ? 'video' : 'image'
-        const previewUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onload = () => resolve(reader.result)
-          reader.onerror = () => reject(new Error('Unable to read file'))
-          reader.readAsDataURL(file)
-        })
-
-        let storagePath = ''
+      for (const source of videos) {
+        let sourceBlob
         if (isSupabaseConfigured) {
-          const { data: { user } } = await supabase.auth.getUser()
-          if (!user) throw new Error('Sign in before uploading media.')
-          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
-          storagePath = `${user.id}/${Date.now()}-${index}-${safeName}`
-          const { error } = await supabase.storage
-            .from('social-media')
-            .upload(storagePath, file, { contentType: file.type, upsert: false })
-          if (error) throw new Error(error.message)
+          if (!source.storagePath) throw new Error(`Re-upload ${source.name} to workspace storage before posting.`)
+          const { data, error } = await supabase.storage.from('social-media').download(source.storagePath)
+          if (error || !data) throw new Error(`Unable to load ${source.name} to prepare destination clips.`)
+          sourceBlob = data
+        } else if (source.previewUrl) {
+          const response = await fetch(source.previewUrl)
+          if (!response.ok) throw new Error(`Unable to read ${source.name} for clip export.`)
+          sourceBlob = await response.blob()
         }
+        if (!sourceBlob) throw new Error(`Unable to read ${source.name} for clip export.`)
 
-        uploadedAssets.push({
-          id: `asset_${Date.now()}_${index}`,
-          name: file.name,
-          type: assetType,
-          mime: file.type,
-          size: file.size,
-          folderId: selectedFolderId,
-          createdAt: new Date().toISOString(),
-          previewUrl,
-          storagePath,
-          summary: 'Uploaded from your device',
-        })
+        for (const channel of channels) {
+          const trim = getVideoTrimForChannel(source, channel)
+          if (trim.durationSeconds < 1) throw new Error(`Choose a valid ${channel} video clip.`)
+          const duration = Number(source.durationSeconds || 0)
+          const isWholeSource = trim.startSeconds === 0 && duration > 0 && trim.endSeconds >= duration - 0.5
+          if (isWholeSource) {
+            prepared.push({
+              ...source,
+              targetPlatform: channel,
+              trimStartSeconds: 0,
+              trimEndSeconds: duration,
+            })
+            continue
+          }
+
+          setMediaUploadProgress({ fileName: `${source.name} · ${channel} clip`, percent: 0, index: 0, total: 1 })
+          const clipFile = await createTrimmedVideoClip(sourceBlob, {
+            startSeconds: trim.startSeconds,
+            endSeconds: trim.endSeconds,
+          })
+          validateMediaFile({ file: clipFile, durationSeconds: trim.durationSeconds, availableQuotaBytes: remainingQuotaBytes })
+          remainingQuotaBytes -= clipFile.size
+          const storagePath = await uploadMediaFile({
+            file: clipFile,
+            userId,
+            onProgress: (fraction) => setMediaUploadProgress({
+              fileName: `${source.name} · ${channel} clip`,
+              percent: Math.round(fraction * 100),
+              index: 0,
+              total: 1,
+            }),
+          })
+          if (storagePath) uploadedPaths.push(storagePath)
+          const previewUrl = URL.createObjectURL(clipFile)
+          const clipId = `asset_${crypto.randomUUID()}`
+          const clipAsset = {
+            id: clipId,
+            name: clipFile.name,
+            type: 'video',
+            mime: clipFile.type,
+            size: clipFile.size,
+            durationSeconds: trim.durationSeconds,
+            folderId: selectedFolderId,
+            createdAt: new Date().toISOString(),
+            previewUrl,
+            storagePath,
+            summary: `Prepared ${channel} clip from ${source.name}`,
+            derivedFromAssetId: source.id,
+            targetPlatform: channel,
+          }
+          generatedAssets.push(clipAsset)
+          prepared.push({
+            id: clipId,
+            name: clipFile.name,
+            type: 'video',
+            mime: clipFile.type,
+            size: clipFile.size,
+            durationSeconds: trim.durationSeconds,
+            storagePath,
+            previewUrl,
+            targetPlatform: channel,
+            trimStartSeconds: 0,
+            trimEndSeconds: trim.durationSeconds,
+          })
+        }
       }
-
-      setWorkspaceAssets((prev) => [...uploadedAssets, ...prev])
-      setComposer((prev) => ({
-        ...prev,
-        mediaAssetIds: [...new Set([...(prev.mediaAssetIds || []), ...uploadedAssets.map((asset) => asset.id)])],
-      }))
+      if (generatedAssets.length) setWorkspaceAssets((previous) => [...generatedAssets, ...previous])
+      setMediaUploadProgress(null)
+      return [...nonVideos, ...prepared]
     } catch (error) {
-      setSchedulerError(error.message || 'Unable to add that media file.')
-    } finally {
-      if (event?.target) event.target.value = ''
+      if (uploadedPaths.length && isSupabaseConfigured) {
+        await supabase.storage.from('social-media').remove(uploadedPaths).catch(() => {})
+      }
+      generatedAssets.forEach((asset) => URL.revokeObjectURL(asset.previewUrl))
+      setMediaUploadProgress(null)
+      throw error
     }
+  }
+
+  const uploadFilesToWorkspace = async (files, attachToComposer, reportError) => {
+    const selectedFiles = Array.from(files ?? [])
+    if (!selectedFiles.length) return
+    const totalBytes = selectedFiles.reduce((total, file) => total + file.size, 0)
+    const availableQuotaBytes = Math.max(0, (storageQuotaMb - storageUsedMb) * 1024 * 1024)
+    const uploadedAssets = []
+    const uploadedPaths = []
+    let completedBytes = 0
+    setMediaUploadProgress({ fileName: selectedFiles[0].name, percent: 0, index: 0, total: selectedFiles.length })
+    try {
+      if (totalBytes > availableQuotaBytes) {
+        throw new Error(`This batch needs ${(totalBytes / 1024 / 1024).toFixed(0)} MB, but only ${Math.floor(availableQuotaBytes / 1024 / 1024)} MB of your ${storageQuotaMb} MB storage is free. Remove unused workspace files or upgrade storage.`)
+      }
+      for (const [index, file] of selectedFiles.entries()) {
+        setMediaUploadProgress({ fileName: file.name, percent: 0, index, total: selectedFiles.length })
+        const asset = await uploadMediaToWorkspace(file, {
+          availableQuotaBytes: availableQuotaBytes - completedBytes,
+          onProgress: (fraction) => setMediaUploadProgress({
+            fileName: file.name,
+            percent: Math.round(((completedBytes + file.size * fraction) / totalBytes) * 100),
+            index,
+            total: selectedFiles.length,
+          }),
+        })
+        uploadedAssets.push(asset)
+        if (asset.storagePath) uploadedPaths.push(asset.storagePath)
+        completedBytes += file.size
+      }
+      setWorkspaceAssets((previous) => [...uploadedAssets, ...previous])
+      if (attachToComposer) {
+        setComposer((previous) => ({
+          ...previous,
+          mediaAssetIds: [...new Set([...(previous.mediaAssetIds || []), ...uploadedAssets.map((asset) => asset.id)])],
+        }))
+      }
+      setMediaUploadProgress(null)
+    } catch (error) {
+      if (uploadedPaths.length && isSupabaseConfigured) {
+        await supabase.storage.from('social-media').remove(uploadedPaths).catch(() => {})
+      }
+      uploadedAssets.forEach((asset) => {
+        if (asset.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(asset.previewUrl)
+      })
+      setMediaUploadProgress(null)
+      reportError(error.message || 'Unable to add that media file.')
+    }
+  }
+
+  const handleUploadAsset = (event) => {
+    const files = Array.from(event?.target?.files || event?.dataTransfer?.files || event || [])
+    setSchedulerError('')
+    void uploadFilesToWorkspace(files, true, setSchedulerError)
+    if (event?.target) event.target.value = ''
   }
 
   // Prevent the browser from navigating to dropped files anywhere on the page.
@@ -2085,41 +2267,8 @@ function App() {
     setDrawerDragActive(false)
     const file = event.dataTransfer?.files?.[0]
     if (!file) return
-    const fileSizeMb = file.size / 1024 / 1024
-    if (storageUsedMb + fileSizeMb > storageQuotaMb) {
-      setAdminError('This upload exceeds your available storage quota.')
-      return
-    }
-    const assetType = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : 'document'
-    const previewUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result)
-      reader.onerror = () => reject(new Error('Unable to read file'))
-      reader.readAsDataURL(file)
-    })
-    let storagePath = ''
-    if (isSupabaseConfigured && ['image', 'video'].includes(assetType)) {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Sign in before uploading media.')
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
-      storagePath = `${user.id}/${Date.now()}-${safeName}`
-      const { error } = await supabase.storage
-        .from('social-media')
-        .upload(storagePath, file, { contentType: file.type, upsert: false })
-      if (error) throw new Error(error.message)
-    }
-    setWorkspaceAssets((prev) => [{
-      id: `asset_${Date.now()}`,
-      name: file.name,
-      type: assetType,
-      mime: file.type || 'application/octet-stream',
-      size: file.size,
-      folderId: selectedFolderId,
-      createdAt: new Date().toISOString(),
-      previewUrl,
-      storagePath,
-      summary: 'Dropped into workspace',
-    }, ...prev])
+    setAdminError('')
+    void uploadFilesToWorkspace([file], false, setAdminError)
   }
 
   const filteredAssets = useMemo(() => {
@@ -4549,6 +4698,11 @@ function App() {
               connectedAccounts={connectedAccounts}
               workspaceAssets={workspaceAssets}
               onUploadAsset={handleUploadAsset}
+              onUpdateMediaTrim={updateMediaTrim}
+              mediaUploadProgress={mediaUploadProgress}
+              mediaStorageRemainingMb={Math.max(0, Math.floor(storageQuotaMb - storageUsedMb))}
+              maxMediaFileMb={Math.floor(MAX_MEDIA_FILE_BYTES / 1024 / 1024)}
+              maxVideoDurationMinutes={VIDEO_MAX_DURATION_SECONDS / 60}
               getPlatformMeta={getPlatformMeta}
               getStatusBadgeClass={getStatusBadgeClass}
               schedulerError={schedulerError}
