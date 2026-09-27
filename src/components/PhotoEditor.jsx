@@ -2020,7 +2020,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     >
       <header className="photo-creator-header">
         <div>
-          <p className="small-title">Image Lab</p>
+          <p className="small-title">Photo Editor</p>
           <h2>Professional image editor</h2>
           <p className="panel-note">Upload a photo, add text and graphics, retouch it, then export.</p>
         </div>

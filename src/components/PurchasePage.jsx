@@ -12,7 +12,7 @@ const CORE_FEATURES = [
   'Analytics with sentiment, trend, and crisis visibility',
   'Brand mentions, keywords, competitors, hashtags, and conversation tracking',
   'AI-powered recommendations and personal AI agent endpoint sync',
-  'Image Lab and timeline-based Motion Lab',
+  'Photo Editor and timeline-based Video Editor',
   'Multi-channel Post Creation, Repost workflows, and team collaboration',
 ]
 
@@ -277,7 +277,7 @@ export function PurchasePage({ onBack, onSubmit, validatePromoCode, referralCode
         {step === 'pay' && (
           <>
             <h2>Complete your order</h2>
-            <p className="muted">Your purchase unlocks Analytics, AI agent sync, Image Lab, Motion Lab, and Post Creation workflows.</p>
+            <p className="muted">Your purchase unlocks Analytics, AI agent sync, Photo Editor, Video Editor, and Post Creation workflows.</p>
 
             {/* Promo code section — always shown first */}
             <div className="promo-code-section">

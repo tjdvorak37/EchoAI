@@ -388,7 +388,7 @@ export const purchaseHistorySeed = [
 ]
 
 export const siteFeatureFlagsSeed = [
-  { id: 'ff-video-studio', label: 'Motion Lab', description: 'Timeline-based video editor', enabled: true },
+  { id: 'ff-video-studio', label: 'Video Editor', description: 'Timeline-based video editor', enabled: true },
   { id: 'ff-ai-assistant', label: 'AI Assistant', description: 'AI caption and content generation', enabled: true },
   { id: 'ff-repost-hub', label: 'Repost', description: 'Company post rebroadcast system', enabled: true },
   { id: 'ff-scheduler', label: 'Post Creation', description: 'Post scheduling and calendar', enabled: true },
