@@ -1435,6 +1435,78 @@
   font: inherit;
 }
 
+.voice-over {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.voice-over header {
+  color: #dc2626;
+}
+
+.voice-over.is-recording {
+  border-color: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2);
+}
+
+.voice-over-start,
+.voice-over-stop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 0;
+  color: #fff;
+  background: linear-gradient(90deg, #dc2626, #db2777);
+  font-weight: 700;
+}
+
+.voice-over-start:hover,
+.voice-over-stop:hover {
+  color: #fff;
+  background: linear-gradient(90deg, #b91c1c, #be185d);
+}
+
+.voice-over-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.voice-over-countdown,
+.voice-over-live {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.5rem;
+  border-radius: 0.45rem;
+  color: #991b1b;
+  background: #fee2e2;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.audio-section .voice-over-device {
+  width: 100%;
+  min-width: 0;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.35rem;
+  color: #172033;
+  background: #fff;
+  font: inherit;
+}
+
+.voice-over-download {
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.rec-btn-voice {
+  border-color: #f87171;
+}
+
 .audio-section .property-toggle {
   color: #334155;
   font-weight: 600;
