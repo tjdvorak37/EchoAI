@@ -31,7 +31,7 @@ export const HELP_ARTICLES = [
     summary: 'Understand what stays available on a Standard account and what Premium unlocks.',
     keywords: ['free', 'paid', 'premium', 'standard', 'subscription', 'upgrade', 'locked'],
     steps: [
-      'Standard accounts can sign in, view every workspace, manage their account, use Help desk, and set up Connections.',
+      'Standard accounts can sign in, view every workspace, manage their account, use Help Center, and set up Connections.',
       'Premium access unlocks Image Lab, Motion Lab, Post Creation publishing, Repost, Analytics, and Ads.',
       'A paid subscription grants Premium access while it is active.',
       'A beta tester flag also grants Premium access at no charge; it is managed only by an administrator in IT / Management.',
@@ -161,7 +161,7 @@ export const HELP_ARTICLES = [
       'Use the account control in the header to review and update your contact card.',
       'Use the password recovery flow if you cannot sign in.',
       'Complete two-factor verification when your account requires it.',
-      'Use Help desk or Contact support for an account or billing issue.',
+      'Use Help Center or Contact support for an account or billing issue.',
     ],
     notes: ['Never send a password, recovery code, OAuth token, or API secret to support.'],
   },

@@ -418,7 +418,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
       mime: file.type,
       previewUrl: URL.createObjectURL(file),
       size: file.size,
-      summary: 'Uploaded directly to Video Studio',
+      summary: 'Uploaded directly to Motion Lab',
     }
     onAddAsset?.(asset)
     addAssetAtPlayhead(asset)

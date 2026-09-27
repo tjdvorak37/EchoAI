@@ -3867,7 +3867,7 @@ function App() {
           ))}
         </div>
         <div className="main-nav-group">
-          <span className="main-nav-label">Create &amp; measure</span>
+          <span className="main-nav-label">Studio &amp; insights</span>
           {[
             ['photo', 'Image Lab', ImagePlus],
             ['studio', 'Motion Lab', Video],
@@ -3888,7 +3888,7 @@ function App() {
           {[
             ['integrations', 'Connections', Link2],
             ['account', 'Account', Settings2],
-            ['help', 'Help desk', LifeBuoy],
+            ['help', 'Help Center', LifeBuoy],
             ...(canViewManagementBoard ? [['admin', 'IT / Management', BarChart3]] : []),
           ].map(([key, label, Icon]) => (
             <button
@@ -3908,10 +3908,10 @@ function App() {
       <nav className="workspace-top-nav" aria-label="Primary workspace areas">
         {[
           ['listening', 'Analytics', ChartNoAxesCombined],
-          ['dashboard', 'Growth', BarChart3],
+          ['dashboard', 'Home Base', BarChart3],
           ['repost', 'Repost', Repeat2],
           ['scheduler', 'Post Creation', CalendarDays],
-          ['integrations', 'Socials', Link2],
+          ['integrations', 'Connections', Link2],
           ['credits', 'Ad Watch', ImagePlus],
         ].map(([key, label, Icon]) => (
           <button key={key} type="button" className={`workspace-top-link ${activeTab === key ? 'active' : ''}`} onClick={() => requestWorkspaceTab(key)}>
@@ -4564,13 +4564,13 @@ function App() {
                 <h2>Turn an idea into a finished campaign</h2>
                 <p className="panel-note">
                   Add your files below, describe what you need, and EchoAI builds a flyer, image, video plan, or post —
-                  ready to edit and send to the Scheduler. No prior experience needed.
+                  ready to edit and send to Post Creation. No prior experience needed.
                 </p>
               </div>
               <div className="create-hub-actions">
                 <button type="button" className="ghost-button" onClick={() => setActiveTab('photo')}>Edit an image</button>
                 <button type="button" className="ghost-button" onClick={() => setActiveTab('studio')}>Create a video</button>
-                <button type="button" className="primary-button" onClick={() => setActiveTab('scheduler')}>Open Scheduler</button>
+                <button type="button" className="primary-button" onClick={() => setActiveTab('scheduler')}>Open Post Creation</button>
               </div>
             </div>
 
@@ -4703,10 +4703,10 @@ function App() {
 
         {activeTab === 'integrations' && (
           <section className="panel panel-integrations">
-            <h2>Integrations &amp; Connected Accounts</h2>
+            <h2>Connections</h2>
             <p className="panel-note">
               Link your social media accounts and third-party tools. Each channel you connect
-              becomes available in the Scheduler and AI Studio.
+              becomes available in Post Creation and Repost.
             </p>
 
             <nav className="integrations-quick-nav" aria-label="Jump to a section">
@@ -4931,7 +4931,7 @@ function App() {
             <h3 className="section-label">Manage company brand kit</h3>
             <p className="panel-note">
               Your company&apos;s colours, licensed fonts, and logos. Everything here is available in
-              the Photo Creator and Video Studio so every post stays on brand.
+              Image Lab and Motion Lab so every post stays on brand.
             </p>
 
             <div className="list-row">
