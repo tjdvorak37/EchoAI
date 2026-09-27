@@ -31,8 +31,12 @@ Deno.serve(async (request) => {
     }
 
     const appUrl = (Deno.env.get('APP_URL') || 'https://www.echoaipro.com').trim().replace(/\/$/, '')
+    // MAILER_AUTOCONFIRM means every account is already confirmed by the time
+    // this runs, so `type: 'signup'` always 422s with email_exists. Use
+    // 'magiclink' instead — it's valid for confirmed users and still logs
+    // them in on click.
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-      type: 'signup',
+      type: 'magiclink',
       email: authData.user.email,
       options: { redirectTo: `${appUrl}/` },
     })
