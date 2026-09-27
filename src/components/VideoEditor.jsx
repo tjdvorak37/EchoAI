@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import { Clapperboard, Download, Eye, EyeOff, Film, Library, Lock, MonitorPlay, Music2, PanelsTopLeft, Play, RotateCcw, Scissors, SlidersHorizontal, Type, Unlock, Volume2, VolumeX } from 'lucide-react'
+import { Clapperboard, Download, Eye, EyeOff, Film, Library, Lock, MonitorPlay, Music2, PanelsTopLeft, Play, Redo2, RotateCcw, Scissors, SlidersHorizontal, Type, Undo2, Unlock, Volume2, VolumeX } from 'lucide-react'
 import { canUseAgentMode, runCreativeAgentJob } from '../services/aiAgentService'
 import {
   DEFAULT_MASTER_AUDIO,
@@ -1648,10 +1648,6 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             🧲 Snap
           </button>
           <button type="button" className="toolbar-btn" title="Reset selected transform" onClick={() => selectedClip && updateSelectedClip({ transform: { ...DEFAULT_TRANSFORM } })}><RotateCcw size={17} /></button>
-          <button type="button" className="toolbar-btn" onClick={undo} disabled={historyCounts.past === 0}>↶</button>
-          <button type="button" className="toolbar-btn" onClick={redo} disabled={historyCounts.future === 0}>
-            ↷
-          </button>
           {statusMessage && <span className="muted">{statusMessage}</span>}
         </div>
 
@@ -1675,6 +1671,12 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
               {label}
             </button>
           ))}
+          <button type="button" className="toolbar-btn toolbar-history-btn" onClick={undo} disabled={historyCounts.past === 0} title="Undo (Ctrl+Z)" aria-label="Undo">
+            <Undo2 size={16} aria-hidden="true" />
+          </button>
+          <button type="button" className="toolbar-btn toolbar-history-btn" onClick={redo} disabled={historyCounts.future === 0} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+            <Redo2 size={16} aria-hidden="true" />
+          </button>
           <button type="button" className="toolbar-btn toolbar-btn-export" onClick={exportTimeline} disabled={isExporting}>
             <Download size={17} aria-hidden="true" />
             {isExporting ? `Exporting ${exportProgress}%` : 'Export video'}
