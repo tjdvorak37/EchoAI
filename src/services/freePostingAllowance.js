@@ -12,6 +12,11 @@ try {
 
 const STORAGE_KEY = 'echoai-free-posting-usage-v1'
 
+const getCurrentMonthKey = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
 const getStorage = () => {
   if (typeof globalThis !== 'undefined' && globalThis.localStorage) {
     return globalThis.localStorage
@@ -64,6 +69,19 @@ const readUsageMap = () => {
   } catch {
     return {}
   }
+}
+
+const normalizeUsageValue = (userId, rawValue) => {
+  const currentMonthKey = getCurrentMonthKey()
+
+  if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+    const month = rawValue.month ?? currentMonthKey
+    const used = Number(rawValue.used ?? 0)
+    return month === currentMonthKey && Number.isFinite(used) ? Math.max(0, used) : 0
+  }
+
+  const numericValue = Number(rawValue ?? 0)
+  return Number.isFinite(numericValue) ? Math.max(0, numericValue) : 0
 }
 
 const writeUsageMap = (usageMap) => {
@@ -122,8 +140,7 @@ export const getFreePostingUsage = async (userId) => {
 
   const usageMap = readUsageMap()
   const raw = usageMap[userId]
-  const value = Number(raw ?? 0)
-  return Number.isFinite(value) ? Math.max(0, value) : 0
+  return normalizeUsageValue(userId, raw)
 }
 
 export const consumeFreePostingAllowance = async ({ userId, entitlement, channelCount }) => {
@@ -165,7 +182,7 @@ export const consumeFreePostingAllowance = async ({ userId, entitlement, channel
   }
 
   const nextMap = readUsageMap()
-  nextMap[userId] = nextUsage
+  nextMap[userId] = { month: getCurrentMonthKey(), used: nextUsage }
   writeUsageMap(nextMap)
 
   return {
