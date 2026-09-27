@@ -52,6 +52,30 @@ test('free accounts get 10 posting slots and usage counts by selected social acc
   assert.equal(await getFreePostingUsage(userId), 5)
 })
 
+test('free posting usage resets monthly and does not carry over to the next cycle', { concurrency: false }, async () => {
+  resetStorage()
+  const userId = 'month-reset-user'
+  const entitlement = { entitled: false, accessLevel: 'free', status: 'none' }
+
+  const lastMonth = new Date()
+  lastMonth.setMonth(lastMonth.getMonth() - 1)
+  const previousMonthKey = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`
+
+  const store = globalThis.localStorage
+  store.setItem('echoai-free-posting-usage-v1', JSON.stringify({
+    [userId]: { month: previousMonthKey, used: 8 },
+  }))
+
+  const usage = await getFreePostingUsage(userId)
+  assert.equal(usage, 0)
+
+  const result = await consumeFreePostingAllowance({ userId, entitlement, channelCount: 2 })
+  assert.equal(result.allowed, true)
+  assert.equal(result.used, 2)
+  assert.equal(result.remaining, 8)
+  assert.equal(await getFreePostingUsage(userId), 2)
+})
+
 test('paid accounts bypass the free posting allowance', { concurrency: false }, async () => {
   resetStorage()
   const userId = 'paid-user-456'

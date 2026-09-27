@@ -473,6 +473,8 @@
 
 .preview-stage-shell {
   position: relative;
+  z-index: 0;
+  isolation: isolate;
   width: min(100%, 980px);
   aspect-ratio: 16 / 9;
   display: flex;
@@ -496,7 +498,7 @@
 
 .preview-stage-toolbar {
   position: absolute;
-  z-index: 4;
+  z-index: 6;
   inset: 0.7rem 0.8rem auto;
   display: flex;
   justify-content: space-between;
@@ -507,9 +509,10 @@
 }
 
 .preview-placeholder {
+  position: relative;
+  z-index: 2;
   text-align: center;
   color: #737b8d;
-  z-index: 2;
 }
 
 .preview-placeholder p {
@@ -567,6 +570,8 @@
 }
 
 .preview-video {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -577,6 +582,8 @@
 }
 
 .preview-image {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -588,7 +595,7 @@
 
 .preview-controls {
   position: absolute;
-  z-index: 5;
+  z-index: 7;
   top: 0.7rem;
   right: 50%;
   display: flex;
