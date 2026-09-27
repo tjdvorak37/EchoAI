@@ -20,6 +20,8 @@ import {
 } from '../services/videoAudioMix'
 import { ClipAudioControls, MasterAudioControls, VoiceOverRecorder } from './VideoAudioMixer'
 import { StockLibrary } from './StockLibrary'
+import { EditorFocusToggle } from './EditorFocusMode'
+import { useEditorFocusMode } from './useEditorFocusMode'
 import { downloadMediaLibraryFile } from '../services/mediaLibraryService'
 
 const FILTER_PRESETS = {
@@ -145,6 +147,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   const [projectSettings, setProjectSettings] = useState({ aspectRatio: '16:9', frameRate: 30, previewScale: 100 })
   const [editTool, setEditTool] = useState('select')
   const [inspectorTab, setInspectorTab] = useState('video')
+  const focusMode = useEditorFocusMode()
   const [masterAudio, setMasterAudio] = useState(DEFAULT_MASTER_AUDIO)
   const [masterLevel, setMasterLevel] = useState(-Infinity)
   const [waveforms, setWaveforms] = useState({})
@@ -1569,10 +1572,13 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   }
 
   return (
-    <div className="video-editor">
+    <div className={`video-editor ${focusMode.focused ? 'editor-focus' : ''}`}>
       <div className="video-editor-intro">
-        <p className="small-title">Video Editor</p>
-        <p className="panel-note">Upload clips, arrange them on the timeline, add text and effects, then export.</p>
+        <div>
+          <p className="small-title">Video Editor</p>
+          <p className="panel-note">Upload clips, arrange them on the timeline, add text and effects, then export.</p>
+        </div>
+        <EditorFocusToggle focused={focusMode.focused} onToggle={focusMode.toggle} fullscreen={focusMode.fullscreen} onToggleFullscreen={focusMode.toggleFullscreen} label="video editor" />
       </div>
       {brief && (
         <div className="video-brief-bar">
