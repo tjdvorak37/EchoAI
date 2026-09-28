@@ -176,6 +176,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
   const timerRef = useRef(null)
+  const recordStartRef = useRef(0)
   const historyRef = useRef({ past: [], future: [] })
   const rafRef = useRef(0)
   const nextLocalId = (prefix) => `${prefix}-${(clipCounter.current += 1)}`
@@ -551,13 +552,16 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
         finalStream.getTracks().forEach((t) => t.stop())
         const blob = new Blob(chunksRef.current, { type: 'video/webm' })
         const url = URL.createObjectURL(blob)
+        // Measured from the wall clock: `recordingSeconds` here would be the stale
+        // value captured when recording started, truncating every clip to ~1s.
+        const elapsed = Math.max(0.1, Math.round(((performance.now() - recordStartRef.current) / 1000) * 100) / 100)
         const clip = {
           id: `clip-${(clipCounter.current += 1)}`,
           assetId: nextLocalId('rec'),
           assetName: `Screen recording ${new Date().toLocaleTimeString()}`,
           startTime: playbackTime,
-          duration: recordingSeconds || 1,
-          trim: { start: 0, end: recordingSeconds || 1 },
+          duration: elapsed,
+          trim: { start: 0, end: elapsed },
           previewUrl: url,
         }
         setTracks((prev) => prev.map((t) => t.type === 'video' ? { ...t, clips: [...t.clips, clip] } : t))
@@ -568,7 +572,8 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
       // Stop recording when user ends screen share via browser UI
       displayStream.getVideoTracks()[0].addEventListener('ended', () => recorder.state === 'recording' && recorder.stop())
 
-      recorder.start(100)
+      recordStartRef.current = performance.now()
+      recorder.start(1000)
       mediaRecorderRef.current = recorder
       setIsRecording(true)
       setRecordingSeconds(0)
