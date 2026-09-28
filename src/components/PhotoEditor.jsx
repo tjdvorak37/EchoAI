@@ -46,6 +46,7 @@ import {
   Image as ImageIcon,
   X,
   GraduationCap,
+  Check,
 } from 'lucide-react'
 import { StockLibrary } from './StockLibrary'
 import { PhotoHueSaturationDialog } from './PhotoHueSaturationDialog'
@@ -919,6 +920,9 @@ const renderComposition = async ({
 export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
   const [workspaceView, setWorkspaceView] = useState(initialProject ? 'editor' : 'home')
+  const [schoolPractice, setSchoolPractice] = useState(null)
+  const [schoolCourseId, setSchoolCourseId] = useState('')
+  const [schoolPracticeCompleted, setSchoolPracticeCompleted] = useState(false)
   const [homeSearch, setHomeSearch] = useState('')
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createCategory, setCreateCategory] = useState('For you')
@@ -2998,6 +3002,37 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setWorkspaceView('editor')
   }
 
+  const startSchoolPractice = (course) => {
+    const template = PHOTO_EDITOR_TEMPLATES.find((item) => item.key === course?.practice?.templateKey)
+    if (!template) {
+      setWorkspaceView('home')
+      return
+    }
+    applyPhotoTemplate(template)
+    setSchoolPractice(course)
+    setSchoolCourseId(course.id)
+    setSchoolPracticeCompleted(false)
+    setRightSidebarCollapsed(false)
+    setActiveTool(course.practice.tool)
+    setActiveLayerId(course.practice.activeLayerId)
+    setBrushColor(template.colors[1])
+    setNotice(`${course.title} practice is ready. Follow the checklist in the inspector.`)
+    if (course.practice.openStock) setStockLibraryOpen(true)
+  }
+
+  const completeSchoolPractice = () => {
+    if (!schoolPractice) return
+    let completed
+    try {
+      completed = JSON.parse(localStorage.getItem('echoai-design-school-progress') || '[]')
+    } catch {
+      completed = []
+    }
+    localStorage.setItem('echoai-design-school-progress', JSON.stringify([...new Set([...completed, schoolPractice.id])]))
+    setSchoolPracticeCompleted(true)
+    setNotice(`${schoolPractice.title} practice completed.`)
+  }
+
   const createDialog = createDialogOpen && createPortal(
     <div className="photo-create-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) setCreateDialogOpen(false)
@@ -3075,7 +3110,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   )
 
   if (workspaceView === 'school') {
-    return <DesignSchool onHome={() => setWorkspaceView('home')} onTemplates={() => setWorkspaceView('home')} onOpenEditor={() => startHomeDesign('4:5')} />
+    return <DesignSchool initialCourseId={schoolCourseId} onHome={() => setWorkspaceView('home')} onTemplates={() => setWorkspaceView('home')} onStartPractice={startSchoolPractice} />
   }
 
   if (workspaceView === 'home') {
@@ -3794,6 +3829,17 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
             </button>
           ) : (
             <>
+          {schoolPractice && (
+            <div className="panel-block photo-practice-guide">
+              <div className="photo-practice-heading"><span>Guided practice</span><strong>{schoolPractice.title}</strong></div>
+              <p>{schoolPractice.exercise}</p>
+              <ol>{schoolPractice.practice.checklist.map((item) => <li key={item}>{item}</li>)}</ol>
+              <div className="photo-practice-actions">
+                <button type="button" onClick={() => setWorkspaceView('school')}>Back to lesson</button>
+                <button type="button" className={schoolPracticeCompleted ? 'completed' : ''} onClick={completeSchoolPractice}><Check size={14} /> {schoolPracticeCompleted ? 'Completed' : 'Finish lesson'}</button>
+              </div>
+            </div>
+          )}
           <div className="panel-block photo-layers-panel">
             <div className="photo-sidebar-toolbar">
               <p className="section-label">Layers</p>
