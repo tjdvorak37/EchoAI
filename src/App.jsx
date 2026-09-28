@@ -2034,25 +2034,51 @@ function App() {
     setWorkspaceAssets((prev) => [exportedAsset, ...prev])
   }
 
-  const handleCreateFolder = (event) => {
-    event.preventDefault()
-    if (!newFolderName.trim()) {
-      return
+  const handleSavePhotoProject = (project) => {
+    const id = `design_${project.projectId}`
+    const savedDesign = {
+      id,
+      name: project.headline?.trim() || project.name || 'Untitled design',
+      type: 'design',
+      mime: 'application/x-echoai-photo-project',
+      size: project.sizeBytes || 0,
+      folderId: project.folderId || selectedFolderId,
+      createdAt: project.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      previewUrl: project.previewUrl || project.imageSrc || '',
+      summary: project.summary || 'Editable Photo Editor design',
+      projectMetadata: project,
     }
+    setWorkspaceAssets((previous) => {
+      const exists = previous.some((asset) => asset.id === id)
+      return exists
+        ? previous.map((asset) => (asset.id === id ? { ...asset, ...savedDesign, createdAt: asset.createdAt } : asset))
+        : [savedDesign, ...previous]
+    })
+  }
 
+  const createWorkspaceFolder = (name, parentId = selectedFolderId) => {
+    const trimmed = name.trim()
+    if (!trimmed) return null
     const folder = {
-      id: `folder_${Date.now()}`,
-      name: newFolderName.trim(),
-      parentId: selectedFolderId,
+      id: `folder_${crypto.randomUUID()}`,
+      name: trimmed,
+      parentId,
       createdAt: new Date().toISOString(),
     }
+    setWorkspaceFolders((previous) => [...previous, folder])
+    return folder
+  }
 
-    setWorkspaceFolders((prev) => [...prev, folder])
+  const handleCreateFolder = (event) => {
+    event.preventDefault()
+    const folder = createWorkspaceFolder(newFolderName)
+    if (!folder) return
     setNewFolderName('')
     setSelectedFolderId(folder.id)
   }
 
-  const uploadMediaToWorkspace = async (file, { availableQuotaBytes, onProgress }) => {
+  const uploadMediaToWorkspace = async (file, { availableQuotaBytes, onProgress, folderId = selectedFolderId }) => {
     const durationSeconds = file.type.startsWith('video/') ? await getVideoDuration(file) : undefined
     validateMediaFile({ file, durationSeconds, availableQuotaBytes })
     let userId = ''
@@ -2070,7 +2096,7 @@ function App() {
       mime: file.type,
       size: file.size,
       durationSeconds,
-      folderId: selectedFolderId,
+      folderId,
       createdAt: new Date().toISOString(),
       previewUrl,
       storagePath,
@@ -2188,7 +2214,7 @@ function App() {
     }
   }
 
-  const uploadFilesToWorkspace = async (files, attachToComposer, reportError) => {
+  const uploadFilesToWorkspace = async (files, attachToComposer, reportError, destinationFolderId = selectedFolderId) => {
     const selectedFiles = Array.from(files ?? [])
     if (!selectedFiles.length) return
     const totalBytes = selectedFiles.reduce((total, file) => total + file.size, 0)
@@ -2205,6 +2231,7 @@ function App() {
         setMediaUploadProgress({ fileName: file.name, percent: 0, index, total: selectedFiles.length })
         const asset = await uploadMediaToWorkspace(file, {
           availableQuotaBytes: availableQuotaBytes - completedBytes,
+          folderId: destinationFolderId,
           onProgress: (fraction) => setMediaUploadProgress({
             fileName: file.name,
             percent: Math.round(((completedBytes + file.size * fraction) / totalBytes) * 100),
@@ -2361,6 +2388,22 @@ function App() {
       console.error('Unable to remove asset', error)
       setAdminError(error.message || 'Unable to delete this asset from storage.')
     }
+  }
+
+  const moveWorkspaceAsset = (assetId, folderId) => {
+    setWorkspaceAssets((previous) => previous.map((asset) => (asset.id === assetId ? { ...asset, folderId } : asset)))
+  }
+
+  const renameWorkspaceAsset = (assetId, name) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setWorkspaceAssets((previous) => previous.map((asset) => (asset.id === assetId ? { ...asset, name: trimmed } : asset)))
+  }
+
+  const renameWorkspaceFolder = (folderId, name) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setWorkspaceFolders((previous) => previous.map((folder) => (folder.id === folderId ? { ...folder, name: trimmed } : folder)))
   }
 
   const handleAssetDragStart = () => {}
@@ -4833,6 +4876,17 @@ function App() {
               <PhotoEditor
                 key={creativeProject?.imageSrc || 'photo-editor'}
                 assets={workspaceAssets}
+                folders={workspaceFolders}
+                selectedFolderId={selectedFolderId}
+                onSelectFolder={setSelectedFolderId}
+                onCreateFolder={createWorkspaceFolder}
+                onUploadFiles={(files, folderId) => uploadFilesToWorkspace(files, false, setAdminError, folderId)}
+                onMoveAsset={moveWorkspaceAsset}
+                onRenameAsset={renameWorkspaceAsset}
+                onRenameFolder={renameWorkspaceFolder}
+                onDeleteAsset={deleteAsset}
+                onDeleteFolder={deleteFolder}
+                onSaveProject={handleSavePhotoProject}
                 onExport={handlePhotoExport}
                   onGeneratedAsset={handleInhouseAiAsset}
                 agentConfig={aiAgentConfig}
