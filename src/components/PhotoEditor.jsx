@@ -505,30 +505,68 @@ const projectLayers = (project) => defaultLayers().map((layer) => {
 const photoTemplateLayers = (template) => {
   const [headline, subcopy, sticker] = defaultLayers()
   const [background, accent, foreground] = template.colors
+  const layout = template.layout
+  const landscape = template.width > template.height
+  const headingSize = Math.round(Math.min(template.width * (landscape ? .055 : .068), template.height * .095, 96))
+  const detailSize = Math.round(Math.min(template.width * .026, template.height * .037, 34))
+  const positions = {
+    editorial: { title: [9, 38], detail: [9, 68], badge: [83, 15], accent: [78, 57] },
+    badge: { title: [50, 49], detail: [50, 69], badge: [50, 23], accent: [50, 49] },
+    split: { title: [9, 48], detail: [9, 74], badge: [78, 25], accent: [76, 50] },
+    frame: { title: [12, 46], detail: [12, 69], badge: [82, 17], accent: [50, 50] },
+    diagonal: { title: [11, 62], detail: [11, 82], badge: [77, 19], accent: [65, 32] },
+    minimal: { title: [10, 48], detail: [10, 70], badge: [80, 18], accent: [50, 83] },
+  }
+  const { title, detail, badge, accent: accentPosition } = positions[layout]
+  const shape = (id, shapeType, x, y, width, height, color, rotation = 0, filled = true, strokeWidth = 0) => ({
+    id, type: 'shape', label: 'Graphic accent', shape: shapeType === 'circle' ? 'ellipse' : shapeType, value: 'Graphic accent', x, y, width, height,
+    color, strokeColor: color, strokeWidth, radius: shapeType === 'rectangle' ? 12 : 0, filled, opacity: 100, rotation,
+  })
+  const decorations = {
+    editorial: [shape('template-block', 'rectangle', 79, 57, 42, 70, accent, -12), shape('template-rule', 'line', 29, 24, 40, 1, foreground)],
+    badge: [shape('template-ring', 'ellipse', 50, 49, 74, 62, accent, 0, false, Math.max(4, Math.round(template.width * .008))), shape('template-bar', 'rectangle', 50, 89, 66, 3, accent)],
+    split: [shape('template-panel', 'rectangle', 76, 50, 48, 100, accent), shape('template-disc', 'ellipse', 75, 49, 32, 32, background)],
+    frame: [shape('template-frame', 'rectangle', 50, 50, 87, 85, accent, 0, false, Math.max(4, Math.round(template.width * .008))), shape('template-corner', 'ellipse', 84, 18, 18, 18, accent)],
+    diagonal: [shape('template-sash', 'rectangle', 65, 32, 115, 22, accent, -24), shape('template-dot', 'ellipse', 82, 68, 12, 12, foreground)],
+    minimal: [shape('template-rule', 'line', 50, 83, 78, 1, accent), shape('template-seal', 'ellipse', 84, 18, 13, 13, accent)],
+  }
   return [
-    {
-      id: 'template-accent',
-      type: 'shape',
-      label: 'Template accent',
-      shape: template.accentShape,
-      value: 'Template accent',
-      x: 74,
-      y: 48,
-      width: template.accentShape === 'line' ? 58 : 38,
-      height: template.accentShape === 'line' ? 1 : 28,
-      color: accent,
-      strokeColor: foreground,
-      strokeWidth: 0,
-      radius: template.accentShape === 'rectangle' ? 18 : 0,
-      filled: true,
-      opacity: 88,
-      rotation: template.accentShape === 'rectangle' ? -8 : 0,
-    },
-    { ...headline, value: template.headline, x: 10, y: 61, fontSize: template.width > template.height ? 72 : 58, color: foreground, shadowColor: background, shadowBlur: 18 },
-    { ...subcopy, value: template.subcopy, x: 10, y: 76, fontSize: template.width > template.height ? 28 : 24, color: foreground, panelColor: `${background}b8` },
-    { ...sticker, value: template.sticker, x: 82, y: 16, color: accent, shadowColor: `${accent}aa` },
+    ...decorations[layout],
+    shape('template-accent', template.accentShape, ...accentPosition, layout === 'badge' ? 20 : 12, layout === 'badge' ? 20 : 12, accent),
+    { ...headline, value: template.headline, x: title[0], y: title[1], fontSize: headingSize, align: layout === 'badge' ? 'center' : 'left', color: foreground, effect: 'shadow', outlineWidth: 0, shadowColor: background, shadowBlur: 4 },
+    { ...subcopy, value: template.subcopy, x: detail[0], y: detail[1], fontSize: detailSize, align: layout === 'badge' ? 'center' : 'left', color: foreground, effect: 'shadow', panelColor: 'transparent', shadowBlur: 2 },
+    { ...sticker, value: template.sticker, x: badge[0], y: badge[1], fontSize: Math.round(headingSize * .85), color: foreground, shadowBlur: 0 },
   ]
 }
+
+const PhotoTemplatePreview = ({ template }) => (
+  <span className="photo-template-preview">
+    <span className="photo-template-art" style={{ aspectRatio: `${template.width} / ${template.height}`, background: template.colors[0] }}>
+      {photoTemplateLayers(template).map((layer) => (
+        <span key={layer.id} className={`photo-template-art-layer ${layer.type}`} style={{
+          left: `${layer.x}%`, top: `${layer.y}%`,
+          transform: `translate(${layer.type === 'text' && layer.align !== 'center' ? '0' : '-50%'}, -50%) rotate(${layer.rotation || 0}deg)`,
+          ...(layer.type === 'shape' ? {
+            width: `${layer.width}%`, height: `${layer.height}%`,
+            background: layer.filled === false || layer.shape === 'line' ? 'transparent' : layer.color,
+            border: layer.filled === false ? `max(1px, .6cqw) solid ${layer.color}` : 'none',
+            borderBottom: layer.shape === 'line' ? `max(1px, .6cqw) solid ${layer.color}` : undefined,
+            borderRadius: layer.shape === 'ellipse' ? '50%' : layer.radius ? '5%' : 0,
+            clipPath: layer.shape === 'triangle' ? 'polygon(50% 0, 100% 100%, 0 100%)' : undefined,
+          } : {
+            color: layer.color,
+            fontSize: `${(layer.fontSize / template.width) * 100}cqw`,
+            fontWeight: layer.weight,
+            textAlign: layer.align,
+            maxWidth: layer.type === 'text' ? '48%' : undefined,
+          }),
+        }}>
+          {layer.type === 'shape' ? null : layer.value}
+        </span>
+      ))}
+    </span>
+  </span>
+)
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
@@ -3725,7 +3763,13 @@ export function PhotoEditor({
               </div>
             </section>
             <section className="photo-home-section photo-home-templates" aria-labelledby="photo-template-heading">
-              <div className="photo-home-section-heading"><div><h2 id="photo-template-heading">Royalty-free templates</h2><span>{PHOTO_EDITOR_TEMPLATES.length} EchoAI originals · editable for personal and commercial work</span></div></div>
+              <div className="photo-home-section-heading"><div><h2 id="photo-template-heading">Templates</h2><span>{PHOTO_EDITOR_TEMPLATES.length} editable designs</span></div><button type="button" className="photo-template-stock-link" onClick={() => setStockLibraryOpen(true)}><Images size={16} aria-hidden="true" /> Browse free photos</button></div>
+              <div className="photo-template-categories" aria-label="Explore template formats">
+                {PHOTO_TEMPLATE_CATEGORIES.map((category) => {
+                  const sample = PHOTO_EDITOR_TEMPLATES.find((template) => template.category === category) || PHOTO_EDITOR_TEMPLATES[0]
+                  return <button key={category} type="button" className={templateCategory === category ? 'active' : ''} style={{ '--tile-base': sample.colors[0], '--tile-accent': sample.colors[1] }} onClick={() => { setTemplateCategory(category); setTemplatePlatform('All') }}><strong>{category}</strong><small>{category === 'All' ? PHOTO_EDITOR_TEMPLATES.length : PHOTO_EDITOR_TEMPLATES.filter((template) => template.category === category).length} designs</small><span aria-hidden="true" /></button>
+                })}
+              </div>
               <div className="photo-template-filters" aria-label="Filter templates">
                 <label>Format<select value={templateCategory} onChange={(event) => { setTemplateCategory(event.target.value); if (event.target.value !== 'Social media') setTemplatePlatform('All') }}><option>All</option>{PHOTO_TEMPLATE_CATEGORIES.slice(1).map((category) => <option key={category}>{category}</option>)}</select></label>
                 <label>Platform<select value={templatePlatform} onChange={(event) => { setTemplatePlatform(event.target.value); if (event.target.value !== 'All') setTemplateCategory('Social media') }}><option>All</option>{PHOTO_TEMPLATE_PLATFORMS.map((platform) => <option key={platform}>{platform}</option>)}</select></label>
@@ -3733,10 +3777,13 @@ export function PhotoEditor({
               </div>
               <div className="photo-template-grid">
                 {visibleStarters.map((starter) => (
-                  <button key={starter.key} type="button" className="photo-template-item" onClick={() => applyPhotoTemplate(starter)}>
-                    <span className="photo-template-preview" style={{ background: `linear-gradient(140deg, ${starter.colors[0]}, ${starter.colors[1]})`, color: starter.colors[2] }}><i>{starter.platform || starter.category}</i><b>{starter.headline}</b><small>{starter.subcopy}</small></span>
-                    <strong>{starter.title}</strong><small className="photo-template-license">{starter.license.shortName} · {starter.width} × {starter.height}</small>
-                  </button>
+                  <div key={starter.key} className="photo-template-choice">
+                    <button type="button" className="photo-template-item" onClick={() => applyPhotoTemplate(starter)}>
+                      <PhotoTemplatePreview template={starter} />
+                      <strong>{starter.title}</strong><small className="photo-template-license">{starter.license.shortName} · {starter.width} × {starter.height}</small>
+                    </button>
+                    <button type="button" className="photo-template-add-photo" title={`Use a free photo with ${starter.title}`} aria-label={`Use a free photo with ${starter.title}`} onClick={() => { applyPhotoTemplate(starter); setStockLibraryOpen(true) }}><Images size={17} aria-hidden="true" /></button>
+                  </div>
                 ))}
                 {visibleStarters.length === 0 && <p className="photo-template-empty">No templates match these filters.</p>}
               </div>
