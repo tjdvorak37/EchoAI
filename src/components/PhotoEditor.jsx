@@ -191,7 +191,10 @@ const PHOTO_SOCIAL_PLATFORMS = [
   { key: 'Google Business Profile', label: 'Google Business', color: '#1769d2' },
 ]
 
-const PHOTO_TEMPLATE_CATEGORIES = ['All', ...new Set(PHOTO_EDITOR_TEMPLATES.map((template) => template.category))]
+const LOGO_EDITOR_TEMPLATES = PHOTO_EDITOR_TEMPLATES.filter((template) => template.category === 'Logos')
+const LOGO_INDUSTRIES = ['All', ...new Set(LOGO_EDITOR_TEMPLATES.map((template) => template.industry))]
+const LOGO_KEYWORDS = ['Circle', 'Leaf', 'Modern', 'House', 'Fire', 'Shield', 'Heart', 'Camera', 'Music', 'Letter', 'Nature', 'Community']
+const PHOTO_TEMPLATE_CATEGORIES = ['All', ...new Set(PHOTO_EDITOR_TEMPLATES.filter((template) => template.category !== 'Logos').map((template) => template.category))]
 
 const STYLE_PRESETS = {
   aurora: {
@@ -522,6 +525,28 @@ const photoTemplateLayers = (template) => {
     id, type: 'shape', label: 'Graphic accent', shape: shapeType === 'circle' ? 'ellipse' : shapeType, value: 'Graphic accent', x, y, width, height,
     color, strokeColor: color, strokeWidth, radius: shapeType === 'rectangle' ? 12 : 0, filled, opacity: 100, rotation,
   })
+  if (template.mark) {
+    const ring = (id, x, y, width, height, color, rotation = 0) => shape(id, 'ellipse', x, y, width, height, color, rotation, false, 12)
+    const marks = {
+      orbit: [ring('outer', 50, 34, 30, 30, accent), ring('inner', 50, 34, 16, 16, foreground), shape('satellite', 'ellipse', 64, 21, 7, 7, accent)],
+      bloom: [0, 90, 180, 270].map((angle) => shape(`petal-${angle}`, 'ellipse', 50 + Math.sin(angle * Math.PI / 180) * 10, 34 - Math.cos(angle * Math.PI / 180) * 10, 12, 20, accent, angle)),
+      arch: [shape('column-left', 'rectangle', 39, 40, 6, 28, accent), shape('column-right', 'rectangle', 61, 40, 6, 28, accent), shape('roof', 'triangle', 50, 22, 34, 16, foreground)],
+      flame: [shape('flame-outer', 'triangle', 50, 32, 28, 34, accent), shape('flame-inner', 'ellipse', 50, 42, 12, 14, background)],
+      crest: [shape('shield', 'triangle', 50, 39, 36, 33, accent, 180), shape('crest-center', 'rectangle', 50, 35, 10, 18, background, 45)],
+      pulse: [ring('pulse-ring', 50, 34, 33, 33, accent), shape('pulse-cross-horizontal', 'rectangle', 50, 34, 21, 5, foreground), shape('pulse-cross-vertical', 'rectangle', 50, 34, 5, 21, foreground)],
+      sunrise: [shape('horizon', 'line', 50, 44, 40, 2, foreground), shape('sun', 'ellipse', 50, 34, 24, 24, accent), shape('horizon-front', 'rectangle', 50, 47, 42, 6, background)],
+      frame: [shape('outer-frame', 'rectangle', 50, 34, 34, 34, accent, 0, false, 12), ring('lens', 50, 34, 17, 17, foreground), shape('flash', 'ellipse', 62, 22, 4, 4, foreground)],
+      note: [ring('record', 50, 34, 34, 34, accent), shape('record-label', 'ellipse', 50, 34, 15, 15, background), shape('record-center', 'ellipse', 50, 34, 5, 5, foreground)],
+      sprout: [shape('stem', 'line', 50, 42, 3, 29, foreground, 90), shape('leaf-left', 'ellipse', 40, 29, 14, 24, accent, -45), shape('leaf-right', 'ellipse', 60, 29, 14, 24, accent, 45)],
+      column: [shape('cap-top', 'rectangle', 50, 21, 34, 5, accent), shape('column', 'rectangle', 50, 34, 12, 25, foreground), shape('cap-bottom', 'rectangle', 50, 48, 34, 5, accent)],
+      link: [ring('link-left', 43, 34, 23, 20, accent, -25), ring('link-right', 57, 34, 23, 20, foreground, -25)],
+    }
+    return [
+      ...marks[template.mark],
+      { ...headline, value: template.headline, x: 50, y: 69, fontSize: 88, weight: 800, align: 'center', color: foreground, effect: 'none', outlineWidth: 0, shadowBlur: 0, panelColor: 'transparent' },
+      { ...subcopy, value: template.subcopy, x: 50, y: 79, fontSize: 30, weight: 600, align: 'center', color: foreground, effect: 'none', outlineWidth: 0, shadowBlur: 0, panelColor: 'transparent', letterSpacing: 3 },
+    ]
+  }
   const decorations = {
     editorial: [shape('template-block', 'rectangle', 79, 57, 42, 70, accent, -12), shape('template-rule', 'line', 29, 24, 40, 1, foreground)],
     badge: [shape('template-ring', 'ellipse', 50, 49, 74, 62, accent, 0, false, Math.max(4, Math.round(template.width * .008))), shape('template-bar', 'rectangle', 50, 89, 66, 3, accent)],
@@ -1079,6 +1104,8 @@ export function PhotoEditor({
   const [schoolCourseId, setSchoolCourseId] = useState('')
   const [schoolPracticeCompleted, setSchoolPracticeCompleted] = useState(false)
   const [homeSearch, setHomeSearch] = useState('')
+  const [logoSearch, setLogoSearch] = useState('')
+  const [logoIndustry, setLogoIndustry] = useState('All')
   const [templateCategory, setTemplateCategory] = useState('All')
   const [templatePlatform, setTemplatePlatform] = useState('All')
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -3167,11 +3194,17 @@ export function PhotoEditor({
   const visibleHomeFormats = PHOTO_HOME_FORMATS.filter((item) => item.label.toLowerCase().includes(normalizedHomeSearch))
   const visibleHomeAssets = imageAssets.filter((asset) => asset.name.toLowerCase().includes(normalizedHomeSearch)).slice(0, 6)
   const visibleStarters = PHOTO_EDITOR_TEMPLATES.filter((item) => {
+    if (item.category === 'Logos') return false
     const matchesSearch = `${item.title} ${item.category} ${item.platform || ''} ${item.headline} ${item.subcopy}`.toLowerCase().includes(normalizedHomeSearch)
     const matchesCategory = templateCategory === 'All' || item.category === templateCategory
     const matchesPlatform = templatePlatform === 'All' || item.platform === templatePlatform
     return matchesSearch && matchesCategory && matchesPlatform
   })
+  const normalizedLogoSearch = logoSearch.trim().toLowerCase()
+  const visibleLogos = LOGO_EDITOR_TEMPLATES.filter((item) => (
+    (logoIndustry === 'All' || item.industry === logoIndustry)
+    && `${item.title} ${item.industry} ${item.keywords.join(' ')}`.toLowerCase().includes(normalizedLogoSearch)
+  ))
   const normalizedCreateSearch = createSearch.trim().toLowerCase()
   const visibleCreateFormats = PHOTO_DESIGN_PRESETS.filter((item) => {
     const matchesSearch = item.label.toLowerCase().includes(normalizedCreateSearch)
@@ -3730,6 +3763,7 @@ export function PhotoEditor({
           <nav>
             <button type="button" className="active" aria-label="Home"><Home size={19} /><span>Home</span></button>
             <button type="button" aria-label="Templates" onClick={() => document.querySelector('.photo-home-templates')?.scrollIntoView({ behavior: 'smooth' })}><LayoutTemplate size={19} /><span>Templates</span></button>
+            <button type="button" aria-label="Logos" onClick={() => document.querySelector('.photo-home-logos')?.scrollIntoView({ behavior: 'smooth' })}><PenTool size={19} /><span>Logos</span></button>
             <button type="button" aria-label="Design School" onClick={() => setWorkspaceView('school')}><GraduationCap size={19} /><span>School</span></button>
             <button type="button" aria-label="Projects" onClick={() => setWorkspaceView('projects')}><FolderOpen size={19} /><span>Projects</span></button>
             <button type="button" aria-label="Stock images" onClick={() => setStockLibraryOpen(true)}><Images size={19} /><span>Stock</span></button>
@@ -3744,6 +3778,7 @@ export function PhotoEditor({
           <div className="photo-home-content">
             <section className="photo-home-formats" aria-label="Create a design">
               <button type="button" className="photo-format-item photo-format-templates" onClick={() => document.querySelector('.photo-home-templates')?.scrollIntoView({ behavior: 'smooth' })}><span className="photo-format-icon"><LayoutTemplate size={24} /></span><span>Templates</span></button>
+              <button type="button" className="photo-format-item photo-format-templates" onClick={() => document.querySelector('.photo-home-logos')?.scrollIntoView({ behavior: 'smooth' })}><span className="photo-format-icon"><PenTool size={24} /></span><span>Logos</span></button>
               {visibleHomeFormats.map((item) => {
                 const FormatIcon = item.icon
                 return <button key={item.key} type="button" className="photo-format-item" onClick={() => startHomeDesign(item)}><span className="photo-format-icon" style={{ '--format-color': item.color }}><FormatIcon size={24} /></span><span>{item.label}</span></button>
@@ -3762,12 +3797,25 @@ export function PhotoEditor({
                 {!hasCurrentDocument && visibleHomeAssets.length === 0 && <button type="button" className="photo-recent-empty" onClick={() => uploadInputRef.current?.click()}><Upload size={24} /><strong>Upload your first image</strong><span>PNG, JPEG, or WebP</span></button>}
               </div>
             </section>
+            <section className="photo-home-section photo-home-logos" aria-labelledby="photo-logo-heading">
+              <div className="photo-home-section-heading"><div><h2 id="photo-logo-heading">Logo starters</h2><span>{LOGO_EDITOR_TEMPLATES.length} original, editable marks</span></div><button type="button" className="photo-template-stock-link" onClick={() => { startHomeDesign({ width: 1200, height: 1200, label: 'Logo' }); setStockLibraryOpen('logo') }}><Images size={16} aria-hidden="true" /> Browse free vectors</button></div>
+              <label className="photo-logo-search"><Search size={18} aria-hidden="true" /><input value={logoSearch} onChange={(event) => setLogoSearch(event.target.value)} placeholder="Search logos, industries, or keywords" aria-label="Search logo starters" /></label>
+              <div className="photo-logo-filters" aria-label="Filter logos by industry">
+                {LOGO_INDUSTRIES.map((industry) => <button key={industry} type="button" className={logoIndustry === industry ? 'active' : ''} onClick={() => setLogoIndustry(industry)}>{industry}</button>)}
+              </div>
+              <div className="photo-logo-keywords"><strong>Popular keywords</strong><div>{LOGO_KEYWORDS.map((keyword) => <button key={keyword} type="button" className={logoSearch.toLowerCase() === keyword.toLowerCase() ? 'active' : ''} onClick={() => { setLogoSearch(keyword); setLogoIndustry('All') }}>{keyword}</button>)}</div></div>
+              <div className="photo-template-grid photo-logo-grid">
+                {visibleLogos.map((logo) => <button key={logo.key} type="button" className="photo-template-item" onClick={() => applyPhotoTemplate(logo)}><PhotoTemplatePreview template={logo} /><strong>{logo.title}</strong><small className="photo-template-license">{logo.industry} · {logo.width} × {logo.height}</small></button>)}
+                {visibleLogos.length === 0 && <p className="photo-template-empty">No logos match. Try another keyword or industry.</p>}
+              </div>
+              <p className="photo-logo-usage">Starter marks are nonexclusive. Stock artwork adds as an image layer, not a trademark-cleared logo. Check availability before registering a mark.</p>
+            </section>
             <section className="photo-home-section photo-home-templates" aria-labelledby="photo-template-heading">
-              <div className="photo-home-section-heading"><div><h2 id="photo-template-heading">Templates</h2><span>{PHOTO_EDITOR_TEMPLATES.length} editable designs</span></div><button type="button" className="photo-template-stock-link" onClick={() => setStockLibraryOpen(true)}><Images size={16} aria-hidden="true" /> Browse free photos</button></div>
+              <div className="photo-home-section-heading"><div><h2 id="photo-template-heading">Templates</h2><span>{PHOTO_EDITOR_TEMPLATES.length - LOGO_EDITOR_TEMPLATES.length} editable designs</span></div><button type="button" className="photo-template-stock-link" onClick={() => setStockLibraryOpen(true)}><Images size={16} aria-hidden="true" /> Browse free photos</button></div>
               <div className="photo-template-categories" aria-label="Explore template formats">
                 {PHOTO_TEMPLATE_CATEGORIES.map((category) => {
                   const sample = PHOTO_EDITOR_TEMPLATES.find((template) => template.category === category) || PHOTO_EDITOR_TEMPLATES[0]
-                  return <button key={category} type="button" className={templateCategory === category ? 'active' : ''} style={{ '--tile-base': sample.colors[0], '--tile-accent': sample.colors[1] }} onClick={() => { setTemplateCategory(category); setTemplatePlatform('All') }}><strong>{category}</strong><small>{category === 'All' ? PHOTO_EDITOR_TEMPLATES.length : PHOTO_EDITOR_TEMPLATES.filter((template) => template.category === category).length} designs</small><span aria-hidden="true" /></button>
+                  return <button key={category} type="button" className={templateCategory === category ? 'active' : ''} style={{ '--tile-base': sample.colors[0], '--tile-accent': sample.colors[1] }} onClick={() => { setTemplateCategory(category); setTemplatePlatform('All') }}><strong>{category}</strong><small>{category === 'All' ? PHOTO_EDITOR_TEMPLATES.length - LOGO_EDITOR_TEMPLATES.length : PHOTO_EDITOR_TEMPLATES.filter((template) => template.category === category).length} designs</small><span aria-hidden="true" /></button>
                 })}
               </div>
               <div className="photo-template-filters" aria-label="Filter templates">
@@ -3791,7 +3839,7 @@ export function PhotoEditor({
           </div>
         </main>
         {createDialog}
-        {stockLibraryOpen && createPortal(<StockLibrary initialKind="image" kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />, document.body)}
+        {stockLibraryOpen && createPortal(<StockLibrary initialKind="image" initialQuery={stockLibraryOpen === 'logo' ? 'logo symbol' : undefined} initialImageType={stockLibraryOpen === 'logo' ? 'vector' : 'all'} kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />, document.body)}
       </section>
     )
   }
@@ -4937,7 +4985,7 @@ export function PhotoEditor({
         </aside>
       </div>
       {stockLibraryOpen && createPortal(
-        <StockLibrary initialKind="image" kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />,
+        <StockLibrary initialKind="image" initialQuery={stockLibraryOpen === 'logo' ? 'logo symbol' : undefined} initialImageType={stockLibraryOpen === 'logo' ? 'vector' : 'all'} kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />,
         document.body,
       )}
       {hueSatDialog && createPortal(

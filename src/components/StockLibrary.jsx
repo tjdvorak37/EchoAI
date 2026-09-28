@@ -31,10 +31,10 @@ const formatDuration = (seconds) => {
 
 const formatSize = (bytes) => (bytes ? `${(bytes / (1024 * 1024)).toFixed(bytes > 100 * 1024 * 1024 ? 0 : 1)} MB` : '')
 
-export function StockLibrary({ initialKind = 'sound', kinds = ['sound', 'video'], onClose, onAdd }) {
+export function StockLibrary({ initialKind = 'sound', initialQuery, initialImageType = 'all', kinds = ['sound', 'video'], onClose, onAdd }) {
   const [kind, setKind] = useState(initialKind)
-  const [query, setQuery] = useState(DEFAULT_QUERY[initialKind])
-  const [imageType, setImageType] = useState('all')
+  const [query, setQuery] = useState(initialQuery || DEFAULT_QUERY[initialKind])
+  const [imageType, setImageType] = useState(initialImageType)
   const [results, setResults] = useState([])
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
@@ -76,7 +76,7 @@ export function StockLibrary({ initialKind = 'sound', kinds = ['sound', 'video']
 
   useEffect(() => {
     const requestId = (requestRef.current += 1)
-    searchMediaLibrary({ kind: initialKind, query: DEFAULT_QUERY[initialKind], page: 1 })
+    searchMediaLibrary({ kind: initialKind, query: initialQuery || DEFAULT_QUERY[initialKind], page: 1, imageType: initialImageType })
       .then((data) => {
         if (requestId !== requestRef.current) return
         setConfigured(data.configured !== false)
@@ -97,7 +97,7 @@ export function StockLibrary({ initialKind = 'sound', kinds = ['sound', 'video']
       window.removeEventListener('keydown', onKey)
       audio?.pause()
     }
-  }, [initialKind])
+  }, [initialKind, initialQuery, initialImageType])
 
   const stopPreview = () => {
     audioRef.current?.pause()

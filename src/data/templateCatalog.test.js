@@ -33,6 +33,17 @@ test('photo templates cover every supported platform', () => {
   }
 })
 
+test('logo starters are searchable, original, and editable', () => {
+  const logos = PHOTO_EDITOR_TEMPLATES.filter((template) => template.category === 'Logos')
+  assert.ok(logos.length >= 12)
+  assert.equal(new Set(logos.map((logo) => logo.mark)).size, logos.length)
+  for (const logo of logos) {
+    assert.ok(logo.industry && logo.keywords.length > 0, `${logo.key} search terms`)
+    assert.equal(logo.headline, 'YOUR BRAND', `${logo.key} brand placeholder`)
+    assert.equal(logo.width, logo.height, `${logo.key} square canvas`)
+  }
+})
+
 test('post templates provide editable copy, visual direction, and publishing targets', () => {
   for (const template of POST_COMPOSER_TEMPLATES) {
     assert.ok(template.message.includes('['), `${template.key} editable placeholders`)
