@@ -8,6 +8,12 @@ const CATEGORIES = {
   image: ['Background', 'Nature', 'Business', 'Food', 'Technology', 'People', 'Texture', 'Abstract', 'Travel', 'Sky', 'Flowers', 'Fitness'],
 }
 
+const VECTOR_TOPICS = [
+  ['Popular', ''], ['Logo marks', 'logo'], ['Geometric', 'geometric'], ['Botanical', 'botanical'],
+  ['Animals', 'animal'], ['Food', 'food'], ['Technology', 'technology'], ['Wellness', 'wellness'],
+  ['Sports', 'sports'], ['Travel', 'travel'], ['Patterns', 'pattern'], ['Icons', 'icon'],
+]
+
 const DEFAULT_QUERY = { sound: 'Whoosh', video: 'Transition', image: 'Background' }
 
 const IMAGE_TYPES = [
@@ -33,9 +39,11 @@ const formatSize = (bytes) => (bytes ? `${(bytes / (1024 * 1024)).toFixed(bytes 
 
 export function StockLibrary({ initialKind = 'sound', initialQuery, initialImageType = 'all', kinds = ['sound', 'video'], onClose, onAdd }) {
   const [kind, setKind] = useState(initialKind)
-  const [query, setQuery] = useState(initialQuery || DEFAULT_QUERY[initialKind])
+  const [query, setQuery] = useState(initialQuery ?? (initialImageType === 'vector' ? '' : DEFAULT_QUERY[initialKind]))
   const [imageType, setImageType] = useState(initialImageType)
+  const [order, setOrder] = useState('popular')
   const [results, setResults] = useState([])
+  const [total, setTotal] = useState(null)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -53,16 +61,17 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
     onCloseRef.current = onClose
   })
 
-  const runSearch = (nextKind, nextQuery, nextPage = 1, nextImageType = imageType) => {
+  const runSearch = (nextKind, nextQuery, nextPage = 1, nextImageType = imageType, nextOrder = order) => {
     const requestId = (requestRef.current += 1)
     setLoading(true)
     setError('')
     if (nextPage === 1) setResults([])
-    return searchMediaLibrary({ kind: nextKind, query: nextQuery, page: nextPage, imageType: nextImageType })
+    return searchMediaLibrary({ kind: nextKind, query: nextQuery, page: nextPage, imageType: nextImageType, order: nextOrder })
       .then((data) => {
         if (requestId !== requestRef.current) return
         setConfigured(data.configured !== false)
         setResults((current) => (nextPage === 1 ? data.items : [...current, ...data.items]))
+        setTotal(data.total == null ? null : Number(data.total))
         setHasMore(Boolean(data.hasMore))
         setPage(nextPage)
       })
@@ -76,11 +85,12 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
 
   useEffect(() => {
     const requestId = (requestRef.current += 1)
-    searchMediaLibrary({ kind: initialKind, query: initialQuery || DEFAULT_QUERY[initialKind], page: 1, imageType: initialImageType })
+    searchMediaLibrary({ kind: initialKind, query: initialQuery ?? (initialImageType === 'vector' ? '' : DEFAULT_QUERY[initialKind]), page: 1, imageType: initialImageType, order: 'popular' })
       .then((data) => {
         if (requestId !== requestRef.current) return
         setConfigured(data.configured !== false)
         setResults(data.items)
+        setTotal(data.total == null ? null : Number(data.total))
         setHasMore(Boolean(data.hasMore))
       })
       .catch((searchError) => {
@@ -138,14 +148,15 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
   }
 
   const renditionFor = (item) => item.renditions?.[quality] ?? item.renditions?.hd ?? item.renditions?.sd ?? null
+  const vectorMode = kind === 'image' && imageType === 'vector'
 
   return (
     <div className="stock-library-backdrop" onClick={onClose}>
-      <aside className="stock-library" role="dialog" aria-modal="true" aria-label="Stock library" onClick={(event) => event.stopPropagation()}>
+      <aside className={`stock-library ${vectorMode ? 'vector-library' : ''}`} role="dialog" aria-modal="true" aria-label="Stock library" onClick={(event) => event.stopPropagation()}>
         <header className="stock-library-head">
           <div>
-            <h3>Stock library</h3>
-            <p>{kinds.includes('image') ? 'Millions of royalty-free photos, illustrations, and vectors. Use one as your background or add it as a layer.' : 'Royalty-free sound effects and stock videos. Pick one to drop it at the playhead.'}</p>
+            <h3>{vectorMode ? 'Vector artwork' : 'Stock library'}</h3>
+            <p>{vectorMode ? 'Pixabay artwork is added as an image layer. It is not an exclusive or trademark-cleared logo.' : kinds.includes('image') ? 'Search free photos, illustrations, and vectors for your design.' : 'Royalty-free sound effects and stock videos. Pick one to drop it at the playhead.'}</p>
           </div>
           <button type="button" className="stock-library-close" onClick={onClose} aria-label="Close stock library"><X size={18} /></button>
         </header>
@@ -160,7 +171,7 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
 
         <form className="stock-library-search" onSubmit={(event) => { event.preventDefault(); stopPreview(); runSearch(kind, query) }}>
           <Search size={16} aria-hidden="true" />
-          <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={{ sound: 'Search sounds, e.g. whoosh, door, crowd', video: 'Search videos, e.g. transition, smoke, city', image: 'Search images, e.g. coffee, sunset, office' }[kind]} aria-label="Search the stock library" />
+          <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={vectorMode ? 'Search vectors, e.g. flower, coffee, monogram' : { sound: 'Search sounds, e.g. whoosh, door, crowd', video: 'Search videos, e.g. transition, smoke, city', image: 'Search images, e.g. coffee, sunset, office' }[kind]} aria-label="Search the stock library" />
           <button type="submit">Search</button>
         </form>
 
@@ -168,16 +179,22 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
           <div className="stock-library-quality" role="radiogroup" aria-label="Image type">
             <span>Type</span>
             {IMAGE_TYPES.map(([key, label]) => (
-              <button key={key} type="button" role="radio" aria-checked={imageType === key} className={imageType === key ? 'active' : ''} onClick={() => { setImageType(key); runSearch(kind, query, 1, key) }}>{label}</button>
+              <button key={key} type="button" role="radio" aria-checked={imageType === key} className={imageType === key ? 'active' : ''} onClick={() => { const nextQuery = key !== 'vector' && !query ? DEFAULT_QUERY.image : query; setImageType(key); setQuery(nextQuery); runSearch(kind, nextQuery, 1, key) }}>{label}</button>
             ))}
           </div>
         )}
 
         <div className="stock-library-chips">
-          {CATEGORIES[kind].map((category) => (
+          {vectorMode ? VECTOR_TOPICS.map(([label, search]) => (
+            <button key={label} type="button" className={query.toLowerCase() === search ? 'active' : ''} onClick={() => { setQuery(search); runSearch(kind, search) }}>{label}</button>
+          )) : CATEGORIES[kind].map((category) => (
             <button key={category} type="button" className={query.toLowerCase() === category.toLowerCase() ? 'active' : ''} onClick={() => { stopPreview(); setQuery(category); runSearch(kind, category) }}>{category}</button>
           ))}
         </div>
+
+        {kind === 'image' && configured && (
+          <div className="stock-image-toolbar"><span>{!loading && !error ? total == null ? `${results.length} shown` : `${total.toLocaleString()} results` : ' '}</span><label>Sort <select value={order} onChange={(event) => { setOrder(event.target.value); runSearch(kind, query, 1, imageType, event.target.value) }}><option value="popular">Popular</option><option value="latest">Newest</option></select></label></div>
+        )}
 
         {kind === 'video' && configured && (
           <div className="stock-library-quality" role="radiogroup" aria-label="Download quality">
@@ -198,7 +215,7 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
             </div>
           )}
           {configured && !loading && !error && results.length === 0 && (
-            <div className="stock-library-empty"><strong>No results.</strong><p>Try a broader word like &ldquo;whoosh&rdquo; or &ldquo;transition&rdquo;.</p></div>
+            <div className="stock-library-empty"><strong>No results.</strong><p>{kind === 'image' ? 'Try a broader search or choose a different topic.' : 'Try a broader word like “whoosh” or “transition”.'}</p></div>
           )}
 
           {kind === 'sound' && (
@@ -263,8 +280,8 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
                       <span className="stock-library-loading"><Loader2 size={14} className="spin" /> Adding…</span>
                     ) : (
                       <>
-                        <button type="button" className="stock-add" disabled={Boolean(addingId)} onClick={() => addItem(item, 'background')} title="Replace the canvas background with this image"><ImageIcon size={13} /> Background</button>
-                        <button type="button" className="stock-add stock-add-alt" disabled={Boolean(addingId)} onClick={() => addItem(item, 'layer')} title="Place this image as a movable layer"><Layers size={13} /> Layer</button>
+                        {!vectorMode && <button type="button" className="stock-add" disabled={Boolean(addingId)} onClick={() => addItem(item, 'background')} title="Replace the canvas background with this image"><ImageIcon size={13} /> Background</button>}
+                        <button type="button" className="stock-add stock-add-alt" disabled={Boolean(addingId)} onClick={() => addItem(item, 'layer')} title="Place this image as a movable layer"><Layers size={13} /> {vectorMode ? 'Add to design' : 'Layer'}</button>
                       </>
                     )}
                   </div>
