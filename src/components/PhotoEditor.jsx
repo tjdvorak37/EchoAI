@@ -47,6 +47,13 @@ import {
   X,
   GraduationCap,
   Check,
+  ArrowLeft,
+  Download,
+  Save,
+  RotateCcw,
+  Palette,
+  Expand,
+  Layers3,
 } from 'lucide-react'
 import { StockLibrary } from './StockLibrary'
 import { PhotoHueSaturationDialog } from './PhotoHueSaturationDialog'
@@ -97,6 +104,15 @@ const normalizeCanvasSize = (value) => {
   const height = Math.round(Number(value?.height))
   if (!Number.isFinite(width) || !Number.isFinite(height) || width < 40 || height < 40) return null
   return { width: Math.min(width, 8192), height: Math.min(height, 8192), label: value?.label || 'Custom' }
+}
+
+const readPhotoAutosave = () => {
+  try {
+    const value = localStorage.getItem('echoai-photo-autosave')
+    return value ? parsePhotoProject(value) : null
+  } catch {
+    return null
+  }
 }
 
 const PHOTO_HOME_FORMATS = [
@@ -293,6 +309,30 @@ const EXPORT_FORMATS = {
   webp: { label: 'WebP', mime: 'image/webp', extension: 'webp', lossy: true },
 }
 
+const PHOTO_FILTER_PRESETS = [
+  { key: 'natural', label: 'Natural', patch: {} },
+  { key: 'luna', label: 'Luna', patch: { brightness: 108, contrast: 108, saturation: 88, hue: 8 } },
+  { key: 'aero', label: 'Aero', patch: { brightness: 112, contrast: 96, saturation: 105, hue: -6 } },
+  { key: 'myst', label: 'Myst', patch: { brightness: 94, contrast: 118, saturation: 78, hue: 18 } },
+  { key: 'bali', label: 'Bali', patch: { brightness: 108, contrast: 106, saturation: 118, sepia: 18 } },
+  { key: 'capri', label: 'Capri', patch: { brightness: 105, contrast: 116, saturation: 132, sepia: 10 } },
+  { key: 'latte', label: 'Latte', patch: { brightness: 112, contrast: 92, saturation: 82, sepia: 34 } },
+  { key: 'bronze', label: 'Bronze', patch: { brightness: 92, contrast: 124, saturation: 105, sepia: 48 } },
+  { key: 'sandi', label: 'Sandi', patch: { brightness: 108, contrast: 102, saturation: 118, hue: -12, sepia: 20 } },
+  { key: 'sangri', label: 'Sangri', patch: { brightness: 96, contrast: 116, saturation: 138, hue: -18, sepia: 16 } },
+  { key: 'polar', label: 'Polar', patch: { brightness: 108, contrast: 110, saturation: 76, hue: 14 } },
+  { key: 'slate', label: 'Slate', patch: { brightness: 90, contrast: 126, saturation: 58, hue: 8 } },
+  { key: 'mono', label: 'Mono', patch: { grayscale: 100, contrast: 112 } },
+]
+
+const PHOTO_SHADOW_PRESETS = [
+  { key: 'none', label: 'None', patch: { shadowX: 0, shadowY: 0, shadowBlur: 0, shadowColor: '#000000' } },
+  { key: 'glow', label: 'Glow', patch: { shadowX: 0, shadowY: 0, shadowBlur: 18, shadowColor: '#a855f7' } },
+  { key: 'drop', label: 'Drop', patch: { shadowX: 10, shadowY: 12, shadowBlur: 12, shadowColor: '#334155' } },
+  { key: 'soft', label: 'Soft', patch: { shadowX: 0, shadowY: 14, shadowBlur: 24, shadowColor: '#64748b' } },
+  { key: 'outline', label: 'Lift', patch: { shadowX: 0, shadowY: 5, shadowBlur: 4, shadowColor: '#7c3aed' } },
+]
+
 const DEFAULT_FILTERS = {
   brightness: 108,
   contrast: 116,
@@ -305,6 +345,10 @@ const DEFAULT_FILTERS = {
   invert: 0,
   vignette: 38,
   grain: 18,
+  shadowX: 0,
+  shadowY: 0,
+  shadowBlur: 0,
+  shadowColor: '#000000',
 }
 
 const NEUTRAL_FILTERS = {
@@ -319,6 +363,10 @@ const NEUTRAL_FILTERS = {
   invert: 0,
   vignette: 0,
   grain: 0,
+  shadowX: 0,
+  shadowY: 0,
+  shadowBlur: 0,
+  shadowColor: '#000000',
 }
 
 // Preview and export must agree, so both read this one string.
@@ -333,7 +381,8 @@ const buildFilterString = (filters) =>
     `grayscale(${filters.grayscale ?? 0}%)`,
     `invert(${filters.invert ?? 0}%)`,
     `blur(${filters.blur}px)`,
-  ].join(' ')
+    filters.shadowBlur > 0 ? `drop-shadow(${filters.shadowX}px ${filters.shadowY}px ${filters.shadowBlur}px ${filters.shadowColor})` : '',
+  ].filter(Boolean).join(' ')
 
 const DEFAULT_PROMPT = 'Create a bold product teaser for an evening launch post.'
 
@@ -919,7 +968,11 @@ const renderComposition = async ({
 
 export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
+  const [autosavedProject, setAutosavedProject] = useState(readPhotoAutosave)
+  const startingProject = initialProject || autosavedProject
   const [workspaceView, setWorkspaceView] = useState(initialProject ? 'editor' : 'home')
+  const [editorPanel, setEditorPanel] = useState('main')
+  const [saveStatus, setSaveStatus] = useState(autosavedProject ? 'Autosaved' : 'Autosave on')
   const [schoolPractice, setSchoolPractice] = useState(null)
   const [schoolCourseId, setSchoolCourseId] = useState('')
   const [schoolPracticeCompleted, setSchoolPracticeCompleted] = useState(false)
@@ -932,13 +985,13 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [uploadedImage, setUploadedImage] = useState('')
   const [stockLibraryOpen, setStockLibraryOpen] = useState(false)
-  const [generatedImageSrc, setGeneratedImageSrc] = useState(initialProject?.imageSrc || '')
-  const [prompt, setPrompt] = useState(initialProject?.visualPrompt || DEFAULT_PROMPT)
+  const [generatedImageSrc, setGeneratedImageSrc] = useState(startingProject?.imageSrc || '')
+  const [prompt, setPrompt] = useState(startingProject?.visualPrompt || startingProject?.prompt || DEFAULT_PROMPT)
   const [presetId, setPresetId] = useState('aurora')
-  const [aspectRatio, setAspectRatio] = useState(initialProject?.outputType === 'image' ? '1:1' : '4:5')
-  const [customCanvasSize, setCustomCanvasSize] = useState(() => normalizeCanvasSize(initialProject?.canvasSize))
-  const [headline, setHeadline] = useState(initialProject?.headline || '')
-  const [subcopy, setSubcopy] = useState(initialProject?.caption || '')
+  const [aspectRatio, setAspectRatio] = useState(startingProject?.aspectRatio || (startingProject?.outputType === 'image' ? '1:1' : '4:5'))
+  const [customCanvasSize, setCustomCanvasSize] = useState(() => normalizeCanvasSize(startingProject?.canvasSize))
+  const [headline, setHeadline] = useState(startingProject?.headline || '')
+  const [subcopy, setSubcopy] = useState(startingProject?.caption || startingProject?.subcopy || '')
   const [activeTool, setActiveTool] = useState('select')
   const [maskShape, setMaskShape] = useState('none')
   const [brushColor, setBrushColor] = useState('#ffffff')
@@ -947,15 +1000,15 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const [brushStrokes, setBrushStrokes] = useState([])
   const [cropRect, setCropRect] = useState({ x: 0, y: 0, w: 100, h: 100 })
   const [removeRect, setRemoveRect] = useState(null)
-  const [canvasBackground, setCanvasBackground] = useState(initialProject ? '#0f172a' : '#ffffff')
+  const [canvasBackground, setCanvasBackground] = useState(startingProject?.canvasBackground || (startingProject ? '#0f172a' : '#ffffff'))
   const [stageMetrics, setStageMetrics] = useState({ width: 1000, height: 1250 })
-  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS, ...startingProject?.filters }))
   const [exportFormat, setExportFormat] = useState('png')
   const [exportQuality, setExportQuality] = useState(92)
   const [historyCounts, setHistoryCounts] = useState({ past: 0, future: 0 })
-  const [layers, setLayers] = useState(() => (initialProject ? projectLayers(initialProject) : []))
-  const [activeLayerId, setActiveLayerId] = useState(initialProject ? 'headline' : '')
-  const [notice, setNotice] = useState(initialProject ? 'Generated project loaded. Every layer remains editable.' : 'Blank workspace ready for upload.')
+  const [layers, setLayers] = useState(() => startingProject?.layers?.length ? startingProject.layers : (initialProject ? projectLayers(initialProject) : []))
+  const [activeLayerId, setActiveLayerId] = useState(startingProject?.layers?.[0]?.id || (initialProject ? 'headline' : ''))
+  const [notice, setNotice] = useState(startingProject ? 'Saved project ready. Every layer remains editable.' : 'Blank workspace ready for upload.')
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(true)
   const [compactMode, setCompactMode] = useState(false)
@@ -3033,6 +3086,185 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setNotice(`${schoolPractice.title} practice completed.`)
   }
 
+  const openEditorPanel = (panel, tool = null) => {
+    setEditorPanel(panel)
+    if (tool) setActiveTool(tool)
+  }
+
+  const setCropAspect = (targetWidth, targetHeight) => {
+    commitHistory()
+    const canvasRatio = aspect.canvasWidth / aspect.canvasHeight
+    const targetRatio = targetWidth / targetHeight
+    let width = 90
+    let height = 90
+    if (targetRatio > canvasRatio) height = width * canvasRatio / targetRatio
+    else width = height * targetRatio / canvasRatio
+    setCropRect({ x: (100 - width) / 2, y: (100 - height) / 2, w: width, h: height })
+    setActiveTool('crop')
+  }
+
+  const smartCrop = () => {
+    if (!activeWork || !imageFit) {
+      setNotice('Add a photo before using Smart crop.')
+      return
+    }
+    withBusy('Finding the subject…', () => {
+      const result = selectSubjectMask(activeWork.imageData)
+      if (result.confidence === 'low') {
+        setNotice('No clear subject found. Use Freeform crop to frame the image manually.')
+        return
+      }
+      let minX = activeWork.width
+      let minY = activeWork.height
+      let maxX = 0
+      let maxY = 0
+      for (let index = 0; index < result.mask.length; index += 1) {
+        if (result.mask[index] < 128) continue
+        const x = index % activeWork.width
+        const y = Math.floor(index / activeWork.width)
+        minX = Math.min(minX, x)
+        minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x)
+        maxY = Math.max(maxY, y)
+      }
+      const padding = 4
+      const x = ((imageFit.x + (minX / activeWork.width) * imageFit.width) / stageDisplaySize.width) * 100
+      const y = ((imageFit.y + (minY / activeWork.height) * imageFit.height) / stageDisplaySize.height) * 100
+      const width = (((maxX - minX) / activeWork.width) * imageFit.width / stageDisplaySize.width) * 100
+      const height = (((maxY - minY) / activeWork.height) * imageFit.height / stageDisplaySize.height) * 100
+      commitHistory()
+      setCropRect({ x: clamp(x - padding, 0, 96), y: clamp(y - padding, 0, 96), w: clamp(width + padding * 2, 4, 100), h: clamp(height + padding * 2, 4, 100) })
+      setActiveTool('crop')
+      setNotice('Smart crop framed the detected subject. Drag the crop handles to refine it.')
+    })
+  }
+
+  const applyFilterPreset = (name, patch) => {
+    commitHistory()
+    setFilters({ ...NEUTRAL_FILTERS, ...patch })
+    setNotice(`${name} filter applied.`)
+  }
+
+  const applyShadowPreset = (preset) => {
+    commitHistory()
+    setFilters((current) => ({ ...current, ...preset.patch }))
+    setNotice(`${preset.label} shadow applied.`)
+  }
+
+  const persistLocalProject = () => {
+    const serialized = JSON.stringify(createPhotoProject({
+      imageSrc: selectedImageSrc,
+      prompt,
+      headline,
+      subcopy,
+      presetId,
+      aspectRatio,
+      canvasSize: customCanvasSize,
+      canvasBackground,
+      maskShape,
+      cropRect,
+      filters,
+      hueSat,
+      layerMask,
+      brushStrokes,
+      layers,
+      selection: null,
+      exportFormat,
+      exportQuality,
+    }))
+    try {
+      localStorage.setItem('echoai-photo-autosave', serialized)
+      setAutosavedProject(parsePhotoProject(serialized))
+      setSaveStatus('Autosaved')
+    } catch {
+      setSaveStatus('Save locally')
+      setNotice('This project is too large for browser autosave. Use Advanced → File → Save Project to keep a complete copy.')
+    }
+  }
+
+  useEffect(() => {
+    if (workspaceView !== 'editor') return undefined
+    const timer = window.setTimeout(() => {
+      const serialized = JSON.stringify(createPhotoProject({
+        imageSrc: selectedImageSrc,
+        prompt,
+        headline,
+        subcopy,
+        presetId,
+        aspectRatio,
+        canvasSize: customCanvasSize,
+        canvasBackground,
+        maskShape,
+        cropRect,
+        filters,
+        hueSat,
+        layerMask,
+        brushStrokes,
+        layers,
+        selection: null,
+        exportFormat,
+        exportQuality,
+      }))
+      try {
+        localStorage.setItem('echoai-photo-autosave', serialized)
+        setAutosavedProject(parsePhotoProject(serialized))
+        setSaveStatus('Autosaved')
+      } catch {
+        setSaveStatus('Save locally')
+      }
+    }, 700)
+    return () => window.clearTimeout(timer)
+  }, [aspectRatio, brushStrokes, canvasBackground, cropRect, customCanvasSize, exportFormat, exportQuality, filters, headline, hueSat, layerMask, layers, maskShape, presetId, prompt, selectedImageSrc, subcopy, workspaceView])
+
+  const modernToolPanel = (
+    <div className="photo-modern-tools">
+      {editorPanel === 'main' ? (
+        <>
+          <div className="modern-tools-heading"><div><span>Edit image</span><strong>Tools</strong></div><button type="button" onClick={() => { persistLocalProject(); setWorkspaceView('home') }} aria-label="Return to Photo home"><X size={18} /></button></div>
+          <div className="modern-select-group"><span>Select</span><div><button type="button" onClick={() => { selectAll(); setActiveTool('rect-select') }}><Images size={15} /> All</button><button type="button" onClick={() => openEditorPanel('select', 'object-select')}><Sparkles size={15} /> Element</button><button type="button" onClick={() => openEditorPanel('select', 'rect-select')}><Wand size={15} /> Area</button></div></div>
+          <div className="modern-tool-rows">
+            <button type="button" onClick={() => openEditorPanel('crop', 'crop')}><Crop size={18} /><span><strong>Crop</strong><small>Frame, rotate, and resize</small></span><ChevronRight size={16} /></button>
+            <button type="button" onClick={() => openEditorPanel('erase', 'eraser')}><Eraser size={18} /><span><strong>Pixel eraser</strong><small>Erase or heal image areas</small></span><ChevronRight size={16} /></button>
+          </div>
+          <div className="modern-tool-section"><div className="modern-section-heading"><strong>Tools</strong><button type="button" onClick={() => setEditorPanel('advanced')}>See all</button></div><div className="modern-tool-grid">
+            <button type="button" onClick={() => openEditorPanel('adjust')}><span className="modern-tool-art adjust"><SlidersHorizontal size={23} /></span><small>Adjust</small></button>
+            <button type="button" onClick={() => openEditorPanel('select', 'object-select')}><span className="modern-tool-art magic"><Sparkles size={23} /></span><small>Magic select</small></button>
+            <button type="button" onClick={sharpenBase}><span className="modern-tool-art upscale"><Expand size={23} /></span><small>Sharpen</small></button>
+            <button type="button" onClick={removeBackground}><span className="modern-tool-art remove"><Images size={23} /></span><small>BG remover</small></button>
+            <button type="button" onClick={() => openEditorPanel('erase', 'eraser')}><span className="modern-tool-art erase"><Eraser size={23} /></span><small>Magic eraser</small></button>
+            <button type="button" onClick={() => setStockLibraryOpen(true)}><span className="modern-tool-art stock"><ImageIcon size={23} /></span><small>Stock image</small></button>
+            <button type="button" onClick={() => openEditorPanel('create')}><span className="modern-tool-art create"><Type size={23} /></span><small>Text & shapes</small></button>
+            <button type="button" onClick={() => openEditorPanel('draw', 'brush')}><span className="modern-tool-art draw"><Paintbrush size={23} /></span><small>Draw</small></button>
+          </div></div>
+          <div className="modern-tool-section"><div className="modern-section-heading"><strong>Filters</strong><button type="button" onClick={() => openEditorPanel('filters')}>See all</button></div><div className="modern-filter-strip">
+            {PHOTO_FILTER_PRESETS.slice(0, 3).map((preset) => <button key={preset.key} type="button" onClick={() => applyFilterPreset(preset.label, preset.patch)}><span style={{ backgroundImage: selectedImageSrc ? `url(${selectedImageSrc})` : undefined, filter: buildFilterString({ ...NEUTRAL_FILTERS, ...preset.patch }) }} />{preset.label}</button>)}
+            <button type="button" className="modern-strip-next" onClick={() => openEditorPanel('filters')} aria-label="See all filters"><ChevronRight size={18} /></button>
+          </div></div>
+          <div className="modern-tool-section"><div className="modern-section-heading"><strong>Shadows</strong><button type="button" onClick={() => openEditorPanel('shadows')}>See all</button></div><div className="modern-shadow-strip">
+            {PHOTO_SHADOW_PRESETS.slice(0, 3).map((preset) => <button key={preset.key} type="button" onClick={() => applyShadowPreset(preset)}><span style={{ filter: preset.patch.shadowBlur ? `drop-shadow(${preset.patch.shadowX}px ${preset.patch.shadowY}px ${preset.patch.shadowBlur}px ${preset.patch.shadowColor})` : 'none' }} />{preset.label}</button>)}
+            <button type="button" className="modern-strip-next" onClick={() => openEditorPanel('shadows')} aria-label="See all shadows"><ChevronRight size={18} /></button>
+          </div></div>
+          <div className="modern-panel-footer"><button type="button" onClick={() => { setRightSidebarCollapsed(false); setEditorPanel('layers') }}><Layers3 size={16} /> Layers</button><button type="button" onClick={() => setEditorPanel('advanced')}><Keyboard size={16} /> Advanced</button></div>
+        </>
+      ) : (
+        <>
+          <div className="modern-context-heading"><button type="button" onClick={() => setEditorPanel('main')} aria-label="Back to all tools"><ArrowLeft size={18} /></button><strong>{{ crop: 'Crop', adjust: 'Adjust', filters: 'Filters', shadows: 'Shadows', erase: 'Erase & heal', select: 'Select', draw: 'Draw & fill', create: 'Text & shapes', layers: 'Layers' }[editorPanel] || 'Tools'}</strong></div>
+          {editorPanel === 'crop' && <div className="modern-context-body"><button type="button" className="modern-smart-action" onClick={smartCrop}><Sparkles size={17} /> Smart crop</button><label className="modern-context-label">Aspect ratio</label><div className="modern-aspect-grid"><button type="button" onClick={() => setActiveTool('crop')}><Crop size={20} />Freeform</button><button type="button" onClick={() => { commitHistory(); setCropRect({ x: 0, y: 0, w: 100, h: 100 }); setActiveTool('crop') }}><ImageIcon size={20} />Original</button><button type="button" onClick={() => setCropAspect(1, 1)}><Square size={20} />1:1</button><button type="button" onClick={() => setCropAspect(4, 5)}><PanelsTopLeft size={20} />4:5</button></div><label className="modern-context-label">Rotate</label><div className="modern-action-pair"><button type="button" onClick={() => transformBase('rotate-ccw', 'Rotated 90° counter-clockwise.')}><RotateCcw size={16} /> Left</button><button type="button" onClick={() => transformBase('rotate-cw', 'Rotated 90° clockwise.')}><RotateCcw size={16} className="rotate-right" /> Right</button></div><label className="modern-context-label">Flip</label><div className="modern-action-pair"><button type="button" onClick={() => transformBase('flip-h', 'Flipped horizontally.')}>Horizontal</button><button type="button" onClick={() => transformBase('flip-v', 'Flipped vertically.')}>Vertical</button></div><div className="modern-context-footer"><button type="button" onClick={() => setCropRect({ x: 0, y: 0, w: 100, h: 100 })}>Reset</button><button type="button" onClick={() => { setActiveTool('select'); setEditorPanel('main'); setNotice('Crop applied to preview and export.') }}>Done</button></div></div>}
+          {editorPanel === 'adjust' && <div className="modern-context-body"><div className="modern-adjust-hero"><Palette size={28} /><span><strong>Color adjustments</strong><small>Preview and export stay in sync</small></span></div>{[['Brightness', 'brightness', 0, 200], ['Contrast', 'contrast', 0, 200], ['Saturation', 'saturation', 0, 200], ['Exposure', 'exposure', 50, 150], ['Hue', 'hue', -180, 180], ['Blur', 'blur', 0, 20]].map(([label, key, min, max]) => <label key={key} className="modern-slider"><span>{label}<b>{filters[key]}</b></span><input type="range" min={min} max={max} value={filters[key]} onPointerDown={commitHistory} onChange={(event) => setFilters((current) => ({ ...current, [key]: Number(event.target.value) }))} /></label>)}<div className="modern-context-footer"><button type="button" onClick={resetFilters}>Reset</button><button type="button" onClick={() => setEditorPanel('main')}>Done</button></div></div>}
+          {editorPanel === 'filters' && <div className="modern-context-body modern-gallery-body"><div className="modern-filter-gallery">{PHOTO_FILTER_PRESETS.map((preset) => <button key={preset.key} type="button" onClick={() => applyFilterPreset(preset.label, preset.patch)}><span style={{ backgroundImage: selectedImageSrc ? `url(${selectedImageSrc})` : undefined, filter: buildFilterString({ ...NEUTRAL_FILTERS, ...preset.patch }) }} /><strong>{preset.label}</strong></button>)}</div><button type="button" className="modern-remove-effect" onClick={resetFilters}>Remove filter</button></div>}
+          {editorPanel === 'shadows' && <div className="modern-context-body modern-gallery-body"><div className="modern-shadow-gallery">{PHOTO_SHADOW_PRESETS.map((preset) => <button key={preset.key} type="button" onClick={() => applyShadowPreset(preset)}><span style={{ filter: preset.patch.shadowBlur ? `drop-shadow(${preset.patch.shadowX}px ${preset.patch.shadowY}px ${preset.patch.shadowBlur}px ${preset.patch.shadowColor})` : 'none' }} /><strong>{preset.label}</strong></button>)}</div><label className="modern-slider"><span>Blur<b>{filters.shadowBlur}px</b></span><input type="range" min="0" max="40" value={filters.shadowBlur} onPointerDown={commitHistory} onChange={(event) => setFilters((current) => ({ ...current, shadowBlur: Number(event.target.value) }))} /></label><label className="modern-color-control"><span>Shadow color</span><input type="color" value={filters.shadowColor} onChange={(event) => setFilters((current) => ({ ...current, shadowColor: event.target.value }))} /></label></div>}
+          {editorPanel === 'erase' && <div className="modern-context-body"><div className="modern-mode-switch"><button type="button" className={activeTool === 'eraser' ? 'active' : ''} onClick={() => setActiveTool('eraser')}><Eraser size={16} /> Erase</button><button type="button" className={activeTool === 'heal' ? 'active' : ''} onClick={() => setActiveTool('heal')}><Bandage size={16} /> Heal</button></div><label className="modern-slider"><span>Brush size<b>{brushSize}px</b></span><input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} /></label><label className="modern-slider"><span>Opacity<b>{Math.round(brushOpacity * 100)}%</b></span><input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} /></label><button type="button" className="modern-smart-action" onClick={() => { setActiveTool('remove'); setNotice('Drag over the area you want to remove.') }}><Sparkles size={17} /> Remove an area</button><div className="modern-context-footer"><button type="button" onClick={undo} disabled={!historyCounts.past}>Undo</button><button type="button" onClick={() => setEditorPanel('main')}>Done</button></div></div>}
+          {editorPanel === 'select' && <div className="modern-context-body"><div className="modern-selection-list"><button type="button" onClick={() => setActiveTool('object-select')}><Sparkles size={18} /><span><strong>Element</strong><small>Find the main subject</small></span></button><button type="button" onClick={() => setActiveTool('magic-wand')}><Wand size={18} /><span><strong>Magic wand</strong><small>Select matching colors</small></span></button><button type="button" onClick={() => setActiveTool('rect-select')}><BoxSelect size={18} /><span><strong>Area</strong><small>Drag a rectangular selection</small></span></button><button type="button" onClick={() => setActiveTool('lasso')}><LassoSelect size={18} /><span><strong>Lasso</strong><small>Draw around an area</small></span></button></div><button type="button" className="modern-smart-action" onClick={selectSubject}>Select subject</button>{selection && <><button type="button" className="modern-wide-action" onClick={invertSelection}>Invert selection</button><button type="button" className="modern-wide-action" onClick={addLayerMaskFromSelection}>Add layer mask</button><button type="button" className="modern-wide-action" onClick={deselect}>Deselect</button></>}</div>}
+          {editorPanel === 'draw' && <div className="modern-context-body"><div className="modern-mode-switch"><button type="button" className={activeTool === 'brush' ? 'active' : ''} onClick={() => setActiveTool('brush')}><Paintbrush size={16} /> Brush</button><button type="button" className={activeTool === 'fill' ? 'active' : ''} onClick={() => setActiveTool('fill')}><PaintBucket size={16} /> Fill</button></div><label className="modern-color-control"><span>Color</span><input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} /></label><label className="modern-slider"><span>Size<b>{brushSize}px</b></span><input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} /></label><label className="modern-slider"><span>Opacity<b>{Math.round(brushOpacity * 100)}%</b></span><input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} /></label></div>}
+          {editorPanel === 'create' && <div className="modern-context-body"><button type="button" className="modern-create-action" onClick={addTextLayer}><Type size={22} /><span><strong>Add text</strong><small>Create an editable text layer</small></span></button><div className="modern-shape-grid">{Object.entries(SHAPES).map(([shape, label]) => <button key={shape} type="button" onClick={() => addShapeLayer(shape)}>{shape === 'rectangle' ? <Square /> : shape === 'ellipse' ? <Circle /> : shape === 'triangle' ? <Triangle /> : <Minus />}<span>{label}</span></button>)}</div><label className="modern-context-label">Stickers</label><div className="modern-sticker-grid">{STICKERS.map((sticker) => <button key={sticker} type="button" onClick={() => addStickerLayer(sticker)}>{sticker}</button>)}</div></div>}
+          {editorPanel === 'layers' && <div className="modern-context-body"><p className="modern-context-note">The layer inspector is open on the right. Select a layer there to edit content, color, size, blend mode, and order.</p><button type="button" className="modern-smart-action" onClick={addTextLayer}><Type size={17} /> Add text layer</button><button type="button" className="modern-wide-action" onClick={() => setRightSidebarCollapsed((value) => !value)}>{rightSidebarCollapsed ? 'Open layer inspector' : 'Hide layer inspector'}</button></div>}
+        </>
+      )}
+    </div>
+  )
+
+  const hasCurrentDocument = Boolean(selectedImageSrc || layers.length || brushStrokes.length || autosavedProject)
+
   const createDialog = createDialogOpen && createPortal(
     <div className="photo-create-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) setCreateDialogOpen(false)
@@ -3150,9 +3382,11 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
             <section className="photo-home-section" aria-labelledby="photo-recent-heading">
               <div className="photo-home-section-heading"><h2 id="photo-recent-heading">Continue designing</h2><span>{imageAssets.length} workspace images</span></div>
               <div className="photo-recent-grid">
-                {visibleHomeAssets.length ? visibleHomeAssets.map((asset) => (
+                {hasCurrentDocument && <button type="button" className="photo-recent-item" onClick={() => setWorkspaceView('editor')}><span className="photo-recent-preview photo-current-preview" style={{ background: canvasBackground === 'transparent' ? '#f8fafc' : canvasBackground }}>{selectedImageSrc ? <img src={selectedImageSrc} alt="" /> : <><strong>{headline || 'Untitled design'}</strong><small>{aspect.canvasWidth} × {aspect.canvasHeight}</small></>}</span><strong>{headline || 'Autosaved design'}</strong><small>Autosaved Photo Editor project</small></button>}
+                {visibleHomeAssets.map((asset) => (
                   <button key={asset.id} type="button" className="photo-recent-item" onClick={() => openWorkspaceAsset(asset)}><span className="photo-recent-preview">{asset.previewUrl ? <img src={asset.previewUrl} alt="" /> : <ImageIcon size={28} />}</span><strong>{asset.name}</strong><small>Photo Editor project</small></button>
-                )) : <button type="button" className="photo-recent-empty" onClick={() => uploadInputRef.current?.click()}><Upload size={24} /><strong>Upload your first image</strong><span>PNG, JPEG, or WebP</span></button>}
+                ))}
+                {!hasCurrentDocument && visibleHomeAssets.length === 0 && <button type="button" className="photo-recent-empty" onClick={() => uploadInputRef.current?.click()}><Upload size={24} /><strong>Upload your first image</strong><span>PNG, JPEG, or WebP</span></button>}
               </div>
             </section>
             <section className="photo-home-section photo-home-templates" aria-labelledby="photo-template-heading">
@@ -3176,48 +3410,32 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
 
   return (
     <section
-      className={`photo-creator-shell ${compactMode ? 'compact' : ''} ${focusMode.focused ? 'editor-focus' : ''}`}
+      className={`photo-creator-shell photo-modern-editor-shell ${compactMode ? 'compact' : ''} ${focusMode.focused ? 'editor-focus' : ''}`}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault()
         importImageFile(event.dataTransfer.files?.[0])
       }}
     >
-      <header className="photo-creator-header">
-        <div>
-          <p className="small-title">Photo Editor</p>
-          <h2>Professional image editor</h2>
-          <p className="panel-note">Upload a photo, add text and graphics, retouch it, then export.</p>
-        </div>
-        <div className="photo-creator-actions">
-          <button type="button" className="ghost-button" onClick={() => setWorkspaceView('home')} title="Photo Editor home"><Home size={15} /> Home</button>
+      <header className="photo-creator-header photo-editor-topbar">
+        <div className="photo-topbar-left">
+          <button type="button" className="photo-topbar-text" onClick={() => { persistLocalProject(); setWorkspaceView('home') }}>Cancel</button>
+          <span className="photo-topbar-divider" />
+          <button type="button" className="photo-topbar-icon" onClick={undo} disabled={historyCounts.past === 0} title="Undo (Ctrl+Z)" aria-label="Undo"><RotateCcw size={18} /></button>
+          <button type="button" className="photo-topbar-icon" onClick={redo} disabled={historyCounts.future === 0} title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><RotateCcw size={18} className="rotate-right" /></button>
           <EditorFocusToggle focused={focusMode.focused} onToggle={focusMode.toggle} fullscreen={focusMode.fullscreen} onToggleFullscreen={focusMode.toggleFullscreen} label="photo editor" />
-          {/* Quick Access - Only essential buttons */}
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={undo}
-            disabled={historyCounts.past === 0}
-            title="Undo (Ctrl+Z)"
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={redo}
-            disabled={historyCounts.future === 0}
-            title="Redo (Ctrl+Shift+Z)"
-          >
-            Redo
-          </button>
-          <button type="button" className="primary-button" onClick={exportCanvas}>
-            Export {EXPORT_FORMATS[exportFormat]?.label ?? 'PNG'}
-          </button>
+        </div>
+        <div className="photo-topbar-title"><strong>{headline || prompt || 'Untitled design'}</strong><span>{aspect.canvasWidth} × {aspect.canvasHeight}px</span></div>
+        <div className="photo-topbar-actions">
+          <span className={`photo-save-status ${saveStatus.toLowerCase()}`}>{saveStatus}</span>
+          <button type="button" className="photo-topbar-icon" onClick={exportCanvas} title={`Download ${EXPORT_FORMATS[exportFormat]?.label ?? 'PNG'}`} aria-label="Download design"><Download size={19} /></button>
+          <button type="button" className="photo-create-design-button" onClick={() => { setWorkspaceView('home'); setCreateDialogOpen(true) }}><Plus size={17} /> Create design</button>
+          <button type="button" className="photo-save-button" onClick={persistLocalProject}><Save size={17} /> Save</button>
+          <button type="button" className="photo-topbar-close" onClick={() => { persistLocalProject(); setWorkspaceView('home') }} aria-label="Close editor"><X size={20} /></button>
         </div>
       </header>
 
-      <div ref={setMenuHost} className="editor-menu-host" />
+      <div ref={setMenuHost} className={`editor-menu-host ${editorPanel === 'advanced' ? 'legacy-menu-visible' : ''}`} />
 
       <div className="editor-options-bar" aria-label="Tool options">
         <div className="option-group">
@@ -3306,8 +3524,10 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
         </div>
       </div>
 
-      <div className={`photo-creator-grid ${compactMode ? 'compact' : ''} ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${rightSidebarCollapsed ? 'right-collapsed' : ''}`}>
-        <aside className={`photo-sidebar photo-sidebar-left ${leftSidebarCollapsed ? 'collapsed' : ''}`}>
+      <div className={`photo-creator-grid modern-editor ${compactMode ? 'compact' : ''} ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${rightSidebarCollapsed ? 'right-collapsed' : ''}`}>
+        <aside className={`photo-sidebar photo-sidebar-left ${leftSidebarCollapsed ? 'collapsed' : ''} ${editorPanel === 'advanced' ? 'legacy-tools-active' : 'modern-tools-active'}`}>
+          {modernToolPanel}
+          {editorPanel === 'advanced' && <button type="button" className="modern-return-button" onClick={() => { setEditorPanel('main'); setLeftSidebarCollapsed(false) }}><ArrowLeft size={16} /> Back to easy tools</button>}
           {/* Compact Menu Bar in Sidebar */}
           {menuHost && createPortal(<div className="sidebar-menu-bar" aria-label="Main menu">
             {/* FILE MENU */}
