@@ -2499,6 +2499,91 @@
 .photo-create-presets strong { overflow: hidden; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
 .photo-create-presets small { color: #77717f; font-size: .67rem; }
 
+/* Soft visual language for the creation picker and platform organizer. */
+.photo-create-dialog,
+.photo-create-dialog header label,
+.photo-create-dialog input,
+.photo-create-dialog select,
+.photo-create-dialog button,
+.photo-create-preset-art,
+.photo-platform-organizer button,
+.photo-create-upload,
+.photo-create-size-fields input,
+.photo-create-size-fields select { border-radius: 12px; }
+
+.photo-platform-organizer {
+  display: flex;
+  gap: .45rem;
+  margin: -.15rem 0 1.2rem;
+  padding-bottom: .25rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.photo-platform-organizer button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  min-height: 34px;
+  padding: .35rem .7rem;
+  border: 1px solid #dfe2ea;
+  color: #4b515b;
+  background: #fff;
+  font-size: .7rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.photo-platform-organizer button span {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--platform-color);
+  font-size: .62rem;
+}
+
+.photo-platform-organizer button:hover,
+.photo-platform-organizer button.active {
+  border-color: var(--platform-color);
+  color: var(--platform-color);
+  background: color-mix(in srgb, var(--platform-color) 9%, white);
+}
+
+.photo-create-preset-art {
+  position: relative;
+  overflow: hidden;
+  border: 0;
+  background:
+    radial-gradient(circle at 78% 22%, rgba(255,255,255,.72) 0 8%, transparent 9%),
+    linear-gradient(135deg, color-mix(in srgb, var(--format-color) 82%, white), var(--format-color));
+  box-shadow: inset 0 -18px 30px rgba(15, 23, 42, .12), 0 6px 12px rgba(41, 32, 66, .08);
+}
+
+.photo-create-preset-art::before,
+.photo-create-preset-art::after {
+  content: '';
+  position: absolute;
+  border: 1px solid rgba(255,255,255,.48);
+  border-radius: 50%;
+}
+
+.photo-create-preset-art::before { width: 92px; height: 92px; right: -24px; top: -34px; }
+.photo-create-preset-art::after { width: 48px; height: 48px; left: -10px; bottom: -16px; }
+.photo-create-preset-art svg { position: relative; z-index: 1; padding: .55rem; border: 1px solid rgba(255,255,255,.82); color: #fff; background: rgba(255,255,255,.14); filter: drop-shadow(3px 4px 0 rgba(37, 30, 48, .22)); }
+.photo-create-preset-card:hover .photo-create-preset-art { transform: translateY(-3px); box-shadow: inset 0 -18px 30px rgba(15, 23, 42, .12), 0 12px 20px rgba(41, 32, 66, .16); }
+.photo-create-preset-card strong { color: #292631; }
+
+.photo-create-dialog > header,
+.photo-create-dialog > header label,
+.photo-create-results,
+.photo-create-body nav,
+.photo-create-presets button,
+.photo-create-quick button { border-radius: 10px; }
+
 .photo-create-custom h3:first-child { font-size: 1.35rem; }
 
 .photo-create-size-fields {

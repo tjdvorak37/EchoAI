@@ -141,11 +141,11 @@ const PHOTO_HOME_FORMATS = [
 const PHOTO_DESIGN_PRESETS = [
   { key: 'presentation', category: 'Presentations', label: 'Presentation (16:9)', icon: Presentation, width: 1920, height: 1080, color: '#ff5a12' },
   { key: 'presentation-standard', category: 'Presentations', label: 'Presentation (4:3)', icon: Presentation, width: 1600, height: 1200, color: '#f97316' },
-  { key: 'instagram-post', category: 'Social media', label: 'Instagram Post (4:5)', icon: Share2, width: 1080, height: 1350, color: '#ff3f5f' },
-  { key: 'instagram-story', category: 'Social media', label: 'Instagram Story', icon: Share2, width: 1080, height: 1920, color: '#ec4899' },
-  { key: 'facebook-landscape', category: 'Social media', label: 'Facebook Post (Landscape)', icon: Share2, width: 1200, height: 630, color: '#2563eb' },
-  { key: 'linkedin-post', category: 'Social media', label: 'LinkedIn Post', icon: Share2, width: 1200, height: 1200, color: '#0284c7' },
-  { key: 'youtube-thumbnail', category: 'Social media', label: 'YouTube Thumbnail', icon: Clapperboard, width: 1280, height: 720, color: '#dc2626' },
+  { key: 'instagram-post', category: 'Social media', platform: 'Instagram', label: 'Instagram Post (4:5)', icon: Share2, width: 1080, height: 1350, color: '#ff3f5f' },
+  { key: 'instagram-story', category: 'Social media', platform: 'Instagram', label: 'Instagram Story', icon: Share2, width: 1080, height: 1920, color: '#ec4899' },
+  { key: 'facebook-landscape', category: 'Social media', platform: 'Facebook', label: 'Facebook Post (Landscape)', icon: Share2, width: 1200, height: 630, color: '#2563eb' },
+  { key: 'linkedin-post', category: 'Social media', platform: 'LinkedIn', label: 'LinkedIn Post', icon: Share2, width: 1200, height: 1200, color: '#0284c7' },
+  { key: 'youtube-thumbnail', category: 'Social media', platform: 'YouTube', label: 'YouTube Thumbnail', icon: Clapperboard, width: 1280, height: 720, color: '#dc2626' },
   { key: 'photo-portrait', category: 'Photo editor', label: 'Portrait photo', icon: ImageIcon, width: 1200, height: 1500, color: '#ec4899' },
   { key: 'photo-square', category: 'Photo editor', label: 'Square photo', icon: ImageIcon, width: 1200, height: 1200, color: '#8b5cf6' },
   { key: 'photo-landscape', category: 'Photo editor', label: 'Landscape photo', icon: ImageIcon, width: 1600, height: 900, color: '#0ea5e9' },
@@ -164,6 +164,17 @@ const PHOTO_DESIGN_PRESETS = [
 ]
 
 const PHOTO_CREATE_CATEGORIES = ['For you', 'Presentations', 'Social media', 'Photo editor', 'Videos', 'Print', 'Docs', 'Whiteboards', 'Websites', 'Emails']
+const PHOTO_SOCIAL_PLATFORMS = [
+  { key: 'all', label: 'Popular', color: '#7c3aed' },
+  { key: 'Facebook', label: 'Facebook', color: '#2563eb' },
+  { key: 'Instagram', label: 'Instagram', color: '#e1306c' },
+  { key: 'LinkedIn', label: 'LinkedIn', color: '#0a66c2' },
+  { key: 'Pinterest', label: 'Pinterest', color: '#bd081c' },
+  { key: 'TikTok', label: 'TikTok', color: '#111827' },
+  { key: 'X', label: 'X', color: '#111827' },
+  { key: 'WhatsApp', label: 'WhatsApp', color: '#16a34a' },
+  { key: 'YouTube', label: 'YouTube', color: '#dc2626' },
+]
 
 const STYLE_PRESETS = {
   aurora: {
@@ -1015,6 +1026,7 @@ export function PhotoEditor({
   const [homeSearch, setHomeSearch] = useState('')
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createCategory, setCreateCategory] = useState('For you')
+  const [createPlatform, setCreatePlatform] = useState('all')
   const [createSearch, setCreateSearch] = useState('')
   const [customWidth, setCustomWidth] = useState(1080)
   const [customHeight, setCustomHeight] = useState(1080)
@@ -3105,7 +3117,8 @@ export function PhotoEditor({
     const matchesSearch = item.label.toLowerCase().includes(normalizedCreateSearch)
       || item.category.toLowerCase().includes(normalizedCreateSearch)
     if (!matchesSearch) return false
-    return normalizedCreateSearch || createCategory === 'For you' || item.category === createCategory
+    const matchesPlatform = createCategory !== 'Social media' || createPlatform === 'all' || item.platform === createPlatform
+    return matchesPlatform && (normalizedCreateSearch || createCategory === 'For you' || item.category === createCategory)
   }).slice(0, createCategory === 'For you' && !normalizedCreateSearch ? 12 : undefined)
   const createCustomDesign = () => startHomeDesign({ width: customWidth, height: customHeight, label: 'Custom' })
 
@@ -3370,7 +3383,7 @@ export function PhotoEditor({
         <div className="photo-create-body">
           <nav aria-label="Design categories">
             {PHOTO_CREATE_CATEGORIES.map((category) => (
-              <button key={category} type="button" className={createCategory === category ? 'active' : ''} onClick={() => setCreateCategory(category)}>
+              <button key={category} type="button" className={createCategory === category ? 'active' : ''} onClick={() => { setCreateCategory(category); if (category !== 'Social media') setCreatePlatform('all') }}>
                 <LayoutTemplate size={16} aria-hidden="true" /><span>{category}</span>
               </button>
             ))}
@@ -3378,6 +3391,15 @@ export function PhotoEditor({
             <button type="button" className={createCategory === 'Upload' ? 'active' : ''} onClick={() => setCreateCategory('Upload')}><Upload size={16} /><span>Upload</span></button>
           </nav>
           <div className="photo-create-results">
+            {createCategory === 'Social media' && (
+              <div className="photo-platform-organizer" aria-label="Filter social designs by platform">
+                {PHOTO_SOCIAL_PLATFORMS.map((platform) => (
+                  <button key={platform.key} type="button" className={createPlatform === platform.key ? 'active' : ''} onClick={() => setCreatePlatform(platform.key)} style={{ '--platform-color': platform.color }}>
+                    <span>{platform.key === 'all' ? '✦' : platform.label.slice(0, 1)}</span>{platform.label}
+                  </button>
+                ))}
+              </div>
+            )}
             {createCategory === 'Custom size' ? (
               <div className="photo-create-custom">
                 <h3>Custom size</h3>
@@ -3391,7 +3413,7 @@ export function PhotoEditor({
                 <div className="photo-create-presets">
                   {PHOTO_DESIGN_PRESETS.filter((item) => ['doc-a4', 'presentation', 'instagram-post', 'business-card'].includes(item.key)).map((item) => {
                     const FormatIcon = item.icon
-                    return <button key={item.key} type="button" onClick={() => startHomeDesign(item)}><span className="photo-create-preset-art" style={{ '--format-color': item.color }}><FormatIcon size={42} /></span><strong>{item.label}</strong><small>{item.width} × {item.height} px</small></button>
+                    return <button key={item.key} type="button" className={`photo-create-preset-card preset-${item.key}`} onClick={() => startHomeDesign(item)}><span className="photo-create-preset-art" style={{ '--format-color': item.color }}><FormatIcon size={42} /></span><strong>{item.label}</strong><small>{item.width} × {item.height} px</small></button>
                   })}
                 </div>
               </div>
@@ -3417,7 +3439,7 @@ export function PhotoEditor({
                   {visibleCreateFormats.map((item) => {
                     const FormatIcon = item.icon
                     return (
-                      <button key={item.key} type="button" onClick={() => startHomeDesign(item)}>
+                      <button key={item.key} type="button" className={`photo-create-preset-card preset-${item.key}`} onClick={() => startHomeDesign(item)}>
                         <span className="photo-create-preset-art" style={{ '--format-color': item.color }}><FormatIcon size={42} /></span>
                         <strong>{item.label}</strong><small>{item.width} × {item.height} px</small>
                       </button>
