@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import { Clapperboard, Download, Eye, EyeOff, Film, Library, Lock, MonitorPlay, Music2, PanelsTopLeft, Play, Redo2, RotateCcw, Scissors, SlidersHorizontal, Type, Undo2, Unlock, Volume2, VolumeX } from 'lucide-react'
+import { Clapperboard, Download, Eye, EyeOff, Film, Image as ImageIcon, Library, Lock, MonitorPlay, Music2, PanelsTopLeft, Play, Redo2, RotateCcw, Scissors, SlidersHorizontal, Type, Undo2, Unlock, Volume2, VolumeX } from 'lucide-react'
 import { canUseAgentMode, runCreativeAgentJob } from '../services/aiAgentService'
 import {
   DEFAULT_MASTER_AUDIO,
@@ -695,6 +695,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
       id: `clip-${(clipCounter.current += 1)}`,
       assetId: asset.id,
       assetName: asset.name,
+      mediaType: asset.type,
       previewUrl: source,
       credit: asset.credit,
       startTime: playbackTime,
@@ -742,15 +743,16 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
   const addFromStockLibrary = async (item, quality) => {
     const isSound = item.kind === 'sound'
-    const rendition = isSound ? null : item.renditions?.[quality] ?? item.renditions?.hd ?? item.renditions?.sd
-    if (!isSound && !rendition) throw new Error('This video has no downloadable version.')
-    const mime = isSound ? 'audio/mpeg' : 'video/mp4'
+    const isImage = item.kind === 'image'
+    const rendition = isSound || isImage ? null : item.renditions?.[quality] ?? item.renditions?.hd ?? item.renditions?.sd
+    if (!isSound && !isImage && !rendition) throw new Error('This video has no downloadable version.')
+    const mime = isSound ? 'audio/mpeg' : isImage ? item.url.split('?')[0].toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' : 'video/mp4'
     setStatusMessage(`Downloading ${item.title}…`)
-    const previewUrl = await downloadMediaLibraryFile(isSound ? item.url : rendition.url, mime)
+    const previewUrl = await downloadMediaLibraryFile(isSound || isImage ? item.url : rendition.url, mime)
     addAssetAtPlayhead({
       id: nextLocalId('stock'),
       name: item.title,
-      type: isSound ? 'audio' : 'video',
+      type: isSound ? 'audio' : isImage ? 'image' : 'video',
       mime,
       previewUrl,
       duration: item.duration,
@@ -1169,6 +1171,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   const previewAsset = activeVisualClip ? assetById.get(activeVisualClip.assetId) ?? null : null
   const previewSrc = clipSource(activeVisualClip)
   const previewType = previewAsset?.type
+    ?? activeVisualClip?.mediaType
     ?? (activeVisualClip?.previewUrl ? 'video' : '')
 
   const videoRef = useRef(null)
@@ -1318,6 +1321,17 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
         visualClips.map(async (clip) => {
           const src = clipSource(clip)
           if (!src || videoElements.has(clip.id)) return
+          if ((assetById.get(clip.assetId)?.type ?? clip.mediaType) === 'image') {
+            const image = new Image()
+            image.crossOrigin = 'anonymous'
+            await new Promise((resolve) => {
+              image.onload = resolve
+              image.onerror = resolve
+              image.src = src
+            })
+            videoElements.set(clip.id, image)
+            return
+          }
           const element = document.createElement('video')
           element.crossOrigin = 'anonymous'
           element.src = src
@@ -1374,7 +1388,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
       }
 
       const syncElement = (element, clip, time) => {
-        if (!element) return
+        if (!element || element instanceof HTMLImageElement) return
         const localTime = (time - clip.startTime) * (clip.speed ?? 1) + (clip.trim?.start ?? 0)
         element.playbackRate = clip.speed ?? 1
         if (element.paused) {
@@ -1397,7 +1411,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           (clip) => time >= clip.startTime && time < clipEnd(clip),
         )
         videoElements.forEach((element, clipId) => {
-          if (clipId !== frameClip?.id && !element.paused) element.pause()
+          if (element instanceof HTMLVideoElement && clipId !== frameClip?.id && !element.paused) element.pause()
         })
 
         if (frameClip) {
@@ -1417,7 +1431,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
 
           const transform = getClipTransform(frameClip)
 
-          if (element && element.readyState >= 2) {
+          if (element && (element instanceof HTMLImageElement ? element.complete && element.naturalWidth > 0 : element.readyState >= 2)) {
             ctx.save()
             ctx.globalAlpha = transition.opacity * (transform.opacity / 100)
             ctx.globalCompositeOperation = transform.blendMode
@@ -1505,7 +1519,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
       setStatusMessage(`Export failed: ${error.message}`)
     } finally {
       videoElements.forEach((element) => {
-        element.pause()
+        if (element instanceof HTMLVideoElement) element.pause()
         element.src = ''
       })
       exportAudio?.close().catch(() => {})
@@ -1515,7 +1529,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   }
 
   const selectedOwner = selectedClip ? tracks.find((track) => track.clips.some((clip) => clip.id === selectedClip.id)) : null
-  const selectedIsVideoClip = selectedOwner?.type === 'video' && selectedClip?.type !== 'text' && (assetById.get(selectedClip?.assetId)?.type ?? 'video') === 'video'
+  const selectedIsVideoClip = selectedOwner?.type === 'video' && selectedClip?.type !== 'text' && (assetById.get(selectedClip?.assetId)?.type ?? selectedClip?.mediaType ?? 'video') === 'video'
   const audioEditableClip = selectedOwner?.type === 'audio' || selectedIsVideoClip ? selectedClip : null
   const openAudioMixer = () => {
     setActiveToolbar('audio')
@@ -1622,7 +1636,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           <button type="button" className="toolbar-btn" title="Match color from another clip" onClick={matchSelectedColor}>Color match</button>
           <button type="button" className="toolbar-btn" title="Speed controls" onClick={() => setInspectorTab('video')}><Film size={17} /> Speed</button>
           <button type="button" className={`toolbar-btn toolbar-btn-audio ${activeToolbar === 'audio' ? 'active' : ''}`} title="Volume, equalizer, fades, and loud/quiet spots" onClick={openAudioMixer}><SlidersHorizontal size={17} /> Audio mixer</button>
-          <button type="button" className="toolbar-btn toolbar-btn-library" title="Royalty-free sound effects, transitions, and stock video" onClick={() => setLibraryKind('sound')}><Library size={17} /> Stock library</button>
+          <button type="button" className="toolbar-btn toolbar-btn-library" title="Stock photos, illustrations, vectors, videos, and sound effects" onClick={() => setLibraryKind('sound')}><Library size={17} /> Stock library</button>
           <span className="time-display">
             {Math.floor(playbackTime)}s / {duration}s
           </span>
@@ -1746,6 +1760,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             <div className="tool-panel">
               <h3>Media</h3>
               <button type="button" className="tool-button stock-library-launch" onClick={() => setLibraryKind('video')}><Clapperboard size={15} /> Browse transitions &amp; stock video</button>
+              <button type="button" className="tool-button stock-library-launch" onClick={() => setLibraryKind('image')}><ImageIcon size={15} /> Browse photos, illustrations &amp; vectors</button>
               <p className="muted">Tap an image, video, or audio file to add it at the playhead.</p>
               <label className="video-direct-upload">
                 <strong>Upload video to timeline</strong>
@@ -2212,7 +2227,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           {tracks.reduce((sum, t) => sum + t.clips.length, 0)} clips • {duration}s duration
         </span>
       </div>
-      {libraryKind && <StockLibrary initialKind={libraryKind} onClose={() => setLibraryKind(null)} onAdd={addFromStockLibrary} />}
+      {libraryKind && <StockLibrary initialKind={libraryKind} kinds={['sound', 'video', 'image']} onClose={() => setLibraryKind(null)} onAdd={addFromStockLibrary} />}
     </div>
   )
 }

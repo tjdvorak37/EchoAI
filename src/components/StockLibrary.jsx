@@ -4,8 +4,8 @@ import { searchMediaLibrary } from '../services/mediaLibraryService'
 
 const CATEGORIES = {
   sound: ['Whoosh', 'Swoosh', 'Impact', 'Riser', 'Pop', 'Click', 'Glitch', 'Notification', 'Applause', 'Laugh', 'Camera shutter', 'Typing'],
-  video: ['Transition', 'Light leak', 'Glitch', 'Smoke', 'Particles', 'Ink', 'Countdown', 'Film burn', 'Bokeh', 'Abstract background'],
-  image: ['Background', 'Nature', 'Business', 'Food', 'Technology', 'People', 'Texture', 'Abstract', 'Travel', 'Sky', 'Flowers', 'Fitness'],
+  video: [['Explore', ''], 'Landscape', 'People', 'City', 'Food', 'Travel', 'Sports', 'Technology', 'Abstract', 'Animation', 'Timelapse', 'Transition'],
+  image: [['Explore', ''], 'Nature', 'Business', 'Food', 'Technology', 'People', 'Texture', 'Abstract', 'Travel', 'Sky', 'Flowers', 'Fitness'],
 }
 
 const VECTOR_TOPICS = [
@@ -14,7 +14,7 @@ const VECTOR_TOPICS = [
   ['Sports', 'sports'], ['Travel', 'travel'], ['Patterns', 'pattern'], ['Icons', 'icon'],
 ]
 
-const DEFAULT_QUERY = { sound: 'Whoosh', video: 'Transition', image: 'Background' }
+const DEFAULT_QUERY = { sound: 'Whoosh', video: '', image: '' }
 
 const IMAGE_TYPES = [
   ['all', 'All'],
@@ -22,6 +22,8 @@ const IMAGE_TYPES = [
   ['illustration', 'Illustrations'],
   ['vector', 'Vectors'],
 ]
+
+const VIDEO_TYPES = [['all', 'All videos'], ['film', 'Footage'], ['animation', 'Animation']]
 
 const QUALITIES = [
   ['uhd', '4K'],
@@ -41,6 +43,7 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
   const [kind, setKind] = useState(initialKind)
   const [query, setQuery] = useState(initialQuery ?? (initialImageType === 'vector' ? '' : DEFAULT_QUERY[initialKind]))
   const [imageType, setImageType] = useState(initialImageType)
+  const [videoType, setVideoType] = useState('all')
   const [order, setOrder] = useState('popular')
   const [results, setResults] = useState([])
   const [total, setTotal] = useState(null)
@@ -61,12 +64,12 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
     onCloseRef.current = onClose
   })
 
-  const runSearch = (nextKind, nextQuery, nextPage = 1, nextImageType = imageType, nextOrder = order) => {
+  const runSearch = (nextKind, nextQuery, nextPage = 1, nextImageType = imageType, nextOrder = order, nextVideoType = videoType) => {
     const requestId = (requestRef.current += 1)
     setLoading(true)
     setError('')
     if (nextPage === 1) setResults([])
-    return searchMediaLibrary({ kind: nextKind, query: nextQuery, page: nextPage, imageType: nextImageType, order: nextOrder })
+    return searchMediaLibrary({ kind: nextKind, query: nextQuery, page: nextPage, imageType: nextImageType, videoType: nextVideoType, order: nextOrder })
       .then((data) => {
         if (requestId !== requestRef.current) return
         setConfigured(data.configured !== false)
@@ -85,7 +88,7 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
 
   useEffect(() => {
     const requestId = (requestRef.current += 1)
-    searchMediaLibrary({ kind: initialKind, query: initialQuery ?? (initialImageType === 'vector' ? '' : DEFAULT_QUERY[initialKind]), page: 1, imageType: initialImageType, order: 'popular' })
+    searchMediaLibrary({ kind: initialKind, query: initialQuery ?? DEFAULT_QUERY[initialKind], page: 1, imageType: initialImageType, videoType: 'all', order: 'popular' })
       .then((data) => {
         if (requestId !== requestRef.current) return
         setConfigured(data.configured !== false)
@@ -149,6 +152,7 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
 
   const renditionFor = (item) => item.renditions?.[quality] ?? item.renditions?.hd ?? item.renditions?.sd ?? null
   const vectorMode = kind === 'image' && imageType === 'vector'
+  const topics = vectorMode ? VECTOR_TOPICS : CATEGORIES[kind]
 
   return (
     <div className="stock-library-backdrop" onClick={onClose}>
@@ -156,7 +160,7 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
         <header className="stock-library-head">
           <div>
             <h3>{vectorMode ? 'Vector artwork' : 'Stock library'}</h3>
-            <p>{vectorMode ? 'Pixabay artwork is added as an image layer. It is not an exclusive or trademark-cleared logo.' : kinds.includes('image') ? 'Search free photos, illustrations, and vectors for your design.' : 'Royalty-free sound effects and stock videos. Pick one to drop it at the playhead.'}</p>
+            <p>{vectorMode ? 'Pixabay artwork is added as an image layer. It is not an exclusive or trademark-cleared logo.' : kind === 'sound' ? 'CC0 sound effects from Freesound via Openverse.' : kind === 'video' ? 'Pixabay footage and animation for your timeline.' : 'Pixabay photos, illustrations, and vectors for your design.'}</p>
           </div>
           <button type="button" className="stock-library-close" onClick={onClose} aria-label="Close stock library"><X size={18} /></button>
         </header>
@@ -164,8 +168,8 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
         {kinds.length > 1 && (
           <div className="stock-library-tabs" role="tablist">
             {kinds.includes('sound') && <button type="button" role="tab" aria-selected={kind === 'sound'} className={kind === 'sound' ? 'active' : ''} onClick={() => switchKind('sound')}><Music2 size={15} /> Sound effects</button>}
-            {kinds.includes('video') && <button type="button" role="tab" aria-selected={kind === 'video'} className={kind === 'video' ? 'active' : ''} onClick={() => switchKind('video')}><Clapperboard size={15} /> Transitions &amp; stock video</button>}
-            {kinds.includes('image') && <button type="button" role="tab" aria-selected={kind === 'image'} className={kind === 'image' ? 'active' : ''} onClick={() => switchKind('image')}><ImageIcon size={15} /> Stock images</button>}
+            {kinds.includes('video') && <button type="button" role="tab" aria-selected={kind === 'video'} className={kind === 'video' ? 'active' : ''} onClick={() => switchKind('video')}><Clapperboard size={15} /> Videos</button>}
+            {kinds.includes('image') && <button type="button" role="tab" aria-selected={kind === 'image'} className={kind === 'image' ? 'active' : ''} onClick={() => switchKind('image')}><ImageIcon size={15} /> Images</button>}
           </div>
         )}
 
@@ -185,15 +189,21 @@ export function StockLibrary({ initialKind = 'sound', initialQuery, initialImage
         )}
 
         <div className="stock-library-chips">
-          {vectorMode ? VECTOR_TOPICS.map(([label, search]) => (
-            <button key={label} type="button" className={query.toLowerCase() === search ? 'active' : ''} onClick={() => { setQuery(search); runSearch(kind, search) }}>{label}</button>
-          )) : CATEGORIES[kind].map((category) => (
-            <button key={category} type="button" className={query.toLowerCase() === category.toLowerCase() ? 'active' : ''} onClick={() => { stopPreview(); setQuery(category); runSearch(kind, category) }}>{category}</button>
-          ))}
+          {topics.map((topic) => {
+            const [label, search] = Array.isArray(topic) ? topic : [topic, topic]
+            return <button key={label} type="button" className={query.toLowerCase() === search.toLowerCase() ? 'active' : ''} onClick={() => { stopPreview(); setQuery(search); runSearch(kind, search) }}>{label}</button>
+          })}
         </div>
 
-        {kind === 'image' && configured && (
+        {(kind === 'image' || kind === 'video') && configured && (
           <div className="stock-image-toolbar"><span>{!loading && !error ? total == null ? `${results.length} shown` : `${total.toLocaleString()} results` : ' '}</span><label>Sort <select value={order} onChange={(event) => { setOrder(event.target.value); runSearch(kind, query, 1, imageType, event.target.value) }}><option value="popular">Popular</option><option value="latest">Newest</option></select></label></div>
+        )}
+
+        {kind === 'video' && configured && (
+          <div className="stock-library-quality" role="radiogroup" aria-label="Video type">
+            <span>Type</span>
+            {VIDEO_TYPES.map(([key, label]) => <button key={key} type="button" role="radio" aria-checked={videoType === key} className={videoType === key ? 'active' : ''} onClick={() => { setVideoType(key); runSearch(kind, query, 1, imageType, order, key) }}>{label}</button>)}
+          </div>
         )}
 
         {kind === 'video' && configured && (

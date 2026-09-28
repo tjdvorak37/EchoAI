@@ -12,10 +12,10 @@ const errorMessage = async (error, fallback) => {
   return error?.message || fallback
 }
 
-export const searchMediaLibrary = async ({ kind, query, page = 1, imageType, order }) => {
+export const searchMediaLibrary = async ({ kind, query, page = 1, imageType, videoType, order }) => {
   if (!isSupabaseConfigured) throw new Error(unavailable)
   const { data, error } = await supabase.functions.invoke('media-library', {
-    body: { action: 'search', kind, query, page, imageType, order },
+    body: { action: 'search', kind, query, page, imageType, videoType, order },
   })
   if (error) throw new Error(await errorMessage(error, 'The stock library could not be reached.'))
   return data

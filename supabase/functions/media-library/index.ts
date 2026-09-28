@@ -72,6 +72,7 @@ const searchSounds = async (query: string, page: number) => {
 }
 
 const IMAGE_TYPES = new Set(['all', 'photo', 'illustration', 'vector'])
+const VIDEO_TYPES = new Set(['all', 'film', 'animation'])
 
 const searchImages = async (query: string, page: number, imageType: unknown, order: unknown) => {
   const key = await pixabayKey()
@@ -104,10 +105,15 @@ const searchImages = async (query: string, page: number, imageType: unknown, ord
   return { configured: true, items, total: Number(payload.totalHits ?? 0), hasMore: page < MAX_PAGE && page * IMAGE_PAGE_SIZE < Number(payload.totalHits ?? 0), provider: 'Pixabay' }
 }
 
-const searchVideos = async (query: string, page: number) => {
+const searchVideos = async (query: string, page: number, videoType: unknown, order: unknown) => {
   const key = await pixabayKey()
   if (!key) return { configured: false, items: [], hasMore: false, provider: 'Pixabay' }
-  const params = new URLSearchParams({ key, q: query, page: String(page), per_page: String(PAGE_SIZE), safesearch: 'true' })
+  const params = new URLSearchParams({
+    key, page: String(page), per_page: String(PAGE_SIZE), safesearch: 'true',
+    video_type: VIDEO_TYPES.has(String(videoType)) ? String(videoType) : 'all',
+    order: order === 'latest' ? 'latest' : 'popular',
+  })
+  if (query) params.set('q', query)
   const response = await fetch(`https://pixabay.com/api/videos/?${params}`)
   if (!response.ok) throw new Error(`Video search failed (${response.status}).`)
   const payload = await response.json()
@@ -133,7 +139,7 @@ const searchVideos = async (query: string, page: number) => {
       license: 'Pixabay Content License (free, no attribution required)',
     }
   })
-  return { configured: true, items, hasMore: page < MAX_PAGE && page * PAGE_SIZE < Number(payload.totalHits ?? 0), provider: 'Pixabay' }
+  return { configured: true, items, total: Number(payload.totalHits ?? 0), hasMore: page < MAX_PAGE && page * PAGE_SIZE < Number(payload.totalHits ?? 0), provider: 'Pixabay' }
 }
 
 const download = async (rawUrl: unknown, request: Request) => {
@@ -194,8 +200,8 @@ Deno.serve(async (request) => {
     if (body.action === 'search') {
       const page = pageNumber(body.page)
       if (body.kind === 'sound') return json(await searchSounds(cleanQuery(body.query, 'whoosh'), page), 200, request)
-      if (body.kind === 'video') return json(await searchVideos(cleanQuery(body.query, 'transition'), page), 200, request)
-      if (body.kind === 'image') return json(await searchImages(cleanQuery(body.query, body.imageType === 'vector' ? '' : 'nature'), page, body.imageType, body.order), 200, request)
+      if (body.kind === 'video') return json(await searchVideos(cleanQuery(body.query, ''), page, body.videoType, body.order), 200, request)
+      if (body.kind === 'image') return json(await searchImages(cleanQuery(body.query, ''), page, body.imageType, body.order), 200, request)
     }
     return json({ error: 'Unknown request.' }, 400, request)
   } catch (error) {
