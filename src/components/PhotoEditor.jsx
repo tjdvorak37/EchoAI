@@ -29,6 +29,22 @@ import {
   Lock,
   Keyboard,
   SlidersHorizontal,
+  Search,
+  Home,
+  LayoutTemplate,
+  Presentation,
+  Share2,
+  Clapperboard,
+  Printer,
+  FileText,
+  PanelsTopLeft,
+  Globe2,
+  Mail,
+  MoreHorizontal,
+  Plus,
+  FolderOpen,
+  Image as ImageIcon,
+  X,
 } from 'lucide-react'
 import { StockLibrary } from './StockLibrary'
 import { PhotoHueSaturationDialog } from './PhotoHueSaturationDialog'
@@ -71,6 +87,60 @@ const ASPECT_RATIOS = {
   '16:9': { label: 'Landscape', canvasWidth: 1600, canvasHeight: 900, css: '16 / 9' },
   '9:16': { label: 'Story', canvasWidth: 1080, canvasHeight: 1920, css: '9 / 16' },
 }
+
+const normalizeCanvasSize = (value) => {
+  const width = Math.round(Number(value?.width))
+  const height = Math.round(Number(value?.height))
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width < 40 || height < 40) return null
+  return { width: Math.min(width, 8192), height: Math.min(height, 8192), label: value?.label || 'Custom' }
+}
+
+const PHOTO_HOME_FORMATS = [
+  { key: 'presentation', label: 'Presentation', icon: Presentation, width: 1920, height: 1080, color: '#ff5a12' },
+  { key: 'social', label: 'Social media', icon: Share2, width: 1080, height: 1080, color: '#ff3f5f' },
+  { key: 'video', label: 'Video cover', icon: Clapperboard, width: 1920, height: 1080, color: '#dc3fe2' },
+  { key: 'print', label: 'Print', icon: Printer, width: 1275, height: 1650, color: '#8b24ee' },
+  { key: 'document', label: 'Document', icon: FileText, width: 2550, height: 3300, color: '#10a7b5' },
+  { key: 'whiteboard', label: 'Whiteboard', icon: PanelsTopLeft, width: 1920, height: 1080, color: '#08a64e' },
+  { key: 'website', label: 'Website', icon: Globe2, width: 1440, height: 900, color: '#4857ef' },
+  { key: 'email', label: 'Email', icon: Mail, width: 600, height: 900, color: '#5539ed' },
+]
+
+const PHOTO_DESIGN_PRESETS = [
+  { key: 'presentation', category: 'Presentations', label: 'Presentation (16:9)', icon: Presentation, width: 1920, height: 1080, color: '#ff5a12' },
+  { key: 'presentation-standard', category: 'Presentations', label: 'Presentation (4:3)', icon: Presentation, width: 1600, height: 1200, color: '#f97316' },
+  { key: 'instagram-post', category: 'Social media', label: 'Instagram Post (4:5)', icon: Share2, width: 1080, height: 1350, color: '#ff3f5f' },
+  { key: 'instagram-story', category: 'Social media', label: 'Instagram Story', icon: Share2, width: 1080, height: 1920, color: '#ec4899' },
+  { key: 'facebook-landscape', category: 'Social media', label: 'Facebook Post (Landscape)', icon: Share2, width: 1200, height: 630, color: '#2563eb' },
+  { key: 'linkedin-post', category: 'Social media', label: 'LinkedIn Post', icon: Share2, width: 1200, height: 1200, color: '#0284c7' },
+  { key: 'youtube-thumbnail', category: 'Social media', label: 'YouTube Thumbnail', icon: Clapperboard, width: 1280, height: 720, color: '#dc2626' },
+  { key: 'photo-portrait', category: 'Photo editor', label: 'Portrait photo', icon: ImageIcon, width: 1200, height: 1500, color: '#ec4899' },
+  { key: 'photo-square', category: 'Photo editor', label: 'Square photo', icon: ImageIcon, width: 1200, height: 1200, color: '#8b5cf6' },
+  { key: 'photo-landscape', category: 'Photo editor', label: 'Landscape photo', icon: ImageIcon, width: 1600, height: 900, color: '#0ea5e9' },
+  { key: 'video-landscape', category: 'Videos', label: 'Landscape Video Cover', icon: Clapperboard, width: 1920, height: 1080, color: '#d946ef' },
+  { key: 'video-mobile', category: 'Videos', label: 'Mobile Video Cover', icon: Clapperboard, width: 1080, height: 1920, color: '#a855f7' },
+  { key: 'video-square', category: 'Videos', label: 'Square Video Cover', icon: Clapperboard, width: 1080, height: 1080, color: '#7c3aed' },
+  { key: 'flyer', category: 'Print', label: 'Flyer (Portrait US)', icon: Printer, width: 1275, height: 1650, color: '#8b24ee' },
+  { key: 'invitation', category: 'Print', label: 'Invitation (Portrait)', icon: Printer, width: 1500, height: 2100, color: '#9333ea' },
+  { key: 'poster', category: 'Print', label: 'Poster (Portrait 3:4)', icon: Printer, width: 1800, height: 2400, color: '#7e22ce' },
+  { key: 'business-card', category: 'Print', label: 'Business Card', icon: Printer, width: 1050, height: 600, color: '#581c87' },
+  { key: 'doc-letter', category: 'Docs', label: 'Document (Letter)', icon: FileText, width: 2550, height: 3300, color: '#10a7b5' },
+  { key: 'doc-a4', category: 'Docs', label: 'Document (A4)', icon: FileText, width: 2480, height: 3508, color: '#0891b2' },
+  { key: 'whiteboard', category: 'Whiteboards', label: 'Whiteboard', icon: PanelsTopLeft, width: 1920, height: 1080, color: '#08a64e' },
+  { key: 'website', category: 'Websites', label: 'Website Canvas', icon: Globe2, width: 1440, height: 900, color: '#4857ef' },
+  { key: 'email', category: 'Emails', label: 'Email Design', icon: Mail, width: 600, height: 900, color: '#5539ed' },
+]
+
+const PHOTO_STARTERS = [
+  { key: 'launch', title: 'Launch announcement', ratio: '4:5', className: 'launch' },
+  { key: 'sale', title: 'Seasonal sale', ratio: '4:5', className: 'sale' },
+  { key: 'story', title: 'Social story', ratio: '9:16', className: 'story' },
+  { key: 'event', title: 'Event invite', ratio: '4:5', className: 'event' },
+  { key: 'product', title: 'Product spotlight', ratio: '1:1', className: 'product' },
+  { key: 'editorial', title: 'Editorial cover', ratio: '4:5', className: 'editorial' },
+]
+
+const PHOTO_CREATE_CATEGORIES = ['For you', 'Presentations', 'Social media', 'Photo editor', 'Videos', 'Print', 'Docs', 'Whiteboards', 'Websites', 'Emails']
 
 const STYLE_PRESETS = {
   aurora: {
@@ -826,6 +896,13 @@ const renderComposition = async ({
 
 export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
+  const [workspaceView, setWorkspaceView] = useState(initialProject ? 'editor' : 'home')
+  const [homeSearch, setHomeSearch] = useState('')
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [createCategory, setCreateCategory] = useState('For you')
+  const [createSearch, setCreateSearch] = useState('')
+  const [customWidth, setCustomWidth] = useState(1080)
+  const [customHeight, setCustomHeight] = useState(1080)
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [uploadedImage, setUploadedImage] = useState('')
   const [stockLibraryOpen, setStockLibraryOpen] = useState(false)
@@ -833,6 +910,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const [prompt, setPrompt] = useState(initialProject?.visualPrompt || DEFAULT_PROMPT)
   const [presetId, setPresetId] = useState('aurora')
   const [aspectRatio, setAspectRatio] = useState(initialProject?.outputType === 'image' ? '1:1' : '4:5')
+  const [customCanvasSize, setCustomCanvasSize] = useState(() => normalizeCanvasSize(initialProject?.canvasSize))
   const [headline, setHeadline] = useState(initialProject?.headline || '')
   const [subcopy, setSubcopy] = useState(initialProject?.caption || '')
   const [activeTool, setActiveTool] = useState('select')
@@ -912,7 +990,14 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const selectedAsset = imageAssets.find((asset) => asset.id === selectedAssetId) ?? null
   const selectedImageSrc = generatedImageSrc || uploadedImage || selectedAsset?.previewUrl || ''
   const preset = STYLE_PRESETS[presetId] ?? STYLE_PRESETS.aurora
-  const aspect = ASPECT_RATIOS[aspectRatio] ?? ASPECT_RATIOS['4:5']
+  const aspect = useMemo(() => aspectRatio === 'custom' && customCanvasSize
+    ? {
+        label: customCanvasSize.label,
+        canvasWidth: customCanvasSize.width,
+        canvasHeight: customCanvasSize.height,
+        css: `${customCanvasSize.width} / ${customCanvasSize.height}`,
+      }
+    : (ASPECT_RATIOS[aspectRatio] ?? ASPECT_RATIOS['4:5']), [aspectRatio, customCanvasSize])
   const resolvedActiveLayerId = layers.some((layer) => layer.id === activeLayerId)
     ? activeLayerId
     : (layers[0]?.id ?? '')
@@ -965,6 +1050,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     cropRect,
     presetId,
     aspectRatio,
+    customCanvasSize,
     generatedImageSrc,
     uploadedImage,
     selectedAssetId,
@@ -981,6 +1067,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setCropRect(snapshot.cropRect)
     setPresetId(snapshot.presetId)
     setAspectRatio(snapshot.aspectRatio)
+    setCustomCanvasSize(snapshot.customCanvasSize ?? null)
     setGeneratedImageSrc(snapshot.generatedImageSrc)
     setUploadedImage(snapshot.uploadedImage)
     setSelectedAssetId(snapshot.selectedAssetId)
@@ -1587,6 +1674,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setSubcopy('')
     setPresetId('aurora')
     setAspectRatio('4:5')
+    setCustomCanvasSize(null)
     setFilters(DEFAULT_FILTERS)
     setBrushStrokes([])
     setMaskShape('none')
@@ -1621,6 +1709,8 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
       commitHistory()
       setUploadedImage(event.target?.result || '')
       setNotice('Image imported successfully.')
+      setCreateDialogOpen(false)
+      setWorkspaceView('editor')
     }
     reader.readAsDataURL(file)
   }
@@ -1840,6 +1930,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
       subcopy,
       presetId,
       aspectRatio,
+      canvasSize: customCanvasSize,
       canvasBackground,
       maskShape,
       cropRect,
@@ -1908,6 +1999,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
           setFilters({ ...DEFAULT_FILTERS, ...project.filters })
           setPresetId(project.presetId)
           setAspectRatio(project.aspectRatio)
+          setCustomCanvasSize(normalizeCanvasSize(project.canvasSize))
           setGeneratedImageSrc(project.imageSrc)
           setUploadedImage('')
           setSelectedAssetId('')
@@ -1925,6 +2017,8 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
           setExportQuality(project.exportQuality)
           setProjectFileHandle(handle)
           setNotice('Project opened with editable layers, image, masks, and adjustments.')
+          setCreateDialogOpen(false)
+          setWorkspaceView('editor')
         } catch (error) {
           setNotice(`Could not open project: ${error.message}`)
         }
@@ -2569,13 +2663,8 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     const file = event.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      setUploadedImage(String(reader.result || ''))
-      setActiveTool('heal')
-      setNotice(`Loaded ${file.name} into the canvas. Use Heal, Crop, or Brush to retouch the underlying image.`)
-    }
-    reader.readAsDataURL(file)
+    importImageFile(file)
+    setActiveTool('heal')
     event.target.value = ''
   }
 
@@ -2584,6 +2673,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setPrompt('')
     setPresetId('editorial')
     setAspectRatio('4:5')
+    setCustomCanvasSize(null)
     setHeadline('')
     setSubcopy('')
     setGeneratedImageSrc('')
@@ -2626,6 +2716,8 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
       })
       setNotice(`Added "${label}" as a layer. Drag it to position and resize it in the layer panel.`)
     }
+    setCreateDialogOpen(false)
+    setWorkspaceView('editor')
     setStockLibraryOpen(false)
   }
 
@@ -2831,6 +2923,176 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   }
   const menuLayer = layerMenu && layerMenu.layerId !== '__photo' ? layers.find((item) => item.id === layerMenu.layerId) ?? null : null
 
+  const startHomeDesign = (design = '4:5') => {
+    resetDocument('New canvas ready. Choose a tool to begin.')
+    if (typeof design === 'string') {
+      setAspectRatio(design)
+      setCustomCanvasSize(null)
+    } else {
+      const size = normalizeCanvasSize({ width: design.width, height: design.height, label: design.label })
+      if (!size) return
+      setCustomCanvasSize(size)
+      setAspectRatio('custom')
+      setNotice(`${size.label} canvas created at ${size.width} × ${size.height} px.`)
+    }
+    setCreateDialogOpen(false)
+    setWorkspaceView('editor')
+  }
+
+  const openWorkspaceAsset = (asset) => {
+    setSelectedAssetId(asset.id)
+    setUploadedImage('')
+    setGeneratedImageSrc('')
+    setNotice(`Opened ${asset.name} from your workspace.`)
+    setWorkspaceView('editor')
+  }
+
+  const normalizedHomeSearch = homeSearch.trim().toLowerCase()
+  const visibleHomeFormats = PHOTO_HOME_FORMATS.filter((item) => item.label.toLowerCase().includes(normalizedHomeSearch))
+  const visibleHomeAssets = imageAssets.filter((asset) => asset.name.toLowerCase().includes(normalizedHomeSearch)).slice(0, 6)
+  const visibleStarters = PHOTO_STARTERS.filter((item) => item.title.toLowerCase().includes(normalizedHomeSearch))
+  const normalizedCreateSearch = createSearch.trim().toLowerCase()
+  const visibleCreateFormats = PHOTO_DESIGN_PRESETS.filter((item) => {
+    const matchesSearch = item.label.toLowerCase().includes(normalizedCreateSearch)
+      || item.category.toLowerCase().includes(normalizedCreateSearch)
+    if (!matchesSearch) return false
+    return normalizedCreateSearch || createCategory === 'For you' || item.category === createCategory
+  }).slice(0, createCategory === 'For you' && !normalizedCreateSearch ? 12 : undefined)
+  const createCustomDesign = () => startHomeDesign({ width: customWidth, height: customHeight, label: 'Custom' })
+
+  const createDialog = createDialogOpen && createPortal(
+    <div className="photo-create-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) setCreateDialogOpen(false)
+    }}>
+      <section className="photo-create-dialog" role="dialog" aria-modal="true" aria-labelledby="photo-create-title">
+        <header>
+          <h2 id="photo-create-title">Create a design</h2>
+          <label><Search size={19} aria-hidden="true" /><input autoFocus value={createSearch} onChange={(event) => setCreateSearch(event.target.value)} placeholder="What would you like to create?" /></label>
+          <button type="button" className="photo-create-close" onClick={() => setCreateDialogOpen(false)} aria-label="Close"><X size={22} /></button>
+        </header>
+        <div className="photo-create-body">
+          <nav aria-label="Design categories">
+            {PHOTO_CREATE_CATEGORIES.map((category) => (
+              <button key={category} type="button" className={createCategory === category ? 'active' : ''} onClick={() => setCreateCategory(category)}>
+                <LayoutTemplate size={16} aria-hidden="true" /><span>{category}</span>
+              </button>
+            ))}
+            <button type="button" className={createCategory === 'Custom size' ? 'active' : ''} onClick={() => setCreateCategory('Custom size')}><PanelsTopLeft size={16} /><span>Custom size</span></button>
+            <button type="button" className={createCategory === 'Upload' ? 'active' : ''} onClick={() => setCreateCategory('Upload')}><Upload size={16} /><span>Upload</span></button>
+          </nav>
+          <div className="photo-create-results">
+            {createCategory === 'Custom size' ? (
+              <div className="photo-create-custom">
+                <h3>Custom size</h3>
+                <div className="photo-create-size-fields">
+                  <label>Width<input type="number" min="40" max="8192" value={customWidth} onChange={(event) => setCustomWidth(event.target.value)} /></label>
+                  <label>Height<input type="number" min="40" max="8192" value={customHeight} onChange={(event) => setCustomHeight(event.target.value)} /></label>
+                  <label>Units<select disabled><option>px</option></select></label>
+                  <button type="button" onClick={createCustomDesign} disabled={!normalizeCanvasSize({ width: customWidth, height: customHeight })}>Create new design</button>
+                </div>
+                <h3>Popular layouts</h3>
+                <div className="photo-create-presets">
+                  {PHOTO_DESIGN_PRESETS.filter((item) => ['doc-a4', 'presentation', 'instagram-post', 'business-card'].includes(item.key)).map((item) => {
+                    const FormatIcon = item.icon
+                    return <button key={item.key} type="button" onClick={() => startHomeDesign(item)}><span className="photo-create-preset-art" style={{ '--format-color': item.color }}><FormatIcon size={42} /></span><strong>{item.label}</strong><small>{item.width} × {item.height} px</small></button>
+                  })}
+                </div>
+              </div>
+            ) : createCategory === 'Upload' ? (
+              <div className="photo-create-upload" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+                event.preventDefault()
+                importImageFile(event.dataTransfer.files?.[0])
+              }}>
+                <Upload size={64} aria-hidden="true" /><h3>Drop your image here</h3><p>Import a PNG, JPEG, WebP, GIF, or SVG into the full Photo Editor.</p><button type="button" onClick={() => uploadInputRef.current?.click()}>Upload files</button>
+              </div>
+            ) : (
+              <>
+                {(createCategory === 'For you' || createCategory === 'Photo editor') && (
+                  <><h3>Quick actions</h3><div className="photo-create-quick">
+                    <button type="button" onClick={() => startHomeDesign(PHOTO_DESIGN_PRESETS.find((item) => item.key === 'photo-portrait'))}><span><ImageIcon size={22} /></span>Photo editor</button>
+                    <button type="button" onClick={() => setStockLibraryOpen(true)}><span><Images size={22} /></span>Stock images</button>
+                    <button type="button" onClick={handleFileOpenProject}><span><FolderOpen size={22} /></span>Open project</button>
+                    <button type="button" onClick={() => setCreateCategory('Upload')}><span><Upload size={22} /></span>Upload image</button>
+                  </div></>
+                )}
+                <h3>{createCategory === 'For you' ? 'Popular in EchoAI' : createCategory}</h3>
+                <div className="photo-create-presets">
+                  {visibleCreateFormats.map((item) => {
+                    const FormatIcon = item.icon
+                    return (
+                      <button key={item.key} type="button" onClick={() => startHomeDesign(item)}>
+                        <span className="photo-create-preset-art" style={{ '--format-color': item.color }}><FormatIcon size={42} /></span>
+                        <strong>{item.label}</strong><small>{item.width} × {item.height} px</small>
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>,
+    document.body,
+  )
+
+  if (workspaceView === 'home') {
+    return (
+      <section className="photo-home" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+        event.preventDefault()
+        importImageFile(event.dataTransfer.files?.[0])
+      }}>
+        <aside className="photo-home-rail" aria-label="Photo editor navigation">
+          <div className="photo-home-mark" aria-label="EchoAI Photo Editor"><ImageIcon size={21} /></div>
+          <button type="button" className="photo-home-create" onClick={() => setCreateDialogOpen(true)} aria-label="Create"><Plus size={20} /><span>Create</span></button>
+          <nav>
+            <button type="button" className="active" aria-label="Home"><Home size={19} /><span>Home</span></button>
+            <button type="button" aria-label="Templates" onClick={() => document.querySelector('.photo-home-templates')?.scrollIntoView({ behavior: 'smooth' })}><LayoutTemplate size={19} /><span>Templates</span></button>
+            <button type="button" aria-label="Projects" onClick={handleFileOpenProject}><FolderOpen size={19} /><span>Projects</span></button>
+            <button type="button" aria-label="Stock images" onClick={() => setStockLibraryOpen(true)}><Images size={19} /><span>Stock</span></button>
+          </nav>
+        </aside>
+        <main className="photo-home-main">
+          <div className="photo-home-hero">
+            <div className="photo-home-tabs"><button type="button" className="active"><Home size={14} /> Home</button><button type="button" onClick={() => document.querySelector('.photo-home-templates')?.scrollIntoView({ behavior: 'smooth' })}><LayoutTemplate size={14} /> Templates</button></div>
+            <h1>What will you create today?</h1>
+            <label className="photo-home-search"><Search size={20} /><input value={homeSearch} onChange={(event) => setHomeSearch(event.target.value)} placeholder="Search formats, templates, and projects" /></label>
+          </div>
+          <div className="photo-home-content">
+            <section className="photo-home-formats" aria-label="Create a design">
+              <button type="button" className="photo-format-item photo-format-templates" onClick={() => setCreateDialogOpen(true)}><span className="photo-format-icon"><LayoutTemplate size={24} /></span><span>Templates</span></button>
+              {visibleHomeFormats.map((item) => {
+                const FormatIcon = item.icon
+                return <button key={item.key} type="button" className="photo-format-item" onClick={() => startHomeDesign(item)}><span className="photo-format-icon" style={{ '--format-color': item.color }}><FormatIcon size={24} /></span><span>{item.label}</span></button>
+              })}
+              <button type="button" className="photo-format-item" onClick={() => uploadInputRef.current?.click()}><span className="photo-format-icon photo-format-neutral"><Upload size={24} /></span><span>Upload</span></button>
+              <button type="button" className="photo-format-item" onClick={() => setCreateDialogOpen(true)}><span className="photo-format-icon photo-format-neutral"><MoreHorizontal size={24} /></span><span>More</span></button>
+            </section>
+            <input ref={uploadInputRef} className="photo-home-file-input" type="file" accept="image/*" onChange={handleUpload} />
+            <section className="photo-home-section" aria-labelledby="photo-recent-heading">
+              <div className="photo-home-section-heading"><h2 id="photo-recent-heading">Continue designing</h2><span>{imageAssets.length} workspace images</span></div>
+              <div className="photo-recent-grid">
+                {visibleHomeAssets.length ? visibleHomeAssets.map((asset) => (
+                  <button key={asset.id} type="button" className="photo-recent-item" onClick={() => openWorkspaceAsset(asset)}><span className="photo-recent-preview">{asset.previewUrl ? <img src={asset.previewUrl} alt="" /> : <ImageIcon size={28} />}</span><strong>{asset.name}</strong><small>Photo Editor project</small></button>
+                )) : <button type="button" className="photo-recent-empty" onClick={() => uploadInputRef.current?.click()}><Upload size={24} /><strong>Upload your first image</strong><span>PNG, JPEG, or WebP</span></button>}
+              </div>
+            </section>
+            <section className="photo-home-section photo-home-templates" aria-labelledby="photo-template-heading">
+              <div className="photo-home-section-heading"><h2 id="photo-template-heading">Templates for you</h2><span>Start with a fully editable canvas</span></div>
+              <div className="photo-template-grid">
+                {visibleStarters.map((starter) => (
+                  <button key={starter.key} type="button" className="photo-template-item" onClick={() => startHomeDesign(starter.ratio)}><span className={`photo-template-preview ${starter.className}`}><i>EchoAI</i><b>{starter.title}</b><small>Create something remarkable</small></span><strong>{starter.title}</strong></button>
+                ))}
+              </div>
+            </section>
+          </div>
+        </main>
+        {createDialog}
+        {stockLibraryOpen && createPortal(<StockLibrary initialKind="image" kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />, document.body)}
+      </section>
+    )
+  }
+
   return (
     <section
       className={`photo-creator-shell ${compactMode ? 'compact' : ''} ${focusMode.focused ? 'editor-focus' : ''}`}
@@ -2847,6 +3109,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
           <p className="panel-note">Upload a photo, add text and graphics, retouch it, then export.</p>
         </div>
         <div className="photo-creator-actions">
+          <button type="button" className="ghost-button" onClick={() => setWorkspaceView('home')} title="Photo Editor home"><Home size={15} /> Home</button>
           <EditorFocusToggle focused={focusMode.focused} onToggle={focusMode.toggle} fullscreen={focusMode.fullscreen} onToggleFullscreen={focusMode.toggleFullscreen} label="photo editor" />
           {/* Quick Access - Only essential buttons */}
           <button
@@ -3590,10 +3853,14 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
             <p className="section-label">Inspector</p>
             <label>
               Aspect ratio
-              <select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value)}>
+              <select value={aspectRatio} onChange={(event) => {
+                setAspectRatio(event.target.value)
+                if (event.target.value !== 'custom') setCustomCanvasSize(null)
+              }}>
                 {Object.entries(ASPECT_RATIOS).map(([key, value]) => (
                   <option key={key} value={key}>{value.label}</option>
                 ))}
+                {customCanvasSize && <option value="custom">{customCanvasSize.label} ({customCanvasSize.width} × {customCanvasSize.height})</option>}
               </select>
             </label>
             <label>
