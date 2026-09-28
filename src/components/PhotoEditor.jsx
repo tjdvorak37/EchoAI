@@ -3839,7 +3839,7 @@ export function PhotoEditor({
           </div>
         </main>
         {createDialog}
-        {stockLibraryOpen && createPortal(<StockLibrary initialKind="image" initialQuery={stockLibraryOpen === 'logo' ? 'logo symbol' : undefined} initialImageType={stockLibraryOpen === 'logo' ? 'vector' : 'all'} kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />, document.body)}
+        {stockLibraryOpen && createPortal(<StockLibrary initialKind="image" initialQuery={stockLibraryOpen === 'logo' ? '' : undefined} initialImageType={stockLibraryOpen === 'logo' ? 'vector' : 'all'} kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />, document.body)}
       </section>
     )
   }
@@ -4985,7 +4985,7 @@ export function PhotoEditor({
         </aside>
       </div>
       {stockLibraryOpen && createPortal(
-        <StockLibrary initialKind="image" initialQuery={stockLibraryOpen === 'logo' ? 'logo symbol' : undefined} initialImageType={stockLibraryOpen === 'logo' ? 'vector' : 'all'} kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />,
+        <StockLibrary initialKind="image" initialQuery={stockLibraryOpen === 'logo' ? '' : undefined} initialImageType={stockLibraryOpen === 'logo' ? 'vector' : 'all'} kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />,
         document.body,
       )}
       {hueSatDialog && createPortal(
