@@ -4,9 +4,12 @@ export const ECHOAI_TEMPLATE_LICENSE = {
   summary: 'EchoAI original. Free for personal and commercial use in exported designs.',
 }
 
+const PHOTO_TEMPLATE_LAYOUTS = ['editorial', 'badge', 'split', 'frame', 'diagonal', 'minimal']
+
 const photoTemplate = (template) => ({
   license: ECHOAI_TEMPLATE_LICENSE,
   source: 'EchoAI original',
+  layout: PHOTO_TEMPLATE_LAYOUTS[[...template.key].reduce((total, char) => total + char.charCodeAt(0), 0) % PHOTO_TEMPLATE_LAYOUTS.length],
   ...template,
 })
 
