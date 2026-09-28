@@ -1342,8 +1342,6 @@ export function PhotoEditor({
   }
 
   // --- Pro editing: pixel pipeline, selections, layer mask ----------------
-  // The payload helper reads the same editor state already listed below.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!selectedImageSrc) return undefined
     let cancelled = false
@@ -3306,6 +3304,8 @@ export function PhotoEditor({
       }
     }, 700)
     return () => window.clearTimeout(timer)
+  // The payload helper reads the same editor state already listed below.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aspectRatio, brushStrokes, canvasBackground, cropRect, customCanvasSize, exportFormat, exportQuality, filters, headline, hueSat, layerMask, layers, maskShape, presetId, prompt, selectedImageSrc, subcopy, workspaceView])
 
   const modernToolPanel = (
