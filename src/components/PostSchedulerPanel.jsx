@@ -1,46 +1,13 @@
 import { useRef, useState, useMemo } from 'react'
+import { ArrowRight } from 'lucide-react'
 import { PUBLISHING_PLATFORMS, PUBLISHING_PLATFORM_KEYS, SOCIAL_PLATFORMS } from '../data/socialPlatforms'
+import { POST_COMPOSER_TEMPLATES } from '../data/templateCatalog'
 import { getVideoTrimForChannel, SOCIAL_VIDEO_CLIP_LIMITS } from '../services/mediaUploadPolicy'
 import './PostSchedulerPanel.css'
 
 const PLATFORM_LIMITS = Object.fromEntries(
   PUBLISHING_PLATFORMS.map((platform) => [platform.key, platform.characterLimit]),
 )
-
-const SCHEDULER_TEMPLATES = [
-  {
-    key: 'launch',
-    title: '🚀 Product Launch Announcement',
-    campaign: 'Product Launch Q3',
-    message: '🚀 IT IS FINALLY HERE! We are thrilled to officially introduce our newest release. Built from customer feedback to help you achieve more in less time.\n\n👉 Click the link in bio to learn more and claim launch pricing!',
-    imageIdea: 'High-contrast product hero shot with vibrant gradient background',
-    channels: ['instagram', 'facebook', 'linkedin', 'x'],
-  },
-  {
-    key: 'flash_sale',
-    title: '⚡ Weekend Flash Sale',
-    campaign: 'Flash Sale Weekend',
-    message: '⚡ WEEKEND FLASH SALE! For the next 48 hours only, take 25% OFF everything when you use code FLASH25 at checkout.\n\nDon’t wait — stock is limited! 🛍️',
-    imageIdea: 'Bold typography poster featuring "25% OFF" in bright brand colors',
-    channels: ['instagram', 'facebook'],
-  },
-  {
-    key: 'spotlight',
-    title: '🌟 Customer Spotlight / Success Story',
-    campaign: 'Customer Success',
-    message: '🌟 "This completely changed how our team operates." See how our latest case study partner scaled their results by 3x in under 30 days.\n\nRead the full story linked in bio!',
-    imageIdea: 'Editorial lifestyle photo of a customer using the product',
-    channels: ['linkedin', 'facebook', 'x'],
-  },
-  {
-    key: 'tip',
-    title: '💡 Educational Tip / How-To',
-    campaign: 'Weekly Education',
-    message: '💡 QUICK TIP: Did you know you can streamline your daily workflow in just 3 steps?\n\n1️⃣ Step One\n2️⃣ Step Two\n3️⃣ Step Three\n\nSave this post for later!',
-    imageIdea: 'Clean 3-step numbered graphic with minimal layout',
-    channels: ['instagram', 'linkedin'],
-  },
-]
 
 const EMOJI_GROUPS = [
   { label: 'Smileys', emojis: '😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🤩 🥳 😏 😒 😞 😔 😟 😕 🙁 ☹️ 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🫡 🤭 🤫 🤥 😶 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 🤐 🤑 🤠' },
@@ -1285,20 +1252,27 @@ export function PostSchedulerPanel({
         {activeTab === 'templates' && (
           <div style={{ display: 'grid', gap: '1.15rem' }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.15rem' }}>High-Converting Post Templates</h3>
+              <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Royalty-Free Post Templates</h3>
               <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.84rem' }}>
-                Select a template to prefill the composer with proven campaign copy and visual direction.
+                EchoAI-original copy frameworks for personal and commercial campaigns. Every field remains editable.
               </p>
             </div>
 
             <div className="templates-grid">
-              {SCHEDULER_TEMPLATES.map((tmpl) => (
+              {POST_COMPOSER_TEMPLATES.map((tmpl) => (
                 <div key={tmpl.key} className="template-card">
+                  <div className={`template-card-visual template-card-visual-${tmpl.category.toLowerCase().replace(/\s+/g, '-')}`}>
+                    <span aria-hidden="true" /><span aria-hidden="true" />
+                    <div><small>{tmpl.category}</small><strong>{tmpl.campaign}</strong></div>
+                  </div>
                   <div>
+                    <div className="template-card-meta"><span>{tmpl.category}</span><span>{tmpl.license.shortName}</span></div>
                     <h4 style={{ margin: '0 0 0.35rem', fontSize: '1rem', color: '#0f172a' }}>{tmpl.title}</h4>
                     <p style={{ margin: 0, fontSize: '0.84rem', color: '#475569', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
                       {tmpl.message}
                     </p>
+                    <p className="template-visual-direction"><strong>Visual:</strong> {tmpl.imageIdea}</p>
+                    <p className="template-channel-list">Designed for {tmpl.channels.map((channel) => getPlatformMeta(channel).label).join(', ')}</p>
                   </div>
 
                   <button
@@ -1307,7 +1281,7 @@ export function PostSchedulerPanel({
                     onClick={() => handleApplyTemplate(tmpl)}
                     style={{ fontSize: '0.84rem', padding: '0.45rem 0.85rem' }}
                   >
-                    ⚡ Load Template into Composer
+                    Load template <ArrowRight size={15} aria-hidden="true" />
                   </button>
                 </div>
               ))}

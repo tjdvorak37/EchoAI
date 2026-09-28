@@ -717,7 +717,7 @@
 .template-card {
   background: #ffffff;
   border: 1.5px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 1.15rem;
   display: flex;
   flex-direction: column;
@@ -725,6 +725,75 @@
   gap: 0.75rem;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
   transition: all 160ms ease;
+}
+
+.template-card-visual {
+  position: relative;
+  min-height: 112px;
+  overflow: hidden;
+  margin: -1.15rem -1.15rem 0;
+  padding: 1rem;
+  color: #fff;
+  background: linear-gradient(135deg, #173f5f, #2f80a3);
+  isolation: isolate;
+}
+
+.template-card-visual > span {
+  position: absolute;
+  z-index: -1;
+  width: 90px;
+  height: 90px;
+  border: 14px solid rgba(255,255,255,.2);
+  border-radius: 50%;
+}
+
+.template-card-visual > span:first-child { top: -38px; right: -20px; }
+.template-card-visual > span:nth-child(2) { right: 46px; bottom: -65px; }
+.template-card-visual > div { height: 80px; display: grid; align-content: end; gap: .25rem; }
+.template-card-visual small { font-size: .62rem; font-weight: 800; text-transform: uppercase; }
+.template-card-visual strong { max-width: 16ch; font-family: Georgia, 'Times New Roman', serif; font-size: 1.15rem; line-height: 1; }
+.template-card-visual-promotion { background: linear-gradient(135deg, #be123c, #f97316); }
+.template-card-visual-trust { background: linear-gradient(135deg, #155e75, #14b8a6); }
+.template-card-visual-education { background: linear-gradient(135deg, #1e3a8a, #3b82f6); }
+.template-card-visual-community { background: linear-gradient(135deg, #4c1d95, #c026d3); }
+.template-card-visual-event { background: linear-gradient(135deg, #7c2d12, #d97706); }
+.template-card-visual-engagement { background: linear-gradient(135deg, #14532d, #65a30d); }
+.template-card-visual-company { background: linear-gradient(135deg, #27272a, #71717a); }
+
+.template-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+
+.template-card .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: .35rem; }
+
+.template-card-meta span {
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  color: #3056b3;
+  background: #edf3ff;
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.template-card-meta span:last-child {
+  color: #166534;
+  background: #ecfdf3;
+}
+
+.template-visual-direction {
+  margin: 0.75rem 0 0;
+  color: #334155;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.template-channel-list {
+  margin: 0.4rem 0 0;
+  color: #64748b;
+  font-size: 0.7rem;
 }
 
 .template-card:hover {

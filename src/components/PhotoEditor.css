@@ -2232,6 +2232,7 @@
 .photo-recent-item:hover img { transform: scale(1.035); }
 .photo-recent-item strong,
 .photo-template-item > strong { overflow: hidden; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.photo-template-license { color: #5f6b62; font-size: .64rem; }
 .photo-recent-item small { color: #77717f; font-size: .67rem; }
 
 .photo-recent-empty {
