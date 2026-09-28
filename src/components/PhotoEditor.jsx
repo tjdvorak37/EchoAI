@@ -146,6 +146,19 @@ const PHOTO_DESIGN_PRESETS = [
   { key: 'facebook-landscape', category: 'Social media', platform: 'Facebook', label: 'Facebook Post (Landscape)', icon: Share2, width: 1200, height: 630, color: '#2563eb' },
   { key: 'linkedin-post', category: 'Social media', platform: 'LinkedIn', label: 'LinkedIn Post', icon: Share2, width: 1200, height: 1200, color: '#0284c7' },
   { key: 'youtube-thumbnail', category: 'Social media', platform: 'YouTube', label: 'YouTube Thumbnail', icon: Clapperboard, width: 1280, height: 720, color: '#dc2626' },
+  { key: 'instagram-reel', category: 'Social media', platform: 'Instagram', label: 'Instagram Reel', icon: Clapperboard, width: 1080, height: 1920, color: '#c13584' },
+  { key: 'facebook-story', category: 'Social media', platform: 'Facebook', label: 'Facebook Story', icon: Share2, width: 1080, height: 1920, color: '#1877f2' },
+  { key: 'facebook-cover', category: 'Social media', platform: 'Facebook', label: 'Facebook Cover', icon: Share2, width: 1640, height: 856, color: '#1769d2' },
+  { key: 'linkedin-video', category: 'Social media', platform: 'LinkedIn', label: 'LinkedIn Video', icon: Clapperboard, width: 1920, height: 1080, color: '#0a66c2' },
+  { key: 'x-post', category: 'Social media', platform: 'X', label: 'X Post', icon: Share2, width: 1600, height: 900, color: '#202124' },
+  { key: 'x-header', category: 'Social media', platform: 'X', label: 'X Header', icon: Share2, width: 1500, height: 500, color: '#111827' },
+  { key: 'pinterest-pin', category: 'Social media', platform: 'Pinterest', label: 'Pinterest Pin', icon: Share2, width: 1000, height: 1500, color: '#bd081c' },
+  { key: 'whatsapp-status', category: 'Social media', platform: 'WhatsApp', label: 'WhatsApp Status', icon: Share2, width: 1080, height: 1920, color: '#16a34a', status: 'Planning only' },
+  { key: 'tiktok-video', category: 'Social media', platform: 'TikTok', label: 'TikTok Video', icon: Clapperboard, width: 1080, height: 1920, color: '#111827', status: 'Planning only' },
+  { key: 'twitch-banner', category: 'Social media', platform: 'Twitch', label: 'Twitch Banner', icon: Share2, width: 1200, height: 480, color: '#6f42c1', status: 'Planned integration' },
+  { key: 'google-business-post', category: 'Social media', platform: 'Google Business Profile', label: 'Google Business Post', icon: Share2, width: 1200, height: 900, color: '#1769d2', status: 'Planned integration' },
+  { key: 'youtube-channel-banner', category: 'Social media', platform: 'YouTube', label: 'YouTube Channel Banner', icon: Share2, width: 2560, height: 1440, color: '#b91c1c' },
+  { key: 'youtube-shorts', category: 'Social media', platform: 'YouTube', label: 'YouTube Short', icon: Clapperboard, width: 1080, height: 1920, color: '#ef4444' },
   { key: 'photo-portrait', category: 'Photo editor', label: 'Portrait photo', icon: ImageIcon, width: 1200, height: 1500, color: '#ec4899' },
   { key: 'photo-square', category: 'Photo editor', label: 'Square photo', icon: ImageIcon, width: 1200, height: 1200, color: '#8b5cf6' },
   { key: 'photo-landscape', category: 'Photo editor', label: 'Landscape photo', icon: ImageIcon, width: 1600, height: 900, color: '#0ea5e9' },
@@ -174,6 +187,8 @@ const PHOTO_SOCIAL_PLATFORMS = [
   { key: 'X', label: 'X', color: '#111827' },
   { key: 'WhatsApp', label: 'WhatsApp', color: '#16a34a' },
   { key: 'YouTube', label: 'YouTube', color: '#dc2626' },
+  { key: 'Twitch', label: 'Twitch', color: '#6f42c1' },
+  { key: 'Google Business Profile', label: 'Google Business', color: '#1769d2' },
 ]
 
 const STYLE_PRESETS = {
@@ -3413,7 +3428,7 @@ export function PhotoEditor({
                 <div className="photo-create-presets">
                   {PHOTO_DESIGN_PRESETS.filter((item) => ['doc-a4', 'presentation', 'instagram-post', 'business-card'].includes(item.key)).map((item) => {
                     const FormatIcon = item.icon
-                    return <button key={item.key} type="button" className={`photo-create-preset-card preset-${item.key}`} onClick={() => startHomeDesign(item)}><span className="photo-create-preset-art" style={{ '--format-color': item.color }}><FormatIcon size={42} /></span><strong>{item.label}</strong><small>{item.width} × {item.height} px</small></button>
+                    return <button key={item.key} type="button" className={`photo-create-preset-card preset-${item.key}`} onClick={() => startHomeDesign(item)}><span className="photo-create-preset-art" style={{ '--format-color': item.color }}><FormatIcon size={42} /></span><strong>{item.label}</strong><small>{item.width} × {item.height} px{item.status ? ` · ${item.status}` : ''}</small></button>
                   })}
                 </div>
               </div>
@@ -3441,7 +3456,7 @@ export function PhotoEditor({
                     return (
                       <button key={item.key} type="button" className={`photo-create-preset-card preset-${item.key}`} onClick={() => startHomeDesign(item)}>
                         <span className="photo-create-preset-art" style={{ '--format-color': item.color }}><FormatIcon size={42} /></span>
-                        <strong>{item.label}</strong><small>{item.width} × {item.height} px</small>
+                        <strong>{item.label}</strong><small>{item.width} × {item.height} px{item.status ? ` · ${item.status}` : ''}</small>
                       </button>
                     )
                   })}
