@@ -540,8 +540,8 @@ const photoTemplateLayers = (template) => {
 }
 
 const PhotoTemplatePreview = ({ template }) => (
-  <span className="photo-template-preview">
-    <span className="photo-template-art" style={{ aspectRatio: `${template.width} / ${template.height}`, background: template.colors[0] }}>
+  <span className="photo-template-preview" style={{ '--template-base': template.colors[0] }}>
+    <span className="photo-template-art" style={{ '--template-ratio': template.width / template.height, background: template.colors[0] }}>
       {photoTemplateLayers(template).map((layer) => (
         <span key={layer.id} className={`photo-template-art-layer ${layer.type}`} style={{
           left: `${layer.x}%`, top: `${layer.y}%`,
@@ -3782,7 +3782,7 @@ export function PhotoEditor({
                       <PhotoTemplatePreview template={starter} />
                       <strong>{starter.title}</strong><small className="photo-template-license">{starter.license.shortName} · {starter.width} × {starter.height}</small>
                     </button>
-                    <button type="button" className="photo-template-add-photo" title={`Use a free photo with ${starter.title}`} aria-label={`Use a free photo with ${starter.title}`} onClick={() => { applyPhotoTemplate(starter); setStockLibraryOpen(true) }}><Images size={17} aria-hidden="true" /></button>
+                    <button type="button" className="photo-template-add-photo" title={`Use a free photo with ${starter.title}`} aria-label={`Use a free photo with ${starter.title}`} onClick={() => { applyPhotoTemplate(starter); setStockLibraryOpen(true) }}><Images size={15} aria-hidden="true" /> Add photo</button>
                   </div>
                 ))}
                 {visibleStarters.length === 0 && <p className="photo-template-empty">No templates match these filters.</p>}
