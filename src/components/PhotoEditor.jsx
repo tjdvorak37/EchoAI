@@ -54,6 +54,8 @@ import {
   Palette,
   Expand,
   Layers3,
+  Folder,
+  MoreVertical,
 } from 'lucide-react'
 import { StockLibrary } from './StockLibrary'
 import { PhotoHueSaturationDialog } from './PhotoHueSaturationDialog'
@@ -113,6 +115,16 @@ const readPhotoAutosave = () => {
   } catch {
     return null
   }
+}
+
+const newProjectId = () => `design_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`
+
+const DATE_FILTER_DAYS = { today: 1, '7': 7, '30': 30, '90': 90 }
+const withinDateFilter = (isoDate, filter) => {
+  if (filter === 'any' || !isoDate) return true
+  const days = DATE_FILTER_DAYS[filter]
+  if (!days) return true
+  return Date.now() - new Date(isoDate).getTime() <= days * 24 * 60 * 60 * 1000
 }
 
 const PHOTO_HOME_FORMATS = [
@@ -966,11 +978,35 @@ const renderComposition = async ({
   return canvas.toDataURL('image/png')
 }
 
-export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
+export function PhotoEditor({
+  assets,
+  onExport,
+  brandKit,
+  initialProject,
+  folders = [],
+  onCreateFolder,
+  onUploadFiles,
+  onMoveAsset,
+  onRenameAsset,
+  onRenameFolder,
+  onDeleteAsset,
+  onDeleteFolder,
+  onSaveProject,
+}) {
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
   const [autosavedProject, setAutosavedProject] = useState(readPhotoAutosave)
   const startingProject = initialProject || autosavedProject
   const [workspaceView, setWorkspaceView] = useState(initialProject ? 'editor' : 'home')
+  const [projectsFolderId, setProjectsFolderId] = useState('')
+  const [projectsSearch, setProjectsSearch] = useState('')
+  const [projectsTypeFilter, setProjectsTypeFilter] = useState('all')
+  const [projectsDateFilter, setProjectsDateFilter] = useState('any')
+  const [newFolderDraft, setNewFolderDraft] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [projectsMenu, setProjectsMenu] = useState(null)
+  const [renamingItem, setRenamingItem] = useState(null)
+  const projectIdRef = useRef(startingProject?.projectId || `design_${Date.now()}`)
+  const projectsUploadInputRef = useRef(null)
   const [editorPanel, setEditorPanel] = useState('main')
   const [saveStatus, setSaveStatus] = useState(autosavedProject ? 'Autosaved' : 'Autosave on')
   const [schoolPractice, setSchoolPractice] = useState(null)
@@ -1306,6 +1342,8 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   }
 
   // --- Pro editing: pixel pipeline, selections, layer mask ----------------
+  // The payload helper reads the same editor state already listed below.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!selectedImageSrc) return undefined
     let cancelled = false
@@ -1742,6 +1780,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
 
   const resetDocument = (message) => {
     commitHistory()
+    projectIdRef.current = newProjectId()
     setUploadedImage('')
     setGeneratedImageSrc('')
     setSelectedAssetId('')
@@ -3019,10 +3058,41 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   }
 
   const openWorkspaceAsset = (asset) => {
+    if (asset.type === 'design' && asset.projectMetadata) {
+      openSavedDesign(asset)
+      return
+    }
+    projectIdRef.current = newProjectId()
     setSelectedAssetId(asset.id)
     setUploadedImage('')
     setGeneratedImageSrc('')
     setNotice(`Opened ${asset.name} from your workspace.`)
+    setWorkspaceView('editor')
+  }
+
+  const openSavedDesign = (asset) => {
+    const project = asset.projectMetadata
+    if (!project) return
+    resetDocument(`${asset.name} loaded. Every layer remains editable.`)
+    projectIdRef.current = project.projectId || asset.id
+    setLayers(project.layers || [])
+    setActiveLayerId(project.layers?.[0]?.id || '')
+    setFilters({ ...DEFAULT_FILTERS, ...project.filters })
+    setPresetId(project.presetId || 'aurora')
+    setAspectRatio(project.aspectRatio || '4:5')
+    setCustomCanvasSize(normalizeCanvasSize(project.canvasSize))
+    setGeneratedImageSrc(project.imageSrc || '')
+    setPrompt(project.prompt || DEFAULT_PROMPT)
+    setHeadline(project.headline || '')
+    setSubcopy(project.subcopy || '')
+    setCanvasBackground(project.canvasBackground || '#ffffff')
+    setMaskShape(project.maskShape || 'none')
+    setCropRect(project.cropRect || { x: 0, y: 0, w: 100, h: 100 })
+    setHueSat(project.hueSat ?? defaultHueSat())
+    setLayerMask(project.layerMask ?? null)
+    setBrushStrokes(project.brushStrokes || [])
+    setExportFormat(project.exportFormat || 'png')
+    setExportQuality(project.exportQuality ?? 92)
     setWorkspaceView('editor')
   }
 
@@ -3151,27 +3221,29 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     setNotice(`${preset.label} shadow applied.`)
   }
 
+  const buildProjectPayload = () => ({
+    imageSrc: selectedImageSrc,
+    prompt,
+    headline,
+    subcopy,
+    presetId,
+    aspectRatio,
+    canvasSize: customCanvasSize,
+    canvasBackground,
+    maskShape,
+    cropRect,
+    filters,
+    hueSat,
+    layerMask,
+    brushStrokes,
+    layers,
+    selection: null,
+    exportFormat,
+    exportQuality,
+  })
+
   const persistLocalProject = () => {
-    const serialized = JSON.stringify(createPhotoProject({
-      imageSrc: selectedImageSrc,
-      prompt,
-      headline,
-      subcopy,
-      presetId,
-      aspectRatio,
-      canvasSize: customCanvasSize,
-      canvasBackground,
-      maskShape,
-      cropRect,
-      filters,
-      hueSat,
-      layerMask,
-      brushStrokes,
-      layers,
-      selection: null,
-      exportFormat,
-      exportQuality,
-    }))
+    const serialized = JSON.stringify(createPhotoProject(buildProjectPayload()))
     try {
       localStorage.setItem('echoai-photo-autosave', serialized)
       setAutosavedProject(parsePhotoProject(serialized))
@@ -3182,29 +3254,49 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     }
   }
 
+  const saveToProjectsLibrary = async () => {
+    if (!onSaveProject) return
+    const hasDocument = Boolean(selectedImageSrc || layers.length || brushStrokes.length)
+    if (!hasDocument) return
+    try {
+      const canvas = document.createElement('canvas')
+      const thumbWidth = 480
+      const thumbHeight = Math.max(1, Math.round(thumbWidth * (aspect.canvasHeight / aspect.canvasWidth)))
+      canvas.width = thumbWidth
+      canvas.height = thumbHeight
+      const previewUrl = await renderComposition({
+        canvas,
+        imageSrc: displayImageSrc,
+        maskShape,
+        filters,
+        preset,
+        backgroundColor: canvasBackground,
+        layers,
+        brushStrokes,
+        stageMetrics: { width: thumbWidth, height: thumbHeight },
+      })
+      onSaveProject({
+        ...buildProjectPayload(),
+        projectId: projectIdRef.current,
+        name: headline?.trim() || prompt?.trim() || 'Untitled design',
+        previewUrl,
+        folderId: projectsFolderId || null,
+        sizeBytes: Math.round(previewUrl.length * 0.72),
+      })
+    } catch {
+      // A thumbnail failure should not block the local autosave from succeeding.
+    }
+  }
+
+  const commitSave = () => {
+    persistLocalProject()
+    saveToProjectsLibrary()
+  }
+
   useEffect(() => {
     if (workspaceView !== 'editor') return undefined
     const timer = window.setTimeout(() => {
-      const serialized = JSON.stringify(createPhotoProject({
-        imageSrc: selectedImageSrc,
-        prompt,
-        headline,
-        subcopy,
-        presetId,
-        aspectRatio,
-        canvasSize: customCanvasSize,
-        canvasBackground,
-        maskShape,
-        cropRect,
-        filters,
-        hueSat,
-        layerMask,
-        brushStrokes,
-        layers,
-        selection: null,
-        exportFormat,
-        exportQuality,
-      }))
+      const serialized = JSON.stringify(createPhotoProject(buildProjectPayload()))
       try {
         localStorage.setItem('echoai-photo-autosave', serialized)
         setAutosavedProject(parsePhotoProject(serialized))
@@ -3220,7 +3312,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     <div className="photo-modern-tools">
       {editorPanel === 'main' ? (
         <>
-          <div className="modern-tools-heading"><div><span>Edit image</span><strong>Tools</strong></div><button type="button" onClick={() => { persistLocalProject(); setWorkspaceView('home') }} aria-label="Return to Photo home"><X size={18} /></button></div>
+          <div className="modern-tools-heading"><div><span>Edit image</span><strong>Tools</strong></div><button type="button" onClick={() => { commitSave(); setWorkspaceView('home') }} aria-label="Return to Photo home"><X size={18} /></button></div>
           <div className="modern-select-group"><span>Select</span><div><button type="button" onClick={() => { selectAll(); setActiveTool('rect-select') }}><Images size={15} /> All</button><button type="button" onClick={() => openEditorPanel('select', 'object-select')}><Sparkles size={15} /> Element</button><button type="button" onClick={() => openEditorPanel('select', 'rect-select')}><Wand size={15} /> Area</button></div></div>
           <div className="modern-tool-rows">
             <button type="button" onClick={() => openEditorPanel('crop', 'crop')}><Crop size={18} /><span><strong>Crop</strong><small>Frame, rotate, and resize</small></span><ChevronRight size={16} /></button>
@@ -3345,6 +3437,205 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     return <DesignSchool initialCourseId={schoolCourseId} onHome={() => setWorkspaceView('home')} onTemplates={() => setWorkspaceView('home')} onStartPractice={startSchoolPractice} />
   }
 
+  if (workspaceView === 'projects') {
+    const rootFolders = folders.filter((folder) => !folder.parentId)
+    const childFolders = folders.filter((folder) => (folder.parentId || '') === (projectsFolderId || ''))
+    const currentFolder = folders.find((folder) => folder.id === projectsFolderId) || null
+    const breadcrumb = []
+    for (let cursor = currentFolder; cursor; cursor = folders.find((folder) => folder.id === cursor.parentId) || null) {
+      breadcrumb.unshift(cursor)
+    }
+    const normalizedSearch = projectsSearch.trim().toLowerCase()
+    const matchesSearch = (name) => !normalizedSearch || name.toLowerCase().includes(normalizedSearch)
+    const byRecency = (a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
+    const passesFilters = (asset) => {
+      if (projectsTypeFilter === 'designs' && asset.type !== 'design') return false
+      if (projectsTypeFilter === 'images' && asset.type !== 'image') return false
+      if (projectsTypeFilter === 'videos' && asset.type !== 'video') return false
+      if (!withinDateFilter(asset.updatedAt || asset.createdAt, projectsDateFilter)) return false
+      return matchesSearch(asset.name)
+    }
+    const showFoldersSection = projectsTypeFilter === 'all' || projectsTypeFilter === 'folders'
+    const inRoot = !projectsFolderId
+    const scopedAssets = assets.filter((asset) => (asset.folderId || '') === (projectsFolderId || '')).filter(passesFilters).sort(byRecency)
+    const scopedFolders = showFoldersSection ? childFolders.filter((folder) => matchesSearch(folder.name)) : []
+    const recentItems = inRoot ? [...assets].filter(passesFilters).sort(byRecency).slice(0, 8) : []
+    const allDesigns = inRoot ? assets.filter((asset) => asset.type === 'design').filter(passesFilters).sort(byRecency) : []
+    const allImages = inRoot ? assets.filter((asset) => asset.type === 'image').filter(passesFilters).sort(byRecency) : []
+
+    const startNewFolder = () => {
+      setNewFolderDraft(true)
+      setNewFolderName('')
+    }
+    const confirmNewFolder = () => {
+      const name = newFolderName.trim()
+      if (name) onCreateFolder?.(name, projectsFolderId || null)
+      setNewFolderDraft(false)
+      setNewFolderName('')
+    }
+    const handleProjectsUpload = (event) => {
+      if (event.target.files?.length) onUploadFiles?.(event.target.files, projectsFolderId || null)
+      event.target.value = ''
+    }
+    const itemMenu = (kind, item) => (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      setProjectsMenu({ x: event.clientX, y: event.clientY, kind, item })
+    }
+
+    const renderAssetCard = (asset) => (
+      <div key={asset.id} className="photo-project-card">
+        <button type="button" className="photo-project-card-body" onClick={() => openWorkspaceAsset(asset)} onContextMenu={itemMenu('asset', asset)}>
+          <span className="photo-project-thumb">{asset.previewUrl ? <img src={asset.previewUrl} alt="" /> : asset.type === 'design' ? <LayoutTemplate size={26} /> : <ImageIcon size={26} />}</span>
+        </button>
+        {renamingItem?.id === asset.id ? (
+          <input autoFocus defaultValue={asset.name} onBlur={(event) => { onRenameAsset?.(asset.id, event.target.value); setRenamingItem(null) }} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') setRenamingItem(null) }} />
+        ) : (
+          <strong title={asset.name}>{asset.name}</strong>
+        )}
+        <small>{asset.type === 'design' ? 'Design' : asset.type === 'video' ? 'Video' : 'Image'} · {new Date(asset.updatedAt || asset.createdAt).toLocaleDateString()}</small>
+        <button type="button" className="photo-project-card-menu" aria-label={`More actions for ${asset.name}`} onClick={itemMenu('asset', asset)}><MoreVertical size={15} /></button>
+      </div>
+    )
+
+    const renderFolderCard = (folder) => (
+      <button key={folder.id} type="button" className="photo-project-folder" onClick={() => setProjectsFolderId(folder.id)} onContextMenu={itemMenu('folder', folder)}>
+        <Folder size={22} />
+        {renamingItem?.id === folder.id ? (
+          <input autoFocus defaultValue={folder.name} onClick={(event) => event.stopPropagation()} onBlur={(event) => { onRenameFolder?.(folder.id, event.target.value); setRenamingItem(null) }} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') setRenamingItem(null) }} />
+        ) : (
+          <span>{folder.name}</span>
+        )}
+        <span type="button" className="photo-project-folder-menu" role="button" tabIndex={0} aria-label={`More actions for ${folder.name}`} onClick={itemMenu('folder', folder)}><MoreVertical size={14} /></span>
+      </button>
+    )
+
+    return (
+      <section className="photo-home photo-projects-shell" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+        event.preventDefault()
+        if (event.dataTransfer.files?.length) onUploadFiles?.(event.dataTransfer.files, projectsFolderId || null)
+      }}>
+        <aside className="photo-home-rail" aria-label="Photo editor navigation">
+          <div className="photo-home-mark" aria-label="EchoAI Photo Editor"><ImageIcon size={21} /></div>
+          <button type="button" className="photo-home-create" onClick={() => setCreateDialogOpen(true)} aria-label="Create"><Plus size={20} /><span>Create</span></button>
+          <nav>
+            <button type="button" aria-label="Home" onClick={() => setWorkspaceView('home')}><Home size={19} /><span>Home</span></button>
+            <button type="button" aria-label="Templates" onClick={() => setWorkspaceView('home')}><LayoutTemplate size={19} /><span>Templates</span></button>
+            <button type="button" aria-label="Design School" onClick={() => setWorkspaceView('school')}><GraduationCap size={19} /><span>School</span></button>
+            <button type="button" className="active" aria-label="Projects"><FolderOpen size={19} /><span>Projects</span></button>
+            <button type="button" aria-label="Stock images" onClick={() => setStockLibraryOpen(true)}><Images size={19} /><span>Stock</span></button>
+          </nav>
+        </aside>
+        <main className="photo-projects-main">
+          <div className="photo-projects-toolbar">
+            <div>
+              <h1>{inRoot ? 'All projects' : currentFolder?.name}</h1>
+              {!inRoot && (
+                <nav className="photo-projects-crumb" aria-label="Breadcrumb">
+                  <button type="button" onClick={() => setProjectsFolderId('')}>Projects</button>
+                  {breadcrumb.map((folder) => (
+                    <span key={folder.id}>/ <button type="button" onClick={() => setProjectsFolderId(folder.id)}>{folder.name}</button></span>
+                  ))}
+                </nav>
+              )}
+            </div>
+            <label className="photo-home-search photo-projects-search"><Search size={18} /><input value={projectsSearch} onChange={(event) => setProjectsSearch(event.target.value)} placeholder="Search designs, folders, and uploads" /></label>
+          </div>
+
+          <div className="photo-projects-filters">
+            <select value={projectsTypeFilter} onChange={(event) => setProjectsTypeFilter(event.target.value)} aria-label="Filter by type">
+              <option value="all">Any type</option>
+              <option value="folders">Folders</option>
+              <option value="designs">Designs</option>
+              <option value="images">Images</option>
+              <option value="videos">Videos</option>
+            </select>
+            <select value={projectsDateFilter} onChange={(event) => setProjectsDateFilter(event.target.value)} aria-label="Filter by date modified">
+              <option value="any">Any time</option>
+              <option value="today">Today</option>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </select>
+            <div className="photo-projects-actions">
+              {newFolderDraft ? (
+                <span className="photo-projects-new-folder"><input autoFocus value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') confirmNewFolder(); if (event.key === 'Escape') setNewFolderDraft(false) }} placeholder="Folder name" /><button type="button" onClick={confirmNewFolder}>Create</button></span>
+              ) : (
+                <button type="button" onClick={startNewFolder}><Folder size={16} /> New folder</button>
+              )}
+              <button type="button" onClick={() => projectsUploadInputRef.current?.click()}><Upload size={16} /> Upload</button>
+              <button type="button" onClick={handleFileOpenProject}><FileText size={16} /> Import file</button>
+              <input ref={projectsUploadInputRef} type="file" multiple accept="image/*,video/*" className="photo-home-file-input" onChange={handleProjectsUpload} />
+            </div>
+          </div>
+
+          {inRoot ? (
+            <>
+              {recentItems.length > 0 && (
+                <section className="photo-projects-section">
+                  <h2>Recents</h2>
+                  <div className="photo-project-grid">{recentItems.map(renderAssetCard)}</div>
+                </section>
+              )}
+              {showFoldersSection && (
+                <section className="photo-projects-section">
+                  <div className="photo-projects-section-heading"><h2>Folders</h2></div>
+                  <div className="photo-project-folder-grid">
+                    {rootFolders.filter((folder) => matchesSearch(folder.name)).map(renderFolderCard)}
+                    {rootFolders.length === 0 && <p className="muted">No folders yet. Use New folder to start organizing your work.</p>}
+                  </div>
+                </section>
+              )}
+              {(projectsTypeFilter === 'all' || projectsTypeFilter === 'designs') && (
+                <section className="photo-projects-section">
+                  <h2>Designs</h2>
+                  <div className="photo-project-grid">{allDesigns.length ? allDesigns.map(renderAssetCard) : <p className="muted">Designs you save from the editor will appear here.</p>}</div>
+                </section>
+              )}
+              {(projectsTypeFilter === 'all' || projectsTypeFilter === 'images') && (
+                <section className="photo-projects-section">
+                  <h2>Images</h2>
+                  <div className="photo-project-grid">{allImages.length ? allImages.map(renderAssetCard) : <p className="muted">Photos you upload will appear here.</p>}</div>
+                </section>
+              )}
+            </>
+          ) : (
+            <section className="photo-projects-section">
+              <div className="photo-project-folder-grid">{scopedFolders.map(renderFolderCard)}</div>
+              <div className="photo-project-grid">{scopedAssets.map(renderAssetCard)}</div>
+              {scopedFolders.length === 0 && scopedAssets.length === 0 && <p className="muted">This folder is empty. Upload files or create a design to fill it.</p>}
+            </section>
+          )}
+        </main>
+        {projectsMenu && createPortal(
+          <div className="photo-context-backdrop" onClick={() => setProjectsMenu(null)} onContextMenu={(event) => { event.preventDefault(); setProjectsMenu(null) }}>
+            <div className="photo-context-menu" role="menu" style={{ left: Math.min(projectsMenu.x, window.innerWidth - 220), top: Math.min(projectsMenu.y, window.innerHeight - 220) }} onClick={(event) => event.stopPropagation()}>
+              {projectsMenu.kind === 'asset' ? (
+                <>
+                  <button type="button" role="menuitem" onClick={() => { openWorkspaceAsset(projectsMenu.item); setProjectsMenu(null) }}>Open</button>
+                  <button type="button" role="menuitem" onClick={() => { setRenamingItem(projectsMenu.item); setProjectsMenu(null) }}>Rename</button>
+                  {projectsMenu.item.folderId && <button type="button" role="menuitem" onClick={() => { onMoveAsset?.(projectsMenu.item.id, null); setProjectsMenu(null) }}>Remove from folder</button>}
+                  <hr />
+                  <button type="button" role="menuitem" className="danger" onClick={() => { if (confirm(`Delete "${projectsMenu.item.name}"? This cannot be undone.`)) onDeleteAsset?.(projectsMenu.item.id); setProjectsMenu(null) }}>Delete</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" role="menuitem" onClick={() => { setProjectsFolderId(projectsMenu.item.id); setProjectsMenu(null) }}>Open</button>
+                  <button type="button" role="menuitem" onClick={() => { setRenamingItem(projectsMenu.item); setProjectsMenu(null) }}>Rename</button>
+                  <hr />
+                  <button type="button" role="menuitem" className="danger" onClick={() => { if (confirm(`Delete "${projectsMenu.item.name}" folder? Items inside will move to Projects.`)) onDeleteFolder?.(projectsMenu.item.id); setProjectsMenu(null) }}>Delete folder</button>
+                </>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
+        {createDialog}
+        {stockLibraryOpen && createPortal(<StockLibrary initialKind="image" kinds={['image']} onClose={() => setStockLibraryOpen(false)} onAdd={addFromStockLibrary} />, document.body)}
+      </section>
+    )
+  }
+
   if (workspaceView === 'home') {
     return (
       <section className="photo-home" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
@@ -3358,7 +3649,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
             <button type="button" className="active" aria-label="Home"><Home size={19} /><span>Home</span></button>
             <button type="button" aria-label="Templates" onClick={() => document.querySelector('.photo-home-templates')?.scrollIntoView({ behavior: 'smooth' })}><LayoutTemplate size={19} /><span>Templates</span></button>
             <button type="button" aria-label="Design School" onClick={() => setWorkspaceView('school')}><GraduationCap size={19} /><span>School</span></button>
-            <button type="button" aria-label="Projects" onClick={handleFileOpenProject}><FolderOpen size={19} /><span>Projects</span></button>
+            <button type="button" aria-label="Projects" onClick={() => setWorkspaceView('projects')}><FolderOpen size={19} /><span>Projects</span></button>
             <button type="button" aria-label="Stock images" onClick={() => setStockLibraryOpen(true)}><Images size={19} /><span>Stock</span></button>
           </nav>
         </aside>
@@ -3419,7 +3710,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     >
       <header className="photo-creator-header photo-editor-topbar">
         <div className="photo-topbar-left">
-          <button type="button" className="photo-topbar-text" onClick={() => { persistLocalProject(); setWorkspaceView('home') }}>Cancel</button>
+          <button type="button" className="photo-topbar-text" onClick={() => { commitSave(); setWorkspaceView('home') }}>Cancel</button>
           <span className="photo-topbar-divider" />
           <button type="button" className="photo-topbar-icon" onClick={undo} disabled={historyCounts.past === 0} title="Undo (Ctrl+Z)" aria-label="Undo"><RotateCcw size={18} /></button>
           <button type="button" className="photo-topbar-icon" onClick={redo} disabled={historyCounts.future === 0} title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><RotateCcw size={18} className="rotate-right" /></button>
@@ -3430,8 +3721,8 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
           <span className={`photo-save-status ${saveStatus.toLowerCase()}`}>{saveStatus}</span>
           <button type="button" className="photo-topbar-icon" onClick={exportCanvas} title={`Download ${EXPORT_FORMATS[exportFormat]?.label ?? 'PNG'}`} aria-label="Download design"><Download size={19} /></button>
           <button type="button" className="photo-create-design-button" onClick={() => { setWorkspaceView('home'); setCreateDialogOpen(true) }}><Plus size={17} /> Create design</button>
-          <button type="button" className="photo-save-button" onClick={persistLocalProject}><Save size={17} /> Save</button>
-          <button type="button" className="photo-topbar-close" onClick={() => { persistLocalProject(); setWorkspaceView('home') }} aria-label="Close editor"><X size={20} /></button>
+          <button type="button" className="photo-save-button" onClick={commitSave}><Save size={17} /> Save</button>
+          <button type="button" className="photo-topbar-close" onClick={() => { commitSave(); setWorkspaceView('home') }} aria-label="Close editor"><X size={20} /></button>
         </div>
       </header>
 
