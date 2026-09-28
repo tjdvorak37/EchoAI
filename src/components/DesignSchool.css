@@ -1,0 +1,34 @@
+.design-school-shell { background: #f7fafc; }
+.design-school-main { min-width: 0; padding: 1.35rem; overflow: hidden; }
+.design-school-hero { min-height: 250px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr); align-items: center; overflow: hidden; border-radius: 8px; color: #fff; background: #123f3b; }
+.design-school-hero > div { padding: 2.4rem; }
+.design-school-hero > div > span { display: inline-flex; align-items: center; gap: .4rem; color: #a7f3d0; font-size: .75rem; font-weight: 800; text-transform: uppercase; }
+.design-school-hero h1 { margin: .6rem 0; max-width: 520px; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(2rem, 4vw, 3.4rem); letter-spacing: 0; line-height: 1; }
+.design-school-hero p { max-width: 570px; margin: 0; color: #d4f5eb; line-height: 1.55; }
+.design-school-hero img { width: 100%; height: 250px; object-fit: cover; object-position: center 24%; }
+.design-school-progress { display: grid; grid-template-columns: minmax(150px, auto) minmax(160px, 1fr) auto; align-items: center; gap: 1rem; margin: 1rem 0 2rem; padding: .85rem 1rem; border: 1px solid #dce7e4; border-radius: 8px; background: #fff; }
+.design-school-progress > div { display: grid; gap: .1rem; }
+.design-school-progress strong { font-size: .8rem; }.design-school-progress span { color: #64748b; font-size: .68rem; }
+.design-school-progress progress { width: 100%; height: 8px; accent-color: #0f766e; }.design-school-progress b { color: #0f766e; font-size: .75rem; }
+.design-course-section { max-width: 1280px; margin: auto; }
+.design-course-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.design-course-heading span { color: #0f766e; font-size: .68rem; font-weight: 800; text-transform: uppercase; }
+.design-course-heading h2 { margin: .2rem 0 0; font-family: Georgia, 'Times New Roman', serif; font-size: 1.5rem; letter-spacing: 0; }
+.design-course-heading button,.design-school-back { display: inline-flex; align-items: center; gap: .4rem; padding: .5rem .75rem; border: 1px solid #b8ccc8; border-radius: 6px; color: #0f5d55; background: #fff; font-weight: 750; cursor: pointer; }
+.design-course-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.design-course-card { min-width: 0; display: grid; grid-template-rows: 150px 1fr; overflow: hidden; padding: 0; border: 1px solid #dbe4e8; border-radius: 8px; color: #18232d; background: #fff; text-align: left; cursor: pointer; transition: transform 160ms ease, box-shadow 160ms ease; }
+.design-course-card:hover { transform: translateY(-3px); box-shadow: 0 12px 24px rgba(15, 61, 57, .12); }
+.design-course-image { position: relative; display: block; overflow: hidden; background: color-mix(in srgb, var(--course-color) 18%, white); }
+.design-course-image::after { content: ''; position: absolute; inset: auto 0 0; height: 6px; background: var(--course-color); }
+.design-course-image img { width: 100%; height: 100%; object-fit: cover; object-position: center 24%; transition: transform 180ms ease; }.design-course-card:hover img { transform: scale(1.035); }
+.design-course-image i { position: absolute; right: .65rem; bottom: .65rem; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--course-color); background: #fff; box-shadow: 0 4px 12px rgba(15, 23, 42, .2); }
+.design-course-copy { display: grid; align-content: start; gap: .45rem; padding: .85rem; }
+.design-course-copy small { color: var(--course-color); font-size: .65rem; font-weight: 800; text-transform: uppercase; }.design-course-copy strong { font-family: Georgia, 'Times New Roman', serif; font-size: 1rem; }.design-course-copy em { color: #52606d; font-size: .75rem; font-style: normal; line-height: 1.4; }.design-course-copy b { display: flex; align-items: center; gap: .3rem; color: #64748b; font-size: .66rem; font-weight: 650; }
+.design-school-back { margin-bottom: 1rem; }
+.design-lesson { max-width: 1160px; margin: auto; }
+.design-lesson-hero { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(0, 1.2fr); overflow: hidden; border-radius: 8px; color: #fff; background: var(--course-color); }
+.design-lesson-hero img { width: 100%; height: 320px; object-fit: cover; object-position: center 24%; }.design-lesson-hero > div { display: grid; align-content: center; gap: .65rem; padding: 2.2rem; }
+.design-lesson-hero span { color: #fff; font-size: .7rem; font-weight: 800; text-transform: uppercase; }.design-lesson-hero h1 { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(2rem, 4vw, 3.2rem); letter-spacing: 0; line-height: 1; }.design-lesson-hero p { margin: 0; color: rgba(255,255,255,.9); }.design-lesson-hero small { display: flex; align-items: center; gap: .35rem; }
+.design-lesson-content { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, .6fr); gap: 1rem; margin-top: 1rem; }.design-lesson-content > section,.design-lesson-content > aside { padding: 1.35rem; border: 1px solid #dbe4e8; border-radius: 8px; background: #fff; }.design-lesson-content h2,.design-lesson-content h3 { margin: 0 0 .8rem; }.design-lesson-content ol { display: grid; gap: .85rem; margin: 0; padding-left: 1.35rem; color: #334155; line-height: 1.5; }.design-lesson-content aside { align-content: start; display: grid; gap: .7rem; }.design-lesson-content aside > svg { color: #0f766e; }.design-lesson-content aside p { margin: 0; color: #52606d; line-height: 1.45; }.design-lesson-content aside button { display: flex; align-items: center; justify-content: center; gap: .4rem; min-height: 40px; padding: .5rem .7rem; border: 0; border-radius: 6px; color: #fff; background: #0f766e; font-weight: 750; cursor: pointer; }.design-lesson-content aside button.completed { color: #166534; background: #dcfce7; }
+@media (max-width: 900px) { .design-course-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.design-school-hero { grid-template-columns: 1fr; }.design-school-hero img { height: 190px; }.design-lesson-hero,.design-lesson-content { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .design-school-main { padding: .8rem; }.design-school-hero > div { padding: 1.4rem; }.design-course-grid { grid-template-columns: 1fr; }.design-course-heading { align-items: start; flex-direction: column; }.design-school-progress { grid-template-columns: 1fr auto; }.design-school-progress progress { grid-column: 1 / -1; grid-row: 2; }.design-lesson-hero img { height: 210px; } }

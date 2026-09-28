@@ -45,14 +45,17 @@ import {
   FolderOpen,
   Image as ImageIcon,
   X,
+  GraduationCap,
 } from 'lucide-react'
 import { StockLibrary } from './StockLibrary'
 import { PhotoHueSaturationDialog } from './PhotoHueSaturationDialog'
 import { PhotoShortcutsOverlay } from './PhotoShortcutsOverlay'
+import { DesignSchool } from './DesignSchool'
 import { EditorFocusToggle } from './EditorFocusMode'
 import { useEditorFocusMode } from './useEditorFocusMode'
 import { downloadMediaLibraryDataUrl } from '../services/mediaLibraryService'
 import { createPhotoProject, parsePhotoProject } from '../services/photoProject'
+import { PHOTO_EDITOR_TEMPLATES } from '../data/templateCatalog'
 import {
   combineMasks,
   defaultHueSat,
@@ -129,15 +132,6 @@ const PHOTO_DESIGN_PRESETS = [
   { key: 'whiteboard', category: 'Whiteboards', label: 'Whiteboard', icon: PanelsTopLeft, width: 1920, height: 1080, color: '#08a64e' },
   { key: 'website', category: 'Websites', label: 'Website Canvas', icon: Globe2, width: 1440, height: 900, color: '#4857ef' },
   { key: 'email', category: 'Emails', label: 'Email Design', icon: Mail, width: 600, height: 900, color: '#5539ed' },
-]
-
-const PHOTO_STARTERS = [
-  { key: 'launch', title: 'Launch announcement', ratio: '4:5', className: 'launch' },
-  { key: 'sale', title: 'Seasonal sale', ratio: '4:5', className: 'sale' },
-  { key: 'story', title: 'Social story', ratio: '9:16', className: 'story' },
-  { key: 'event', title: 'Event invite', ratio: '4:5', className: 'event' },
-  { key: 'product', title: 'Product spotlight', ratio: '1:1', className: 'product' },
-  { key: 'editorial', title: 'Editorial cover', ratio: '4:5', className: 'editorial' },
 ]
 
 const PHOTO_CREATE_CATEGORIES = ['For you', 'Presentations', 'Social media', 'Photo editor', 'Videos', 'Print', 'Docs', 'Whiteboards', 'Websites', 'Emails']
@@ -417,6 +411,34 @@ const projectLayers = (project) => defaultLayers().map((layer) => {
   if (layer.id === 'subcopy') return { ...layer, value: project.caption || layer.value }
   return layer
 })
+
+const photoTemplateLayers = (template) => {
+  const [headline, subcopy, sticker] = defaultLayers()
+  const [background, accent, foreground] = template.colors
+  return [
+    {
+      id: 'template-accent',
+      type: 'shape',
+      label: 'Template accent',
+      shape: template.accentShape,
+      value: 'Template accent',
+      x: 74,
+      y: 48,
+      width: template.accentShape === 'line' ? 58 : 38,
+      height: template.accentShape === 'line' ? 1 : 28,
+      color: accent,
+      strokeColor: foreground,
+      strokeWidth: 0,
+      radius: template.accentShape === 'rectangle' ? 18 : 0,
+      filled: true,
+      opacity: 88,
+      rotation: template.accentShape === 'rectangle' ? -8 : 0,
+    },
+    { ...headline, value: template.headline, x: 10, y: 61, fontSize: template.width > template.height ? 72 : 58, color: foreground, shadowColor: background, shadowBlur: 18 },
+    { ...subcopy, value: template.subcopy, x: 10, y: 76, fontSize: template.width > template.height ? 28 : 24, color: foreground, panelColor: `${background}b8` },
+    { ...sticker, value: template.sticker, x: 82, y: 16, color: accent, shadowColor: `${accent}aa` },
+  ]
+}
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
@@ -2950,7 +2972,9 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
   const normalizedHomeSearch = homeSearch.trim().toLowerCase()
   const visibleHomeFormats = PHOTO_HOME_FORMATS.filter((item) => item.label.toLowerCase().includes(normalizedHomeSearch))
   const visibleHomeAssets = imageAssets.filter((asset) => asset.name.toLowerCase().includes(normalizedHomeSearch)).slice(0, 6)
-  const visibleStarters = PHOTO_STARTERS.filter((item) => item.title.toLowerCase().includes(normalizedHomeSearch))
+  const visibleStarters = PHOTO_EDITOR_TEMPLATES.filter((item) => (
+    `${item.title} ${item.category}`.toLowerCase().includes(normalizedHomeSearch)
+  ))
   const normalizedCreateSearch = createSearch.trim().toLowerCase()
   const visibleCreateFormats = PHOTO_DESIGN_PRESETS.filter((item) => {
     const matchesSearch = item.label.toLowerCase().includes(normalizedCreateSearch)
@@ -2959,6 +2983,20 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     return normalizedCreateSearch || createCategory === 'For you' || item.category === createCategory
   }).slice(0, createCategory === 'For you' && !normalizedCreateSearch ? 12 : undefined)
   const createCustomDesign = () => startHomeDesign({ width: customWidth, height: customHeight, label: 'Custom' })
+
+  const applyPhotoTemplate = (template) => {
+    resetDocument(`${template.title} template loaded.`)
+    setCustomCanvasSize({ width: template.width, height: template.height, label: template.title })
+    setAspectRatio('custom')
+    setCanvasBackground(template.colors[0])
+    setLayers(photoTemplateLayers(template))
+    setActiveLayerId('headline')
+    setHeadline(template.headline)
+    setSubcopy(template.subcopy)
+    setPrompt(template.title)
+    setNotice(`${template.title} loaded. Every layer is editable · ${template.license.shortName}.`)
+    setWorkspaceView('editor')
+  }
 
   const createDialog = createDialogOpen && createPortal(
     <div className="photo-create-backdrop" role="presentation" onMouseDown={(event) => {
@@ -3036,6 +3074,10 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
     document.body,
   )
 
+  if (workspaceView === 'school') {
+    return <DesignSchool onHome={() => setWorkspaceView('home')} onTemplates={() => setWorkspaceView('home')} onOpenEditor={() => startHomeDesign('4:5')} />
+  }
+
   if (workspaceView === 'home') {
     return (
       <section className="photo-home" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
@@ -3048,6 +3090,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
           <nav>
             <button type="button" className="active" aria-label="Home"><Home size={19} /><span>Home</span></button>
             <button type="button" aria-label="Templates" onClick={() => document.querySelector('.photo-home-templates')?.scrollIntoView({ behavior: 'smooth' })}><LayoutTemplate size={19} /><span>Templates</span></button>
+            <button type="button" aria-label="Design School" onClick={() => setWorkspaceView('school')}><GraduationCap size={19} /><span>School</span></button>
             <button type="button" aria-label="Projects" onClick={handleFileOpenProject}><FolderOpen size={19} /><span>Projects</span></button>
             <button type="button" aria-label="Stock images" onClick={() => setStockLibraryOpen(true)}><Images size={19} /><span>Stock</span></button>
           </nav>
@@ -3060,7 +3103,7 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
           </div>
           <div className="photo-home-content">
             <section className="photo-home-formats" aria-label="Create a design">
-              <button type="button" className="photo-format-item photo-format-templates" onClick={() => setCreateDialogOpen(true)}><span className="photo-format-icon"><LayoutTemplate size={24} /></span><span>Templates</span></button>
+              <button type="button" className="photo-format-item photo-format-templates" onClick={() => document.querySelector('.photo-home-templates')?.scrollIntoView({ behavior: 'smooth' })}><span className="photo-format-icon"><LayoutTemplate size={24} /></span><span>Templates</span></button>
               {visibleHomeFormats.map((item) => {
                 const FormatIcon = item.icon
                 return <button key={item.key} type="button" className="photo-format-item" onClick={() => startHomeDesign(item)}><span className="photo-format-icon" style={{ '--format-color': item.color }}><FormatIcon size={24} /></span><span>{item.label}</span></button>
@@ -3078,10 +3121,13 @@ export function PhotoEditor({ assets, onExport, brandKit, initialProject }) {
               </div>
             </section>
             <section className="photo-home-section photo-home-templates" aria-labelledby="photo-template-heading">
-              <div className="photo-home-section-heading"><h2 id="photo-template-heading">Templates for you</h2><span>Start with a fully editable canvas</span></div>
+              <div className="photo-home-section-heading"><h2 id="photo-template-heading">Royalty-free templates</h2><span>EchoAI originals · editable for personal and commercial work</span></div>
               <div className="photo-template-grid">
                 {visibleStarters.map((starter) => (
-                  <button key={starter.key} type="button" className="photo-template-item" onClick={() => startHomeDesign(starter.ratio)}><span className={`photo-template-preview ${starter.className}`}><i>EchoAI</i><b>{starter.title}</b><small>Create something remarkable</small></span><strong>{starter.title}</strong></button>
+                  <button key={starter.key} type="button" className="photo-template-item" onClick={() => applyPhotoTemplate(starter)}>
+                    <span className="photo-template-preview" style={{ background: `linear-gradient(140deg, ${starter.colors[0]}, ${starter.colors[1]})`, color: starter.colors[2] }}><i>{starter.category}</i><b>{starter.headline}</b><small>{starter.subcopy}</small></span>
+                    <strong>{starter.title}</strong><small className="photo-template-license">{starter.license.shortName} · {starter.width} × {starter.height}</small>
+                  </button>
                 ))}
               </div>
             </section>
