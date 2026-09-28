@@ -42,7 +42,7 @@ test('eq values are clamped to the band count and range', () => {
 
 test('mix skips muted tracks and detached video audio', () => {
   const tracks = [
-    { type: 'video', muted: false, clips: [{ id: 'v1', previewUrl: 'a' }, { id: 'v2', previewUrl: 'b', audioDetached: true }] },
+    { type: 'video', muted: false, clips: [{ id: 'v1', previewUrl: 'a' }, { id: 'v2', previewUrl: 'b', audioDetached: true }, { id: 'still', previewUrl: 'image.png', mediaType: 'image' }] },
     { type: 'audio', muted: true, clips: [{ id: 'a1', previewUrl: 'c' }] },
     { type: 'audio', muted: false, clips: [{ id: 'a2', previewUrl: 'd' }] },
     { type: 'text', muted: false, clips: [{ id: 't1', previewUrl: 'e' }] },

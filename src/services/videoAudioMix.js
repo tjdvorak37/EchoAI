@@ -367,7 +367,7 @@ export const setMasterLimiter = (bus, enabled) => {
 export const audibleClipsForMix = (tracks) =>
   (tracks ?? []).flatMap((track) => {
     if (track.muted || (track.type !== 'audio' && track.type !== 'video')) return []
-    return track.clips.filter((clip) => clip.previewUrl && !(track.type === 'video' && clip.audioDetached))
+    return track.clips.filter((clip) => clip.previewUrl && !(track.type === 'video' && (clip.audioDetached || clip.mediaType === 'image')))
   })
 
 // Renders the whole timeline mix with the same gain/EQ math as the preview.
