@@ -65,7 +65,7 @@ import { EditorFocusToggle } from './EditorFocusMode'
 import { useEditorFocusMode } from './useEditorFocusMode'
 import { downloadMediaLibraryDataUrl } from '../services/mediaLibraryService'
 import { createPhotoProject, parsePhotoProject } from '../services/photoProject'
-import { PHOTO_EDITOR_TEMPLATES } from '../data/templateCatalog'
+import { PHOTO_EDITOR_TEMPLATES, PHOTO_TEMPLATE_PLATFORMS } from '../data/templateCatalog'
 import {
   combineMasks,
   defaultHueSat,
@@ -190,6 +190,8 @@ const PHOTO_SOCIAL_PLATFORMS = [
   { key: 'Twitch', label: 'Twitch', color: '#6f42c1' },
   { key: 'Google Business Profile', label: 'Google Business', color: '#1769d2' },
 ]
+
+const PHOTO_TEMPLATE_CATEGORIES = ['All', ...new Set(PHOTO_EDITOR_TEMPLATES.map((template) => template.category))]
 
 const STYLE_PRESETS = {
   aurora: {
@@ -1039,6 +1041,8 @@ export function PhotoEditor({
   const [schoolCourseId, setSchoolCourseId] = useState('')
   const [schoolPracticeCompleted, setSchoolPracticeCompleted] = useState(false)
   const [homeSearch, setHomeSearch] = useState('')
+  const [templateCategory, setTemplateCategory] = useState('All')
+  const [templatePlatform, setTemplatePlatform] = useState('All')
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createCategory, setCreateCategory] = useState('For you')
   const [createPlatform, setCreatePlatform] = useState('all')
@@ -3124,9 +3128,12 @@ export function PhotoEditor({
   const normalizedHomeSearch = homeSearch.trim().toLowerCase()
   const visibleHomeFormats = PHOTO_HOME_FORMATS.filter((item) => item.label.toLowerCase().includes(normalizedHomeSearch))
   const visibleHomeAssets = imageAssets.filter((asset) => asset.name.toLowerCase().includes(normalizedHomeSearch)).slice(0, 6)
-  const visibleStarters = PHOTO_EDITOR_TEMPLATES.filter((item) => (
-    `${item.title} ${item.category}`.toLowerCase().includes(normalizedHomeSearch)
-  ))
+  const visibleStarters = PHOTO_EDITOR_TEMPLATES.filter((item) => {
+    const matchesSearch = `${item.title} ${item.category} ${item.platform || ''} ${item.headline} ${item.subcopy}`.toLowerCase().includes(normalizedHomeSearch)
+    const matchesCategory = templateCategory === 'All' || item.category === templateCategory
+    const matchesPlatform = templatePlatform === 'All' || item.platform === templatePlatform
+    return matchesSearch && matchesCategory && matchesPlatform
+  })
   const normalizedCreateSearch = createSearch.trim().toLowerCase()
   const visibleCreateFormats = PHOTO_DESIGN_PRESETS.filter((item) => {
     const matchesSearch = item.label.toLowerCase().includes(normalizedCreateSearch)
@@ -3718,14 +3725,20 @@ export function PhotoEditor({
               </div>
             </section>
             <section className="photo-home-section photo-home-templates" aria-labelledby="photo-template-heading">
-              <div className="photo-home-section-heading"><h2 id="photo-template-heading">Royalty-free templates</h2><span>EchoAI originals · editable for personal and commercial work</span></div>
+              <div className="photo-home-section-heading"><div><h2 id="photo-template-heading">Royalty-free templates</h2><span>{PHOTO_EDITOR_TEMPLATES.length} EchoAI originals · editable for personal and commercial work</span></div></div>
+              <div className="photo-template-filters" aria-label="Filter templates">
+                <label>Format<select value={templateCategory} onChange={(event) => { setTemplateCategory(event.target.value); if (event.target.value !== 'Social media') setTemplatePlatform('All') }}><option>All</option>{PHOTO_TEMPLATE_CATEGORIES.slice(1).map((category) => <option key={category}>{category}</option>)}</select></label>
+                <label>Platform<select value={templatePlatform} onChange={(event) => { setTemplatePlatform(event.target.value); if (event.target.value !== 'All') setTemplateCategory('Social media') }}><option>All</option>{PHOTO_TEMPLATE_PLATFORMS.map((platform) => <option key={platform}>{platform}</option>)}</select></label>
+                <span>{visibleStarters.length} template{visibleStarters.length === 1 ? '' : 's'}</span>
+              </div>
               <div className="photo-template-grid">
                 {visibleStarters.map((starter) => (
                   <button key={starter.key} type="button" className="photo-template-item" onClick={() => applyPhotoTemplate(starter)}>
-                    <span className="photo-template-preview" style={{ background: `linear-gradient(140deg, ${starter.colors[0]}, ${starter.colors[1]})`, color: starter.colors[2] }}><i>{starter.category}</i><b>{starter.headline}</b><small>{starter.subcopy}</small></span>
+                    <span className="photo-template-preview" style={{ background: `linear-gradient(140deg, ${starter.colors[0]}, ${starter.colors[1]})`, color: starter.colors[2] }}><i>{starter.platform || starter.category}</i><b>{starter.headline}</b><small>{starter.subcopy}</small></span>
                     <strong>{starter.title}</strong><small className="photo-template-license">{starter.license.shortName} · {starter.width} × {starter.height}</small>
                   </button>
                 ))}
+                {visibleStarters.length === 0 && <p className="photo-template-empty">No templates match these filters.</p>}
               </div>
             </section>
           </div>
