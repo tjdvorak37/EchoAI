@@ -14,6 +14,7 @@ export const createPhotoProject = (state) => ({
     subcopy: state.subcopy || '',
     presetId: state.presetId || 'aurora',
     aspectRatio: state.aspectRatio || '4:5',
+    canvasSize: state.canvasSize || null,
     canvasBackground: state.canvasBackground ?? '#ffffff',
     maskShape: state.maskShape || 'none',
     cropRect: state.cropRect || { x: 0, y: 0, w: 100, h: 100 },
