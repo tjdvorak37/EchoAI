@@ -2320,6 +2320,17 @@
 .photo-template-filters > span { margin: 0 0 .6rem auto; color: #6f6879; font-size: .72rem; }
 .photo-template-empty { grid-column: 1 / -1; padding: 2rem 0; color: #6f6879; }
 
+.photo-logo-search { display: flex; align-items: center; gap: .55rem; width: min(100%, 480px); height: 42px; padding: 0 .75rem; border: 1px solid #cbd5d1; border-radius: 6px; color: #176659; background: #fff; }
+.photo-logo-search:focus-within { border-color: #14836c; outline: 2px solid #14836c22; }
+.photo-logo-search input { min-width: 0; flex: 1; border: 0; outline: 0; color: #292331; background: transparent; font-size: .82rem; }
+.photo-logo-filters, .photo-logo-keywords > div { display: flex; flex-wrap: wrap; gap: .4rem; }
+.photo-logo-filters { margin: .85rem 0; }
+.photo-logo-filters button, .photo-logo-keywords button { padding: .38rem .65rem; border: 1px solid #d9dfdc; border-radius: 5px; color: #305048; background: #fff; font-size: .72rem; cursor: pointer; }
+.photo-logo-filters button.active, .photo-logo-keywords button.active { border-color: #116a57; color: #fff; background: #116a57; }
+.photo-logo-keywords { margin-bottom: 1rem; }
+.photo-logo-keywords > strong { display: block; margin-bottom: .45rem; color: #424d49; font-size: .72rem; }
+.photo-logo-usage { margin: 1rem 0 0; color: #606c65; font-size: .7rem; }
+
 .photo-recent-grid,
 .photo-template-grid { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 1rem; }
 .photo-template-choice { position: relative; min-width: 0; }
@@ -2664,8 +2675,8 @@
 @media (max-width: 720px) {
   .photo-home { min-height: calc(100vh - 7rem); grid-template-columns: 1fr; overflow: visible; }
   .photo-home-rail { position: sticky; top: 0; flex-direction: row; justify-content: space-between; padding: .45rem .6rem; border-right: 0; border-bottom: 1px solid #e8e6ee; }
-  .photo-home-rail nav { width: auto; display: flex; }
-  .photo-home-rail nav button { width: 48px; }
+  .photo-home-rail nav { width: auto; max-width: calc(100vw - 66px); display: flex; overflow-x: auto; }
+  .photo-home-rail nav button { flex: 0 0 44px; width: 44px; }
   .photo-home-rail nav button span,
   .photo-home-create span,
   .photo-home-mark { display: none; }
