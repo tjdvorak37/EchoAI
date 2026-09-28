@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ECHOAI_TEMPLATE_LICENSE, PHOTO_EDITOR_TEMPLATES, POST_COMPOSER_TEMPLATES } from './templateCatalog.js'
+import { ECHOAI_TEMPLATE_LICENSE, PHOTO_EDITOR_TEMPLATES, PHOTO_TEMPLATE_PLATFORMS, POST_COMPOSER_TEMPLATES } from './templateCatalog.js'
 
 const assertLicensedCatalog = (templates) => {
   assert.equal(new Set(templates.map((template) => template.key)).size, templates.length, 'template keys must be unique')
@@ -17,11 +17,19 @@ test('every selectable template has explicit royalty-free provenance', () => {
 })
 
 test('photo templates meet editable canvas requirements', () => {
+  assert.ok(PHOTO_EDITOR_TEMPLATES.length >= 40, 'photo catalog should offer a substantial starter library')
   for (const template of PHOTO_EDITOR_TEMPLATES) {
     assert.ok(template.width >= 40 && template.width <= 8192, `${template.key} width`)
     assert.ok(template.height >= 40 && template.height <= 8192, `${template.key} height`)
     assert.equal(template.colors.length, 3, `${template.key} palette`)
     assert.ok(template.headline && template.subcopy && template.accentShape, `${template.key} editable content`)
+  }
+})
+
+test('photo templates cover every supported platform', () => {
+  const coveredPlatforms = new Set(PHOTO_EDITOR_TEMPLATES.map((template) => template.platform).filter(Boolean))
+  for (const platform of PHOTO_TEMPLATE_PLATFORMS) {
+    assert.ok(coveredPlatforms.has(platform), `${platform} template coverage`)
   }
 })
 

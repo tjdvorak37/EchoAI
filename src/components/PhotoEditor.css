@@ -2298,6 +2298,18 @@
 .photo-home-section-heading h2 { color: #15121b; font-size: 1.35rem; }
 .photo-home-section-heading span { color: #6f6879; font-size: .75rem; }
 
+.photo-template-filters {
+  display: flex;
+  align-items: end;
+  gap: .65rem;
+  margin-bottom: 1rem;
+}
+
+.photo-template-filters label { display: grid; gap: .25rem; color: #51495b; font-size: .68rem; font-weight: 700; }
+.photo-template-filters select { min-width: 160px; height: 36px; padding: 0 2rem 0 .65rem; border: 1px solid #d8d4de; border-radius: 6px; color: #292331; background: #fff; }
+.photo-template-filters > span { margin: 0 0 .6rem auto; color: #6f6879; font-size: .72rem; }
+.photo-template-empty { grid-column: 1 / -1; padding: 2rem 0; color: #6f6879; }
+
 .photo-recent-grid,
 .photo-template-grid { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 1rem; }
 
@@ -2665,6 +2677,9 @@
   .photo-recent-grid,
   .photo-template-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .photo-home-section-heading { align-items: flex-start; flex-direction: column; gap: .2rem; }
+  .photo-template-filters { align-items: stretch; flex-direction: column; }
+  .photo-template-filters select { width: 100%; }
+  .photo-template-filters > span { margin: 0; }
   .photo-create-backdrop { padding: .5rem; align-items: end; }
   .photo-create-dialog { width: 100%; height: calc(100vh - 1rem); border-radius: 14px; }
   .photo-create-dialog > header { grid-template-columns: 1fr 40px; padding: 1rem; }
