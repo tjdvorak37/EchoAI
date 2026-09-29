@@ -526,9 +526,7 @@ export function AdminPanel({
     },
     {
       group: 'Finance',
-      tabs: [
-        { id: 'profitability', label: '📈 Pricing & Profit Model', hint: 'Plan pricing, margins, and cost projections' },
-      ],
+      tabs: [],
     },
     {
       group: 'People',
