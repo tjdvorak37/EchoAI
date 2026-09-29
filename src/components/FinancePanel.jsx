@@ -111,6 +111,20 @@ export function FinancePanel({
     setShowExpForm(false)
   }
 
+  const duplicateExpense = (expense) => {
+    setExpForm({
+      category: expense.category || 'Hosting',
+      vendor: expense.vendor || '',
+      description: expense.description || '',
+      amountUsd: '',
+      date: '',
+      recurring: expense.recurring === true,
+      recurringPeriod: expense.recurringPeriod || 'monthly',
+      status: expense.status || 'pending',
+    })
+    setShowExpForm(true)
+  }
+
   const addPayrollEntry = () => {
     if (!prForm.name || !prForm.grossPayUsd) return
     const gross = Number(prForm.grossPayUsd)
@@ -323,7 +337,10 @@ export function FinancePanel({
                     <span style={{ fontWeight: 700 }}>{fmt(e.amountUsd)}</span>
                     <span>{fmtDate(e.date)}</span>
                     <Badge value={e.status} />
-                    <button type="button" className="ghost-button" style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', color: '#ef4444' }} onClick={() => setExpenses((prev) => prev.filter((x) => x.id !== e.id))}>Delete</button>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <button type="button" className="ghost-button" style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }} onClick={() => duplicateExpense(e)}>Duplicate</button>
+                      <button type="button" className="ghost-button" style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', color: '#ef4444' }} onClick={() => setExpenses((prev) => prev.filter((x) => x.id !== e.id))}>Delete</button>
+                    </div>
                   </div>
                 ))}
               </div>
