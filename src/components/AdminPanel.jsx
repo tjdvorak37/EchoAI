@@ -16,7 +16,7 @@ import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerS
 const USERS_PER_PAGE = 25
 const TICKETS_PER_PAGE = 50
 const USER_ROLES = ['admin', 'it', 'accountant', 'user']
-const USER_STATUSES = ['active', 'pending', 'deactivated', 'approved', 'denied']
+const USER_STATUSES = ['active', 'deactivated']
 
 const PLATFORM_TABS = [
   { id: 'company-email', label: '📧 Company Email & SMTP', hint: 'Manage outbound support email, Microsoft 365, and mail routing', permission: 'companyEmailEditAccess' },
@@ -40,6 +40,8 @@ const formatDateTime = (value) => (value ? new Date(value).toLocaleString() : 'N
 
 const STATUS_COLORS = {
   active: '#22c55e',
+  paid: '#22c55e',
+  free: '#64748b',
   pending: '#f59e0b',
   pending_payment: '#f59e0b',
   expired: '#6b7280',
@@ -79,6 +81,15 @@ function StatusBadge({ value }) {
     </span>
   )
 }
+
+const getDirectoryAccessStatus = (accessStatus) => (
+  ['deactivated', 'denied'].includes(accessStatus) ? 'deactivated' : 'active'
+)
+
+const hasPaidSubscription = (member, licenses) => licenses.some((license) => (
+  (license.userId && license.userId === member.id) ||
+  (license.userEmail && license.userEmail.toLowerCase() === member.email?.toLowerCase())
+) && license.paymentConfirmed)
 
 function Section({ title, children }) {
   return (
@@ -554,7 +565,7 @@ export function AdminPanel({
       || member.email?.toLowerCase().includes(term)
       || member.company?.toLowerCase().includes(term)
     const matchesRole = userRoleFilter === 'all' || normalizeRole(member.role) === normalizeRole(userRoleFilter)
-    const matchesStatus = userStatusFilter === 'all' || member.accessStatus === userStatusFilter
+    const matchesStatus = userStatusFilter === 'all' || getDirectoryAccessStatus(member.accessStatus) === userStatusFilter
     return matchesSearch && matchesRole && matchesStatus
   })
 
@@ -1509,7 +1520,8 @@ export function AdminPanel({
                         <span>{member.email} • {member.company || 'No company'}</span>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <StatusBadge value={member.accessStatus} />
+                        <StatusBadge value={getDirectoryAccessStatus(member.accessStatus)} />
+                        <StatusBadge value={hasPaidSubscription(member, licenses) ? 'paid' : 'free'} />
                         <button
                           type="button"
                           className="ghost-button"
