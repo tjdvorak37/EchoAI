@@ -4562,7 +4562,7 @@ export function PhotoEditor({
                     } rotate(${layer.rotation || 0}deg)`,
                   }}
                   onPointerDown={(event) => beginDrag(layer, event)}
-                  onClick={() => setActiveLayerId(layer.id)}
+                  onClick={() => { setActiveLayerId(layer.id); setActiveTool('select') }}
                 >
                   {layer.type === 'image' ? (
                     <img
@@ -4661,7 +4661,7 @@ export function PhotoEditor({
                 <li
                   key={`manage-${layer.id}`}
                   className={`${layer.id === resolvedActiveLayerId ? 'active' : ''} ${layer.hidden ? 'is-hidden' : ''}`}
-                  onClick={() => setActiveLayerId(layer.id)}
+                  onClick={() => { setActiveLayerId(layer.id); setActiveTool('select') }}
                   onDoubleClick={() => setRenamingLayerId(layer.id)}
                   onContextMenu={(event) => {
                     event.preventDefault()
@@ -4738,7 +4738,7 @@ export function PhotoEditor({
             </label>
             <label>
               Active layer
-              <select value={resolvedActiveLayerId} onChange={(event) => setActiveLayerId(event.target.value)}>
+              <select value={resolvedActiveLayerId} onChange={(event) => { setActiveLayerId(event.target.value); setActiveTool('select') }}>
                 {layers.map((layer) => (
                   <option key={layer.id} value={layer.id}>{layer.label}</option>
                 ))}
