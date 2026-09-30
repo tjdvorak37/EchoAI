@@ -1753,6 +1753,14 @@
   min-width: 0;
 }
 
+/* Side panels scroll inside the row instead of stretching it, which pushed the centered canvas out of view. */
+@media (min-width: 901px) {
+  .photo-creator-grid.modern-editor > .photo-sidebar:not(.collapsed) {
+    contain: size;
+    height: auto;
+  }
+}
+
 .photo-layers-props {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(6.5rem, auto);
