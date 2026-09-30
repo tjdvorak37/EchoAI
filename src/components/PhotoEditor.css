@@ -1732,7 +1732,7 @@
 
 .photo-layers-props {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(6.5rem, auto);
   gap: 0.4rem;
   align-items: center;
 }
@@ -1741,11 +1741,14 @@
   display: flex;
   align-items: center;
   gap: 0.3rem;
+  min-width: 0;
+  white-space: nowrap;
   font-size: 0.72rem;
 }
 
 .photo-layers-props input {
-  width: 3.4rem;
+  width: 4.5rem;
+  box-sizing: border-box;
 }
 
 .photo-layers-props select,
