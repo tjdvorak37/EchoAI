@@ -261,6 +261,14 @@ const MASK_SHAPES = {
   diagonal: 'Diagonal',
 }
 
+const IMAGE_LAYER_SHAPES = {
+  none: 'Rectangle',
+  rounded: 'Rounded',
+  circle: 'Circle',
+  frame: 'Frame',
+  diagonal: 'Diagonal',
+}
+
 const TOOLS = {
   select: 'Move / select',
   move: 'Move',
@@ -306,6 +314,14 @@ const BLEND_MODES = {
 }
 
 const cssBlend = (mode) => (!mode || mode === 'source-over' ? 'normal' : mode)
+
+const imageLayerClipPath = (shape) => ({
+  none: 'none',
+  rounded: 'inset(0 round 28px)',
+  circle: 'circle(44% at 50% 50%)',
+  frame: 'inset(6% round 36px)',
+  diagonal: 'polygon(8% 16%, 92% 6%, 84% 84%, 12% 94%)',
+}[shape || 'none'] || 'none')
 
 const KRITA_TOOL_GROUPS = [
   {
@@ -455,7 +471,11 @@ const createBaseImageLayer = (src, label = 'Original photo') => ({
 })
 
 const ensureBaseImageLayer = (layers, src, label = 'Original photo') => {
-  const withoutBase = (layers || []).filter((layer) => !layer.isBaseImage && layer.id !== BASE_IMAGE_LAYER_ID)
+  const withoutBase = (layers || []).filter((layer) => (
+    !layer.isBaseImage
+    && layer.id !== BASE_IMAGE_LAYER_ID
+    && !(layer.type === 'image' && layer.src === src)
+  ))
   return src ? [createBaseImageLayer(src, label), ...withoutBase] : withoutBase
 }
 
@@ -1061,7 +1081,14 @@ const renderComposition = async ({
       ctx.globalAlpha = (layer.opacity ?? 100) / 100
       ctx.translate(x, y)
       ctx.rotate(((layer.rotation || 0) * Math.PI) / 180)
-      ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
+      if (layer.clipShape && layer.clipShape !== 'none') {
+        ctx.translate(-drawWidth / 2, -drawHeight / 2)
+        buildMaskPath(ctx, layer.clipShape, drawWidth, drawHeight)
+        ctx.clip()
+        ctx.drawImage(image, 0, 0, drawWidth, drawHeight)
+      } else {
+        ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
+      }
       ctx.restore()
       return
     }
@@ -1988,6 +2015,8 @@ export function PhotoEditor({
       setGeneratedImageSrc('')
       setSelectedAssetId('')
       syncBaseImageLayer(src, file.name || 'Original photo')
+      setActiveLayerId(BASE_IMAGE_LAYER_ID)
+      setActiveTool('select')
       setNotice('Image imported successfully.')
       setCreateDialogOpen(false)
       setWorkspaceView('editor')
@@ -2993,7 +3022,7 @@ export function PhotoEditor({
     if (!file) return
 
     importImageFile(file)
-    setActiveTool('heal')
+    setActiveTool('select')
     event.target.value = ''
   }
 
@@ -4572,6 +4601,7 @@ export function PhotoEditor({
                         display: 'block',
                         width: `${(layer.width / 100) * stageDisplaySize.width}px`,
                         height: 'auto',
+                        clipPath: imageLayerClipPath(layer.clipShape),
                       }}
                     />
                   ) : layer.type === 'shape' ? (
@@ -4762,20 +4792,52 @@ export function PhotoEditor({
                   <label>
                     Content
                     <input
-                      value={layer.value}
+                      value={layer.value ?? layer.label ?? ''}
                       onChange={(event) => updateLayer(layer.id, { value: event.target.value })}
                     />
                   </label>
-                  <label>
-                    Size
-                    <input
-                      type="range"
-                      min="16"
-                      max="96"
-                      value={layer.fontSize}
-                      onChange={(event) => updateLayer(layer.id, { fontSize: Number(event.target.value) })}
-                    />
-                  </label>
+                  {(layer.type === 'text' || layer.type === 'sticker') && (
+                    <label>
+                      Size
+                      <input
+                        type="range"
+                        min="16"
+                        max="96"
+                        value={layer.fontSize}
+                        onChange={(event) => updateLayer(layer.id, { fontSize: Number(event.target.value) })}
+                      />
+                    </label>
+                  )}
+                  {layer.type === 'image' && (
+                    <>
+                      {!layer.isBaseImage && (
+                        <label className="slider-row">
+                          <span>Image width {layer.width ?? 50}%</span>
+                          <input
+                            type="range"
+                            min="2"
+                            max="100"
+                            value={layer.width ?? 50}
+                            onPointerDown={commitHistory}
+                            onChange={(event) => updateLayer(layer.id, { width: Number(event.target.value) })}
+                          />
+                        </label>
+                      )}
+                      <label>
+                        Image shape
+                        <select
+                          value={layer.isBaseImage ? maskShape : layer.clipShape || 'none'}
+                          onChange={(event) => {
+                            commitHistory()
+                            if (layer.isBaseImage) setMaskShape(event.target.value)
+                            else updateLayer(layer.id, { clipShape: event.target.value })
+                          }}
+                        >
+                          {Object.entries(IMAGE_LAYER_SHAPES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                        </select>
+                      </label>
+                    </>
+                  )}
                   <label className="slider-row">
                     <span>Opacity {layer.opacity ?? 100}%</span>
                     <input
