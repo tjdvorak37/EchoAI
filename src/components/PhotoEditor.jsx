@@ -89,6 +89,7 @@ import {
   maskToDataUrl,
   renderProcessedBase,
   selectionOverlayUrls,
+  stagePointToImage,
   transformImageSrc,
 } from '../services/photoCanvasOps'
 import './PhotoEditor.css'
@@ -727,6 +728,11 @@ const drawStroke = (ctx, stroke, width, height) => {
     }
   })
 
+  if (stroke.points.length === 1) {
+    const point = stroke.points[0]
+    ctx.lineTo((point.x / 100) * width + 0.01, (point.y / 100) * height)
+  }
+
   ctx.stroke()
   ctx.restore()
 }
@@ -1188,6 +1194,9 @@ export function PhotoEditor({
   const [brushColor, setBrushColor] = useState('#ffffff')
   const [brushSize, setBrushSize] = useState(24)
   const [brushOpacity, setBrushOpacity] = useState(0.8)
+  const [brushCursor, setBrushCursor] = useState(null)
+  const [erasePreviewId, setErasePreviewId] = useState(null)
+  const [erasePreviewReady, setErasePreviewReady] = useState(false)
   const [brushStrokes, setBrushStrokes] = useState([])
   const [cropRect, setCropRect] = useState({ x: 0, y: 0, w: 100, h: 100 })
   const [removeRect, setRemoveRect] = useState(null)
@@ -1235,6 +1244,7 @@ export function PhotoEditor({
   const stageRef = useRef(null)
   const stageViewportRef = useRef(null)
   const paintCanvasRef = useRef(null)
+  const erasePreviewRef = useRef(null)
   const dragRef = useRef(null)
   const cropDragRef = useRef(null)
   const removeDragRef = useRef(null)
@@ -2637,12 +2647,15 @@ export function PhotoEditor({
   })
 
   const getStagePoint = (event) => {
-    const rect = stageRef.current?.getBoundingClientRect()
-    if (!rect) return { x: 0, y: 0 }
+    const stage = stageRef.current
+    if (!stage) return { x: 0, y: 0 }
+    const rect = stage.getBoundingClientRect()
+    const scaleX = rect.width / stage.offsetWidth
+    const scaleY = rect.height / stage.offsetHeight
 
     return {
-      x: clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100),
-      y: clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100),
+      x: clamp(((event.clientX - rect.left - stage.clientLeft * scaleX) / (stage.clientWidth * scaleX)) * 100, 0, 100),
+      y: clamp(((event.clientY - rect.top - stage.clientTop * scaleY) / (stage.clientHeight * scaleY)) * 100, 0, 100),
     }
   }
 
@@ -2688,6 +2701,20 @@ export function PhotoEditor({
     window.addEventListener('pointercancel', handleUp)
   }
 
+  const drawErasePreview = (stroke) => {
+    if (!stroke.context) return
+    while (stroke.drawnPoints < stroke.points.length) {
+      const index = stroke.drawnPoints
+      const current = stroke.mapPoint(stroke.points[index])
+      const previous = stroke.mapPoint(stroke.points[Math.max(0, index - 1)])
+      stroke.context.beginPath()
+      stroke.context.moveTo(previous.x, previous.y)
+      stroke.context.lineTo(current.x + (index === 0 ? 0.01 : 0), current.y)
+      stroke.context.stroke()
+      stroke.drawnPoints += 1
+    }
+  }
+
   const startBrushStroke = (event) => {
     const painting = activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal'
     if (!painting || !paintCanvasRef.current || !stageRef.current) return
@@ -2696,6 +2723,10 @@ export function PhotoEditor({
     const erase = activeTool === 'eraser'
     const healing = activeTool === 'heal'
     const point = getStagePoint(event)
+    const targetLayer = event.target instanceof Element ? event.target.closest('.photo-layer') : null
+    const targetImage = targetLayer ? layers.find((layer) => layer.id === targetLayer.dataset.layerId && layer.type === 'image') : null
+    const imageLayer = targetImage
+    if (targetImage) setActiveLayerId(targetImage.id)
     const stroke = {
       id: nextLayerId('stroke'),
       erase,
@@ -2704,9 +2735,40 @@ export function PhotoEditor({
       size: brushSize,
       opacity: brushOpacity,
       points: [point],
+      imageLayerId: imageLayer?.id || null,
+      imageSrc: imageLayer?.src || selectedImageSrc,
+      imageLayer,
+      drawnPoints: 0,
     }
 
     brushStrokeRef.current = stroke
+
+    if (erase && stroke.imageSrc) {
+      setErasePreviewId(stroke.imageLayerId || BASE_IMAGE_LAYER_ID)
+      stroke.ready = (async () => {
+        const image = await loadWorkImage(stroke.imageSrc)
+        await new Promise((resolve) => requestAnimationFrame(resolve))
+        const preview = erasePreviewRef.current
+        if (!preview) throw new Error('The eraser preview is unavailable.')
+        preview.width = image.width
+        preview.height = image.height
+        const context = preview.getContext('2d')
+        if (!context) throw new Error('The eraser is unavailable in this browser.')
+        context.putImageData(image.imageData, 0, 0)
+        context.globalCompositeOperation = 'destination-out'
+        context.globalAlpha = stroke.opacity
+        context.lineCap = 'round'
+        context.lineJoin = 'round'
+        const stageWidth = stageRef.current?.clientWidth || stageDisplaySize.width
+        const stageHeight = stageRef.current?.clientHeight || stageDisplaySize.height
+        stroke.mapPoint = (value) => stagePointToImage(value, image.width, image.height, stageWidth, stageHeight, stroke.imageLayer)
+        context.lineWidth = stroke.size * stroke.mapPoint(stroke.points[0]).pixelsPerStagePixel
+        stroke.context = context
+        stroke.canvas = preview
+        drawErasePreview(stroke)
+        setErasePreviewReady(true)
+      })().catch((error) => { stroke.error = error })
+    }
 
     const canvas = paintCanvasRef.current
     const ctx = canvas.getContext('2d')
@@ -2724,6 +2786,10 @@ export function PhotoEditor({
       y: (point.y / 100) * canvas.height,
     }
     ctx.moveTo(mapped.x, mapped.y)
+    if (!healing && !erase) {
+      ctx.lineTo(mapped.x + 0.01, mapped.y)
+      ctx.stroke()
+    }
     ctx.restore()
 
     const moveStroke = (moveEvent) => {
@@ -2733,6 +2799,10 @@ export function PhotoEditor({
       const lastPoint = currentStroke.points[currentStroke.points.length - 1]
       currentStroke.points.push(nextPoint)
 
+      if (currentStroke.erase) {
+        drawErasePreview(currentStroke)
+        return
+      }
       if (currentStroke.healing) return
       const moveCanvas = paintCanvasRef.current
       const moveCtx = moveCanvas.getContext('2d')
@@ -2761,6 +2831,10 @@ export function PhotoEditor({
 
     const finishStroke = async () => {
       const completedStroke = brushStrokeRef.current
+      brushStrokeRef.current = null
+      window.removeEventListener('pointermove', moveStroke)
+      window.removeEventListener('pointerup', finishStroke)
+      window.removeEventListener('pointercancel', finishStroke)
       if (completedStroke) {
         commitHistory()
         if (completedStroke.healing) {
@@ -2784,52 +2858,34 @@ export function PhotoEditor({
             }
           }
         } else if (completedStroke.erase) {
-          if (!activeWork) {
+          if (!completedStroke.imageSrc) {
             setNotice('Load an image before using Eraser.')
           } else {
-            const canvas = document.createElement('canvas')
-            canvas.width = activeWork.width
-            canvas.height = activeWork.height
-            const ctx = canvas.getContext('2d')
-            if (!ctx) {
-              setNotice('The eraser is unavailable in this browser.')
-            } else {
-              ctx.putImageData(cloneImageData(activeWork.imageData), 0, 0)
-              ctx.globalCompositeOperation = 'destination-out'
-              ctx.lineCap = 'round'
-              ctx.lineJoin = 'round'
-              ctx.lineWidth = brushSize * ((activeWork.width / stageMetrics.width + activeWork.height / stageMetrics.height) / 2)
-              ctx.beginPath()
-              completedStroke.points.forEach((point, index) => {
-                const x = (point.x / 100) * activeWork.width
-                const y = (point.y / 100) * activeWork.height
-                if (index === 0) ctx.moveTo(x, y)
-                else ctx.lineTo(x, y)
-              })
-              if (completedStroke.points.length === 1) {
-                const point = completedStroke.points[0]
-                const x = (point.x / 100) * activeWork.width
-                const y = (point.y / 100) * activeWork.height
-                ctx.moveTo(x + 0.01, y)
-                ctx.lineTo(x, y)
+            try {
+              await completedStroke.ready
+              if (completedStroke.error) throw completedStroke.error
+              drawErasePreview(completedStroke)
+              const erasedSrc = completedStroke.canvas.toDataURL('image/png')
+              if (completedStroke.imageLayerId) {
+                updateLayer(completedStroke.imageLayerId, { src: erasedSrc })
+              } else {
+                setGeneratedImageSrc(erasedSrc)
+                syncBaseImageLayer(erasedSrc)
+                setUploadedImage('')
+                setSelectedAssetId('')
               }
-              ctx.stroke()
-              const erasedSrc = imageDataToDataUrl(ctx.getImageData(0, 0, activeWork.width, activeWork.height))
-              setGeneratedImageSrc(erasedSrc)
-              syncBaseImageLayer(erasedSrc)
-              setUploadedImage('')
-              setSelectedAssetId('')
-              setNotice('Erased pixels from the original image.')
+              setNotice('Erased pixels from the selected image.')
+            } catch (error) {
+              setNotice(error.message)
+            } finally {
+              setErasePreviewReady(false)
+              setErasePreviewId(null)
             }
           }
         } else {
           setBrushStrokes((prev) => [...prev, completedStroke])
         }
       }
-      brushStrokeRef.current = null
-      window.removeEventListener('pointermove', moveStroke)
-      window.removeEventListener('pointerup', finishStroke)
-      window.removeEventListener('pointercancel', finishStroke)
     }
 
     window.addEventListener('pointermove', moveStroke)
@@ -4421,8 +4477,12 @@ export function PhotoEditor({
             <div
               ref={stageRef}
               className={`photo-stage ${canvasBackground === 'transparent' ? 'photo-stage-transparent' : ''}`}
+              onPointerMove={(event) => {
+                if (activeTool === 'eraser' || activeTool === 'brush') setBrushCursor(getStagePoint(event))
+              }}
+              onPointerLeave={() => setBrushCursor(null)}
               onPointerDown={(event) => {
-                if (event.target instanceof Element && event.target.closest('button, input, select, summary')) return
+                if (event.target instanceof Element && event.target.closest('button, input, select, summary') && !(activeTool === 'eraser' && event.target.closest('.photo-layer'))) return
                 if (activeTool === 'remove') startRemoveArea(event)
                 else if (SELECTION_TOOLS.has(activeTool)) startSelection(event)
                 else if (activeTool === 'fill') applyPaintBucket(event)
@@ -4435,7 +4495,7 @@ export function PhotoEditor({
                 background: canvasBackground === 'transparent' ? undefined : canvasBackground,
                 transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${canvasZoom / 100})`,
                 cursor:
-                  activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal' || SELECTION_TOOLS.has(activeTool)
+                  activeTool === 'eraser' || activeTool === 'brush' ? 'none' : activeTool === 'heal' || SELECTION_TOOLS.has(activeTool)
                     ? 'crosshair'
                     : activeTool === 'remove'
                       ? 'crosshair'
@@ -4458,6 +4518,7 @@ export function PhotoEditor({
                       filter: buildFilterString(filters),
                       opacity: (baseImageLayer?.opacity ?? 100) / 100,
                       clipPath: `inset(${cropRect.y}% ${100 - cropRect.x - cropRect.w}% ${100 - cropRect.y - cropRect.h}% ${cropRect.x}%)`,
+                      visibility: erasePreviewId === BASE_IMAGE_LAYER_ID && erasePreviewReady ? 'hidden' : undefined,
                     }}
                   />
                 ) : null
@@ -4475,6 +4536,9 @@ export function PhotoEditor({
                   </div>
                 </div>
               ) : null}
+              {erasePreviewId === BASE_IMAGE_LAYER_ID && (
+                <canvas ref={erasePreviewRef} className="photo-stage-image" aria-hidden="true" style={{ filter: buildFilterString(filters), opacity: (baseImageLayer?.opacity ?? 100) / 100, clipPath: `inset(${cropRect.y}% ${100 - cropRect.x - cropRect.w}% ${100 - cropRect.y - cropRect.h}% ${cropRect.x}%)`, visibility: erasePreviewReady ? 'visible' : 'hidden' }} />
+              )}
 
               {showGrid && <div className="photo-stage-grid-overlay" aria-hidden="true" />}
               {showGuides && (
@@ -4568,10 +4632,14 @@ export function PhotoEditor({
                 </svg>
               )}
               {busy && <div className="photo-busy" role="status"><span className="photo-busy-spinner" />{busy}</div>}
+              {(activeTool === 'eraser' || activeTool === 'brush') && brushCursor && (
+                <div className="photo-eraser-cursor" aria-hidden="true" style={{ left: `${brushCursor.x}%`, top: `${brushCursor.y}%`, width: brushSize, height: brushSize }} />
+              )}
 
               {layers.filter((layer) => !layer.hidden && !layer.isBaseImage).map((layer) => (
                 <button
                   key={layer.id}
+                  data-layer-id={layer.id}
                   type="button"
                   className={layer.id === resolvedActiveLayerId ? 'photo-layer active' : 'photo-layer'}
                   style={{
@@ -4579,7 +4647,7 @@ export function PhotoEditor({
                     top: `${layer.y}%`,
                     opacity: (layer.opacity ?? 100) / 100,
                     mixBlendMode: cssBlend(layer.blendMode),
-                    cursor: activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal' ? 'crosshair' : 'grab',
+                    cursor: activeTool === 'eraser' || activeTool === 'brush' ? 'none' : activeTool === 'heal' ? 'crosshair' : 'grab',
                     transform: `${
                       layer.type === 'sticker' || layer.type === 'shape' || layer.type === 'image'
                         ? 'translate(-50%, -50%)'
@@ -4591,7 +4659,7 @@ export function PhotoEditor({
                     } rotate(${layer.rotation || 0}deg)`,
                   }}
                   onPointerDown={(event) => beginDrag(layer, event)}
-                  onClick={() => { setActiveLayerId(layer.id); setActiveTool('select') }}
+                  onClick={() => { if (activeTool !== 'eraser') { setActiveLayerId(layer.id); setActiveTool('select') } }}
                 >
                   {layer.type === 'image' ? (
                     <img
@@ -4599,9 +4667,10 @@ export function PhotoEditor({
                       alt={layer.label}
                       style={{
                         display: 'block',
-                        width: `${(layer.width / 100) * stageDisplaySize.width}px`,
+                        width: `${(layer.width / 100) * (stageRef.current?.clientWidth || stageDisplaySize.width - 2)}px`,
                         height: 'auto',
                         clipPath: imageLayerClipPath(layer.clipShape),
+                        visibility: erasePreviewId === layer.id && erasePreviewReady ? 'hidden' : undefined,
                       }}
                     />
                   ) : layer.type === 'shape' ? (
@@ -4637,6 +4706,9 @@ export function PhotoEditor({
                     >
                       {layer.value}
                     </span>
+                  )}
+                  {erasePreviewId === layer.id && (
+                    <canvas ref={erasePreviewRef} className="photo-image-erase-preview" aria-hidden="true" style={{ clipPath: imageLayerClipPath(layer.clipShape), visibility: erasePreviewReady ? 'visible' : 'hidden' }} />
                   )}
                 </button>
               ))}

@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { stagePointToImage } from './photoCanvasOps.js'
 import {
   applyHueSaturation,
   combineMasks,
@@ -29,6 +30,18 @@ const makeImage = (width, height, paint) => {
   }
   return { data, width, height }
 }
+
+test('pointer coordinates track contained and positioned image pixels', () => {
+  const base = stagePointToImage({ x: 50, y: 25 }, 400, 200, 200, 200)
+  assert.equal(base.x, 200)
+  assert.equal(base.y, 0)
+  const overlay = { x: 30, y: 40, width: 50, rotation: 90 }
+  const center = stagePointToImage({ x: 30, y: 40 }, 400, 200, 200, 200, overlay)
+  assert.equal(center.x, 200)
+  assert.equal(center.y, 100)
+  const right = stagePointToImage({ x: 35, y: 40 }, 400, 200, 200, 200, overlay)
+  assert.ok(Math.abs(right.y - 60) < 0.001)
+})
 
 test('rgb <-> hsl round trips', () => {
   for (const color of [[255, 0, 0], [12, 200, 90], [128, 128, 128], [250, 240, 10]]) {
