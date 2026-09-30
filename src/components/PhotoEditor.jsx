@@ -26,7 +26,6 @@ import {
   Wand,
   Eye,
   EyeOff,
-  Lock,
   Keyboard,
   SlidersHorizontal,
   Search,
@@ -114,6 +113,15 @@ const readPhotoAutosave = () => {
     return value ? parsePhotoProject(value) : null
   } catch {
     return null
+  }
+}
+
+const readPhotoWorkspaceView = () => {
+  try {
+    const value = localStorage.getItem('echoai-photo-workspace-view')
+    return ['home', 'editor', 'projects', 'school'].includes(value) ? value : 'home'
+  } catch {
+    return 'home'
   }
 }
 
@@ -428,6 +436,28 @@ const buildFilterString = (filters) =>
   ].filter(Boolean).join(' ')
 
 const DEFAULT_PROMPT = 'Create a bold product teaser for an evening launch post.'
+
+const BASE_IMAGE_LAYER_ID = 'base-image'
+
+const createBaseImageLayer = (src, label = 'Original photo') => ({
+  id: BASE_IMAGE_LAYER_ID,
+  type: 'image',
+  label,
+  src,
+  value: label,
+  x: 50,
+  y: 50,
+  width: 100,
+  opacity: 100,
+  rotation: 0,
+  blendMode: 'source-over',
+  isBaseImage: true,
+})
+
+const ensureBaseImageLayer = (layers, src, label = 'Original photo') => {
+  const withoutBase = (layers || []).filter((layer) => !layer.isBaseImage && layer.id !== BASE_IMAGE_LAYER_ID)
+  return src ? [createBaseImageLayer(src, label), ...withoutBase] : withoutBase
+}
 
 const defaultLayers = () => [
   {
@@ -925,6 +955,7 @@ const renderComposition = async ({
   backgroundColor,
   layers,
   brushStrokes,
+  imageOpacity = 100,
 }) => {
   const ctx = canvas.getContext('2d')
   if (!ctx) {
@@ -959,6 +990,7 @@ const renderComposition = async ({
       }
 
       ctx.filter = buildFilterString(filters)
+      ctx.globalAlpha = clamp(imageOpacity / 100, 0, 1)
       ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
       ctx.restore()
     } catch {
@@ -1001,7 +1033,7 @@ const renderComposition = async ({
   const logoImages = new Map()
   await Promise.all(
     layers
-      .filter((layer) => layer.type === 'image' && layer.src && !layer.hidden)
+      .filter((layer) => layer.type === 'image' && layer.src && !layer.hidden && !layer.isBaseImage)
       .map(async (layer) => {
         try {
           logoImages.set(layer.id, await loadImage(layer.src))
@@ -1012,7 +1044,7 @@ const renderComposition = async ({
   )
 
   layers.forEach((layer) => {
-    if (layer.hidden) return
+    if (layer.hidden || layer.isBaseImage) return
 
     const x = (layer.x / 100) * width
     const y = (layer.y / 100) * height
@@ -1087,7 +1119,7 @@ export function PhotoEditor({
   const imageAssets = useMemo(() => assets.filter((asset) => asset.type === 'image'), [assets])
   const [autosavedProject, setAutosavedProject] = useState(readPhotoAutosave)
   const startingProject = initialProject || autosavedProject
-  const [workspaceView, setWorkspaceView] = useState(initialProject ? 'editor' : 'home')
+  const [workspaceView, setWorkspaceView] = useState(initialProject ? 'editor' : readPhotoWorkspaceView)
   const [projectsFolderId, setProjectsFolderId] = useState('')
   const [projectsSearch, setProjectsSearch] = useState('')
   const [projectsTypeFilter, setProjectsTypeFilter] = useState('all')
@@ -1138,7 +1170,9 @@ export function PhotoEditor({
   const [exportFormat, setExportFormat] = useState('png')
   const [exportQuality, setExportQuality] = useState(92)
   const [historyCounts, setHistoryCounts] = useState({ past: 0, future: 0 })
-  const [layers, setLayers] = useState(() => startingProject?.layers?.length ? startingProject.layers : (initialProject ? projectLayers(initialProject) : []))
+  const [layers, setLayers] = useState(() => startingProject?.layers?.length
+    ? ensureBaseImageLayer(startingProject.layers, startingProject.imageSrc)
+    : (initialProject ? projectLayers(initialProject) : []))
   const [activeLayerId, setActiveLayerId] = useState(startingProject?.layers?.[0]?.id || (initialProject ? 'headline' : ''))
   const [notice, setNotice] = useState(startingProject ? 'Saved project ready. Every layer remains editable.' : 'Blank workspace ready for upload.')
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
@@ -1148,6 +1182,13 @@ export function PhotoEditor({
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 })
   const [openMenu, setOpenMenu] = useState(null)
   const [menuHost, setMenuHost] = useState(null)
+  useEffect(() => {
+    try {
+      localStorage.setItem('echoai-photo-workspace-view', workspaceView)
+    } catch {
+      // The editor still works when browser storage is unavailable.
+    }
+  }, [workspaceView])
   useEffect(() => {
     if (!openMenu) return undefined
     const dismissOutside = (event) => {
@@ -1199,7 +1240,8 @@ export function PhotoEditor({
   const selectionDragRef = useRef(null)
 
   const selectedAsset = imageAssets.find((asset) => asset.id === selectedAssetId) ?? null
-  const selectedImageSrc = generatedImageSrc || uploadedImage || selectedAsset?.previewUrl || ''
+  const baseImageLayer = layers.find((layer) => layer.isBaseImage) ?? null
+  const selectedImageSrc = generatedImageSrc || uploadedImage || selectedAsset?.previewUrl || baseImageLayer?.src || ''
   const preset = STYLE_PRESETS[presetId] ?? STYLE_PRESETS.aurora
   const aspect = useMemo(() => aspectRatio === 'custom' && customCanvasSize
     ? {
@@ -1248,6 +1290,10 @@ export function PhotoEditor({
     setLayers((prev) => prev.map((layer) => (layer.id === layerId ? { ...layer, ...patch } : layer)))
   }
 
+  const syncBaseImageLayer = (src, label = 'Original photo') => {
+    setLayers((prev) => ensureBaseImageLayer(prev, src, label))
+  }
+
   // --- History -------------------------------------------------------------
   // Snapshots everything a user can undo. Sliders call commitHistory on
   // pointerdown so one drag produces one undo step, not one per pixel.
@@ -1257,6 +1303,7 @@ export function PhotoEditor({
     layers,
     filters,
     brushStrokes,
+    selection,
     maskShape,
     cropRect,
     presetId,
@@ -1274,6 +1321,7 @@ export function PhotoEditor({
     setLayers(snapshot.layers)
     setFilters(snapshot.filters)
     setBrushStrokes(snapshot.brushStrokes)
+    setSelection(snapshot.selection ?? null)
     setMaskShape(snapshot.maskShape)
     setCropRect(snapshot.cropRect)
     setPresetId(snapshot.presetId)
@@ -1393,6 +1441,7 @@ export function PhotoEditor({
       label: `${source.label} copy`,
       x: clamp(source.x + 4, 0, 100),
       y: clamp(source.y + 4, 0, 100),
+      isBaseImage: false,
     }
     commitHistory()
     setLayers((prev) => [...prev, copy])
@@ -1401,7 +1450,18 @@ export function PhotoEditor({
   }
 
   const deleteLayer = (layerId) => {
-    if (layers.length <= 1) {
+    const layer = layers.find((item) => item.id === layerId)
+    if (layer?.isBaseImage) {
+      commitHistory()
+      setGeneratedImageSrc('')
+      setUploadedImage('')
+      setSelectedAssetId('')
+      syncBaseImageLayer('')
+      setActiveLayerId('')
+      setNotice('Original image removed. The canvas is ready for a new upload.')
+      return
+    }
+    if (layers.filter((item) => !item.isBaseImage).length <= 1 && !layers.some((item) => item.isBaseImage)) {
       setNotice('Keep at least one layer on the canvas.')
       return
     }
@@ -1488,6 +1548,7 @@ export function PhotoEditor({
     : processed?.src === selectedImageSrc
       ? processed.url
       : maskActive ? '' : selectedImageSrc
+  const renderedImageSrc = baseImageLayer?.hidden ? '' : displayImageSrc
 
   const imageFit = activeWork ? fitContain(activeWork.width, activeWork.height, stageDisplaySize.width, stageDisplaySize.height) : null
   const stageToWork = (point) => ({
@@ -1545,6 +1606,7 @@ export function PhotoEditor({
       setNotice('Nothing is selected.')
       return
     }
+    commitHistory()
     setSelection({ mask: next, width, height, ...selectionOverlayUrls(next, width, height) })
     setNotice(`${label}: ${Math.max(1, Math.round(coverage * 100))}% of the photo selected.`)
   }
@@ -1579,6 +1641,7 @@ export function PhotoEditor({
   }
 
   const deselect = () => {
+    if (selection) commitHistory()
     setSelection(null)
     setLassoPoints([])
     setMarquee(null)
@@ -1744,6 +1807,7 @@ export function PhotoEditor({
     setGeneratedImageSrc(src)
     setUploadedImage('')
     setSelectedAssetId('')
+    syncBaseImageLayer(src)
     setNotice(message)
   }
 
@@ -1809,7 +1873,7 @@ export function PhotoEditor({
       const canvas = document.createElement('canvas')
       canvas.width = stageMetrics.width
       canvas.height = stageMetrics.height
-      const src = await renderComposition({ canvas, imageSrc: displayImageSrc, maskShape, filters, preset, backgroundColor: canvasBackground, layers, brushStrokes, stageMetrics })
+      const src = await renderComposition({ canvas, imageSrc: renderedImageSrc, maskShape, filters, preset, backgroundColor: canvasBackground, layers, brushStrokes, stageMetrics, imageOpacity: baseImageLayer?.opacity })
       replaceBaseImage(src, 'Flattened everything into a single photo.')
       setLayers([])
       setBrushStrokes([])
@@ -1826,7 +1890,7 @@ export function PhotoEditor({
     const canvas = document.createElement('canvas')
     canvas.width = stageMetrics.width
     canvas.height = stageMetrics.height
-    const src = await renderComposition({ canvas, imageSrc: '', maskShape: 'none', filters: NEUTRAL_FILTERS, preset, backgroundColor: 'transparent', layers: [{ ...layer, hidden: false }], brushStrokes: [], stageMetrics })
+    const src = await renderComposition({ canvas, imageSrc: layer.isBaseImage ? renderedImageSrc : '', maskShape: 'none', filters: NEUTRAL_FILTERS, preset, backgroundColor: 'transparent', layers: [{ ...layer, hidden: false }], brushStrokes: [], stageMetrics, imageOpacity: layer.isBaseImage ? baseImageLayer?.opacity : undefined })
     const link = document.createElement('a')
     link.href = src
     link.download = `${slugify(layer.label || 'layer')}.png`
@@ -1919,7 +1983,11 @@ export function PhotoEditor({
     const reader = new FileReader()
     reader.onload = (event) => {
       commitHistory()
-      setUploadedImage(event.target?.result || '')
+      const src = event.target?.result || ''
+      setUploadedImage(src)
+      setGeneratedImageSrc('')
+      setSelectedAssetId('')
+      syncBaseImageLayer(src, file.name || 'Original photo')
       setNotice('Image imported successfully.')
       setCreateDialogOpen(false)
       setWorkspaceView('editor')
@@ -2059,12 +2127,12 @@ export function PhotoEditor({
       const mergeMetrics = { width: canvas.width, height: canvas.height }
       const mergedSrc = await renderComposition({
         canvas,
-        imageSrc: '',
+        imageSrc: lower.isBaseImage ? renderedImageSrc : '',
         maskShape: 'none',
         filters: NEUTRAL_FILTERS,
         preset,
         backgroundColor: 'transparent',
-        layers: [lower, upper],
+        layers: lower.isBaseImage ? [upper] : [lower, upper],
         brushStrokes: [],
         stageMetrics: mergeMetrics,
       })
@@ -2206,8 +2274,8 @@ export function PhotoEditor({
             restoredSelection = { mask, width: project.selection.width, height: project.selection.height, ...selectionOverlayUrls(mask, project.selection.width, project.selection.height) }
           }
           commitHistory()
-          setLayers(project.layers)
-          setActiveLayerId(project.layers[0]?.id ?? '')
+          setLayers(ensureBaseImageLayer(project.layers, project.imageSrc))
+          setActiveLayerId(project.imageSrc ? BASE_IMAGE_LAYER_ID : project.layers[0]?.id ?? '')
           setFilters({ ...DEFAULT_FILTERS, ...project.filters })
           setPresetId(project.presetId)
           setAspectRatio(project.aspectRatio)
@@ -2215,6 +2283,7 @@ export function PhotoEditor({
           setGeneratedImageSrc(project.imageSrc)
           setUploadedImage('')
           setSelectedAssetId('')
+          syncBaseImageLayer(project.imageSrc)
           setPrompt(project.prompt)
           setHeadline(project.headline)
           setSubcopy(project.subcopy)
@@ -2552,6 +2621,7 @@ export function PhotoEditor({
     if (activeTool !== 'select' && activeTool !== 'move') return
     if (!stageRef.current) return
     event.preventDefault()
+    commitHistory()
     const stageRect = stageRef.current.getBoundingClientRect()
     const currentX = (layer.x / 100) * stageRect.width
     const currentY = (layer.y / 100) * stageRect.height
@@ -2563,13 +2633,14 @@ export function PhotoEditor({
     }
 
     const handleMove = (moveEvent) => {
-      if (!dragRef.current || !stageRef.current) return
+      const drag = dragRef.current
+      if (!drag || !stageRef.current) return
       const rect = stageRef.current.getBoundingClientRect()
-      const nextX = ((moveEvent.clientX - rect.left - dragRef.current.offsetX) / rect.width) * 100
-      const nextY = ((moveEvent.clientY - rect.top - dragRef.current.offsetY) / rect.height) * 100
+      const nextX = ((moveEvent.clientX - rect.left - drag.offsetX) / rect.width) * 100
+      const nextY = ((moveEvent.clientY - rect.top - drag.offsetY) / rect.height) * 100
       setLayers((prev) =>
         prev.map((item) =>
-          item.id === dragRef.current.layerId
+          item.id === drag.layerId
             ? { ...item, x: clamp(nextX, 4, 92), y: clamp(nextY, 6, 88) }
             : item,
         ),
@@ -2668,17 +2739,58 @@ export function PhotoEditor({
             setNotice('Load an image before using Heal.')
           } else {
             try {
-              setGeneratedImageSrc(await healImage({
+              const healedSrc = await healImage({
                 imageSrc: selectedImageSrc,
                 points: completedStroke.points,
                 brushSize,
                 stageMetrics,
-              }))
+              })
+              setGeneratedImageSrc(healedSrc)
+              syncBaseImageLayer(healedSrc)
               setUploadedImage('')
               setSelectedAssetId('')
               setNotice('Healed the selected area in the image pixels.')
             } catch (error) {
               setNotice(error.message)
+            }
+          }
+        } else if (completedStroke.erase) {
+          if (!activeWork) {
+            setNotice('Load an image before using Eraser.')
+          } else {
+            const canvas = document.createElement('canvas')
+            canvas.width = activeWork.width
+            canvas.height = activeWork.height
+            const ctx = canvas.getContext('2d')
+            if (!ctx) {
+              setNotice('The eraser is unavailable in this browser.')
+            } else {
+              ctx.putImageData(cloneImageData(activeWork.imageData), 0, 0)
+              ctx.globalCompositeOperation = 'destination-out'
+              ctx.lineCap = 'round'
+              ctx.lineJoin = 'round'
+              ctx.lineWidth = brushSize * ((activeWork.width / stageMetrics.width + activeWork.height / stageMetrics.height) / 2)
+              ctx.beginPath()
+              completedStroke.points.forEach((point, index) => {
+                const x = (point.x / 100) * activeWork.width
+                const y = (point.y / 100) * activeWork.height
+                if (index === 0) ctx.moveTo(x, y)
+                else ctx.lineTo(x, y)
+              })
+              if (completedStroke.points.length === 1) {
+                const point = completedStroke.points[0]
+                const x = (point.x / 100) * activeWork.width
+                const y = (point.y / 100) * activeWork.height
+                ctx.moveTo(x + 0.01, y)
+                ctx.lineTo(x, y)
+              }
+              ctx.stroke()
+              const erasedSrc = imageDataToDataUrl(ctx.getImageData(0, 0, activeWork.width, activeWork.height))
+              setGeneratedImageSrc(erasedSrc)
+              syncBaseImageLayer(erasedSrc)
+              setUploadedImage('')
+              setSelectedAssetId('')
+              setNotice('Erased pixels from the original image.')
             }
           }
         } else {
@@ -2783,7 +2895,9 @@ export function PhotoEditor({
       if (!rect || rect.w < 1 || rect.h < 1) return
       commitHistory()
       try {
-        setGeneratedImageSrc(await removeImageArea({ imageSrc: selectedImageSrc, rect, stageMetrics }))
+        const removedSrc = await removeImageArea({ imageSrc: selectedImageSrc, rect, stageMetrics })
+        setGeneratedImageSrc(removedSrc)
+        syncBaseImageLayer(removedSrc)
         setUploadedImage('')
         setSelectedAssetId('')
         setRemoveRect(null)
@@ -2811,6 +2925,7 @@ export function PhotoEditor({
     if (activeTool !== 'crop') return
     event.preventDefault()
     event.stopPropagation()
+    commitHistory()
     cropDragRef.current = {
       mode,
       startPoint: getStagePoint(event),
@@ -2855,6 +2970,7 @@ export function PhotoEditor({
     setGeneratedImageSrc('')
     setUploadedImage('')
     setSelectedAssetId('')
+    syncBaseImageLayer('')
     setActiveTool('select')
     setNotice('Base image cleared. The canvas is ready for a new upload.')
   }
@@ -2868,6 +2984,7 @@ export function PhotoEditor({
     setSelectedAssetId(firstImage.id)
     setUploadedImage('')
     setGeneratedImageSrc('')
+    syncBaseImageLayer(firstImage.previewUrl, firstImage.name || 'Original photo')
     setNotice(`Using ${firstImage.name} as the base image.`)
   }
 
@@ -2912,6 +3029,7 @@ export function PhotoEditor({
       setUploadedImage(dataUrl)
       setGeneratedImageSrc('')
       setSelectedAssetId('')
+      syncBaseImageLayer(dataUrl, label)
       setNotice(`Using "${label}" from Pixabay as the background.`)
     } else {
       addLayer({
@@ -2983,6 +3101,7 @@ export function PhotoEditor({
 
   const updateTextEffect = (patch) => {
     if (!activeTextLayer) return
+    commitHistory()
     updateLayer(activeTextLayer.id, patch)
   }
 
@@ -2998,7 +3117,7 @@ export function PhotoEditor({
     stageCanvas.height = stageMetrics.height
     const stageDataUrl = await renderComposition({
       canvas: stageCanvas,
-      imageSrc: displayImageSrc,
+      imageSrc: renderedImageSrc,
       maskShape,
       filters,
       preset,
@@ -3006,6 +3125,7 @@ export function PhotoEditor({
       layers,
       brushStrokes,
       stageMetrics,
+      imageOpacity: baseImageLayer?.opacity,
     })
 
     const exportCanvasEl = document.createElement('canvas')
@@ -3077,7 +3197,7 @@ export function PhotoEditor({
         stageCanvas.height = stageMetrics.height
         const stageDataUrl = await renderComposition({
           canvas: stageCanvas,
-          imageSrc: displayImageSrc,
+          imageSrc: renderedImageSrc,
           maskShape,
           filters,
           preset,
@@ -3085,6 +3205,7 @@ export function PhotoEditor({
           layers,
           brushStrokes,
           stageMetrics,
+          imageOpacity: baseImageLayer?.opacity,
         })
         const output = document.createElement('canvas')
         output.width = aspect.canvasWidth
@@ -3160,6 +3281,7 @@ export function PhotoEditor({
     setSelectedAssetId(asset.id)
     setUploadedImage('')
     setGeneratedImageSrc('')
+    syncBaseImageLayer(asset.previewUrl, asset.name || 'Original photo')
     setNotice(`Opened ${asset.name} from your workspace.`)
     setWorkspaceView('editor')
   }
@@ -3169,8 +3291,8 @@ export function PhotoEditor({
     if (!project) return
     resetDocument(`${asset.name} loaded. Every layer remains editable.`)
     projectIdRef.current = project.projectId || asset.id
-    setLayers(project.layers || [])
-    setActiveLayerId(project.layers?.[0]?.id || '')
+    setLayers(ensureBaseImageLayer(project.layers, project.imageSrc))
+    setActiveLayerId(project.imageSrc ? BASE_IMAGE_LAYER_ID : project.layers?.[0]?.id || '')
     setFilters({ ...DEFAULT_FILTERS, ...project.filters })
     setPresetId(project.presetId || 'aurora')
     setAspectRatio(project.aspectRatio || '4:5')
@@ -3370,7 +3492,7 @@ export function PhotoEditor({
       canvas.height = thumbHeight
       const previewUrl = await renderComposition({
         canvas,
-        imageSrc: displayImageSrc,
+        imageSrc: renderedImageSrc,
         maskShape,
         filters,
         preset,
@@ -3420,6 +3542,10 @@ export function PhotoEditor({
         <>
           <div className="modern-tools-heading"><div><span>Edit image</span><strong>Tools</strong></div><button type="button" onClick={() => { commitSave(); setWorkspaceView('home') }} aria-label="Return to Photo home"><X size={18} /></button></div>
           <div className="modern-select-group"><span>Select</span><div><button type="button" onClick={() => { selectAll(); setActiveTool('rect-select') }}><Images size={15} /> All</button><button type="button" onClick={() => openEditorPanel('select', 'object-select')}><Sparkles size={15} /> Element</button><button type="button" onClick={() => openEditorPanel('select', 'rect-select')}><Wand size={15} /> Area</button></div></div>
+          <div className="modern-media-actions" aria-label="Add image">
+            <button type="button" onClick={() => uploadInputRef.current?.click()}><Upload size={16} /><span><strong>Upload image</strong><small>Use a file from your device</small></span></button>
+            <button type="button" onClick={() => setStockLibraryOpen(true)}><Images size={16} /><span><strong>Add image</strong><small>Browse photos, illustrations, or vectors</small></span></button>
+          </div>
           <div className="modern-tool-rows">
             <button type="button" onClick={() => openEditorPanel('crop', 'crop')}><Crop size={18} /><span><strong>Crop</strong><small>Frame, rotate, and resize</small></span><ChevronRight size={16} /></button>
             <button type="button" onClick={() => openEditorPanel('erase', 'eraser')}><Eraser size={18} /><span><strong>Pixel eraser</strong><small>Erase or heal image areas</small></span><ChevronRight size={16} /></button>
@@ -4267,10 +4393,11 @@ export function PhotoEditor({
               ref={stageRef}
               className={`photo-stage ${canvasBackground === 'transparent' ? 'photo-stage-transparent' : ''}`}
               onPointerDown={(event) => {
+                if (event.target instanceof Element && event.target.closest('button, input, select, summary')) return
                 if (activeTool === 'remove') startRemoveArea(event)
                 else if (SELECTION_TOOLS.has(activeTool)) startSelection(event)
                 else if (activeTool === 'fill') applyPaintBucket(event)
-                else startBrushStroke(event)
+                else if (activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal') startBrushStroke(event)
               }}
               style={{
                 width: `${stageDisplaySize.width}px`,
@@ -4292,14 +4419,16 @@ export function PhotoEditor({
               }}
             >
               {selectedImageSrc ? (
-                displayImageSrc ? (
+                renderedImageSrc ? (
                   <img
                     className="photo-stage-image"
-                    src={displayImageSrc}
+                    src={renderedImageSrc}
                     alt="Selected composition"
                     draggable={false}
                     style={{
                       filter: buildFilterString(filters),
+                      opacity: (baseImageLayer?.opacity ?? 100) / 100,
+                      clipPath: `inset(${cropRect.y}% ${100 - cropRect.x - cropRect.w}% ${100 - cropRect.y - cropRect.h}% ${cropRect.x}%)`,
                     }}
                   />
                 ) : null
@@ -4317,6 +4446,20 @@ export function PhotoEditor({
                   </div>
                 </div>
               ) : null}
+
+              {showGrid && <div className="photo-stage-grid-overlay" aria-hidden="true" />}
+              {showGuides && (
+                <div className="photo-stage-guides-overlay" aria-hidden="true">
+                  <span className="photo-stage-guide-vertical" />
+                  <span className="photo-stage-guide-horizontal" />
+                </div>
+              )}
+              {showRulers && (
+                <div className="photo-stage-rulers-overlay" aria-hidden="true">
+                  <span className="photo-stage-ruler-top">0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;25&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;50&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;75&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;100</span>
+                  <span className="photo-stage-ruler-left">0<br />25<br />50<br />75<br />100</span>
+                </div>
+              )}
 
               {(selectedImageSrc || layers.length > 0 || brushStrokes.length > 0) && canvasBackground !== 'transparent' && (
                 <>
@@ -4397,7 +4540,7 @@ export function PhotoEditor({
               )}
               {busy && <div className="photo-busy" role="status"><span className="photo-busy-spinner" />{busy}</div>}
 
-              {layers.filter((layer) => !layer.hidden).map((layer) => (
+              {layers.filter((layer) => !layer.hidden && !layer.isBaseImage).map((layer) => (
                 <button
                   key={layer.id}
                   type="button"
@@ -4407,6 +4550,7 @@ export function PhotoEditor({
                     top: `${layer.y}%`,
                     opacity: (layer.opacity ?? 100) / 100,
                     mixBlendMode: cssBlend(layer.blendMode),
+                    cursor: activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'heal' ? 'crosshair' : 'grab',
                     transform: `${
                       layer.type === 'sticker' || layer.type === 'shape' || layer.type === 'image'
                         ? 'translate(-50%, -50%)'
@@ -4556,25 +4700,6 @@ export function PhotoEditor({
                   {layer.blendMode && layer.blendMode !== 'source-over' && <small className="photo-layer-blend">{BLEND_MODES[layer.blendMode]}</small>}
                 </li>
               ))}
-              {selectedImageSrc && (
-                <li
-                  className="photo-layer-base"
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    setLayerMenu({ x: event.clientX, y: event.clientY, layerId: '__photo' })
-                  }}
-                >
-                  <span className="photo-layer-eye" aria-hidden="true"><Eye size={14} /></span>
-                  <span className="photo-layer-thumb" aria-hidden="true"><img src={displayImageSrc || selectedImageSrc} alt="" /></span>
-                  {layerMask && (
-                    <button type="button" className={`photo-mask-thumb ${layerMask.enabled === false ? 'disabled' : ''}`} title={layerMask.enabled === false ? 'Layer mask is off. Click to turn it on.' : 'Layer mask. Click to turn it off; right-click for more.'} onClick={toggleLayerMask}>
-                      <img src={layerMask.src} alt="Layer mask" />
-                    </button>
-                  )}
-                  <span className="photo-layer-name">Photo{!isNeutralHueSat(hueSat) ? ' · Hue/Sat' : ''}</span>
-                  <Lock size={12} aria-label="Position locked" />
-                </li>
-              )}
               <li className="photo-layer-fill">
                 <span className="photo-layer-eye" aria-hidden="true" />
                 <span className={`photo-layer-thumb ${canvasBackground === 'transparent' ? 'is-transparent' : ''}`} style={canvasBackground === 'transparent' ? undefined : { background: canvasBackground }} aria-hidden="true" />
