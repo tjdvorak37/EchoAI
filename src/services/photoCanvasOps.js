@@ -1,4 +1,4 @@
-import { applyHueSaturation, isNeutralHueSat, maskEdges } from './photoPixelOps'
+import { applyHueSaturation, isNeutralHueSat, maskEdges } from './photoPixelOps.js'
 
 // Pixel work runs at this size; exports scale from it. 2048px keeps Select Subject fast on 12MP photos.
 export const WORK_MAX = 2048
@@ -120,6 +120,21 @@ export const fitContain = (imageWidth, imageHeight, boxWidth, boxHeight) => {
   const width = imageWidth * scale
   const height = imageHeight * scale
   return { x: (boxWidth - width) / 2, y: (boxHeight - height) / 2, width, height }
+}
+
+export const stagePointToImage = (point, imageWidth, imageHeight, stageWidth, stageHeight, layer = null) => {
+  if (!imageWidth || !imageHeight || !stageWidth || !stageHeight) return null
+  const fit = layer
+    ? { width: stageWidth * (layer.width ?? 50) / 100, height: stageWidth * (layer.width ?? 50) / 100 * imageHeight / imageWidth }
+    : fitContain(imageWidth, imageHeight, stageWidth, stageHeight)
+  const centerX = layer ? stageWidth * layer.x / 100 : fit.x + fit.width / 2
+  const centerY = layer ? stageHeight * layer.y / 100 : fit.y + fit.height / 2
+  const angle = (layer?.rotation || 0) * Math.PI / 180
+  const dx = point.x * stageWidth / 100 - centerX
+  const dy = point.y * stageHeight / 100 - centerY
+  const x = (dx * Math.cos(angle) + dy * Math.sin(angle) + fit.width / 2) * imageWidth / fit.width
+  const y = (-dx * Math.sin(angle) + dy * Math.cos(angle) + fit.height / 2) * imageHeight / fit.height
+  return { x, y, pixelsPerStagePixel: imageWidth / fit.width }
 }
 
 // Destructive whole-image transforms (rotate, flip) return a new PNG data URL.
