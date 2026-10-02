@@ -26,11 +26,11 @@ verify_enabled = true
 #   1. Create a Google OAuth client (console.cloud.google.com) and a Facebook
 #      Login app (developers.facebook.com), each with authorized redirect URI
 #      https://<project-ref>.supabase.co/auth/v1/callback
-#   2. supabase secrets set AUTH_GOOGLE_CLIENT_ID=... AUTH_GOOGLE_CLIENT_SECRET=... \
-#        AUTH_FACEBOOK_CLIENT_ID=... AUTH_FACEBOOK_CLIENT_SECRET=...
-#   3. supabase config push (or toggle+save the equivalent fields in
-#      Authentication -> Providers in the Supabase dashboard, which achieves
-#      the same result without the CLI).
+#   2. Set the real client IDs and secrets in Supabase Dashboard ->
+#      Authentication -> Sign In / Providers -> Google / Facebook.
+#      Edge Function secrets do NOT configure hosted Auth providers.
+#   3. If using `supabase config push` instead, provide the AUTH_* variables
+#      referenced below in the local shell environment first.
 [auth.external.google]
 enabled = true
 client_id = "env(AUTH_GOOGLE_CLIENT_ID)"
