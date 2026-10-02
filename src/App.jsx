@@ -3489,10 +3489,6 @@ function App() {
                   <span className="provider-mark provider-google" aria-hidden="true">G</span>
                   Continue with Google
                 </button>
-                <button type="button" className="auth-provider-button" onClick={() => handleSocialSignIn('facebook')} disabled={authLoading}>
-                  <span className="provider-mark provider-facebook" aria-hidden="true">f</span>
-                  Continue with Facebook
-                </button>
               </div>
               <div className="auth-divider"><span>or use your email</span></div>
               {authView === 'signin' && (

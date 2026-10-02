@@ -113,26 +113,21 @@ It defines the production Auth URL and redirect allowlist, email confirmation,
 TOTP MFA, and the JWT behavior for public webhook, OAuth, recovery, and
 authenticated functions.
 
-### Google and Facebook account signup
+### Google account signup
 
-Account signup uses Supabase Auth providers, not the social publishing app
-credentials in the employee Developer Apps panel. In Supabase Dashboard ->
-Authentication -> Sign In / Providers, save the real Google web OAuth client ID
-and client secret, and the real Facebook App ID and App Secret.
+Account signup uses the Supabase Google Auth provider, not the social
+publishing app credentials in the employee Developer Apps panel. In Supabase
+Dashboard -> Authentication -> Sign In / Providers -> Google, save the real
+Google web OAuth client ID and client secret.
 
 - Google client IDs end in `.apps.googleusercontent.com`. Create a Web
   application client in Google Cloud Console and authorize the site origins
   `https://www.echoaipro.com` and `https://echoaipro.com`.
-- Facebook App IDs are numeric. Configure Facebook Login for the website in
-  Meta's app dashboard. Production signups require a live app; development
-  mode only permits app-role/test accounts.
 - Register `https://yxmsqrtoghrazfwweqqf.supabase.co/auth/v1/callback` as the
-  authorized redirect URI in Google and the valid OAuth redirect URI in Meta
-  for the current production project. Other environments must use their own
-  project callback.
-- Google `401: invalid_client` / "OAuth client was not found" and Facebook
-  "Invalid App ID" indicate invalid, deleted, or placeholder provider IDs.
-  Replace those IDs in Supabase Auth. Edge Function secrets do not configure
+  authorized redirect URI in Google for the current production project. Other
+  environments must use their own project callback.
+- Google `401: invalid_client` / "OAuth client was not found" indicates an
+  invalid or placeholder provider ID. Edge Function secrets do not configure
   hosted Auth providers, and client secrets must never go into frontend env vars.
 
 ### Employee alerts

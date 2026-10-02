@@ -316,7 +316,7 @@ export const authService = {
   },
 
   async signInWithProvider(provider) {
-    if (!['google', 'facebook'].includes(provider)) {
+    if (provider !== 'google') {
       throw new Error('That sign-in provider is not supported.')
     }
 
