@@ -97,13 +97,13 @@
 }
 
 .auth-provider-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.7rem;
+  display: flex;
+  justify-content: center;
   margin-top: 1.25rem;
 }
 
 .auth-provider-button {
+  width: min(100%, 14rem);
   min-height: 48px;
   display: inline-flex;
   align-items: center;
