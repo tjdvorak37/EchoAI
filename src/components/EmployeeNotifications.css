@@ -1,0 +1,25 @@
+.employee-notifications { position: fixed; right: 20px; bottom: 20px; z-index: 850; display: grid; justify-items: end; gap: 10px; color: #18212b; font-size: 14px; }
+.employee-notifications button { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; border: 1px solid #c6d0d8; border-radius: 6px; background: #fff; color: #18212b; padding: 6px 10px; }
+.employee-notifications button:focus-visible { outline: 3px solid #16806a; outline-offset: 3px; }
+.employee-notifications button:disabled { cursor: wait; opacity: .6; }
+.employee-alert-panel, .employee-alert-popup { width: min(360px, calc(100vw - 32px)); border: 1px solid #c6d0d8; border-radius: 8px; background: #fff; box-shadow: 0 8px 28px #0003; overflow-wrap: anywhere; }
+.employee-alert-popup { padding: 16px; padding-right: 46px; }
+.employee-alert-popup strong, .employee-alert-list strong { display: block; font-size: 15px; line-height: 1.4; }
+.employee-alert-popup p, .employee-alert-list p { margin: 6px 0 12px; line-height: 1.5; }
+.employee-alert-popup { position: relative; }
+.employee-alert-dismiss { position: absolute; right: 6px; top: 6px; padding: 4px !important; }
+.employee-alert-panel header { display: flex; align-items: center; gap: 6px; padding: 12px; border-bottom: 1px solid #dce2e7; }
+.employee-alert-panel header strong { margin-right: auto; }
+.employee-alert-panel > p { padding: 0 12px; }
+.employee-alert-list { max-height: min(420px, 60dvh); overflow-y: auto; }
+.employee-alert-list > p, .employee-alert-list article { padding: 12px; margin: 0; }
+.employee-alert-list article { border-bottom: 1px solid #dce2e7; border-left: 3px solid #16806a; }
+.employee-alert-list article.is-read { border-left-color: transparent; background: #f4f6f7; }
+.employee-alert-list article > div { display: flex; align-items: center; justify-content: space-between; }
+.employee-notifications .employee-alert-bell { position: relative; width: 48px; height: 48px; border-radius: 50%; background: #fff; box-shadow: 0 3px 14px #0002; }
+.employee-alert-bell span { position: absolute; top: -5px; right: -5px; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 12px; display: grid; place-items: center; font-size: 12px; background: #b42318; color: #fff; }
+.employee-alert-bell.has-unread { border-color: #16806a; animation: employee-alert-pulse 1.6s ease-in-out infinite; }
+@keyframes employee-alert-pulse { 50% { box-shadow: 0 0 0 5px #16806a33; } }
+html.editor-focus-active .employee-notifications { display: none; }
+@media (max-width: 600px) { .employee-notifications { right: 16px; bottom: 16px; } }
+@media (prefers-reduced-motion: reduce) { .employee-alert-bell.has-unread { animation: none; } }

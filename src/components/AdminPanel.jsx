@@ -182,13 +182,14 @@ export function AdminPanel({
   socialPlatformReadiness, socialPlatformReadinessLoading, socialPlatformReadinessError, handleRefreshSocialPlatformReadiness,
   adminLoading, adminError,
   currentUser,
+  notificationDestination,
   onAdminUserAction,
 }) {
-  const [itTab, setItTab] = useState(() => ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role)) ? 'overview' : 'integrations')
+  const [itTab, setItTab] = useState(() => notificationDestination ? (notificationDestination.destination === 'tickets' ? 'tickets' : 'forum') : ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role)) ? 'overview' : 'integrations')
   const [openTabGroup, setOpenTabGroup] = useState(null)
   const tabNavRef = useRef(null)
-  const [ticketOpen, setTicketOpen] = useState(null)
-  const [openTicketIds, setOpenTicketIds] = useState([])
+  const [ticketOpen, setTicketOpen] = useState(() => notificationDestination?.destination === 'tickets' ? tickets.find((ticket) => ticket.id === notificationDestination.recordId) || null : null)
+  const [openTicketIds, setOpenTicketIds] = useState(() => notificationDestination?.destination === 'tickets' ? [notificationDestination.recordId] : [])
   const [replyDraft, setReplyDraft] = useState('')
   const [licenseNote, setLicenseNote] = useState({})
   const [quoteTicketId, setQuoteTicketId] = useState('')
@@ -901,7 +902,7 @@ export function AdminPanel({
 
         {itTab === 'analytics' && <AnalyticsPanel tickets={tickets} />}
 
-  {itTab === 'forum' && <InternalForumPanel currentUser={currentUser} teamMembers={teamMembers} onUnreadChange={setForumUnreadCount} />}
+  {itTab === 'forum' && <InternalForumPanel initialView={notificationDestination?.destination === 'chat' ? 'chat' : 'posts'} currentUser={currentUser} teamMembers={teamMembers} onUnreadChange={setForumUnreadCount} />}
 
   {itTab === 'projects' && <ProjectBoardPanel currentUser={currentUser} teamMembers={teamMembers} />}
 

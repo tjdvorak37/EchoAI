@@ -43,6 +43,9 @@ import {
 import { AGENT_CAPABILITIES, DEFAULT_AGENT_CAPABILITIES } from './services/aiAgentService'
 import { OpenAiSetupGuide } from './components/OpenAiSetupGuide'
 import { AnnouncementBanner } from './components/AnnouncementBanner'
+import { EmployeeNotifications } from './components/EmployeeNotifications'
+import { InternalForumPanel } from './components/InternalForumPanel'
+import { isEmployee } from './services/employeeNotificationService'
 import { UpgradeDialog } from './components/UpgradeDialog'
 import { removeStoredAsset } from './services/mediaAssets'
 import { createTrimmedVideoClip, getVideoDuration, makeMediaPreview, uploadMediaFile, validateMediaFile, MAX_MEDIA_FILE_BYTES, VIDEO_MAX_DURATION_SECONDS } from './services/mediaUploadService'
@@ -232,6 +235,7 @@ function App() {
   )
 
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [employeeDestination, setEmployeeDestination] = useState(null)
   const [workspaceSidebarOpen, setWorkspaceSidebarOpen] = useState(true)
   const [connectedAccounts, setConnectedAccounts] = useState([])
   const [socialPlatformReadiness, setSocialPlatformReadiness] = useState([])
@@ -3626,6 +3630,13 @@ function App() {
 
   return (
     <div className="app-shell">
+      {session && isEmployee(normalizeRole(session.role)) && (
+        <EmployeeNotifications key={session.id} currentUser={{ ...session, role: normalizeRole(session.role) }} onOpen={async (alert) => {
+          if (alert.destination === 'tickets') await handleRefreshSupportTickets()
+          setEmployeeDestination((current) => ({ ...alert, navigationId: (current?.navigationId || 0) + 1 }))
+          setActiveTab(normalizeRole(session.role) === 'accountant' ? 'employee-forum' : 'admin')
+        }} />
+      )}
       {onboardingOpen && (
         <div className="onboarding-overlay" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
           <section className="onboarding-modal">
@@ -5700,9 +5711,18 @@ function App() {
           </section>
         )}
 
+        {activeTab === 'employee-forum' && isEmployee(normalizeRole(session?.role)) && (
+          <section className="panel">
+            <h2>Company forum</h2>
+            <InternalForumPanel key={`${session.id}:${employeeDestination?.navigationId || 0}`} initialView={employeeDestination?.destination === 'chat' ? 'chat' : 'posts'} currentUser={session} teamMembers={teamMembers} />
+          </section>
+        )}
+
         {activeTab === 'admin' && ['admin', 'super_admin', 'it'].includes(normalizeRole(session?.role)) && (
           <Suspense fallback={loadingPanel}>
             <AdminPanel
+              key={`${session.id}:${employeeDestination?.navigationId || 'management'}`}
+              notificationDestination={employeeDestination}
               teamMembers={teamMembers}
               setTeamMembers={setTeamMembers}
               alerts={alerts}

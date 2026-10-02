@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { internalForumService } from '../services/internalForumService'
 
-const STAFF_ROLES = ['admin', 'it', 'accountant']
+const STAFF_ROLES = ['admin', 'super_admin', 'it', 'accountant']
 
-export function InternalForumPanel({ currentUser, teamMembers = [], onUnreadChange }) {
-  const [activeView, setActiveView] = useState('posts')
+export function InternalForumPanel({ currentUser, teamMembers = [], onUnreadChange, initialView = 'posts' }) {
+  const [activeView, setActiveView] = useState(initialView)
   const [posts, setPosts] = useState([])
   const [messages, setMessages] = useState([])
   const [postDraft, setPostDraft] = useState({ title: '', body: '', category: 'Training', documentUrl: '' })
@@ -21,16 +21,18 @@ export function InternalForumPanel({ currentUser, teamMembers = [], onUnreadChan
 
   useEffect(() => {
     let active = true
-    internalForumService.list().then((result) => {
+    const refresh = () => internalForumService.list().then((result) => {
       if (!active) return
       setPosts(result.posts)
       setMessages(result.messages)
       onUnreadChange?.(internalForumService.getUnreadCount(result.messages, currentUser?.id))
-      setStatus({ loading: false, saving: false, error: '', message: '' })
+      setStatus((current) => ({ ...current, loading: false, error: '' }))
     }).catch((error) => {
-      if (active) setStatus({ loading: false, saving: false, error: error.message, message: '' })
+      if (active) setStatus((current) => ({ ...current, loading: false, error: error.message }))
     })
-    return () => { active = false }
+    refresh()
+    const timer = window.setInterval(refresh, 10000)
+    return () => { active = false; window.clearInterval(timer) }
   }, [currentUser?.id, onUnreadChange])
 
   const unreadCount = internalForumService.getUnreadCount(messages, currentUser?.id)
