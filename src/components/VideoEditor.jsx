@@ -23,25 +23,9 @@ import { StockLibrary } from './StockLibrary'
 import { EditorFocusToggle } from './EditorFocusMode'
 import { useEditorFocusMode } from './useEditorFocusMode'
 import { downloadMediaLibraryFile } from '../services/mediaLibraryService'
+import { DEFAULT_EFFECTS, FILTER_PRESETS, EFFECT_PRESETS, TRANSITIONS, TRANSITION_PRESETS, buildClipFilter, transitionStateAt } from '../services/videoVisualPresets'
+import { VideoPresetPicker } from './VideoPresetPicker'
 import './VideoEditorWorkspace.css'
-
-const FILTER_PRESETS = {
-  none: { label: 'None', css: '' },
-  vintage: { label: 'Vintage', css: 'sepia(45%) contrast(110%) saturate(85%)' },
-  retro: { label: 'Retro', css: 'sepia(25%) hue-rotate(-15deg) saturate(140%)' },
-  cool: { label: 'Cool', css: 'hue-rotate(180deg) saturate(115%) brightness(105%)' },
-  warm: { label: 'Warm', css: 'sepia(20%) saturate(130%) brightness(105%)' },
-  mono: { label: 'B&W', css: 'grayscale(100%) contrast(115%)' },
-  dreamy: { label: 'Dreamy', css: 'blur(1px) brightness(110%) saturate(120%)' },
-}
-
-const DEFAULT_EFFECTS = {
-  brightness: 100,
-  contrast: 100,
-  saturate: 100,
-  blur: 0,
-  hue: 0,
-}
 
 const DEFAULT_TRANSFORM = {
   x: 0,
@@ -59,14 +43,6 @@ const PROJECT_PRESETS = {
   '4:5': { label: 'Portrait', width: 1080, height: 1350 },
 }
 
-const TRANSITIONS = {
-  none: 'None',
-  fade: 'Fade',
-  slide: 'Slide',
-  zoom: 'Zoom',
-  wipe: 'Wipe',
-}
-
 const TEXT_PRESETS = {
   title: { label: 'Title', fontSize: 64, weight: 800, y: 45, color: '#ffffff' },
   subtitle: { label: 'Subtitle', fontSize: 34, weight: 600, y: 80, color: '#f8fafc' },
@@ -80,46 +56,6 @@ const GENERATE_MODES = [
   { key: 'character', label: 'Character to Video', icon: '\uD83E\uDDD1', hint: 'Keep a saved persona consistent across the generated scene.' },
   { key: 'extend', label: 'Extend Clip', icon: '\u23E9', hint: 'Continue an existing clip using its last frame as the start.' },
 ]
-
-// Both the live preview and the exported frames read this, so what you see is
-// what gets rendered.
-const buildClipFilter = (clip) => {
-  if (!clip) return 'none'
-  const effects = { ...DEFAULT_EFFECTS, ...(clip.effects ?? {}) }
-  const preset = FILTER_PRESETS[clip.filter ?? 'none']?.css ?? ''
-  const adjustments = [
-    `brightness(${effects.brightness}%)`,
-    `contrast(${effects.contrast}%)`,
-    `saturate(${effects.saturate}%)`,
-    `hue-rotate(${effects.hue}deg)`,
-    effects.blur > 0 ? `blur(${effects.blur}px)` : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-
-  return [preset, adjustments].filter(Boolean).join(' ') || 'none'
-}
-
-// Transitions are time-based opacity/scale ramps at the clip edges.
-const transitionStateAt = (clip, localTime) => {
-  const length = 0.6
-  const kind = clip?.transition ?? 'none'
-  if (kind === 'none' || !clip) return { opacity: 1, scale: 1, offset: 0, clip: 0 }
-
-  const fadingIn = localTime < length
-  const fadingOut = localTime > clip.duration - length
-  if (!fadingIn && !fadingOut) return { opacity: 1, scale: 1, offset: 0, clip: 0 }
-
-  const progress = fadingIn ? localTime / length : (clip.duration - localTime) / length
-  const eased = Math.max(0, Math.min(1, progress))
-
-  if (kind === 'fade') return { opacity: eased, scale: 1, offset: 0, clip: 0 }
-  if (kind === 'zoom') return { opacity: eased, scale: 1 + (1 - eased) * 0.25, offset: 0, clip: 0 }
-  if (kind === 'slide') return { opacity: 1, scale: 1, offset: (1 - eased) * (fadingIn ? -1 : 1), clip: 0 }
-  if (kind === 'wipe') return { opacity: 1, scale: 1, offset: 0, clip: 1 - eased }
-
-  return { opacity: 1, scale: 1, offset: 0, clip: 0 }
-}
 
 const clipEnd = (clip) => clip.startTime + clip.duration
 
@@ -168,6 +104,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   const [voicePlayAlong, setVoicePlayAlong] = useState(true)
   const [voiceLastTake, setVoiceLastTake] = useState(null)
   const [libraryKind, setLibraryKind] = useState(null)
+  const [libraryQuery, setLibraryQuery] = useState(undefined)
   const voiceRef = useRef({ recorder: null, stream: null, timer: null, meterFrame: 0, startTime: 0, startedAt: 0, cancelled: false })
   const clipCounter = useRef(0)
   const timelineRef = useRef(null)
@@ -1530,6 +1467,11 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
   }
 
   const selectedOwner = selectedClip ? tracks.find((track) => track.clips.some((clip) => clip.id === selectedClip.id)) : null
+  const canApplyVisualPreset = Boolean(selectedClip && selectedOwner?.type === 'video' && !selectedOwner.locked)
+  const openStockLibrary = (kind, query) => {
+    setLibraryQuery(query)
+    setLibraryKind(kind)
+  }
   const selectedIsVideoClip = selectedOwner?.type === 'video' && selectedClip?.type !== 'text' && (assetById.get(selectedClip?.assetId)?.type ?? selectedClip?.mediaType ?? 'video') === 'video'
   const audioEditableClip = selectedOwner?.type === 'audio' || selectedIsVideoClip ? selectedClip : null
   const openAudioMixer = () => {
@@ -1621,24 +1563,6 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           <button type="button" className="rec-btn" onClick={addBriefStoryboard}>Add plan to timeline</button>
         </div>
       )}
-      <div className="screen-record-bar" role="group" aria-label="Video recording controls">
-        {isRecording ? (
-          <>
-            <span className="rec-dot" />
-            <span className="rec-label">Recording — {Math.floor(recordingSeconds / 60).toString().padStart(2, '0')}:{(recordingSeconds % 60).toString().padStart(2, '0')}</span>
-            <button type="button" className="rec-stop-btn" onClick={stopScreenRecord}>⏹ Stop &amp; add to timeline</button>
-          </>
-        ) : (
-          <>
-            <span className="rec-title">Screen Capture</span>
-            <button type="button" className="rec-btn" onClick={() => startScreenRecord(false)}>🖥 Record screen</button>
-            <button type="button" className="rec-btn rec-btn-audio" onClick={() => startScreenRecord(true)}>🎙 Record with audio</button>
-            <button type="button" className="rec-btn rec-btn-voice" onClick={openAudioMixer}>🎤 Record voice-over</button>
-            {recordingError && <span className="rec-error">{recordingError}</span>}
-          </>
-        )}
-      </div>
-
       <div className="editor-toolbar" aria-label="Video editing toolbar">
         <div className="toolbar-buttons" role="group" aria-label="Video quick editing tools">
           <button type="button" className={`toolbar-btn ${editTool === 'select' ? 'active' : ''}`} aria-pressed={editTool === 'select'} title="Selection tool (V)" onClick={() => setEditTool('select')}><MonitorPlay size={17} /> Select</button>
@@ -1649,7 +1573,24 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           <button type="button" className="toolbar-btn" title="Match color from another clip" onClick={matchSelectedColor}>Color match</button>
           <button type="button" className="toolbar-btn" title="Speed controls" onClick={() => setInspectorTab('video')}><Film size={17} /> Speed</button>
           <button type="button" className={`toolbar-btn toolbar-btn-audio ${activeToolbar === 'audio' ? 'active' : ''}`} title="Volume, equalizer, fades, and loud/quiet spots" onClick={openAudioMixer}><SlidersHorizontal size={17} /> Audio mixer</button>
-          <button type="button" className="toolbar-btn toolbar-btn-library" title="Stock photos, illustrations, vectors, videos, and sound effects" onClick={() => setLibraryKind('sound')}><Library size={17} /> Stock library</button>
+          <button type="button" className="toolbar-btn toolbar-btn-library" title="Stock photos, illustrations, vectors, videos, and sound effects" onClick={() => openStockLibrary('sound')}><Library size={17} /> Stock library</button>
+          <div className="video-capture-controls" role="group" aria-label="Video recording controls">
+            {isRecording ? <>
+              <span className="rec-dot" aria-hidden="true" />
+              <span className="video-recording-clock" role="status">Recording {Math.floor(recordingSeconds / 60).toString().padStart(2, '0')}:{(recordingSeconds % 60).toString().padStart(2, '0')}</span>
+              <button type="button" className="toolbar-btn video-recording-stop" onClick={stopScreenRecord}>Stop &amp; add to timeline</button>
+            </> : <select className="video-capture-select" aria-label="Screen Capture" value=""
+              onChange={(event) => {
+                const action = event.target.value
+                if (action === 'voice') openAudioMixer()
+                else if (action === 'screen' || action === 'audio') startScreenRecord(action === 'audio')
+              }}>
+              <option value="" disabled>Screen Capture</option>
+              <option value="screen">Record screen</option>
+              <option value="audio">Record with audio</option>
+              <option value="voice">Record voice-over</option>
+            </select>}
+          </div>
           <span className="time-display">
             {Math.floor(playbackTime)}s / {duration}s
           </span>
@@ -1683,6 +1624,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           </button>
           <button type="button" className="toolbar-btn" title="Reset selected transform" aria-label="Reset selected transform" onClick={() => selectedClip && updateSelectedClip({ transform: { ...DEFAULT_TRANSFORM } })}><RotateCcw size={17} /></button>
           {statusMessage && <span className="muted video-editor-status" role="status">{statusMessage}</span>}
+          {recordingError && <span className="rec-error video-editor-status" role="alert">{recordingError}</span>}
         </div>
 
         <div className="toolbar-groups" role="group" aria-label="Video tool panels">
@@ -1765,8 +1707,8 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           {activeToolbar === 'media' && (
             <div className="tool-panel">
               <h3>Media</h3>
-              <button type="button" className="tool-button stock-library-launch" onClick={() => setLibraryKind('video')}><Clapperboard size={15} /> Browse transitions &amp; stock video</button>
-              <button type="button" className="tool-button stock-library-launch" onClick={() => setLibraryKind('image')}><ImageIcon size={15} /> Browse photos, illustrations &amp; vectors</button>
+              <button type="button" className="tool-button stock-library-launch" onClick={() => openStockLibrary('video')}><Clapperboard size={15} /> Browse transitions &amp; stock video</button>
+              <button type="button" className="tool-button stock-library-launch" onClick={() => openStockLibrary('image')}><ImageIcon size={15} /> Browse photos, illustrations &amp; vectors</button>
               <p className="muted">Tap an image, video, or audio file to add it at the playhead.</p>
               <label className="video-direct-upload">
                 <strong>Upload video to timeline</strong>
@@ -1793,23 +1735,19 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
               {['★ Featured', '✓ Approved', '→ Swipe up', '♥ Love this'].map((label) => (
                 <button key={label} type="button" className="tool-button" onClick={() => addTextClip('lower_third', label)}>{label}</button>
               ))}
+              <button type="button" className="tool-button video-more-presets" onClick={() => openStockLibrary('image', 'Graphic')}><Library size={15} /> Looking for something more?</button>
             </div>
           )}
           {activeToolbar === 'transitions' && (
             <div className="tool-panel">
               <h3>Transitions</h3>
-              <p className="muted">Applied to the edges of the selected clip.</p>
-              {Object.entries(TRANSITIONS).map(([key, label]) => (
-                <div key={key} className="tool-item">
-                  <button
-                    type="button"
-                    className={`tool-button ${selectedClip?.transition === key ? 'active' : ''}`}
-                    onClick={() => updateSelectedClip({ transition: key })}
-                  >
-                    {label}
-                  </button>
-                </div>
-              ))}
+              <p className="muted">Built-in entrance/exit presets for video and image clips. Hover or focus a card to preview its motion.</p>
+              {!canApplyVisualPreset && <p className="video-preset-hint">Select an unlocked video or image clip to apply a preset.</p>}
+              <VideoPresetPicker label="Built-in transitions" presets={TRANSITION_PRESETS} kind="transition"
+                selectedKey={selectedClip?.transition ?? 'none'} disabled={!canApplyVisualPreset}
+                onSelect={(key) => updateSelectedClip({ transition: key })} />
+              <button type="button" className="tool-button video-more-presets" onClick={() => openStockLibrary('video', 'Transition')}><Library size={15} /> Looking for something more?</button>
+              <p className="muted">Stock transitions are footage added to the timeline, not editable edge presets.</p>
             </div>
           )}
 
@@ -1819,6 +1757,11 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
               <p className="muted">
                 {selectedClip ? `Editing ${selectedClip.assetName}` : 'Select a clip to adjust.'}
               </p>
+              {!canApplyVisualPreset && <p className="video-preset-hint">Select an unlocked video or image clip to apply a preset.</p>}
+              <VideoPresetPicker label="Built-in effects" presets={EFFECT_PRESETS} kind="effect"
+                selectedKey={Object.entries(EFFECT_PRESETS).find(([, preset]) => Object.keys(DEFAULT_EFFECTS).every((key) => preset.effects[key] === (selectedClip?.effects?.[key] ?? DEFAULT_EFFECTS[key])))?.[0]}
+                disabled={!canApplyVisualPreset} onSelect={(key) => updateSelectedClip({ effects: { ...EFFECT_PRESETS[key].effects } })} />
+              <p className="muted">Presets replace the adjustment sliders; filters remain separate and stack on top. Fine-tune below.</p>
               {[
                 ['brightness', 'Brightness', 0, 200],
                 ['contrast', 'Contrast', 0, 200],
@@ -1849,6 +1792,8 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
               >
                 Reset effects
               </button>
+              <button type="button" className="tool-button video-more-presets" onClick={() => openStockLibrary('video', 'Abstract')}><Library size={15} /> Looking for something more?</button>
+              <p className="muted">Search stock effect footage; added media does not replace clip adjustments.</p>
             </div>
           )}
 
@@ -1856,17 +1801,12 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             <div className="tool-panel">
               <h3>Filters</h3>
               <p className="muted">Look presets stack on top of the effect sliders.</p>
-              {Object.entries(FILTER_PRESETS).map(([key, value]) => (
-                <div key={key} className="tool-item">
-                  <button
-                    type="button"
-                    className={`tool-button ${selectedClip?.filter === key ? 'active' : ''}`}
-                    onClick={() => updateSelectedClip({ filter: key })}
-                  >
-                    {value.label}
-                  </button>
-                </div>
-              ))}
+              {!canApplyVisualPreset && <p className="video-preset-hint">Select an unlocked video or image clip to apply a preset.</p>}
+              <VideoPresetPicker label="Built-in filters" presets={FILTER_PRESETS} kind="filter"
+                selectedKey={selectedClip?.filter ?? 'none'} disabled={!canApplyVisualPreset}
+                onSelect={(key) => updateSelectedClip({ filter: key })} />
+              <button type="button" className="tool-button video-more-presets" onClick={() => openStockLibrary('video', 'Cinematic')}><Library size={15} /> Looking for something more?</button>
+              <p className="muted">Browse cinematic stock footage. Stock search supplies media, not downloadable color filters.</p>
             </div>
           )}
 
@@ -1881,6 +1821,8 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                   </button>
                 </div>
               ))}
+              <button type="button" className="tool-button video-more-presets" onClick={() => openStockLibrary('video', 'Title')}><Library size={15} /> Looking for something more?</button>
+              <p className="muted">Stock title footage is media; use the built-in titles for editable text.</p>
 
               {selectedClip?.type === 'text' && (
                 <>
@@ -1929,7 +1871,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           {activeToolbar === 'audio' && (
             <div className="tool-panel audio-mixer-panel">
               <h3>Audio mixer</h3>
-              <button type="button" className="tool-button stock-library-launch" onClick={() => setLibraryKind('sound')}><Music2 size={15} /> Browse sound effects</button>
+              <button type="button" className="tool-button stock-library-launch" onClick={() => openStockLibrary('sound')}><Music2 size={15} /> Browse sound effects</button>
               <p className="muted">Press play to hear changes live. Everything here is included when you export.</p>
               <VoiceOverRecorder
                 status={voiceStatus}
@@ -2016,6 +1958,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
                   opacity: activeTransition.opacity * (getClipTransform(activeVisualClip).opacity / 100),
                   mixBlendMode: getClipTransform(activeVisualClip).blendMode,
                   transform: `translate(${getClipTransform(activeVisualClip).x * 10 + activeTransition.offset * 100}%, ${getClipTransform(activeVisualClip).y * 10}%) rotate(${getClipTransform(activeVisualClip).rotation}deg) scale(${activeTransition.scale * getClipTransform(activeVisualClip).scale / 100})`,
+                  clipPath: activeTransition.clip > 0 ? `inset(0 ${activeTransition.clip * 100}% 0 0)` : 'none',
                 }}
               />
               ) : (
@@ -2233,7 +2176,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           {tracks.reduce((sum, t) => sum + t.clips.length, 0)} clips • {duration}s duration
         </span>
       </div>
-      {libraryKind && <StockLibrary initialKind={libraryKind} kinds={['sound', 'video', 'image']} onClose={() => setLibraryKind(null)} onAdd={addFromStockLibrary} />}
+      {libraryKind && <StockLibrary initialKind={libraryKind} initialQuery={libraryQuery} kinds={['sound', 'video', 'image']} onClose={() => setLibraryKind(null)} onAdd={addFromStockLibrary} />}
     </div>
   )
 }
