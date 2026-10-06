@@ -59,11 +59,18 @@ import {
   Unlock,
   Folder,
   MoreVertical,
+  Hexagon,
+  Star,
+  Blend,
+  Scissors,
+  Copy,
+  ClipboardPaste,
 } from 'lucide-react'
 import { StockLibrary } from './StockLibrary'
 import { PhotoHueSaturationDialog } from './PhotoHueSaturationDialog'
 import { PhotoShortcutsOverlay } from './PhotoShortcutsOverlay'
 import { PhotoClassicToolbox } from './PhotoClassicToolbox'
+import { PhotoClassicQuickToolbar } from './PhotoClassicQuickToolbar'
 import { PhotoObjectProperties, PhotoObjectGeometryFields } from './PhotoObjectProperties'
 import { PhotoObjectHandles } from './PhotoObjectHandles'
 import { PhotoObjectSelectionPanel } from './PhotoObjectSelectionPanel'
@@ -71,6 +78,7 @@ import { PhotoObjectBoxSelection } from './PhotoObjectBoxSelection'
 import { pickObjectIds, toggleObjectIds, translateObjectSelection, selectionAlignmentPatches, distributionPatches } from '../services/photoObjectSelection'
 import { objectAlignmentPatch } from '../services/photoObjectTransforms'
 import { snapObjectTranslation } from '../services/photoObjectSnapping'
+import { polygonShapePoints } from '../services/photoShapePaths'
 import { DEFAULT_PHOTO_MEASUREMENTS, validatePhotoMeasurements } from '../services/photoMeasurements'
 import { PhotoPageSetup } from './PhotoPageSetup'
 import { PhotoRulers } from './PhotoRulers'
@@ -410,12 +418,14 @@ const CLASSIC_TOOL_GROUPS = [
     { key: 'reset-view', label: 'Reset view', icon: Expand, action: true, description: 'Reset zoom to 100% and center the view.' },
   ] },
   { id: 'drawing', label: 'Drawing', tools: [
-    classicTool('brush', 'Paint freehand strokes; this is not a vector path.'),
     classicTool('line', 'Insert an editable straight-line object.', 'Add line'),
+    classicTool('brush', 'Paint freehand strokes; this is not a vector path.'),
   ] },
+  { id: 'rectangle', label: 'Rectangle', tools: [classicTool('rectangle', 'Insert an editable rectangle.', 'Add rectangle')] },
+  { id: 'ellipse', label: 'Ellipse', tools: [classicTool('ellipse', 'Insert an editable ellipse.', 'Add ellipse')] },
   { id: 'shapes', label: 'Geometric shapes', tools: [
-    classicTool('rectangle', 'Insert an editable rectangle.', 'Add rectangle'),
-    classicTool('ellipse', 'Insert an editable ellipse.', 'Add ellipse'),
+    { key: 'hexagon', label: 'Add polygon', icon: Hexagon, action: true, description: 'Insert an editable six-sided polygon.' },
+    { key: 'star', label: 'Add star', icon: Star, action: true, description: 'Insert an editable five-point star.' },
     classicTool('triangle', 'Insert an editable triangle.', 'Add triangle'),
   ] },
   { id: 'text', label: 'Text', tools: [
@@ -428,7 +438,13 @@ const CLASSIC_TOOL_GROUPS = [
     classicTool('lasso', 'Draw a freehand selection of image pixels.'),
     classicTool('polygon', 'Click corners to select image pixels.'),
   ] },
-  { id: 'fill', label: 'Fill', tools: [classicTool('fill', 'Fill image pixels or the canvas background.')] },
+  { id: 'transparency', label: 'Transparency', tools: [
+    { key: 'object-opacity', label: 'Object transparency', icon: Blend, action: true, description: 'Open Properties to edit the selected object opacity.' },
+  ] },
+  { id: 'fill', label: 'Fill', tools: [
+    { key: 'object-appearance', label: 'Object fill and outline', icon: Palette, action: true, description: 'Open the selected object fill and outline controls.' },
+    classicTool('fill', 'Fill image pixels or the canvas background.'),
+  ] },
 ]
 
 const SHAPES = {
@@ -436,6 +452,8 @@ const SHAPES = {
   ellipse: 'Ellipse',
   line: 'Line',
   triangle: 'Triangle',
+  hexagon: 'Polygon',
+  star: 'Star',
 }
 
 const EXPORT_FORMATS = {
@@ -925,7 +943,16 @@ const drawShapeLayer = (ctx, layer, width, height) => {
   ctx.lineCap = 'round'
 
   ctx.beginPath()
-  if (layer.shape === 'ellipse') {
+  const polygonPoints = polygonShapePoints(layer.shape)
+  if (polygonPoints) {
+    polygonPoints.forEach((point, index) => {
+      const x = (point.x / 100 - 0.5) * w
+      const y = (point.y / 100 - 0.5) * h
+      if (index === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    })
+    ctx.closePath()
+  } else if (layer.shape === 'ellipse') {
     ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2)
   } else if (layer.shape === 'line') {
     ctx.moveTo(-w / 2, 0)
@@ -1295,6 +1322,7 @@ export function PhotoEditor({
   const [canvasZoom, setCanvasZoom] = useState(100)
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 })
   const [objectSnapping, setObjectSnapping] = useState(true)
+  const [nudgePixels, setNudgePixels] = useState(1)
   const [objectSnapGuides, setObjectSnapGuides] = useState([])
   const [openMenu, setOpenMenu] = useState(null)
   const [menuHost, setMenuHost] = useState(null)
@@ -1770,7 +1798,7 @@ export function PhotoEditor({
       y: 50,
       width: 30,
       height: shape === 'line' ? 1 : 20,
-      color: preset.accent,
+      color: shape === 'hexagon' || shape === 'star' ? '#7137e8' : preset.accent,
       strokeColor: preset.secondary,
       strokeWidth: 0,
       radius: shape === 'rectangle' ? 18 : 0,
@@ -3004,7 +3032,7 @@ export function PhotoEditor({
         && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
         && (target === document.body || (target instanceof Element && target.closest('.photo-stage')))) {
         return run(() => {
-          const step = event.shiftKey ? 10 : 1
+          const step = nudgePixels * (event.shiftKey ? 10 : 1)
           const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
           const key = horizontal ? 'x' : 'y'
           const direction = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1
@@ -3463,6 +3491,14 @@ export function PhotoEditor({
     if (key === 'zoom') setCanvasZoom((value) => clamp(value + 10, 25, 400))
     else if (key === 'zoom-out') setCanvasZoom((value) => clamp(value - 10, 25, 400))
     else if (key === 'reset-view') resetCanvasView()
+    else if (key === 'object-opacity' || key === 'object-appearance') {
+      selectTool('select')
+      setRightSidebarCollapsed(false)
+      setClassicInspectorPanel('properties')
+      setNotice(activeLayer && !activeLayer.isBaseImage
+        ? key === 'object-opacity' ? 'Edit Object opacity in Properties; 0% is transparent and 100% is opaque.' : 'Edit the selected object color, fill, and outline in Properties.'
+        : 'Select a design object to edit its appearance.')
+    }
     else if (key === 'text' || Object.hasOwn(SHAPES, key)) {
       selectTool('select')
       setRightSidebarCollapsed(false)
@@ -4213,7 +4249,7 @@ export function PhotoEditor({
           {editorPanel === 'erase' && <div className="modern-context-body"><div className="modern-mode-switch"><button type="button" className={activeTool === 'eraser' ? 'active' : ''} onClick={() => setActiveTool('eraser')}><Eraser size={16} /> Erase</button><button type="button" className={activeTool === 'heal' ? 'active' : ''} onClick={() => setActiveTool('heal')}><Bandage size={16} /> Heal</button></div><label className="modern-slider"><span>Brush size<b>{brushSize}px</b></span><input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} /></label><label className="modern-slider"><span>Opacity<b>{Math.round(brushOpacity * 100)}%</b></span><input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} /></label><button type="button" className="modern-smart-action" onClick={() => { setActiveTool('remove'); setNotice('Drag over the area you want to remove.') }}><Sparkles size={17} /> Remove an area</button><div className="modern-context-footer"><button type="button" onClick={undo} disabled={!historyCounts.past}>Undo</button><button type="button" onClick={() => setEditorPanel('main')}>Done</button></div></div>}
           {editorPanel === 'select' && <div className="modern-context-body"><div className="modern-selection-list"><button type="button" onClick={() => setActiveTool('object-select')}><Sparkles size={18} /><span><strong>Element</strong><small>Find the main subject</small></span></button><button type="button" onClick={() => setActiveTool('magic-wand')}><Wand size={18} /><span><strong>Magic wand</strong><small>Select matching colors</small></span></button><button type="button" onClick={() => setActiveTool('rect-select')}><BoxSelect size={18} /><span><strong>Area</strong><small>Drag a rectangular selection</small></span></button><button type="button" onClick={() => setActiveTool('lasso')}><LassoSelect size={18} /><span><strong>Lasso</strong><small>Draw around an area</small></span></button></div><button type="button" className="modern-smart-action" onClick={selectSubject}>Select subject</button>{selection && <><button type="button" className="modern-wide-action" onClick={invertSelection}>Invert selection</button><button type="button" className="modern-wide-action" onClick={addLayerMaskFromSelection}>Add layer mask</button><button type="button" className="modern-wide-action" onClick={deselect}>Deselect</button></>}</div>}
           {editorPanel === 'draw' && <div className="modern-context-body"><div className="modern-mode-switch"><button type="button" className={activeTool === 'brush' ? 'active' : ''} onClick={() => setActiveTool('brush')}><Paintbrush size={16} /> Brush</button><button type="button" className={activeTool === 'fill' ? 'active' : ''} onClick={() => setActiveTool('fill')}><PaintBucket size={16} /> Fill</button></div><label className="modern-color-control"><span>Color</span><input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} /></label><label className="modern-slider"><span>Size<b>{brushSize}px</b></span><input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} /></label><label className="modern-slider"><span>Opacity<b>{Math.round(brushOpacity * 100)}%</b></span><input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} /></label></div>}
-          {editorPanel === 'create' && <div className="modern-context-body"><button type="button" className="modern-create-action" onClick={addTextLayer}><Type size={22} /><span><strong>Add text</strong><small>Create an editable text layer</small></span></button><div className="modern-shape-grid">{Object.entries(SHAPES).map(([shape, label]) => <button key={shape} type="button" onClick={() => addShapeLayer(shape)}>{shape === 'rectangle' ? <Square /> : shape === 'ellipse' ? <Circle /> : shape === 'triangle' ? <Triangle /> : <Minus />}<span>{label}</span></button>)}</div><label className="modern-context-label">Stickers</label><div className="modern-sticker-grid">{STICKERS.map((sticker) => <button key={sticker} type="button" onClick={() => addStickerLayer(sticker)}>{sticker}</button>)}</div></div>}
+          {editorPanel === 'create' && <div className="modern-context-body"><button type="button" className="modern-create-action" onClick={addTextLayer}><Type size={22} /><span><strong>Add text</strong><small>Create an editable text layer</small></span></button><div className="modern-shape-grid">{Object.entries(SHAPES).map(([shape, label]) => <button key={shape} type="button" onClick={() => addShapeLayer(shape)}>{shape === 'rectangle' ? <Square /> : shape === 'ellipse' ? <Circle /> : shape === 'triangle' ? <Triangle /> : shape === 'hexagon' ? <Hexagon /> : shape === 'star' ? <Star /> : <Minus />}<span>{label}</span></button>)}</div><label className="modern-context-label">Stickers</label><div className="modern-sticker-grid">{STICKERS.map((sticker) => <button key={sticker} type="button" onClick={() => addStickerLayer(sticker)}>{sticker}</button>)}</div></div>}
           {editorPanel === 'layers' && <div className="modern-context-body"><p className="modern-context-note">The layer inspector is open on the right. Select a layer there to edit content, color, size, blend mode, and order.</p><button type="button" className="modern-smart-action" onClick={addTextLayer}><Type size={17} /> Add text layer</button><button type="button" className="modern-wide-action" onClick={() => setRightSidebarCollapsed((value) => !value)}>{rightSidebarCollapsed ? 'Open layer inspector' : 'Hide layer inspector'}</button></div>}
         </>
       )}
@@ -4624,17 +4660,6 @@ export function PhotoEditor({
         </div>
         <div className="photo-topbar-title"><strong>{headline || prompt || 'Untitled design'}</strong><span>{aspect.canvasWidth} × {aspect.canvasHeight}px</span></div>
         <div className="photo-topbar-actions">
-          {classicWorkspace && <div className="photo-classic-command-actions" role="group" aria-label="Document commands">
-            {[
-              ['Library', Images, useLibraryImage, 'Use an image from the library'],
-              ['Remove background', Wand, removeBackground, 'Select the subject and mask its background'],
-              ['Hue/Sat', SlidersHorizontal, openHueSat, 'Hue/Saturation (Ctrl+U)'],
-              ['Clear image', Eraser, clearBaseImage, 'Clear the original photo'],
-              ['New canvas', Plus, resetEditor, 'Reset to a new canvas'],
-              ['Keyboard shortcuts', Keyboard, () => setShortcutsOpen(true), 'Keyboard shortcuts (?)'],
-            ].map(([label, Icon, action, title]) => <button key={label} type="button" className="photo-topbar-icon" aria-label={label} title={title} onClick={action}><Icon size={17} aria-hidden="true" /></button>)}
-            <button type="button" className="photo-topbar-icon" aria-label={compactMode ? 'Comfortable' : 'Compact'} title={compactMode ? 'Comfortable workspace spacing' : 'Compact workspace spacing'} aria-pressed={compactMode} onClick={() => setCompactMode((value) => !value)}><PanelsTopLeft size={17} aria-hidden="true" /></button>
-          </div>}
           <span className={`photo-save-status ${saveStatus.toLowerCase()}`}>{saveStatus}</span>
           <button type="button" className="photo-topbar-icon" onClick={exportCanvas} title={`Download ${EXPORT_FORMATS[exportFormat]?.label ?? 'PNG'}`} aria-label="Download design"><Download size={19} /></button>
           <button type="button" className="photo-create-design-button" onClick={() => { setWorkspaceView('home'); setCreateDialogOpen(true) }}><Plus size={17} /> Create design</button>
@@ -4645,6 +4670,34 @@ export function PhotoEditor({
 
       <div ref={setMenuHost} className={`editor-menu-host ${legacyToolsVisible ? 'legacy-menu-visible' : ''}`} />
 
+      {classicWorkspace && <PhotoClassicQuickToolbar
+        groups={[
+          { label: 'Project commands', actions: [
+            { label: 'New canvas', icon: Plus, onClick: resetEditor },
+            { label: 'Open project', icon: FolderOpen, onClick: handleFileOpenProject },
+            { label: 'Open image', icon: Upload, onClick: () => uploadInputRef.current?.click() },
+            { label: 'Save project', icon: Save, onClick: () => handleFileSave(false), title: 'Save an editable EchoAI project file' },
+          ] },
+          { label: 'Clipboard commands', actions: [
+            { label: 'Cut object', icon: Scissors, onClick: handleEditCut, disabled: !activeLayer || activeLayer.isBaseImage || activeLayer.locked || multipleObjectsSelected, title: 'Cut one unlocked object (Ctrl+X)' },
+            { label: 'Copy objects', icon: Copy, onClick: handleEditCopy, disabled: !activeLayer || activeLayer.isBaseImage, title: 'Copy selected objects (Ctrl+C)' },
+            { label: 'Paste objects', icon: ClipboardPaste, onClick: handleEditPaste, title: 'Paste copied objects (Ctrl+V)' },
+          ] },
+          { label: 'Document commands', actions: [
+            { label: 'Library', icon: Images, onClick: useLibraryImage },
+            { label: 'Remove background', icon: Wand, onClick: removeBackground },
+            { label: 'Hue/Sat', icon: SlidersHorizontal, onClick: openHueSat, title: 'Hue/Saturation (Ctrl+U)' },
+            { label: 'Clear image', icon: Eraser, onClick: clearBaseImage },
+            { label: 'Keyboard shortcuts', icon: Keyboard, onClick: () => setShortcutsOpen(true) },
+            { label: compactMode ? 'Comfortable' : 'Compact', icon: PanelsTopLeft, onClick: () => setCompactMode((value) => !value), pressed: compactMode },
+          ] },
+        ]}
+        zoom={canvasZoom} onZoom={setCanvasZoom} onFit={resetCanvasView}
+        rulers={showRulers} grid={showGrid} guides={showGuides} snapping={objectSnapping}
+        onRulers={handleViewToggleRulers} onGrid={handleViewToggleGrid} onGuides={handleViewToggleGuides}
+        onSnapping={() => { setObjectSnapping((value) => !value); setObjectSnapGuides([]) }}
+        nudgePixels={nudgePixels} onNudge={setNudgePixels} settings={measurements} onError={setNotice}
+      />}
       {classicWorkspace && <PhotoPageSetup
         key={`${aspect.canvasWidth}-${aspect.canvasHeight}-${measurements.ppi}`}
         width={aspect.canvasWidth} height={aspect.canvasHeight} settings={measurements}
@@ -5042,13 +5095,12 @@ export function PhotoEditor({
               <span className="status-pill">{activeTool.toUpperCase()}</span>
               <p className="muted" title={notice} role="status">{notice}</p>
             </div>
-            <div className="canvas-controls" aria-label="Canvas controls">
-              {classicWorkspace && <button type="button" className="chip" aria-pressed={objectSnapping} title="Snap moving objects to canvas and object edges/centers. Hold Alt while dragging to bypass." onClick={() => { setObjectSnapping((value) => !value); setObjectSnapGuides([]) }}>Snap</button>}
+            {!classicWorkspace && <div className="canvas-controls" aria-label="Canvas controls">
               <button type="button" className="chip" onClick={() => setCanvasZoom((value) => clamp(value - 10, 25, 400))}>−</button>
               <span>{canvasZoom}%</span>
               <button type="button" className="chip" onClick={() => setCanvasZoom((value) => clamp(value + 10, 25, 400))}>+</button>
               <button type="button" className="chip" onClick={resetCanvasView}>Fit</button>
-            </div>
+            </div>}
           </div>
 
           <div
@@ -5279,6 +5331,16 @@ export function PhotoEditor({
                         visibility: erasePreviewId === layer.id && erasePreviewReady ? 'hidden' : undefined,
                       }}
                     />
+                  ) : layer.type === 'shape' && polygonShapePoints(layer.shape) ? (
+                    <svg className="photo-polygon-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" style={{
+                      display: 'block',
+                      width: `${(layer.width / 100) * (stageRef.current?.clientWidth || stageDisplaySize.width - 2)}px`,
+                      height: `${(layer.height / 100) * (stageRef.current?.clientHeight || stageDisplaySize.height - 2)}px`,
+                    }}>
+                      <polygon points={polygonShapePoints(layer.shape).map(({ x, y }) => `${x},${y}`).join(' ')}
+                        fill={layer.filled === false ? 'none' : layer.color} stroke={layer.strokeColor || layer.color}
+                        strokeWidth={(layer.strokeWidth || 0) * (stageRef.current?.clientWidth || stageDisplaySize.width - 2) / aspect.canvasWidth} vectorEffect="non-scaling-stroke" />
+                    </svg>
                   ) : layer.type === 'shape' ? (
                     <span
                       style={{
@@ -5441,7 +5503,7 @@ export function PhotoEditor({
                     {layer.locked ? <Lock size={13} aria-hidden="true" /> : <Unlock size={13} aria-hidden="true" />}
                   </button>}
                   <span className="photo-layer-thumb" aria-hidden="true">
-                    {layer.type === 'image' ? <img src={layer.src} alt="" /> : layer.type === 'shape' ? <span style={{ background: layer.color, borderRadius: layer.shape === 'ellipse' ? '50%' : 3 }} /> : layer.type === 'sticker' ? layer.value : <strong style={{ color: normalizeColorInputValue(layer.color, '#0f172a') }}>T</strong>}
+                    {layer.type === 'image' ? <img src={layer.src} alt="" /> : layer.type === 'shape' && polygonShapePoints(layer.shape) ? <svg viewBox="0 0 100 100" width="20" height="20"><polygon points={polygonShapePoints(layer.shape).map(({ x, y }) => `${x},${y}`).join(' ')} fill={layer.color} /></svg> : layer.type === 'shape' ? <span style={{ background: layer.color, borderRadius: layer.shape === 'ellipse' ? '50%' : 3 }} /> : layer.type === 'sticker' ? layer.value : <strong style={{ color: normalizeColorInputValue(layer.color, '#0f172a') }}>T</strong>}
                   </span>
                   {renamingLayerId === layer.id ? (
                     <input
@@ -5642,7 +5704,7 @@ export function PhotoEditor({
                         <input
                           type="color"
                           value={normalizeColorInputValue(layer.color, '#67e8f9')}
-                          onChange={(event) => updateLayer(layer.id, { color: event.target.value })}
+                          onChange={(event) => classicWorkspace ? commitObjectProperties({ color: event.target.value }) : updateLayer(layer.id, { color: event.target.value })}
                         />
                       </label>
                       <label>
@@ -5652,7 +5714,7 @@ export function PhotoEditor({
                           min="0"
                           max="24"
                           value={layer.strokeWidth ?? 0}
-                          onPointerDown={commitHistory}
+                          onFocus={commitHistory}
                           onChange={(event) => updateLayer(layer.id, { strokeWidth: Number(event.target.value) })}
                         />
                       </label>
@@ -5661,7 +5723,7 @@ export function PhotoEditor({
                         <input
                           type="color"
                           value={normalizeColorInputValue(layer.strokeColor, '#f9a8d4')}
-                          onChange={(event) => updateLayer(layer.id, { strokeColor: event.target.value })}
+                          onChange={(event) => classicWorkspace ? commitObjectProperties({ strokeColor: event.target.value }) : updateLayer(layer.id, { strokeColor: event.target.value })}
                         />
                       </label>
                       <label>
@@ -5669,7 +5731,7 @@ export function PhotoEditor({
                         <input
                           type="checkbox"
                           checked={layer.filled !== false}
-                          onChange={(event) => updateLayer(layer.id, { filled: event.target.checked })}
+                          onChange={(event) => classicWorkspace ? commitObjectProperties({ filled: event.target.checked }) : updateLayer(layer.id, { filled: event.target.checked })}
                         />
                       </label>
                     </>

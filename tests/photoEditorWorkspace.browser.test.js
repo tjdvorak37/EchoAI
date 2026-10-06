@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { Buffer } from 'node:buffer'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 
@@ -69,10 +70,12 @@ test('photo editor workspace switching', async (t) => {
     await toggle.getByRole('button', { name: 'Classic', exact: true }).click()
     const menu = await page.locator('.editor-menu-host').boundingBox()
     const commands = await page.locator('.photo-editor-topbar').boundingBox()
+    const quick = await page.getByLabel('Classic quick editing toolbar', { exact: true }).boundingBox()
     const setup = await page.getByRole('form', { name: 'Page setup', exact: true }).boundingBox()
     const options = await page.getByLabel('Tool options', { exact: true }).boundingBox()
     assert.ok(menu.y + menu.height <= commands.y + 1)
-    assert.ok(commands.y + commands.height <= setup.y + 1)
+    assert.ok(commands.y + commands.height <= quick.y + 1)
+    assert.ok(quick.y + quick.height <= setup.y + 1)
     assert.ok(setup.y + setup.height <= options.y + 1)
     const tool = page.locator('.classic-tool-primary').first()
     const toolBounds = await tool.boundingBox()
@@ -212,7 +215,7 @@ test('photo editor workspace switching', async (t) => {
     assert.equal(await setup.getByLabel('Document units').inputValue(), 'in')
     assert.equal(await setup.getByLabel('Resolution (PPI)', { exact: true }).inputValue(), '300')
     await page.getByRole('button', { name: 'View', exact: true }).click()
-    await page.getByRole('button', { name: /Rulers/ }).click()
+    await page.locator('.editor-menu-host').getByRole('button', { name: /Rulers/ }).click()
     assert.equal(await page.locator('.photo-document-rulers').count(), 0)
     assert.deepEqual(errors, [])
   })
@@ -286,7 +289,7 @@ test('photo editor workspace switching', async (t) => {
       assert.equal(await page.locator('.photo-sidebar-left > .photo-sidebar-toolbar').isVisible(), false)
       const layout = await page.evaluate(() => {
         const shell = document.querySelector('.photo-classic-editor-shell').getBoundingClientRect()
-        const buttons = [...document.querySelectorAll('.photo-editor-topbar button')]
+        const buttons = [...document.querySelectorAll('.photo-editor-topbar button, .photo-classic-quick-toolbar button')]
         const headings = [...document.querySelectorAll('.photo-sidebar-right .section-label')]
         return {
           buttonsFit: buttons.filter((button) => button.getBoundingClientRect().width > 0).every((button) => {
@@ -311,6 +314,147 @@ test('photo editor workspace switching', async (t) => {
       await page.getByRole('dialog', { name: 'Stock library', exact: true }).waitFor()
       await page.close()
     }
+  })
+
+  await t.test('quick toolbar view controls and unit-aware nudge perform real edits without view history', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const view = page.getByRole('group', { name: 'Document view controls', exact: true })
+    const initialUndo = await page.getByRole('button', { name: 'Undo', exact: true }).isEnabled()
+    await view.getByLabel('Zoom (%)', { exact: true }).fill('175')
+    await view.getByLabel('Zoom (%)', { exact: true }).press('Enter')
+    assert.match(await page.locator('.photo-stage').getAttribute('style'), /scale\(1.75\)/)
+    await view.getByRole('button', { name: 'Fit page', exact: true }).click()
+    assert.match(await page.locator('.photo-stage').getAttribute('style'), /translate\(0px, 0px\) scale\(1\)/)
+    await view.getByLabel('Zoom (%)', { exact: true }).fill('401')
+    await view.getByLabel('Zoom (%)', { exact: true }).press('Enter')
+    assert.equal(await view.getByLabel('Zoom (%)', { exact: true }).inputValue(), '100')
+    assert.equal(await page.getByRole('status').getByText('Zoom (%) must be between 25 and 400.', { exact: true }).isVisible(), true)
+    for (const [label, selector] of [['Grid', '.photo-stage-grid-overlay'], ['Guides', '.photo-stage-guides-overlay']]) {
+      await view.getByRole('button', { name: label, exact: true }).click()
+      assert.equal(await page.locator(selector).count(), 1)
+      assert.equal(await view.getByRole('button', { name: label, exact: true }).getAttribute('aria-pressed'), 'true')
+      await view.getByRole('button', { name: label, exact: true }).click()
+      assert.equal(await page.locator(selector).count(), 0)
+    }
+    await view.getByRole('button', { name: 'Rulers', exact: true }).click()
+    assert.equal(await page.locator('.photo-document-rulers').count(), 0)
+    await view.getByRole('button', { name: 'Rulers', exact: true }).click()
+    await page.getByLabel('Document rulers in px', { exact: true }).waitFor()
+    await view.getByRole('button', { name: 'Snap', exact: true }).click()
+    assert.equal(await view.getByRole('button', { name: 'Snap', exact: true }).getAttribute('aria-pressed'), 'false')
+    await view.getByLabel('Nudge (px)', { exact: true }).fill('12')
+    await view.getByLabel('Nudge (px)', { exact: true }).press('Enter')
+    assert.equal(await page.getByRole('button', { name: 'Undo', exact: true }).isEnabled(), initialUndo)
+    await page.getByRole('form', { name: 'Page setup', exact: true }).getByLabel('Document units').selectOption('in')
+    assert.equal(await view.getByLabel('Nudge (in)', { exact: true }).inputValue(), '0.125')
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    assert.equal(await view.getByLabel('Nudge (px)', { exact: true }).inputValue(), '12')
+    const start = Number(await page.getByLabel('Tool Position X (px)', { exact: true }).inputValue())
+    await page.locator('.photo-stage [data-layer-id="original-text"]').focus()
+    await page.keyboard.press('ArrowRight')
+    assert.equal(Number(await page.getByLabel('Tool Position X (px)', { exact: true }).inputValue()), start + 12)
+    await page.keyboard.press('Shift+ArrowRight')
+    assert.equal(Number(await page.getByLabel('Tool Position X (px)', { exact: true }).inputValue()), start + 132)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    assert.equal(Number(await page.getByLabel('Tool Position X (px)', { exact: true }).inputValue()), start + 12)
+  })
+
+  await t.test('quick clipboard and project commands copy paste cut save and reopen editable objects', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, permissions: ['clipboard-read', 'clipboard-write'] })
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      window.showSaveFilePicker = undefined
+      window.showOpenFilePicker = undefined
+    })
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const clipboard = page.getByRole('group', { name: 'Clipboard commands', exact: true })
+    await clipboard.getByRole('button', { name: 'Copy objects', exact: true }).click()
+    await page.waitForFunction(async () => JSON.parse(await navigator.clipboard.readText()).id === 'original-text')
+    await clipboard.getByRole('button', { name: 'Paste objects', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 2)
+    await clipboard.getByRole('button', { name: 'Cut object', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 1)
+    const commands = page.getByRole('group', { name: 'Project commands', exact: true })
+    const [download] = await Promise.all([page.waitForEvent('download'), commands.getByRole('button', { name: 'Save project', exact: true }).click()])
+    assert.match(download.suggestedFilename(), /\.echoai$/)
+    const file = await download.path()
+    await commands.getByRole('button', { name: 'New canvas', exact: true }).click()
+    assert.equal(await clipboard.getByRole('button', { name: 'Copy objects', exact: true }).isEnabled(), false)
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), commands.getByRole('button', { name: 'Open project', exact: true }).click()])
+    await chooser.setFiles(file)
+    await page.locator('.photo-stage [data-layer-id="original-text"]').waitFor()
+    const [imageChooser] = await Promise.all([page.waitForEvent('filechooser'), commands.getByRole('button', { name: 'Open image', exact: true }).click()])
+    assert.equal(imageChooser.isMultiple(), false)
+  })
+
+  await t.test('polygon star and appearance shortcuts preserve geometry and match exported raster artwork', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1615, height: 900 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => { window.__usePhotoAutosave = true })
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.getByRole('button', { name: 'New canvas', exact: true }).click()
+    const toolbox = page.getByRole('group', { name: 'Classic toolbox', exact: true })
+    await toolbox.getByRole('button', { name: 'Add polygon', exact: true }).click()
+    assert.equal(await page.locator('.photo-polygon-shape polygon').getAttribute('points').then((value) => value.split(' ').length), 6)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    assert.equal(await page.locator('.photo-polygon-shape').count(), 0)
+    await toolbox.getByRole('button', { name: 'Geometric shapes tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Add star/ }).click()
+    assert.equal(await page.locator('.photo-polygon-shape polygon').getAttribute('points').then((value) => value.split(' ').length), 10)
+    await toolbox.getByRole('button', { name: 'Object transparency', exact: true }).click()
+    const opacity = page.getByLabel('Object opacity (%)', { exact: true })
+    await opacity.fill('60')
+    await opacity.press('Enter')
+    assert.equal(await page.locator('.photo-layer.active').evaluate((element) => element.style.opacity), '0.6')
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    assert.equal(await opacity.inputValue(), '90')
+    await toolbox.getByRole('button', { name: 'Object fill and outline', exact: true }).click()
+    assert.equal(await page.getByRole('button', { name: 'Properties', exact: true }).getAttribute('aria-pressed'), 'true')
+    await page.getByLabel('Filled', { exact: true }).uncheck()
+    assert.equal(await page.locator('.photo-polygon-shape polygon').getAttribute('fill'), 'none')
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    assert.equal(await page.getByLabel('Filled', { exact: true }).isChecked(), true)
+    await page.getByLabel('Border width', { exact: true }).focus()
+    await page.getByLabel('Border width', { exact: true }).press('End')
+    const outline = await page.locator('.photo-polygon-shape polygon').evaluate((polygon) => ({
+      stroke: Number(polygon.getAttribute('stroke-width')),
+      pageWidth: polygon.closest('.photo-stage').clientWidth,
+    }))
+    assert.ok(Math.abs(outline.stroke - 24 * outline.pageWidth / 1200) < .00001)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    assert.equal(await page.getByLabel('Border width', { exact: true }).inputValue(), '0')
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0]?.shape === 'star')
+    await page.reload()
+    assert.equal(await page.locator('.photo-polygon-shape polygon').getAttribute('points').then((value) => value.split(' ').length), 10)
+    await page.screenshot({ path: '/home/codespace/.copilot/session-state/b4bb868c-9596-4d47-a3d5-eac962444037/files/classic-quick-toolbars.png', fullPage: true })
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download design', exact: true }).click()])
+    const stream = await download.createReadStream()
+    const chunks = []
+    for await (const chunk of stream) chunks.push(chunk)
+    const data = Buffer.concat(chunks).toString('base64')
+    const pixels = await page.evaluate(async (data) => {
+      const image = new Image()
+      image.src = `data:image/png;base64,${data}`
+      await image.decode()
+      const canvas = document.createElement('canvas')
+      canvas.width = image.width
+      canvas.height = image.height
+      const context = canvas.getContext('2d')
+      context.drawImage(image, 0, 0)
+      const pixel = (x, y) => [...context.getImageData(Math.round(x), Math.round(y), 1, 1).data]
+      return { center: pixel(image.width * .5, image.height * .5), outside: pixel(image.width * .36, image.height * .41), width: image.width, height: image.height }
+    }, data)
+    assert.deepEqual(pixels.outside, [255, 255, 255, 255], 'Star bounding-box corners stay unfilled in the export')
+    assert.notDeepEqual(pixels.center, pixels.outside, 'Star center is filled in the export')
+    assert.deepEqual([pixels.width, pixels.height], [1200, 1500])
   })
 
   await t.test('switches existing tools without resetting document, selection, or history', async (t) => {
@@ -412,10 +556,10 @@ test('photo editor workspace switching', async (t) => {
     const menu = page.getByRole('menu', { name: 'Geometric shapes tools', exact: true })
     assert.equal(await menu.getByRole('menuitem').count(), 3)
     await page.keyboard.press('ArrowDown')
-    assert.match(await page.locator(':focus').innerText(), /Add ellipse/)
+    assert.match(await page.locator(':focus').innerText(), /Add star/)
     await page.keyboard.press('Enter')
     assert.equal(await menu.count(), 0)
-    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.some((layer) => layer.shape === 'ellipse'))
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.some((layer) => layer.shape === 'star'))
     assert.equal(await toolbox.getByRole('button', { name: 'Add ellipse', exact: true }).count(), 1)
     await toolbox.getByRole('button', { name: 'Add ellipse', exact: true }).click()
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 3)

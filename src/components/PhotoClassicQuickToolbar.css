@@ -1,0 +1,12 @@
+.photo-classic-quick-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; flex-shrink: 0; padding: 3px 6px; border-bottom: 1px solid #d7dbe0; color: #334155; background: #f8fafc; }
+.photo-classic-quick-commands, .photo-classic-quick-group { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; min-width: 0; }
+.photo-classic-quick-commands { gap: 6px; }
+.photo-classic-quick-commands > .photo-classic-quick-group { padding-right: 6px; border-right: 1px solid #d7dbe0; }
+.photo-classic-view-controls > label { display: flex; align-items: center; gap: 4px; margin: 0 3px; white-space: nowrap; font-size: 11px; }
+.photo-classic-view-controls input { box-sizing: border-box; width: 66px; height: 28px; min-height: 28px; padding: 3px 5px; border: 1px solid #cbd5e1; border-radius: 3px; color: #334155; background: #fff; font-size: 12px; }
+.photo-classic-quick-toolbar button[aria-pressed='true'] { color: #6d28d9; background: #ede9fe; }
+.photo-classic-quick-toolbar button:disabled { opacity: .4; cursor: default; }
+.photo-classic-quick-toolbar :focus-visible { outline: 2px solid #7137e8; outline-offset: 1px; }
+@media (pointer: coarse) {
+  .photo-classic-view-controls input { height: 40px; min-height: 40px; }
+}

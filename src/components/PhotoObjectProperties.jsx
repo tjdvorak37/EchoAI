@@ -1,7 +1,7 @@
 import './PhotoObjectProperties.css'
 import { DEFAULT_PHOTO_MEASUREMENTS, pixelsToUnits, unitsToPixels } from '../services/photoMeasurements'
 
-function NumericProperty({ label, ariaLabel = label, value, min, max, onCommit, onError, precision = 2 }) {
+export function NumericProperty({ label, ariaLabel = label, value, min, max, onCommit, onError, precision = 2 }) {
   const displayed = Number(value.toFixed(precision))
   return (
     <label>
@@ -87,7 +87,7 @@ export function PhotoObjectProperties({ layer, canvasWidth, canvasHeight, settin
           ))}
         </div>
         <p className="panel-note">Alignment uses the visible object's rotated bounding box. Pick shows resize/rotation handles for shapes, images, and stickers. Resize keeps the center fixed; Shift preserves shape proportions or snaps rotation to 15 degrees.</p>
-        <p className="panel-note">With Pick active and the canvas focused: arrow keys move 1 canvas pixel; Shift + arrow moves 10.</p>
+        <p className="panel-note">With Pick active and the canvas focused: arrow keys use the toolbar Nudge distance (default 1 canvas pixel); Shift + arrow moves ten times that distance.</p>
       </fieldset>}
       <div className="photo-object-position-actions" role="group" aria-label="Object actions">
         <button type="button" onClick={onDuplicate}>Duplicate object</button>
