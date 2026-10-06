@@ -5,6 +5,22 @@ and analyzing social content. It combines campaign planning, media creation,
 social connections, support workflows, analytics, and team controls in one web
 application.
 
+### Video Editor visual organization
+
+Video Editor uses the same white/slate workspace surfaces, violet editing
+accents, compact desktop controls, and shared rotating Focus button as Photo
+Editor. Undo/Redo and Export video live in the top document-command group;
+recording, quick editing tools, and tool-panel choices remain separate rows.
+Media/tools appear on the left, preview/timeline in the center, and video/audio/
+color/animation properties in the inspector. Tablet layouts move the inspector
+below the workspace instead of hiding it; narrow screens wrap tool rows and use
+larger touch controls.
+
+These are presentation changes only: timelines, clip timing, rendering/export,
+audio processing, recording, transitions, and project settings retain their
+video-specific behavior. All new styling is scoped to Video Editor, and Help
+Center instructions describe its controls separately from Photo Editor.
+
 ## Current Product
 
 - Dashboard for workspace activity, connected accounts, announcements, and

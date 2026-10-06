@@ -23,6 +23,7 @@ import { StockLibrary } from './StockLibrary'
 import { EditorFocusToggle } from './EditorFocusMode'
 import { useEditorFocusMode } from './useEditorFocusMode'
 import { downloadMediaLibraryFile } from '../services/mediaLibraryService'
+import './VideoEditorWorkspace.css'
 
 const FILTER_PRESETS = {
   none: { label: 'None', css: '' },
@@ -1597,7 +1598,19 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           <p className="small-title">Video Editor</p>
           <p className="panel-note">Upload clips, arrange them on the timeline, add text and effects, then export.</p>
         </div>
-        <EditorFocusToggle focused={focusMode.focused} onToggle={focusMode.toggle} fullscreen={focusMode.fullscreen} onToggleFullscreen={focusMode.toggleFullscreen} label="video editor" />
+        <div className="video-document-actions" role="group" aria-label="Video document commands">
+          <button type="button" className="toolbar-btn toolbar-history-btn" onClick={undo} disabled={historyCounts.past === 0} title="Undo (Ctrl+Z)" aria-label="Undo">
+            <Undo2 size={16} aria-hidden="true" />
+          </button>
+          <button type="button" className="toolbar-btn toolbar-history-btn" onClick={redo} disabled={historyCounts.future === 0} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+            <Redo2 size={16} aria-hidden="true" />
+          </button>
+          <EditorFocusToggle focused={focusMode.focused} onToggle={focusMode.toggle} fullscreen={focusMode.fullscreen} onToggleFullscreen={focusMode.toggleFullscreen} label="video editor" />
+          <button type="button" className="toolbar-btn toolbar-btn-export" onClick={exportTimeline} disabled={isExporting}>
+            <Download size={17} aria-hidden="true" />
+            {isExporting ? `Exporting ${exportProgress}%` : 'Export video'}
+          </button>
+        </div>
       </div>
       {brief && (
         <div className="video-brief-bar">
@@ -1608,7 +1621,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           <button type="button" className="rec-btn" onClick={addBriefStoryboard}>Add plan to timeline</button>
         </div>
       )}
-      <div className="screen-record-bar">
+      <div className="screen-record-bar" role="group" aria-label="Video recording controls">
         {isRecording ? (
           <>
             <span className="rec-dot" />
@@ -1626,10 +1639,10 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
         )}
       </div>
 
-      <div className="editor-toolbar">
-        <div className="toolbar-buttons">
-          <button type="button" className={`toolbar-btn ${editTool === 'select' ? 'active' : ''}`} title="Selection tool (V)" onClick={() => setEditTool('select')}><MonitorPlay size={17} /> Select</button>
-          <button type="button" className={`toolbar-btn ${editTool === 'razor' ? 'active' : ''}`} title="Razor tool (B)" onClick={() => { setEditTool('razor'); splitAtPlayhead() }}><Scissors size={17} /> Razor</button>
+      <div className="editor-toolbar" aria-label="Video editing toolbar">
+        <div className="toolbar-buttons" role="group" aria-label="Video quick editing tools">
+          <button type="button" className={`toolbar-btn ${editTool === 'select' ? 'active' : ''}`} aria-pressed={editTool === 'select'} title="Selection tool (V)" onClick={() => setEditTool('select')}><MonitorPlay size={17} /> Select</button>
+          <button type="button" className={`toolbar-btn ${editTool === 'razor' ? 'active' : ''}`} aria-pressed={editTool === 'razor'} title="Razor tool (B)" onClick={() => { setEditTool('razor'); splitAtPlayhead() }}><Scissors size={17} /> Razor</button>
           <button type="button" className="toolbar-btn" title="Delete selected clip" onClick={() => removeSelectedClip(false)}>Delete</button>
           <button type="button" className="toolbar-btn" title="Ripple delete selected clip" onClick={() => removeSelectedClip(true)}>Ripple delete</button>
           <button type="button" className="toolbar-btn" title="Crop and zoom" onClick={() => { setInspectorTab('video'); setStatusMessage('Use Scale and Position in Video properties to crop and zoom.') }}><PanelsTopLeft size={17} /> Crop</button>
@@ -1648,6 +1661,7 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             value={zoom}
             onChange={(event) => setZoom(Number(event.target.value))}
             className="zoom-slider"
+            aria-label="Timeline zoom"
           />
           <span className="muted">{(zoom * 100).toFixed(0)}%</span>
           <button
@@ -1662,15 +1676,16 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
             type="button"
             className={`toolbar-btn ${snapEnabled ? 'active' : ''}`}
             title="Snap to clip edges"
+            aria-pressed={snapEnabled}
             onClick={() => setSnapEnabled((prev) => !prev)}
           >
             🧲 Snap
           </button>
-          <button type="button" className="toolbar-btn" title="Reset selected transform" onClick={() => selectedClip && updateSelectedClip({ transform: { ...DEFAULT_TRANSFORM } })}><RotateCcw size={17} /></button>
-          {statusMessage && <span className="muted">{statusMessage}</span>}
+          <button type="button" className="toolbar-btn" title="Reset selected transform" aria-label="Reset selected transform" onClick={() => selectedClip && updateSelectedClip({ transform: { ...DEFAULT_TRANSFORM } })}><RotateCcw size={17} /></button>
+          {statusMessage && <span className="muted video-editor-status" role="status">{statusMessage}</span>}
         </div>
 
-        <div className="toolbar-groups">
+        <div className="toolbar-groups" role="group" aria-label="Video tool panels">
           {[
             ['media', 'Media', 'Add your uploaded photos, video, or audio'],
             ['transitions', 'Transitions', 'Fades and wipes between clips'],
@@ -1685,26 +1700,17 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
               type="button"
               className={`toolbar-group-btn ${activeToolbar === tool ? 'active' : ''}`}
               title={hint}
+              aria-pressed={activeToolbar === tool}
               onClick={() => (tool === 'audio' ? openAudioMixer() : setActiveToolbar(tool))}
             >
               {label}
             </button>
           ))}
-          <button type="button" className="toolbar-btn toolbar-history-btn" onClick={undo} disabled={historyCounts.past === 0} title="Undo (Ctrl+Z)" aria-label="Undo">
-            <Undo2 size={16} aria-hidden="true" />
-          </button>
-          <button type="button" className="toolbar-btn toolbar-history-btn" onClick={redo} disabled={historyCounts.future === 0} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
-            <Redo2 size={16} aria-hidden="true" />
-          </button>
-          <button type="button" className="toolbar-btn toolbar-btn-export" onClick={exportTimeline} disabled={isExporting}>
-            <Download size={17} aria-hidden="true" />
-            {isExporting ? `Exporting ${exportProgress}%` : 'Export video'}
-          </button>
         </div>
       </div>
 
       <div className="editor-layout">
-        <aside className="editor-panel">
+        <aside className="editor-panel" aria-label="Video tools and media">
           {(() => false)() && activeToolbar === 'generate' && (
             <div className="tool-panel video-generation-panel">
               <h3>Generate video</h3>
@@ -2205,10 +2211,10 @@ export function VideoEditor({ assets, onExport, brief, agentConfig, onAddAsset }
           </div>
         </div>
 
-        <aside className="editor-properties">
+        <aside className="editor-properties" aria-label="Video inspector">
           <div className="properties-heading"><h3>{selectedClip ? 'Clip properties' : 'Project properties'}</h3><span>{selectedClip?.assetName || PROJECT_PRESETS[projectSettings.aspectRatio].label}</span></div>
-          <div className="properties-tabs">
-            {['video', 'audio', 'color', 'animation'].map((tab) => <button key={tab} type="button" className={inspectorTab === tab ? 'active' : ''} onClick={() => setInspectorTab(tab)}>{tab}</button>)}
+          <div className="properties-tabs" role="group" aria-label="Video inspector panels">
+            {['video', 'audio', 'color', 'animation'].map((tab) => <button key={tab} type="button" className={inspectorTab === tab ? 'active' : ''} aria-pressed={inspectorTab === tab} onClick={() => setInspectorTab(tab)}>{tab}</button>)}
           </div>
           {!selectedClip && inspectorTab === 'video' && <div className="prop-section"><label>Project format<select value={projectSettings.aspectRatio} onChange={(event) => setProjectSettings((current) => ({ ...current, aspectRatio: event.target.value }))}>{Object.entries(PROJECT_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label} ({key})</option>)}</select></label><label>Frame rate<select value={projectSettings.frameRate} onChange={(event) => setProjectSettings((current) => ({ ...current, frameRate: Number(event.target.value) }))}><option value={24}>24 fps</option><option value={30}>30 fps</option><option value={60}>60 fps</option></select></label><label>Preview scale {projectSettings.previewScale}%<input type="range" min="60" max="100" value={projectSettings.previewScale} onChange={(event) => setProjectSettings((current) => ({ ...current, previewScale: Number(event.target.value) }))} /></label></div>}
           {selectedClip && inspectorTab === 'video' && <div className="properties-stack"><div className="prop-grid"><label>Position X<input type="number" value={getClipTransform(selectedClip).x} onChange={(event) => updateSelectedTransform('x', Number(event.target.value))} /></label><label>Position Y<input type="number" value={getClipTransform(selectedClip).y} onChange={(event) => updateSelectedTransform('y', Number(event.target.value))} /></label><label>Scale {getClipTransform(selectedClip).scale}%<input type="range" min="25" max="250" value={getClipTransform(selectedClip).scale} onPointerDown={commitHistory} onChange={(event) => updateSelectedTransform('scale', Number(event.target.value))} /></label><label>Rotation<input type="number" min="-360" max="360" value={getClipTransform(selectedClip).rotation} onChange={(event) => updateSelectedTransform('rotation', Number(event.target.value))} /></label><label>Opacity {getClipTransform(selectedClip).opacity}%<input type="range" min="0" max="100" value={getClipTransform(selectedClip).opacity} onPointerDown={commitHistory} onChange={(event) => updateSelectedTransform('opacity', Number(event.target.value))} /></label><label>Blend mode<select value={getClipTransform(selectedClip).blendMode} onChange={(event) => updateSelectedTransform('blendMode', event.target.value)}><option value="normal">Normal</option><option value="multiply">Multiply</option><option value="screen">Screen</option><option value="overlay">Overlay</option><option value="lighten">Lighten</option></select></label><label>Trim in<input type="number" min="0" step="0.1" value={selectedClip.trim?.start ?? 0} onChange={(event) => handleTrimClip(tracks.find((track) => track.clips.some((clip) => clip.id === selectedClip.id))?.id, selectedClip.id, Number(event.target.value), selectedClip.trim?.end ?? selectedClip.duration)} /></label><label>Trim out<input type="number" min="0" step="0.1" value={selectedClip.trim?.end ?? selectedClip.duration} onChange={(event) => handleTrimClip(tracks.find((track) => track.clips.some((clip) => clip.id === selectedClip.id))?.id, selectedClip.id, selectedClip.trim?.start ?? 0, Number(event.target.value))} /></label></div><label className="prop-section">Speed {selectedClip.speed ?? 1}x<input type="range" min="0.25" max="3" step="0.25" value={selectedClip.speed ?? 1} onPointerDown={commitHistory} onChange={(event) => updateSelectedClip({ speed: Number(event.target.value) })} /></label></div>}
