@@ -141,6 +141,24 @@ Run the workspace browser regression checks with
 `node --test tests/photoEditorWorkspace.browser.test.js` (requires Playwright's
 Chromium browser).
 
+### Photo Editor user training
+
+Help Center has separate **Photo Editor - Simple** and **Photo Editor - Classic**
+categories, with mode-specific tool locations and workflows. Design School has
+independent **Simple training**, **Classic training**, and **Design foundations**
+learning paths; completion progress is calculated per path. The Tutorials icon
+beside the editor workspace switch opens the current mode's training. Return to
+current design leaves the artwork unchanged. Starting prepared practice loads a
+training template and activates its intended workspace; save a project backup
+first. A practice checklist shows its mode and offers a return-to-mode action
+when the user switches layouts.
+
+Knowledge-base guides and the corresponding training lessons share the content
+in `src/data/photoEditorTraining.js`. Simple covers guided panels, photo tools,
+text/layers, and save/export; Classic covers the toolbox/quick bars, objects,
+page measurements, photo tools, and editable project workflows. Shortcut help
+identifies the active mode and hides Classic-only object instructions in Simple.
+
 ### Classic layout and measurements
 
 Classic uses a compact desktop hierarchy: menu row, command toolbar, page setup,

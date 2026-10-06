@@ -39,8 +39,8 @@ const PHOTO_SHORTCUTS = [
     ['Alt during object drag', 'Bypass Classic edge/center snapping'],
     ['Ctrl+G / Ctrl+Shift+G', 'Group / ungroup selected design objects'],
     ['Ctrl+C / Ctrl+V', 'Copy / paste design objects (including selections)'],
-    ['Arrow keys', 'Pick: nudge the focused canvas object by 1 canvas pixel'],
-    ['Shift + arrow keys', 'Pick: nudge by 10 canvas pixels'],
+    ['Arrow keys', 'Pick: move by the toolbar Nudge distance (default 1 canvas pixel)'],
+    ['Shift + arrow keys', 'Pick: move by ten times the toolbar Nudge distance'],
     ['Enter / Esc', 'Numeric properties: apply / cancel the draft'],
     ['Shift + handle drag', 'Preserve shape proportions / snap rotation to 15 degrees'],
     ['Up / Down on resize handle', 'Scale selected object by 2%'],
@@ -56,7 +56,7 @@ const PHOTO_SHORTCUTS = [
   ]],
 ]
 
-export function PhotoShortcutsOverlay({ onClose }) {
+export function PhotoShortcutsOverlay({ workspace = 'simple', onClose }) {
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === 'Escape' || event.key === '?') onClose()
@@ -69,11 +69,11 @@ export function PhotoShortcutsOverlay({ onClose }) {
     <div className="hs-backdrop" onClick={onClose}>
       <div className="shortcut-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={(event) => event.stopPropagation()}>
         <header>
-          <h3>Keyboard shortcuts</h3>
+          <h3>{workspace === 'classic' ? 'Classic' : 'Simple'} keyboard shortcuts</h3>
           <button type="button" className="hs-close" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </header>
         <div className="shortcut-columns">
-          {PHOTO_SHORTCUTS.map(([group, items]) => (
+          {PHOTO_SHORTCUTS.filter(([group]) => workspace === 'classic' || group !== 'Classic object editing').map(([group, items]) => (
             <section key={group}>
               <h4>{group}</h4>
               <dl>

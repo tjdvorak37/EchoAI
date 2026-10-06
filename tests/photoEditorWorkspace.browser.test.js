@@ -16,8 +16,9 @@ const fixtureCode = `
   import '/src/index.css'
   import '/src/App.css'
   import { PhotoEditor } from '/src/components/PhotoEditor.jsx'
+  import { HelpCenter } from '/src/components/HelpCenter.jsx'
   import { parsePhotoProject } from '/src/services/photoProject.js'
-  createRoot(document.getElementById('root')).render(React.createElement(PhotoEditor, {
+  createRoot(document.getElementById('root')).render(window.__photoHelp ? React.createElement(HelpCenter, { onContactSupport: () => {} }) : React.createElement(PhotoEditor, {
     assets: [],
     onExport: () => {},
     initialProject: window.__usePhotoAutosave && localStorage.getItem('echoai-photo-autosave') ? parsePhotoProject(localStorage.getItem('echoai-photo-autosave')) : {
@@ -519,6 +520,99 @@ test('photo editor workspace switching', async (t) => {
     assert.deepEqual(pixels.outside, [255, 255, 255, 255], 'Star bounding-box corners stay unfilled in the export')
     assert.notDeepEqual(pixels.center, pixels.outside, 'Star center is filled in the export')
     assert.deepEqual([pixels.width, pixels.height], [1200, 1500])
+  })
+
+  await t.test('tutorial learning paths keep tool locations separate and preserve the current design on return', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0]?.id === 'original-text')
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document)
+    await page.getByRole('button', { name: 'Simple tutorials', exact: true }).click()
+    const paths = page.getByRole('navigation', { name: 'Tutorial learning paths', exact: true })
+    assert.equal(await paths.getByRole('button', { name: 'Simple training', exact: true }).getAttribute('aria-pressed'), 'true')
+    assert.equal(await page.locator('.design-course-card').count(), 4)
+    assert.equal(await page.locator('.design-course-card').filter({ hasText: 'Classic:' }).count(), 0)
+    assert.equal(await page.locator('.design-school-hero h1').evaluate((element) => getComputedStyle(element).color), 'rgb(255, 255, 255)')
+    await page.getByRole('button', { name: /Simple: find your tools/ }).click()
+    assert.equal(await page.locator('.design-lesson-hero h1').evaluate((element) => getComputedStyle(element).color), 'rgb(255, 255, 255)')
+    assert.match(await page.locator('.design-lesson-content').innerText(), /Upload image|Text & shapes/)
+    assert.match(await page.locator('.design-lesson-content').innerText(), /replaces the current editor document/)
+    await page.getByRole('button', { name: 'Return to current design', exact: true }).click()
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document), before)
+    await page.getByRole('group', { name: 'Editor workspace', exact: true }).getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.getByRole('button', { name: 'Classic tutorials', exact: true }).click()
+    assert.equal(await paths.getByRole('button', { name: 'Classic training', exact: true }).getAttribute('aria-pressed'), 'true')
+    assert.equal(await page.locator('.design-course-card').count(), 4)
+    assert.equal(await page.locator('.design-course-card').filter({ hasText: 'Simple:' }).count(), 0)
+    await page.screenshot({ path: '/home/codespace/.copilot/session-state/b4bb868c-9596-4d47-a3d5-eac962444037/files/classic-training-path.png', fullPage: true })
+    await page.getByRole('button', { name: /Classic: toolbox and quick-toolbar tour/ }).click()
+    assert.match(await page.locator('.design-lesson-content').innerText(), /quick toolbar|Page setup/)
+    await page.getByRole('button', { name: 'Mark complete', exact: true }).click()
+    await page.getByRole('button', { name: 'All lessons', exact: true }).click()
+    assert.match(await page.locator('.design-school-progress').innerText(), /1 of 4 lessons/)
+    await paths.getByRole('button', { name: 'Simple training', exact: true }).click()
+    assert.match(await page.locator('.design-school-progress').innerText(), /0 of 4 lessons/)
+    await page.setViewportSize({ width: 375, height: 1000 })
+    const bounds = await paths.boundingBox()
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 375)
+    await page.screenshot({ path: '/home/codespace/.copilot/session-state/b4bb868c-9596-4d47-a3d5-eac962444037/files/simple-training-mobile.png', fullPage: true })
+  })
+
+  await t.test('prepared tutorials activate the intended mode and keep completion and shortcuts separate', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('button', { name: 'Simple tutorials', exact: true }).click()
+    const paths = page.getByRole('navigation', { name: 'Tutorial learning paths', exact: true })
+    await paths.getByRole('button', { name: 'Classic training', exact: true }).click()
+    await page.getByRole('button', { name: /Classic: toolbox and quick-toolbar tour/ }).click()
+    await page.getByRole('button', { name: 'Start prepared project', exact: false }).click()
+    const workspace = page.getByRole('group', { name: 'Editor workspace', exact: true })
+    assert.equal(await workspace.getByRole('button', { name: 'Classic', exact: true }).getAttribute('aria-pressed'), 'true')
+    assert.match(await page.locator('.photo-practice-guide').innerText(), /Classic guided practice/i)
+    await workspace.getByRole('button', { name: 'Simple', exact: true }).click()
+    await page.getByRole('button', { name: 'Return to Classic practice mode', exact: true }).click()
+    assert.equal(await workspace.getByRole('button', { name: 'Classic', exact: true }).getAttribute('aria-pressed'), 'true')
+    await page.getByRole('button', { name: 'Finish lesson', exact: true }).click()
+    await page.getByRole('button', { name: 'Back to lesson', exact: true }).click()
+    assert.equal(await page.getByRole('button', { name: 'Lesson completed', exact: true }).isVisible(), true)
+    await paths.getByRole('button', { name: 'Simple training', exact: true }).click()
+    await page.getByRole('button', { name: /Simple: find your tools/ }).click()
+    await page.getByRole('button', { name: 'Start prepared project', exact: false }).click()
+    assert.equal(await workspace.getByRole('button', { name: 'Simple', exact: true }).getAttribute('aria-pressed'), 'true')
+    assert.equal(await page.locator('.photo-modern-tools').isVisible(), true)
+    await page.keyboard.press('?')
+    assert.equal(await page.getByRole('heading', { name: 'Simple keyboard shortcuts', exact: true }).isVisible(), true)
+    assert.equal(await page.getByRole('heading', { name: 'Classic object editing', exact: true }).count(), 0)
+    await page.keyboard.press('Escape')
+    await workspace.getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.keyboard.press('?')
+    assert.equal(await page.getByRole('heading', { name: 'Classic keyboard shortcuts', exact: true }).isVisible(), true)
+    assert.match(await page.getByRole('dialog', { name: 'Keyboard shortcuts', exact: true }).innerText(), /toolbar Nudge distance/)
+  })
+
+  await t.test('knowledge base exposes independent Simple and Classic categories and searchable tutorials', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => { window.__photoHelp = true })
+    const page = await context.newPage()
+    await page.goto(url)
+    const categories = page.getByRole('complementary', { name: 'Help categories', exact: true })
+    for (const [mode, count] of [['Simple', 3], ['Classic', 4]]) {
+      await categories.getByRole('button', { name: new RegExp(`Photo Editor - ${mode}`) }).click()
+      assert.equal(await page.locator('.help-article').count(), count)
+      assert.equal(await page.locator('.help-article-toggle strong').evaluateAll((elements, mode) => elements.every((element) => element.textContent.startsWith(`${mode}:`)), mode), true)
+    }
+    await page.getByRole('button', { name: 'How do I learn Classic editing?', exact: true }).click()
+    await page.getByLabel('Search EchoAI help', { exact: true }).fill('classic nudge')
+    await page.locator('.help-article-toggle').filter({ hasText: 'Classic: select, transform, group' }).click()
+    assert.match(await page.locator('.help-article-body').innerText(), /Shift moves ten times the distance/)
+    await page.getByRole('button', { name: 'Where are the Simple editor tools?', exact: true }).click()
+    await page.locator('.help-article-toggle').filter({ hasText: 'Simple: find your tools' }).click()
+    assert.match(await page.locator('.help-article-body').innerText(), /left Tools tiles/)
   })
 
   await t.test('switches existing tools without resetting document, selection, or history', async (t) => {

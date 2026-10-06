@@ -6,9 +6,10 @@ import echoPhoto from '../assets/echo-poses/echo-photo-editor.png'
 import echoSocial from '../assets/echo-poses/echo-social-media.png'
 import echoScheduler from '../assets/echo-poses/echo-scheduler.png'
 import echoModern from '../assets/echo-poses/echo-modern-friendly.png'
+import { PHOTO_EDITOR_TRAINING } from '../data/photoEditorTraining'
 import './DesignSchool.css'
 
-const DESIGN_SCHOOL_COURSES = [
+const GENERAL_DESIGN_COURSES = [
   {
     id: 'design-foundations',
     track: 'Design foundations',
@@ -65,19 +66,15 @@ const DESIGN_SCHOOL_COURSES = [
   },
   {
     id: 'photo-workflow',
-    track: 'Photo Editor',
-    title: 'Edit photos without losing control',
+    workspace: 'simple',
+    track: 'Simple training',
+    title: 'Simple: edit photos without losing control',
     summary: 'Use selections, masks, adjustments, and layers in a reversible workflow.',
     level: 'Intermediate',
     minutes: 14,
     image: echoPhoto,
     color: '#0369a1',
-    steps: [
-      'Import a licensed image and duplicate or save the project before destructive edits.',
-      'Use selections and a layer mask to isolate the subject without deleting pixels.',
-      'Adjust hue and saturation after masking so the result remains editable.',
-      'Export PNG for transparency, JPEG for compact photos, or WebP for modern web use.',
-    ],
+    steps: PHOTO_EDITOR_TRAINING.find((lesson) => lesson.id === 'simple-photo-tools').steps,
     exercise: 'Choose a Pixabay image, remove its background, and export a transparent PNG.',
     practice: { templateKey: 'product-focus', tool: 'object-select', activeLayerId: 'headline', openStock: true, checklist: ['Choose a licensed stock image as the background.', 'Select the subject and add a layer mask.', 'Set the fill to transparent and export PNG.'] },
   },
@@ -119,6 +116,15 @@ const DESIGN_SCHOOL_COURSES = [
   },
 ]
 
+const DESIGN_SCHOOL_COURSES = [
+  ...GENERAL_DESIGN_COURSES,
+  ...PHOTO_EDITOR_TRAINING.map((lesson) => ({
+    ...lesson, track: lesson.workspace === 'classic' ? 'Classic training' : 'Simple training',
+    level: 'Beginner', image: echoPhoto, color: lesson.workspace === 'classic' ? '#7137e8' : '#0369a1',
+  })),
+]
+const LEARNING_PATHS = { general: 'Design foundations', simple: 'Simple training', classic: 'Classic training' }
+
 const readProgress = () => {
   try {
     return new Set(JSON.parse(localStorage.getItem('echoai-design-school-progress') || '[]'))
@@ -127,8 +133,10 @@ const readProgress = () => {
   }
 }
 
-export function DesignSchool({ initialCourseId = '', onHome, onTemplates, onStartPractice }) {
+export function DesignSchool({ initialCourseId = '', initialLearningPath = 'general', onHome, onTemplates, onStartPractice, onReturnToEditor }) {
   const [selectedCourse, setSelectedCourse] = useState(() => DESIGN_SCHOOL_COURSES.find((course) => course.id === initialCourseId) ?? null)
+  const [learningPath, setLearningPath] = useState(() => DESIGN_SCHOOL_COURSES.find((course) => course.id === initialCourseId)?.workspace
+    || (Object.hasOwn(LEARNING_PATHS, initialLearningPath) ? initialLearningPath : 'general'))
   const [completed, setCompleted] = useState(readProgress)
 
   const markComplete = (courseId) => {
@@ -137,7 +145,9 @@ export function DesignSchool({ initialCourseId = '', onHome, onTemplates, onStar
     localStorage.setItem('echoai-design-school-progress', JSON.stringify([...next]))
   }
 
-  const progress = Math.round((completed.size / DESIGN_SCHOOL_COURSES.length) * 100)
+  const courses = DESIGN_SCHOOL_COURSES.filter((course) => (course.workspace || 'general') === learningPath)
+  const completedCount = courses.filter((course) => completed.has(course.id)).length
+  const progress = Math.round((completedCount / courses.length) * 100)
 
   return (
     <section className="photo-home design-school-shell">
@@ -147,11 +157,17 @@ export function DesignSchool({ initialCourseId = '', onHome, onTemplates, onStar
           <button type="button" aria-label="Home" onClick={onHome}><Home size={19} /><span>Home</span></button>
           <button type="button" aria-label="Templates" onClick={onTemplates}><LayoutTemplate size={19} /><span>Templates</span></button>
           <button type="button" className="active" aria-label="Design School"><GraduationCap size={19} /><span>School</span></button>
-          <button type="button" aria-label="Start guided practice" onClick={() => onStartPractice(DESIGN_SCHOOL_COURSES[0])}><ImageIcon size={19} /><span>Practice</span></button>
+          <button type="button" aria-label="Start guided practice" onClick={() => setSelectedCourse(courses[0])}><ImageIcon size={19} /><span>Practice</span></button>
         </nav>
       </aside>
 
       <main className="design-school-main">
+        {onReturnToEditor && <button type="button" className="design-school-back" onClick={onReturnToEditor}><ArrowLeft size={17} /> Return to current design</button>}
+        <nav className="design-learning-paths" aria-label="Tutorial learning paths">
+          {Object.entries(LEARNING_PATHS).map(([path, label]) => <button key={path} type="button" aria-pressed={learningPath === path} onClick={() => { setLearningPath(path); setSelectedCourse(null) }}>{label}</button>)}
+        </nav>
+        <p className="design-path-description">{learningPath === 'general' ? 'General design skills. Choose a separate training path for tool locations in your editor mode.'
+          : `${LEARNING_PATHS[learningPath]} only: these instructions use the ${learningPath === 'classic' ? 'Classic icon toolbox and top bars' : 'Simple guided left panels'}. Prepared practice opens in this mode.`}</p>
         {selectedCourse ? (
           <article className="design-lesson">
             <button type="button" className="design-school-back" onClick={() => setSelectedCourse(null)}><ArrowLeft size={17} /> All lessons</button>
@@ -163,11 +179,13 @@ export function DesignSchool({ initialCourseId = '', onHome, onTemplates, onStar
               <section>
                 <h2>Lesson</h2>
                 <ol>{selectedCourse.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+                {selectedCourse.notes?.map((note) => <p key={note}>{note}</p>)}
               </section>
               <aside>
                 <BookOpen size={24} />
                 <h3>Practice in EchoAI</h3>
                 <p>{selectedCourse.exercise}</p>
+                <p>Prepared practice replaces the current editor document with a training template. Save an editable project copy first, or return to your current design without starting practice.</p>
                 <button type="button" onClick={() => onStartPractice(selectedCourse)}>Start prepared project <ArrowRight size={16} /></button>
                 <button type="button" className={completed.has(selectedCourse.id) ? 'completed' : ''} onClick={() => markComplete(selectedCourse.id)}><Check size={16} /> {completed.has(selectedCourse.id) ? 'Lesson completed' : 'Mark complete'}</button>
               </aside>
@@ -179,11 +197,11 @@ export function DesignSchool({ initialCourseId = '', onHome, onTemplates, onStar
               <div><span><GraduationCap size={17} /> EchoAI Design School</span><h1>Learn design by making.</h1><p>Short, practical lessons for stronger visuals and a faster EchoAI workflow.</p></div>
               <img src={echoCreator} alt="EchoAI creator working through a design lesson" />
             </header>
-            <div className="design-school-progress"><div><strong>Your progress</strong><span>{completed.size} of {DESIGN_SCHOOL_COURSES.length} lessons</span></div><progress value={completed.size} max={DESIGN_SCHOOL_COURSES.length}>{progress}%</progress><b>{progress}%</b></div>
+            <div className="design-school-progress"><div><strong>{LEARNING_PATHS[learningPath]} progress</strong><span>{completedCount} of {courses.length} lessons</span></div><progress value={completedCount} max={courses.length}>{progress}%</progress><b>{progress}%</b></div>
             <section className="design-course-section">
               <div className="design-course-heading"><div><span>Learning paths</span><h2>Build skills that transfer to every project</h2></div><button type="button" onClick={onTemplates}>Practice with templates <ArrowRight size={16} /></button></div>
               <div className="design-course-grid">
-                {DESIGN_SCHOOL_COURSES.map((course) => (
+                {courses.map((course) => (
                   <button key={course.id} type="button" className="design-course-card" onClick={() => setSelectedCourse(course)} style={{ '--course-color': course.color }}>
                     <span className="design-course-image"><img src={course.image} alt="" /><i>{completed.has(course.id) ? <Check size={15} /> : <Play size={15} />}</i></span>
                     <span className="design-course-copy"><small>{course.track}</small><strong>{course.title}</strong><em>{course.summary}</em><b><Clock size={13} /> {course.minutes} min · {course.level}</b></span>

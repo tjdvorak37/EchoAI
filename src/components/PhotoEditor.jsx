@@ -1264,6 +1264,7 @@ export function PhotoEditor({
   const [saveStatus, setSaveStatus] = useState(autosavedProject ? 'Autosaved' : 'Autosave on')
   const [schoolPractice, setSchoolPractice] = useState(null)
   const [schoolCourseId, setSchoolCourseId] = useState('')
+  const [schoolLearningPath, setSchoolLearningPath] = useState('general')
   const [schoolPracticeCompleted, setSchoolPracticeCompleted] = useState(false)
   const [homeSearch, setHomeSearch] = useState('')
   const [logoSearch, setLogoSearch] = useState('')
@@ -4022,19 +4023,28 @@ export function PhotoEditor({
   const startSchoolPractice = (course) => {
     const template = PHOTO_EDITOR_TEMPLATES.find((item) => item.key === course?.practice?.templateKey)
     if (!template) {
-      setWorkspaceView('home')
+      setNotice('This lesson does not have an available practice template.')
       return
     }
+    if (course.workspace) switchEditorWorkspace(course.workspace)
     applyPhotoTemplate(template)
     setSchoolPractice(course)
     setSchoolCourseId(course.id)
     setSchoolPracticeCompleted(false)
     setRightSidebarCollapsed(false)
+    setClassicInspectorPanel('objects')
+    setEditorPanel('main')
     setActiveTool(course.practice.tool)
     setActiveLayerId(course.practice.activeLayerId)
     setBrushColor(template.colors[1])
     setNotice(`${course.title} practice is ready. Follow the checklist in the inspector.`)
     if (course.practice.openStock) setStockLibraryOpen(true)
+  }
+  const openWorkspaceTutorials = () => {
+    commitSave()
+    setSchoolCourseId('')
+    setSchoolLearningPath(editorWorkspace)
+    setWorkspaceView('school')
   }
 
   const completeSchoolPractice = () => {
@@ -4341,7 +4351,7 @@ export function PhotoEditor({
   )
 
   if (workspaceView === 'school') {
-    return <DesignSchool initialCourseId={schoolCourseId} onHome={() => setWorkspaceView('home')} onTemplates={() => setWorkspaceView('home')} onStartPractice={startSchoolPractice} />
+    return <DesignSchool initialCourseId={schoolCourseId} initialLearningPath={schoolLearningPath} onHome={() => setWorkspaceView('home')} onTemplates={() => setWorkspaceView('home')} onStartPractice={startSchoolPractice} onReturnToEditor={hasCurrentDocument ? () => setWorkspaceView('editor') : undefined} />
   }
 
   if (workspaceView === 'projects') {
@@ -4657,6 +4667,7 @@ export function PhotoEditor({
             <button type="button" aria-pressed={!classicWorkspace} onClick={() => switchEditorWorkspace('simple')} title="Guided editing with visual tool panels">Simple</button>
             <button type="button" aria-pressed={classicWorkspace} onClick={() => switchEditorWorkspace('classic')} title="Traditional menus, tool dock, and inspector">Classic</button>
           </div>
+          <button type="button" className="photo-topbar-icon" aria-label={`${classicWorkspace ? 'Classic' : 'Simple'} tutorials`} title={`Learn the ${classicWorkspace ? 'Classic' : 'Simple'} workspace`} onClick={openWorkspaceTutorials}><GraduationCap size={17} /></button>
         </div>
         <div className="photo-topbar-title"><strong>{headline || prompt || 'Untitled design'}</strong><span>{aspect.canvasWidth} × {aspect.canvasHeight}px</span></div>
         <div className="photo-topbar-actions">
@@ -5446,7 +5457,8 @@ export function PhotoEditor({
           />}
           {schoolPractice && (
             <div className="panel-block photo-practice-guide">
-              <div className="photo-practice-heading"><span>Guided practice</span><strong>{schoolPractice.title}</strong></div>
+              <div className="photo-practice-heading"><span>{schoolPractice.workspace ? `${schoolPractice.workspace === 'classic' ? 'Classic' : 'Simple'} guided practice` : 'Guided practice'}</span><strong>{schoolPractice.title}</strong></div>
+              {schoolPractice.workspace && schoolPractice.workspace !== editorWorkspace && <p>This checklist is for {schoolPractice.workspace === 'classic' ? 'Classic' : 'Simple'}. <button type="button" onClick={() => switchEditorWorkspace(schoolPractice.workspace)}>Return to {schoolPractice.workspace === 'classic' ? 'Classic' : 'Simple'} practice mode</button></p>}
               <p>{schoolPractice.exercise}</p>
               <ol>{schoolPractice.practice.checklist.map((item) => <li key={item}>{item}</li>)}</ol>
               <div className="photo-practice-actions">
@@ -5996,7 +6008,7 @@ export function PhotoEditor({
         <PhotoHueSaturationDialog initial={hueSatDialog.initial} onPreview={setHueSat} onApply={applyHueSat} onCancel={cancelHueSat} />,
         document.body,
       )}
-      {shortcutsOpen && createPortal(<PhotoShortcutsOverlay onClose={() => setShortcutsOpen(false)} />, document.body)}
+      {shortcutsOpen && createPortal(<PhotoShortcutsOverlay workspace={editorWorkspace} onClose={() => setShortcutsOpen(false)} />, document.body)}
       {layerMenu && createPortal(
         <div className="photo-context-backdrop" onClick={() => setLayerMenu(null)} onContextMenu={(event) => { event.preventDefault(); setLayerMenu(null) }}>
           <div className="photo-context-menu" role="menu" style={{ left: Math.min(layerMenu.x, window.innerWidth - 240), top: Math.min(layerMenu.y, window.innerHeight - 320) }} onClick={(event) => event.stopPropagation()}>
