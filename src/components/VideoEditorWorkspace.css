@@ -170,6 +170,139 @@
   overflow-wrap: anywhere;
 }
 
+.video-editor .video-capture-controls {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.video-editor .video-capture-select {
+  min-height: 28px;
+  max-width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--video-border);
+  border-radius: 4px;
+  color: #334155;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.video-editor .video-recording-clock {
+  color: #991b1b;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-editor .video-recording-stop {
+  color: #991b1b;
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.video-editor .video-preset-picker,
+.video-editor .video-preset-category {
+  display: grid;
+  gap: 6px;
+}
+
+.video-editor .video-preset-category h4 {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 11px;
+}
+
+.video-editor .video-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.video-editor .video-preset-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid var(--video-border);
+  border-radius: 4px;
+  color: #334155;
+  background: #f8fafc;
+  text-align: left;
+}
+
+.video-editor .video-preset-card strong {
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.video-editor .video-preset-card.active {
+  color: #6d28d9;
+  border-color: #8b5cf6;
+  background: #f3e8ff;
+}
+
+.video-editor .video-preset-card:disabled {
+  cursor: not-allowed;
+}
+
+.video-editor .video-preset-hint {
+  margin: 0;
+  padding: 6px;
+  border-radius: 4px;
+  color: #475569;
+  background: #f1f5f9;
+  font-size: 12px;
+}
+
+.video-editor .video-preset-sample {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #172033;
+}
+
+.video-editor .video-preset-scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(circle at 75% 30%, #fcd34d 0 10%, transparent 11%),
+    linear-gradient(150deg, transparent 50%, #0f766e 51% 70%, #134e4a 71%),
+    linear-gradient(15deg, #f97316, #7dd3fc 70%);
+}
+
+.video-editor .video-preset-card:is(:hover, :focus-visible):not(:disabled) .motion-fade .video-preset-scene {
+  animation: video-preset-fade var(--preset-duration) alternate infinite;
+}
+
+.video-editor .video-preset-card:is(:hover, :focus-visible):not(:disabled) .motion-slide .video-preset-scene {
+  animation: video-preset-slide var(--preset-duration) alternate infinite;
+}
+
+.video-editor .video-preset-card:is(:hover, :focus-visible):not(:disabled) .motion-zoom .video-preset-scene {
+  animation: video-preset-zoom var(--preset-duration) alternate infinite;
+}
+
+.video-editor .video-preset-card:is(:hover, :focus-visible):not(:disabled) .motion-wipe .video-preset-scene {
+  animation: video-preset-wipe var(--preset-duration) alternate infinite;
+}
+
+@keyframes video-preset-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes video-preset-slide { from { transform: translateX(calc(-100% * var(--preset-direction))); } to { transform: translateX(0); } }
+@keyframes video-preset-zoom { from { opacity: 0; transform: scale(var(--preset-scale)); } to { opacity: 1; transform: scale(1); } }
+@keyframes video-preset-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .video-editor .video-preset-card .video-preset-scene {
+    animation: none !important;
+  }
+}
+
 .video-editor .editor-layout {
   grid-template-columns: 240px minmax(0, 1fr) 272px;
 }
@@ -451,7 +584,7 @@
 @media (max-width: 900px) {
   .video-editor :is(.toolbar-btn, .toolbar-group-btn, .tool-button, .rec-btn, .add-track-btn,
     .properties-tabs button, .preview-generate-button, .editor-footer .primary-button,
-    .editor-focus-button, .editor-fullscreen-button) {
+    .editor-focus-button, .editor-fullscreen-button, .video-capture-select) {
     min-height: 40px;
     height: auto;
   }

@@ -10,7 +10,9 @@ application.
 Video Editor uses the same white/slate workspace surfaces, violet editing
 accents, compact desktop controls, and shared rotating Focus button as Photo
 Editor. Undo/Redo and Export video live in the top document-command group;
-recording, quick editing tools, and tool-panel choices remain separate rows.
+Screen Capture is a dropdown immediately after Stock library in the quick
+toolbar (screen, screen with audio, or voice-over), without a separate recording
+row. An active recording replaces the selector with its clock and Stop action.
 Media/tools appear on the left, preview/timeline in the center, and video/audio/
 color/animation properties in the inspector. Tablet layouts move the inspector
 below the workspace instead of hiding it; narrow screens wrap tool rows and use
@@ -20,6 +22,21 @@ These are presentation changes only: timelines, clip timing, rendering/export,
 audio processing, recording, transitions, and project settings retain their
 video-specific behavior. All new styling is scoped to Video Editor, and Help
 Center instructions describe its controls separately from Photo Editor.
+
+The video panels include 12 built-in entrance/exit transitions, 19 color filters,
+and 9 adjustment presets, ready without stock-library requests. Grouped cards
+preview color looks and animate motion on hover/focus (respecting reduced
+motion). Apply them to unlocked video/image clips with undo support. Effect
+presets replace adjustment values; filters stack independently and existing
+sliders remain available. Transition variants use the same shared definitions
+for preview and export; legacy preset IDs retain their usual timing/geometry.
+Entrance/exit durations are capped at half the clip duration on short clips
+so the ramps cannot overlap or jump.
+
+"Looking for something more?" opens contextual stock searches from Transitions,
+Effects, Filters, Text, and Elements. Stock footage/artwork is media, not an
+editable transition/filter/plugin. Results depend on workspace/library access;
+the app does not bundle or automatically download thousands of licensed files.
 
 ## Current Product
 
