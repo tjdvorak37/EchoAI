@@ -1,0 +1,86 @@
+.photo-classic-command-bar {
+  flex-wrap: wrap;
+}
+
+.photo-classic-command-bar > button {
+  min-height: 24px;
+  height: 24px;
+  padding: 2px 7px;
+  font-size: 12px;
+  border-radius: 3px;
+}
+
+.photo-classic-command-bar > button[aria-expanded='true'],
+.photo-classic-command-bar > button:focus-visible {
+  background: #334155;
+  outline: 2px solid #a78bfa;
+  outline-offset: -2px;
+}
+
+.photo-classic-command-popup {
+  position: fixed;
+  z-index: 1200;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  background: #111827;
+  color: #f8fafc;
+  box-shadow: 0 8px 24px #0006;
+}
+
+.photo-classic-command-popup button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  transition: background-color .15s;
+}
+
+.photo-classic-command-popup button:hover:not(:disabled),
+.photo-classic-command-popup button:focus-visible {
+  background: #334155;
+  outline: 2px solid #a78bfa;
+  outline-offset: -2px;
+}
+
+.photo-classic-command-popup button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.photo-classic-command-popup kbd {
+  margin-left: auto;
+  color: #cbd5e1;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.classic-command-check {
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.photo-classic-command-popup hr {
+  border: 0;
+  border-top: 1px solid #334155;
+  margin: 4px 0;
+}
+
+@media (max-width: 900px) {
+  .photo-classic-editor-shell .photo-classic-command-bar > button,
+  .photo-classic-command-popup button {
+    min-height: 40px;
+    height: auto;
+  }
+}
