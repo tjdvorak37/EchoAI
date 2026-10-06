@@ -1,0 +1,11 @@
+.photo-page-setup { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 5px 8px; color: #334155; background: #f8fafc; font-size: 12px; border-bottom: 1px solid #d7dbe0; }
+.photo-page-setup label { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.photo-page-setup input { width: 76px; }
+.photo-page-setup input, .photo-page-setup select, .photo-page-setup button { box-sizing: border-box; height: 28px; min-height: 28px; padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 3px; color: #334155; background: #fff; font: inherit; }
+.photo-page-setup button { cursor: pointer; }
+.photo-page-setup button:hover { border-color: #7137e8; }
+.photo-page-setup :focus-visible { outline: 2px solid #7137e8; outline-offset: 1px; }
+.photo-create-custom .photo-page-setup { padding: 12px; gap: 12px; border: 1px solid #d7dbe0; }
+@media (pointer: coarse) {
+  .photo-page-setup input, .photo-page-setup select, .photo-page-setup button { height: 40px; min-height: 40px; }
+}

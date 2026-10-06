@@ -1,3 +1,5 @@
+import { DEFAULT_PHOTO_MEASUREMENTS, validatePhotoMeasurements } from './photoMeasurements.js'
+
 export const PHOTO_PROJECT_FORMAT = 'echoai-photo-project'
 export const PHOTO_PROJECT_VERSION = 2
 
@@ -15,6 +17,7 @@ export const createPhotoProject = (state) => ({
     presetId: state.presetId || 'aurora',
     aspectRatio: state.aspectRatio || '4:5',
     canvasSize: state.canvasSize || null,
+    measurements: validatePhotoMeasurements(state.measurements ?? DEFAULT_PHOTO_MEASUREMENTS),
     canvasBackground: state.canvasBackground ?? '#ffffff',
     maskShape: state.maskShape || 'none',
     cropRect: state.cropRect || { x: 0, y: 0, w: 100, h: 100 },
@@ -53,6 +56,7 @@ export const parsePhotoProject = (text) => {
   if (document.imageSrc && typeof document.imageSrc !== 'string') {
     throw new Error('The project image is invalid.')
   }
+  const measurements = validatePhotoMeasurements(document.measurements === undefined ? DEFAULT_PHOTO_MEASUREMENTS : document.measurements)
   return {
     prompt: '',
     headline: '',
@@ -67,6 +71,7 @@ export const parsePhotoProject = (text) => {
     exportFormat: 'png',
     exportQuality: 92,
     ...document,
+    measurements,
     aspectRatio: document.aspectRatio || document.aspect || '4:5',
     filters: { ...document.filters },
     layers: document.layers.map((layer) => ({ ...layer })),

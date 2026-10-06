@@ -69,3 +69,12 @@ test('object locks survive save/open, preserve legacy objects, and reject invali
   }))), /invalid object lock/)
   assert.equal(parsePhotoProject(JSON.stringify(createPhotoProject(state))).layers[0].locked, undefined)
 })
+
+test('document measurements round-trip, legacy documents retain pixels, and invalid settings fail', () => {
+  const measured = { ...state, measurements: { unit: 'in', ppi: 300 } }
+  assert.deepEqual(parsePhotoProject(JSON.stringify(createPhotoProject(measured))).measurements, measured.measurements)
+  assert.deepEqual(parsePhotoProject(JSON.stringify({ filters: {}, layers: [] })).measurements, { unit: 'px', ppi: 96 })
+  for (const measurements of [null, {}, { unit: 'mm', ppi: -1 }, { unit: 'px', ppi: '96' }]) {
+    assert.throws(() => parsePhotoProject(JSON.stringify({ filters: {}, layers: [], measurements })), /Document measurements/)
+  }
+})

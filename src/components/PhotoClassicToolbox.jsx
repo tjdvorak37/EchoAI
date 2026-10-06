@@ -103,7 +103,7 @@ export function PhotoClassicToolbox({ groups, activeTool, onSelect }) {
               title={`${selected.label}${selected.shortcut ? ` (${selected.shortcut})` : ''}: ${selected.description}`}
               onClick={() => chooseTool(group, selected)}
             >
-              <Icon size={20} aria-hidden="true" />
+              <Icon size={17} aria-hidden="true" />
             </button>
             {group.tools.length > 1 && (
               <button
