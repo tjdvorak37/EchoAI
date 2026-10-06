@@ -64,13 +64,16 @@ import { StockLibrary } from './StockLibrary'
 import { PhotoHueSaturationDialog } from './PhotoHueSaturationDialog'
 import { PhotoShortcutsOverlay } from './PhotoShortcutsOverlay'
 import { PhotoClassicToolbox } from './PhotoClassicToolbox'
-import { PhotoObjectProperties } from './PhotoObjectProperties'
+import { PhotoObjectProperties, PhotoObjectGeometryFields } from './PhotoObjectProperties'
 import { PhotoObjectHandles } from './PhotoObjectHandles'
 import { PhotoObjectSelectionPanel } from './PhotoObjectSelectionPanel'
 import { PhotoObjectBoxSelection } from './PhotoObjectBoxSelection'
 import { pickObjectIds, toggleObjectIds, translateObjectSelection, selectionAlignmentPatches, distributionPatches } from '../services/photoObjectSelection'
 import { objectAlignmentPatch } from '../services/photoObjectTransforms'
 import { snapObjectTranslation } from '../services/photoObjectSnapping'
+import { DEFAULT_PHOTO_MEASUREMENTS, validatePhotoMeasurements } from '../services/photoMeasurements'
+import { PhotoPageSetup } from './PhotoPageSetup'
+import { PhotoRulers } from './PhotoRulers'
 import { DesignSchool } from './DesignSchool'
 import { EditorFocusToggle } from './EditorFocusMode'
 import { useEditorFocusMode } from './useEditorFocusMode'
@@ -1244,8 +1247,6 @@ export function PhotoEditor({
   const [createCategory, setCreateCategory] = useState('For you')
   const [createPlatform, setCreatePlatform] = useState('all')
   const [createSearch, setCreateSearch] = useState('')
-  const [customWidth, setCustomWidth] = useState(1080)
-  const [customHeight, setCustomHeight] = useState(1080)
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [uploadedImage, setUploadedImage] = useState('')
   const [stockLibraryOpen, setStockLibraryOpen] = useState(false)
@@ -1254,6 +1255,7 @@ export function PhotoEditor({
   const [presetId, setPresetId] = useState('aurora')
   const [aspectRatio, setAspectRatio] = useState(startingProject?.aspectRatio || (startingProject?.outputType === 'image' ? '1:1' : '4:5'))
   const [customCanvasSize, setCustomCanvasSize] = useState(() => normalizeCanvasSize(startingProject?.canvasSize))
+  const [measurements, setMeasurements] = useState(() => validatePhotoMeasurements(startingProject?.measurements ?? DEFAULT_PHOTO_MEASUREMENTS))
   const [headline, setHeadline] = useState(startingProject?.headline || '')
   const [subcopy, setSubcopy] = useState(startingProject?.caption || startingProject?.subcopy || '')
   const [activeTool, setActiveTool] = useState('select')
@@ -1445,6 +1447,12 @@ export function PhotoEditor({
     }
     setLayers((prev) => prev.map((layer) => (layer.id === layerId ? { ...layer, ...patch } : layer)))
   }
+  const commitObjectProperties = (patch) => {
+    if (activeLayer?.locked) { setNotice('Unlock the object before editing it.'); return }
+    if (!activeLayer || !Object.entries(patch).some(([key, value]) => activeLayer[key] !== value)) return
+    commitHistory()
+    updateLayer(activeLayer.id, patch)
+  }
 
   const alignActiveObject = (alignment) => {
     if (!activeLayer || activeLayer.hidden || activeLayer.locked || activeLayer.isBaseImage || !stageRef.current) {
@@ -1502,6 +1510,7 @@ export function PhotoEditor({
     presetId,
     aspectRatio,
     customCanvasSize,
+    measurements,
     generatedImageSrc,
     uploadedImage,
     selectedAssetId,
@@ -1522,6 +1531,7 @@ export function PhotoEditor({
     setPresetId(snapshot.presetId)
     setAspectRatio(snapshot.aspectRatio)
     setCustomCanvasSize(snapshot.customCanvasSize ?? null)
+    setMeasurements(snapshot.measurements ?? DEFAULT_PHOTO_MEASUREMENTS)
     setGeneratedImageSrc(snapshot.generatedImageSrc)
     setUploadedImage(snapshot.uploadedImage)
     setSelectedAssetId(snapshot.selectedAssetId)
@@ -2316,6 +2326,7 @@ export function PhotoEditor({
     setPresetId('aurora')
     setAspectRatio('4:5')
     setCustomCanvasSize(null)
+    setMeasurements(DEFAULT_PHOTO_MEASUREMENTS)
     setFilters(DEFAULT_FILTERS)
     setBrushStrokes([])
     setMaskShape('none')
@@ -2611,6 +2622,7 @@ export function PhotoEditor({
       presetId,
       aspectRatio,
       canvasSize: customCanvasSize,
+      measurements,
       canvasBackground,
       maskShape,
       cropRect,
@@ -2680,6 +2692,7 @@ export function PhotoEditor({
           setPresetId(project.presetId)
           setAspectRatio(project.aspectRatio)
           setCustomCanvasSize(normalizeCanvasSize(project.canvasSize))
+          setMeasurements(project.measurements)
           setGeneratedImageSrc(project.imageSrc)
           setUploadedImage('')
           setSelectedAssetId('')
@@ -2755,7 +2768,9 @@ export function PhotoEditor({
   // EXPANDED VIEW MENU
   const [showGrid, setShowGrid] = useState(false)
   const [showGuides, setShowGuides] = useState(false)
-  const [showRulers, setShowRulers] = useState(false)
+  const [simpleRulers, setSimpleRulers] = useState(false)
+  const [classicRulers, setClassicRulers] = useState(true)
+  const showRulers = classicWorkspace ? classicRulers : simpleRulers
 
   const handleViewToggleGrid = () => {
     setShowGrid((v) => !v)
@@ -2770,7 +2785,8 @@ export function PhotoEditor({
   }
 
   const handleViewToggleRulers = () => {
-    setShowRulers((v) => !v)
+    if (classicWorkspace) setClassicRulers((value) => !value)
+    else setSimpleRulers((value) => !value)
     setNotice(`Rulers ${!showRulers ? 'shown' : 'hidden'}.`)
     setOpenMenu(null)
   }
@@ -3595,6 +3611,7 @@ export function PhotoEditor({
     setPresetId('editorial')
     setAspectRatio('4:5')
     setCustomCanvasSize(null)
+    setMeasurements(DEFAULT_PHOTO_MEASUREMENTS)
     setHeadline('')
     setSubcopy('')
     setGeneratedImageSrc('')
@@ -3857,6 +3874,7 @@ export function PhotoEditor({
       const size = normalizeCanvasSize({ width: design.width, height: design.height, label: design.label })
       if (!size) return
       setCustomCanvasSize(size)
+      setMeasurements(design.settings ?? (['Print', 'Docs'].includes(design.category) ? { unit: design.key === 'doc-a4' ? 'mm' : 'in', ppi: 300 } : DEFAULT_PHOTO_MEASUREMENTS))
       setAspectRatio('custom')
       setNotice(`${size.label} canvas created at ${size.width} × ${size.height} px.`)
     }
@@ -3881,6 +3899,13 @@ export function PhotoEditor({
   const openSavedDesign = (asset) => {
     const project = asset.projectMetadata
     if (!project) return
+    let restoredMeasurements
+    try {
+      restoredMeasurements = validatePhotoMeasurements(project.measurements ?? DEFAULT_PHOTO_MEASUREMENTS)
+    } catch (error) {
+      setNotice(`Could not open this design: ${error.message}`)
+      return
+    }
     resetDocument(`${asset.name} loaded. Every layer remains editable.`)
     projectIdRef.current = project.projectId || asset.id
     setLayers(ensureBaseImageLayer(project.layers, project.imageSrc))
@@ -3889,6 +3914,7 @@ export function PhotoEditor({
     setPresetId(project.presetId || 'aurora')
     setAspectRatio(project.aspectRatio || '4:5')
     setCustomCanvasSize(normalizeCanvasSize(project.canvasSize))
+    setMeasurements(restoredMeasurements)
     setGeneratedImageSrc(project.imageSrc || '')
     setPrompt(project.prompt || DEFAULT_PROMPT)
     setHeadline(project.headline || '')
@@ -3927,7 +3953,14 @@ export function PhotoEditor({
     const matchesPlatform = createCategory !== 'Social media' || createPlatform === 'all' || item.platform === createPlatform
     return matchesPlatform && (normalizedCreateSearch || createCategory === 'For you' || item.category === createCategory)
   }).slice(0, createCategory === 'For you' && !normalizedCreateSearch ? 12 : undefined)
-  const createCustomDesign = () => startHomeDesign({ width: customWidth, height: customHeight, label: 'Custom' })
+  const applyPageSetup = ({ width, height, settings }) => {
+    if (width === aspect.canvasWidth && height === aspect.canvasHeight && settings.unit === measurements.unit && settings.ppi === measurements.ppi) return
+    commitHistory()
+    setCustomCanvasSize({ width, height, label: 'Custom' })
+    setAspectRatio('custom')
+    setMeasurements(settings)
+    setNotice(`Page setup applied: ${width} × ${height} px at ${settings.ppi} PPI. Existing objects keep their relative positions and sizes.`)
+  }
 
   const applyPhotoTemplate = (template) => {
     resetDocument(`${template.title} template loaded.`)
@@ -4047,6 +4080,7 @@ export function PhotoEditor({
     presetId,
     aspectRatio,
     canvasSize: customCanvasSize,
+    measurements,
     canvasBackground,
     maskShape,
     cropRect,
@@ -4126,7 +4160,7 @@ export function PhotoEditor({
     return () => window.clearTimeout(timer)
   // The payload helper reads the same editor state already listed below.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aspectRatio, brushStrokes, canvasBackground, cropRect, customCanvasSize, exportFormat, exportQuality, filters, headline, hueSat, layerMask, layers, maskShape, presetId, prompt, selectedImageSrc, subcopy, workspaceView])
+  }, [aspectRatio, brushStrokes, canvasBackground, cropRect, customCanvasSize, measurements, exportFormat, exportQuality, filters, headline, hueSat, layerMask, layers, maskShape, presetId, prompt, selectedImageSrc, subcopy, workspaceView])
 
   const modernToolPanel = (
     <div className="photo-modern-tools">
@@ -4214,12 +4248,9 @@ export function PhotoEditor({
             {createCategory === 'Custom size' ? (
               <div className="photo-create-custom">
                 <h3>Custom size</h3>
-                <div className="photo-create-size-fields">
-                  <label>Width<input type="number" min="40" max="8192" value={customWidth} onChange={(event) => setCustomWidth(event.target.value)} /></label>
-                  <label>Height<input type="number" min="40" max="8192" value={customHeight} onChange={(event) => setCustomHeight(event.target.value)} /></label>
-                  <label>Units<select disabled><option>px</option></select></label>
-                  <button type="button" onClick={createCustomDesign} disabled={!normalizeCanvasSize({ width: customWidth, height: customHeight })}>Create new design</button>
-                </div>
+                <PhotoPageSetup width={1080} height={1080} settings={DEFAULT_PHOTO_MEASUREMENTS} create onError={setNotice} onApply={(size) => startHomeDesign({ ...size, label: 'Custom' })} />
+                <p className="panel-note">Print documents normally use 300 PPI. Dimensions are rounded to whole pixels; each side supports 40–8192 pixels.</p>
+                <p role="status">{notice}</p>
                 <h3>Popular layouts</h3>
                 <div className="photo-create-presets">
                   {PHOTO_DESIGN_PRESETS.filter((item) => ['doc-a4', 'presentation', 'instagram-post', 'business-card'].includes(item.key)).map((item) => {
@@ -4595,6 +4626,11 @@ export function PhotoEditor({
 
       <div ref={setMenuHost} className={`editor-menu-host ${legacyToolsVisible ? 'legacy-menu-visible' : ''}`} />
 
+      {classicWorkspace && <PhotoPageSetup
+        key={`${aspect.canvasWidth}-${aspect.canvasHeight}-${measurements.unit}-${measurements.ppi}`}
+        width={aspect.canvasWidth} height={aspect.canvasHeight} settings={measurements}
+        onApply={applyPageSetup} onError={setNotice}
+      />}
       <div className="editor-options-bar" aria-label="Tool options">
         <div className="option-group">
           <span className="option-group-title">{TOOLS[activeTool] || 'Tool'}</span>
@@ -4656,12 +4692,7 @@ export function PhotoEditor({
           ) : classicWorkspace && (activeTool === 'select' || activeTool === 'move') ? (
             multipleObjectsSelected ? <span>{selectedObjects.length} objects selected — use Objects or Properties for group actions</span> : activeLayer && !activeLayer.isBaseImage ? <>
               <span>{activeLayer.label}</span>
-              <label>Rotation
-                <input disabled={activeLayer.locked} type="number" min="-180" max="180" value={activeLayer.rotation ?? 0} onFocus={commitHistory} onChange={(event) => updateLayer(activeLayer.id, { rotation: clamp(Number(event.target.value) || 0, -180, 180) })} />
-              </label>
-              <label>Object opacity
-                <input disabled={activeLayer.locked} type="number" min="0" max="100" value={activeLayer.opacity ?? 100} onFocus={commitHistory} onChange={(event) => updateLayer(activeLayer.id, { opacity: clamp(Number(event.target.value) || 0, 0, 100) })} />
-              </label>
+              <PhotoObjectGeometryFields key={activeLayer.id} layer={activeLayer} canvasWidth={aspect.canvasWidth} canvasHeight={aspect.canvasHeight} settings={measurements} compact onCommit={commitObjectProperties} onError={setNotice} />
             </> : <span>{activeLayer?.isBaseImage ? 'Use Crop to frame the original photo' : 'Select an object to edit its properties'}</span>
           ) : (
             <>
@@ -5004,7 +5035,7 @@ export function PhotoEditor({
 
           <div
             ref={stageViewportRef}
-            className="photo-stage-wrap"
+            className={`photo-stage-wrap ${classicWorkspace && showRulers ? 'has-document-rulers' : ''}`}
             onPointerDownCapture={startCanvasPan}
             onContextMenu={(event) => {
               if (event.ctrlKey) event.preventDefault()
@@ -5090,7 +5121,7 @@ export function PhotoEditor({
                   <span className="photo-stage-guide-horizontal" />
                 </div>
               )}
-              {showRulers && (
+              {showRulers && !classicWorkspace && (
                 <div className="photo-stage-rulers-overlay" aria-hidden="true">
                   <span className="photo-stage-ruler-top">0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;25&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;50&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;75&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;100</span>
                   <span className="photo-stage-ruler-left">0<br />25<br />50<br />75<br />100</span>
@@ -5292,6 +5323,7 @@ export function PhotoEditor({
                 />
               )}
             </div>
+            {classicWorkspace && showRulers && <PhotoRulers stageRef={stageRef} viewportRef={stageViewportRef} width={aspect.canvasWidth} height={aspect.canvasHeight} settings={measurements} zoom={canvasZoom} pan={canvasPan} />}
           </div>
 
         </div>
@@ -5440,12 +5472,8 @@ export function PhotoEditor({
             layer={activeLayer}
             canvasWidth={aspect.canvasWidth}
             canvasHeight={aspect.canvasHeight}
-            onCommit={(patch) => {
-              if (activeLayer?.locked) { setNotice('Unlock the object before editing it.'); return }
-              if (!activeLayer || !Object.entries(patch).some(([key, value]) => activeLayer[key] !== value)) return
-              commitHistory()
-              updateLayer(activeLayer.id, patch)
-            }}
+            settings={measurements}
+            onCommit={commitObjectProperties}
             onError={setNotice}
             onDuplicate={() => activeLayer && duplicateLayer(activeLayer.id)}
             onDelete={() => activeLayer && deleteLayer(activeLayer.id)}

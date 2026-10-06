@@ -1,8 +1,15 @@
 .photo-object-properties h3 { margin: 0; font-size: .9rem; }
 .photo-object-edit-fields { display: grid; gap: .65rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.photo-object-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.photo-object-fields.photo-object-fields-compact { display: flex; gap: 6px; flex-wrap: nowrap; }
 .photo-object-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
 .photo-object-fields label { display: grid; gap: .3rem; font-size: .7rem; }
 .photo-object-fields input { width: 100%; box-sizing: border-box; min-height: 32px; }
+.photo-object-fields.photo-object-fields-compact label { display: flex; font-size: 11px; }
+.photo-object-fields.photo-object-fields-compact input { width: 64px; height: 26px; min-height: 26px; padding: 2px 4px; }
+@media (pointer: coarse) {
+  .photo-object-fields.photo-object-fields-compact input { height: 40px; min-height: 40px; }
+}
 .photo-object-position-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .photo-object-position-actions button {
   min-height: 32px;

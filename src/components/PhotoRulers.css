@@ -1,0 +1,7 @@
+.photo-stage-wrap.has-document-rulers { position: relative; padding: 24px 4px 4px 24px; }
+.photo-document-rulers { position: absolute; inset: 0; z-index: 40; pointer-events: none; overflow: hidden; }
+.photo-document-ruler-top { position: absolute; top: 0; left: 0; border-bottom: 1px solid #cbd5e1; }
+.photo-document-ruler-left { position: absolute; top: 0; left: 0; border-right: 1px solid #cbd5e1; }
+.photo-document-rulers line { stroke: #64748b; stroke-width: 1; }
+.photo-document-rulers text { fill: #475569; font: 10px sans-serif; }
+.photo-document-ruler-unit { position: absolute; top: 0; left: 0; display: grid; place-items: center; width: 20px; height: 20px; color: #475569; background: #e2e8f0; font: 10px sans-serif; }

@@ -1,58 +1,78 @@
 import './PhotoObjectProperties.css'
+import { DEFAULT_PHOTO_MEASUREMENTS, pixelsToUnits, unitsToPixels } from '../services/photoMeasurements'
 
-function NumericProperty({ label, value, min, max, onCommit, onError }) {
+function NumericProperty({ label, ariaLabel = label, value, min, max, onCommit, onError, precision = 2 }) {
+  const displayed = Number(value.toFixed(precision))
   return (
     <label>
       <span>{label}</span>
       <input
         key={value}
+        aria-label={ariaLabel}
         type="number"
-        step="0.01"
+        step={10 ** -precision}
         min={min}
         max={max}
-        defaultValue={Number(value.toFixed(2))}
+        defaultValue={displayed}
         onKeyDown={(event) => {
           if (event.key === 'Enter') event.currentTarget.blur()
           if (event.key === 'Escape') {
-            event.currentTarget.value = String(Number(value.toFixed(2)))
+            event.currentTarget.value = String(displayed)
             event.currentTarget.blur()
           }
         }}
         onBlur={(event) => {
           const input = event.currentTarget
           const next = Number(input.value)
+          if (input.value.trim() && next === displayed) return
           if (!input.value.trim() || !Number.isFinite(next) || next < min || next > max) {
             onError(`${label} must be between ${min} and ${max}.`)
-            input.value = String(Number(value.toFixed(2)))
+            input.value = String(displayed)
             return
           }
-          if (Math.abs(next - value) > 0.005) onCommit(next)
+          if (Math.abs(next - value) > 0.5 * 10 ** -precision) onCommit(next)
         }}
       />
     </label>
   )
 }
 
-export function PhotoObjectProperties({ layer, canvasWidth, canvasHeight, onCommit, onError, onDuplicate, onDelete, onAlign, onUnlock }) {
-  if (!layer) return <div className="panel-block photo-object-properties"><p>Select an object in the Objects panel to edit its properties.</p></div>
+export function PhotoObjectGeometryFields({ layer, canvasWidth, canvasHeight, settings = DEFAULT_PHOTO_MEASUREMENTS, onCommit, onError, compact = false }) {
+  const compactLabel = (label) => label
+    .replace('Position X', 'X').replace('Position Y', 'Y')
+    .replace('Object width', 'W').replace('Object height', 'H')
+    .replace('Object rotation (degrees)', 'Rotation').replace('Object opacity (%)', 'Opacity (%)')
   const numeric = (label, value, min, max, patch) => (
-    <NumericProperty label={label} value={value} min={min} max={max} onCommit={(next) => onCommit(patch(next))} onError={onError} />
+    <NumericProperty label={compact ? compactLabel(label) : label}
+      ariaLabel={compact ? label === 'Object rotation (degrees)' ? 'Rotation' : label === 'Object opacity (%)' ? 'Object opacity' : `Tool ${label}` : label}
+      precision={settings.unit === 'px' ? 2 : 4}
+      value={value} min={min} max={max} onCommit={(next) => onCommit(patch(next))} onError={onError} />
   )
+  const dimension = (label, percent, canvas, minimum, key) => numeric(
+    `${label} (${settings.unit})`, pixelsToUnits(percent / 100 * canvas, settings),
+    pixelsToUnits(minimum * canvas, settings), pixelsToUnits(canvas, settings),
+    (next) => ({ [key]: unitsToPixels(next, settings) / canvas * 100 }),
+  )
+  return <fieldset className={`photo-object-fields ${compact ? 'photo-object-fields-compact' : ''}`} disabled={layer.locked}>
+    {dimension('Position X', layer.x, canvasWidth, 0, 'x')}
+    {dimension('Position Y', layer.y, canvasHeight, 0, 'y')}
+    {(layer.type === 'shape' || layer.type === 'image') && dimension('Object width', layer.width ?? 50, canvasWidth, 0.02, 'width')}
+    {layer.type === 'shape' && dimension('Object height', layer.height, canvasHeight, layer.shape === 'line' ? 0.001 : 0.02, 'height')}
+    {(layer.type === 'text' || layer.type === 'sticker') && numeric('Text size', layer.fontSize ?? 34, 16, 96, (next) => ({ fontSize: next }))}
+    {numeric('Object rotation (degrees)', layer.rotation ?? 0, -180, 180, (next) => ({ rotation: next }))}
+    {numeric('Object opacity (%)', layer.opacity ?? 100, 0, 100, (next) => ({ opacity: next }))}
+  </fieldset>
+}
+
+export function PhotoObjectProperties({ layer, canvasWidth, canvasHeight, settings = DEFAULT_PHOTO_MEASUREMENTS, onCommit, onError, onDuplicate, onDelete, onAlign, onUnlock }) {
+  if (!layer) return <div className="panel-block photo-object-properties"><p>Select an object in the Objects panel to edit its properties.</p></div>
   return (
     <section className="panel-block photo-object-properties" aria-label="Object geometry">
       <h3>{layer.label}</h3>
       {layer.locked && <><p className="panel-note">This object is locked. Unlock it to edit its properties.</p><button type="button" className="ghost-button" onClick={onUnlock}>Unlock object</button></>}
-      <p className="panel-note">{layer.isBaseImage ? 'Original photo: use Crop and Image shape below to change its framing.' : 'Position is the object anchor in canvas pixels. Shapes and images use their center; text uses its alignment anchor.'}</p>
+      <p className="panel-note">{layer.isBaseImage ? 'Original photo: use Crop and Image shape below to change its framing.' : `Position is the object anchor in ${settings.unit} at ${settings.ppi} PPI. Shapes and images use their center; text uses its alignment anchor.`}</p>
       {!layer.isBaseImage && <fieldset className="photo-object-edit-fields" disabled={layer.locked}>
-        <div className="photo-object-fields">
-          {numeric('Position X (px)', layer.x / 100 * canvasWidth, 0, canvasWidth, (next) => ({ x: next / canvasWidth * 100 }))}
-          {numeric('Position Y (px)', layer.y / 100 * canvasHeight, 0, canvasHeight, (next) => ({ y: next / canvasHeight * 100 }))}
-          {(layer.type === 'shape' || layer.type === 'image') && numeric('Object width (px)', (layer.width ?? 50) / 100 * canvasWidth, canvasWidth * 0.02, canvasWidth, (next) => ({ width: next / canvasWidth * 100 }))}
-          {layer.type === 'shape' && numeric('Object height (px)', layer.height / 100 * canvasHeight, canvasHeight * (layer.shape === 'line' ? 0.001 : 0.02), canvasHeight, (next) => ({ height: next / canvasHeight * 100 }))}
-          {(layer.type === 'text' || layer.type === 'sticker') && numeric('Text size', layer.fontSize ?? 34, 16, 96, (next) => ({ fontSize: next }))}
-          {numeric('Object rotation (degrees)', layer.rotation ?? 0, -180, 180, (next) => ({ rotation: next }))}
-          {numeric('Object opacity (%)', layer.opacity ?? 100, 0, 100, (next) => ({ opacity: next }))}
-        </div>
+        <PhotoObjectGeometryFields layer={layer} canvasWidth={canvasWidth} canvasHeight={canvasHeight} settings={settings} onCommit={onCommit} onError={onError} />
         {layer.type === 'image' && <p className="panel-note">Image width keeps the original aspect ratio.</p>}
         <div className="photo-object-position-actions" role="group" aria-label="Object anchor positioning">
           <button type="button" onClick={() => onCommit({ x: 50 })}>Center X anchor</button>
