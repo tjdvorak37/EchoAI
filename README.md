@@ -35,6 +35,26 @@ works but the preference cannot be remembered.
 Classic is a layout for EchoAI's current tools, not CorelDRAW file compatibility
 or a complete vector-design suite.
 
+Classic has a dedicated compact **File / Edit / View / Layout / Object /
+Effects / Bitmaps / Text / Tools / Window / Help** menu row. Simple retains its
+existing menu layout. Commands reuse the same document/history operations as
+the toolbox, quick toolbar, and inspector; unavailable selection-dependent
+commands are disabled. Menu arrows navigate commands and adjacent menus,
+Home/End jump within a menu, Enter activates, and Escape restores trigger
+focus. Popups stay within the viewport and scroll independently.
+
+Layout opens page setup/background controls. Object exposes single-page or
+reference-object alignment, distribution, stacking, flat grouping, locks,
+visibility, and rotation reset. Bring to front/Send to back preserve selection
+order; Show all/Unlock all affect design objects, not the original photo.
+Text case and alignment changes support unlocked text selections and undo.
+Edit distinguishes design-object selection from photo-pixel selection
+(Ctrl+A). Effects operates on the original photo except explicitly named text
+effects/object transparency; Bitmaps provides existing photo/mask/rasterization
+operations. Window opens/restores docks; Help opens Classic training and
+shortcuts. Vector boolean shaping, tracing, editable tables, multipage documents,
+CMYK workflows, and native desktop automation are not advertised as implemented.
+
 The Classic toolbox groups Pick, Crop & pixel editing, Navigation, Drawing,
 Geometric shapes, Text, Photo selections, and Fill. Arrow buttons open flyouts
 with tool descriptions and existing shortcuts. Use Up/Down or Home/End to

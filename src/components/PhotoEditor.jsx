@@ -71,6 +71,7 @@ import { PhotoHueSaturationDialog } from './PhotoHueSaturationDialog'
 import { PhotoShortcutsOverlay } from './PhotoShortcutsOverlay'
 import { PhotoClassicToolbox } from './PhotoClassicToolbox'
 import { PhotoClassicQuickToolbar } from './PhotoClassicQuickToolbar'
+import { PhotoClassicMenus } from './PhotoClassicMenus'
 import { PhotoObjectProperties, PhotoObjectGeometryFields } from './PhotoObjectProperties'
 import { PhotoObjectHandles } from './PhotoObjectHandles'
 import { PhotoObjectSelectionPanel } from './PhotoObjectSelectionPanel'
@@ -1425,6 +1426,18 @@ export function PhotoEditor({
     : activeLayer ? [activeLayer.id] : []
   const selectedObjects = layers.filter((layer) => selectedObjectIds.includes(layer.id))
   const multipleObjectsSelected = classicWorkspace && selectedObjects.length > 1
+  const selectAllDesignObjects = () => {
+    const ids = layers.filter((layer) => !layer.hidden && !layer.isBaseImage).map((layer) => layer.id)
+    if (!ids.length) { setNotice('No visible design objects to select.'); return }
+    const primaryId = ids.at(-1)
+    setActiveLayerIdState(primaryId)
+    setObjectSelection({ ids, primaryId })
+    setActiveTool('select')
+  }
+  const clearDesignObjectSelection = () => {
+    setActiveLayerIdState('')
+    setObjectSelection({ ids: [], primaryId: '' })
+  }
   const selectDesignObject = (layer, event = {}) => {
     if (!classicWorkspace) {
       setActiveLayerId(layer.id)
@@ -1892,6 +1905,37 @@ export function PhotoEditor({
     setLayers((prev) =>
       prev.map((layer) => (layer.id === layerId ? { ...layer, hidden: !layer.hidden } : layer)),
     )
+  }
+
+  const setDesignObjectVisibility = (ids, hidden) => {
+    if (!layers.some((layer) => ids.includes(layer.id) && !layer.isBaseImage && Boolean(layer.hidden) !== hidden)) return
+    commitHistory()
+    setLayers((current) => current.map((layer) => ids.includes(layer.id) && !layer.isBaseImage ? { ...layer, hidden } : layer))
+    setNotice(hidden ? 'Selected objects hidden. Use Object > Show all objects to restore them.' : 'Design objects shown.')
+  }
+
+  const moveSelectedObjectsToEnd = (front) => {
+    if (!selectedObjects.length || selectedObjects.some((layer) => layer.locked || layer.isBaseImage)) {
+      setNotice('Select unlocked design objects to change their stacking order.')
+      return
+    }
+    const rest = layers.filter((layer) => !selectedObjectIds.includes(layer.id))
+    const next = front ? [...rest, ...selectedObjects] : [...selectedObjects, ...rest]
+    if (next.every((layer, index) => layer.id === layers[index].id)) return
+    commitHistory()
+    setLayers(next)
+    setNotice(front ? 'Selection brought to front.' : 'Selection sent to back.')
+  }
+
+  const changeSelectedTextCase = (uppercase) => {
+    if (!selectedObjects.length || selectedObjects.some((layer) => layer.type !== 'text' || layer.locked)) {
+      setNotice('Select unlocked text objects to change case.')
+      return
+    }
+    applyObjectPatches(selectedObjects.map((layer) => ({
+      id: layer.id, value: uppercase ? (layer.value ?? '').toUpperCase() : (layer.value ?? '').toLowerCase(),
+    })))
+    setNotice(uppercase ? 'Selected text changed to uppercase.' : 'Selected text changed to lowercase.')
   }
 
   const resetFilters = () => {
@@ -2983,7 +3027,7 @@ export function PhotoEditor({
       const target = event.target
       if (target instanceof HTMLElement) {
         const tag = target.tagName.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable || target.closest('.photo-classic-flyout')) {
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable || target.closest('.photo-classic-flyout, .photo-classic-command-popup, .photo-classic-command-bar')) {
           return
         }
       }
@@ -4077,6 +4121,193 @@ export function PhotoEditor({
     setActiveTool('crop')
   }
 
+  const openClassicInspector = (panel, focusContent = false) => {
+    setRightSidebarCollapsed(false)
+    setClassicInspectorPanel(panel)
+    if (focusContent) requestAnimationFrame(() => {
+      const input = document.querySelector('.classic-inspector .layer-inspector input')
+      input?.scrollIntoView({ block: 'nearest' })
+      input?.focus({ preventScroll: true })
+    })
+  }
+  const openClassicPageSetup = () => {
+    requestAnimationFrame(() => {
+      const input = document.querySelector('.photo-page-setup input')
+      input?.scrollIntoView({ block: 'nearest' })
+      input?.focus({ preventScroll: true })
+    })
+  }
+  const toggleClassicFullScreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen()
+      else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen()
+      else setNotice('Full-screen mode is not supported in this browser. Use Focus on editing instead.')
+    } catch (error) {
+      setNotice(`Full-screen mode could not be changed: ${error.message}`)
+    }
+  }
+  const command = (label, onSelect, options = {}) => ({ label, onSelect, ...options })
+  const separator = { separator: true }
+  const designSelection = selectedObjects.length > 0 && selectedObjects.every((layer) => !layer.isBaseImage)
+  const editableSelection = designSelection && selectedObjects.every((layer) => !layer.locked)
+  const transformableSelection = editableSelection && selectedObjects.every((layer) => !layer.hidden)
+  const editableTextSelection = editableSelection && selectedObjects.every((layer) => layer.type === 'text')
+  const classicMenus = [
+    { label: 'File', items: [
+      command('New', handleFileNew),
+      command('New from template', () => { commitSave(); setWorkspaceView('home') }, { description: 'Browse templates on the shared Home screen; choosing one replaces the current design.' }),
+      command('Open Image', handleFileOpen),
+      command('Open Project', handleFileOpenProject),
+      command('Projects', () => { commitSave(); setWorkspaceView('projects') }),
+      separator,
+      command('Save Project', () => handleFileSave(false)),
+      command('Save Project As...', () => handleFileSave(true)),
+      separator,
+      ...['png', 'jpeg', 'webp'].map((format) => command(`Export ${format.toUpperCase()}`, () => handleExport(format))),
+      command('Print...', handlePrint),
+      command('Document properties', () => openClassicInspector('canvas')),
+      separator,
+      command('Close document', handleFileClose),
+    ] },
+    { label: 'Edit', items: [
+      command('Undo', undo, { disabled: historyCounts.past === 0, shortcut: 'Ctrl+Z' }),
+      command('Redo', redo, { disabled: historyCounts.future === 0, shortcut: 'Ctrl+Y' }),
+      separator,
+      command('Cut', handleEditCut, { disabled: !editableSelection || multipleObjectsSelected, shortcut: 'Ctrl+X', description: 'Cut one unlocked design object.' }),
+      command('Copy', handleEditCopy, { disabled: !designSelection, shortcut: 'Ctrl+C' }),
+      command('Paste', handleEditPaste, { shortcut: 'Ctrl+V' }),
+      command('Duplicate', duplicateSelectedObjects, { disabled: !designSelection, shortcut: 'Ctrl+J' }),
+      command('Delete', deleteSelectedObjects, { disabled: !editableSelection || selectedObjects.length === layers.length }),
+      separator,
+      command('Select all design objects', selectAllDesignObjects, { disabled: !layers.some((layer) => !layer.hidden && !layer.isBaseImage) }),
+      command('Clear object selection', clearDesignObjectSelection, { disabled: !selectedObjects.length }),
+      separator,
+      command('Select all photo pixels', selectAll, { disabled: !activeWork, shortcut: 'Ctrl+A' }),
+      command('Deselect photo pixels', deselect, { disabled: !selection, shortcut: 'Ctrl+D' }),
+      command('Invert photo selection', invertSelection, { disabled: !selection, shortcut: 'Ctrl+Shift+I' }),
+    ] },
+    { label: 'View', items: [
+      command('Zoom in', handleViewZoomIn, { disabled: canvasZoom >= 400, shortcut: 'Ctrl++' }),
+      command('Zoom out', handleViewZoomOut, { disabled: canvasZoom <= 25, shortcut: 'Ctrl+-' }),
+      command('Fit page', handleViewFit, { shortcut: 'Ctrl+0' }),
+      command('Reset view', handleViewResetView),
+      separator,
+      command('Rulers', handleViewToggleRulers, { checked: showRulers }),
+      command('Grid', handleViewToggleGrid, { checked: showGrid, description: 'Visual grid only; does not enable grid snapping.' }),
+      command('Guidelines', handleViewToggleGuides, { checked: showGuides, description: 'Canvas center guides.' }),
+      command('Snap to objects and page', () => { setObjectSnapping((value) => !value); setObjectSnapGuides([]) }, { checked: objectSnapping, description: 'Snap dragged objects to edges and centers; Alt bypasses snapping.' }),
+      separator,
+      command('Canvas only', handleViewCanvasOnly),
+      command('Restore editing panels', () => { setLeftSidebarCollapsed(false); setRightSidebarCollapsed(false) }),
+      command('Full screen', toggleClassicFullScreen),
+    ] },
+    { label: 'Layout', items: [
+      command('Page setup', openClassicPageSetup),
+      command('Page background', () => openClassicInspector('objects'), { description: 'Edit canvas Fill in Objects; transparent is supported.' }),
+      command('Document options', () => openClassicInspector('canvas')),
+    ] },
+    { label: 'Object', items: [
+      command('Transformations / properties', () => openClassicInspector('properties'), { disabled: !designSelection }),
+      command('Reset rotation', () => applyObjectPatches(selectedObjects.map((layer) => ({ id: layer.id, rotation: 0 }))), { disabled: !editableSelection }),
+      separator,
+      ...[
+        ['left', 'Align left'], ['center', 'Align horizontal center'], ['right', 'Align right'],
+        ['top', 'Align top'], ['middle', 'Align vertical center'], ['bottom', 'Align bottom'],
+      ].map(([alignment, label]) => command(label, () => selectedObjects.length > 1 ? alignSelectedObjects(alignment) : alignActiveObject(alignment), {
+        disabled: !transformableSelection, description: selectedObjects.length > 1 ? 'Align to the last picked object.' : 'Align to the page.',
+      })),
+      ...[
+        ['horizontal', 'centers', 'Distribute horizontal centers'], ['vertical', 'centers', 'Distribute vertical centers'],
+        ['horizontal', 'gaps', 'Equal horizontal gaps'], ['vertical', 'gaps', 'Equal vertical gaps'],
+      ].map(([axis, mode, label]) => command(label, () => distributeSelectedObjects(axis, mode), { disabled: !transformableSelection || selectedObjects.length < 3 })),
+      separator,
+      command('Bring to front', () => moveSelectedObjectsToEnd(true), { disabled: !editableSelection }),
+      command('Bring forward', () => moveLayerOrder(resolvedActiveLayerId, 1), { disabled: !editableSelection }),
+      command('Send backward', () => moveLayerOrder(resolvedActiveLayerId, -1), { disabled: !editableSelection }),
+      command('Send to back', () => moveSelectedObjectsToEnd(false), { disabled: !editableSelection }),
+      separator,
+      command('Group objects', groupSelectedObjects, { disabled: !transformableSelection || selectedObjects.length < 2, shortcut: 'Ctrl+G' }),
+      command('Ungroup objects', ungroupSelectedObjects, { disabled: !editableSelection || !selectedObjects.some((layer) => layer.objectGroupId), shortcut: 'Ctrl+Shift+G' }),
+      command('Lock selection', () => setObjectsLocked(selectedObjectIds, true), { disabled: !designSelection || selectedObjects.every((layer) => layer.locked) }),
+      command('Unlock selection', () => setObjectsLocked(selectedObjectIds, false), { disabled: !designSelection || !selectedObjects.some((layer) => layer.locked) }),
+      command('Unlock all objects', () => setObjectsLocked(layers.filter((layer) => !layer.isBaseImage).map((layer) => layer.id), false), { disabled: !layers.some((layer) => !layer.isBaseImage && layer.locked) }),
+      command('Hide selection', () => setDesignObjectVisibility(selectedObjectIds, true), { disabled: !designSelection || selectedObjects.every((layer) => layer.hidden) }),
+      command('Show selection', () => setDesignObjectVisibility(selectedObjectIds, false), { disabled: !designSelection || !selectedObjects.some((layer) => layer.hidden) }),
+      command('Show all objects', () => setDesignObjectVisibility(layers.map((layer) => layer.id), false), { disabled: !layers.some((layer) => !layer.isBaseImage && layer.hidden) }),
+      separator,
+      command('Rename', handleLayerRenameActive, { disabled: !editableSelection || multipleObjectsSelected }),
+    ] },
+    { label: 'Effects', items: [
+      command('Photo adjustments', () => openClassicInspector('canvas'), { description: 'Brightness, contrast, saturation, blur, and other photo controls.' }),
+      command('Hue/Saturation...', openHueSat, { disabled: !activeWork, shortcut: 'Ctrl+U' }),
+      separator,
+      command('Brightness +', handleFilterBrightness, { disabled: !selectedImageSrc }),
+      command('Contrast +', handleFilterContrast, { disabled: !selectedImageSrc }),
+      command('Saturation +', handleFilterSaturation, { disabled: !selectedImageSrc }),
+      command('Blur', handleFilterBlur, { disabled: !selectedImageSrc }),
+      command('Grayscale', handleFilterGrayscale, { disabled: !selectedImageSrc, checked: filters.grayscale > 0 }),
+      command('Invert', handleFilterInvert, { disabled: !selectedImageSrc, checked: filters.invert > 0 }),
+      command('Sepia', handleFilterSepia, { disabled: !selectedImageSrc, checked: filters.sepia > 0 }),
+      command('Reset photo adjustments', resetFilters, { disabled: !selectedImageSrc }),
+      separator,
+      command('Text effects', () => openClassicInspector('properties'), { disabled: !activeTextLayer || multipleObjectsSelected }),
+      command('Object transparency', () => selectClassicTool('object-opacity'), { disabled: !designSelection || multipleObjectsSelected }),
+    ] },
+    { label: 'Bitmaps', items: [
+      command('Crop photo', handleImageCrop, { disabled: !selectedImageSrc }),
+      command('Sharpen photo', sharpenBase, { disabled: !activeWork }),
+      command('Rotate photo clockwise', handleImageRotate, { disabled: !activeWork }),
+      command('Rotate photo counter-clockwise', () => transformBase('rotate-ccw', 'Rotated the photo 90 degrees counter-clockwise.'), { disabled: !activeWork }),
+      command('Flip photo horizontally', handleImageFlip, { disabled: !activeWork }),
+      command('Flip photo vertically', () => transformBase('flip-v', 'Flipped the photo vertically.'), { disabled: !activeWork }),
+      separator,
+      command('Select subject', selectSubject, { disabled: !activeWork }),
+      command('Remove background', removeBackground, { disabled: !activeWork }),
+      command('Add layer mask from selection', addLayerMaskFromSelection, { disabled: !selection }),
+      command(layerMask?.enabled === false ? 'Enable layer mask' : 'Disable layer mask', toggleLayerMask, { disabled: !layerMask }),
+      command('Delete layer mask', deleteLayerMask, { disabled: !layerMask }),
+      separator,
+      command('Merge Down', handleLayerMergeDown, { disabled: multipleObjectsSelected || layers.findIndex((layer) => layer.id === resolvedActiveLayerId) <= 0, description: 'Rasterizes the selected layer and the layer below; locked objects are protected.' }),
+      command('Flatten image', handleImageFlatten, { shortcut: 'Ctrl+Shift+E', description: 'Rasterizes the composition; locked objects are protected.' }),
+    ] },
+    { label: 'Text', items: [
+      command('New text object', () => selectClassicTool('text')),
+      command('Edit text', () => openClassicInspector('properties', true), { disabled: !activeTextLayer || multipleObjectsSelected || activeLayer.locked }),
+      command('Text properties', () => openClassicInspector('properties'), { disabled: !activeTextLayer || multipleObjectsSelected }),
+      separator,
+      command('Uppercase', () => changeSelectedTextCase(true), { disabled: !editableTextSelection }),
+      command('Lowercase', () => changeSelectedTextCase(false), { disabled: !editableTextSelection }),
+      separator,
+      ...['left', 'center', 'right'].map((align) => command(`Align text ${align}`, () => applyObjectPatches(selectedObjects.map((layer) => ({ id: layer.id, align }))), { disabled: !editableTextSelection })),
+    ] },
+    { label: 'Tools', items: [
+      command('Pick / move objects', () => selectClassicTool('select')),
+      command('Brush', () => selectClassicTool('brush')),
+      command('Pixel eraser', () => selectClassicTool('eraser')),
+      command('Healing brush', () => selectClassicTool('heal')),
+      command('Paint bucket', () => selectClassicTool('fill')),
+      separator,
+      ...['rectangle', 'ellipse', 'hexagon', 'star', 'triangle', 'line'].map((shape) => command(`Add ${SHAPES[shape]}`, () => selectClassicTool(shape))),
+      separator,
+      command('Photo selection tools', () => { setLeftSidebarCollapsed(false); selectClassicTool('rect-select') }),
+      command('Object fill and outline', () => selectClassicTool('object-appearance'), { disabled: !designSelection || multipleObjectsSelected }),
+    ] },
+    { label: 'Window', items: [
+      command('Objects panel', () => openClassicInspector('objects')),
+      command('Properties panel', () => openClassicInspector('properties')),
+      command('Canvas panel', () => openClassicInspector('canvas')),
+      separator,
+      command('Toolbox visible', () => setLeftSidebarCollapsed((value) => !value), { checked: !leftSidebarCollapsed }),
+      command('Inspector visible', () => setRightSidebarCollapsed((value) => !value), { checked: !rightSidebarCollapsed }),
+      command('Restore editing panels', () => { setLeftSidebarCollapsed(false); setRightSidebarCollapsed(false) }),
+    ] },
+    { label: 'Help', items: [
+      command('Classic tutorials and user guide', openWorkspaceTutorials),
+      command('Keyboard shortcuts', () => setShortcutsOpen(true), { shortcut: '?' }),
+      command('Welcome screen', () => { commitSave(); setWorkspaceView('home') }),
+    ] },
+  ]
+
   const smartCrop = () => {
     if (!activeWork || !imageFit) {
       setNotice('Add a photo before using Smart crop.')
@@ -4819,7 +5050,8 @@ export function PhotoEditor({
           {modernToolPanel}
           {!classicWorkspace && editorPanel === 'advanced' && <button type="button" className="modern-return-button" onClick={() => { setEditorPanel('main'); setLeftSidebarCollapsed(false) }}><ArrowLeft size={16} /> Back to easy tools</button>}
           {/* Compact Menu Bar in Sidebar */}
-          {menuHost && createPortal(<div className="sidebar-menu-bar" aria-label="Main menu">
+          {menuHost && classicWorkspace && createPortal(<PhotoClassicMenus menus={classicMenus} />, menuHost)}
+          {menuHost && !classicWorkspace && createPortal(<div className="sidebar-menu-bar" aria-label="Main menu">
             {/* FILE MENU */}
             <div className="menu-container">
               <button type="button" className="menu-item-compact" title="File" onClick={() => setOpenMenu(openMenu === 'File' ? null : 'File')}>
@@ -5474,15 +5706,8 @@ export function PhotoEditor({
             </div>
             {classicWorkspace && <button type="button" className="ghost-button" disabled={!activeLayer} onClick={() => setClassicInspectorPanel('properties')}>Edit selected object properties</button>}
             {classicWorkspace && <div className="classic-object-selection-actions" role="group" aria-label="Design object selection">
-              <button type="button" className="ghost-button" onClick={() => {
-                const ids = layers.filter((layer) => !layer.hidden && !layer.isBaseImage).map((layer) => layer.id)
-                if (!ids.length) { setNotice('No visible design objects to select.'); return }
-                const primaryId = ids.at(-1)
-                setActiveLayerIdState(primaryId)
-                setObjectSelection({ ids, primaryId })
-                setActiveTool('select')
-              }}>Select all design objects</button>
-              <button type="button" className="ghost-button" onClick={() => { setActiveLayerIdState(''); setObjectSelection({ ids: [], primaryId: '' }) }}>Clear selection</button>
+              <button type="button" className="ghost-button" onClick={selectAllDesignObjects}>Select all design objects</button>
+              <button type="button" className="ghost-button" onClick={clearDesignObjectSelection}>Clear selection</button>
             </div>}
             {activeLayer && !multipleObjectsSelected && (
               <div className="photo-layers-props">
