@@ -1,0 +1,15 @@
+.photo-object-selection-panel h3 { margin: 0; font-size: .85rem; }
+.photo-selection-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.photo-selection-actions button {
+  min-height: 32px;
+  padding: .35rem .5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #334155;
+  background: #fff;
+  font-size: .7rem;
+  cursor: pointer;
+}
+.photo-selection-actions button:disabled { opacity: .5; cursor: default; }
+.photo-selection-actions button:not(:disabled):hover { background: #ede9fe; }
+.photo-selection-actions button:focus-visible { outline: 2px solid #7137e8; outline-offset: 2px; }

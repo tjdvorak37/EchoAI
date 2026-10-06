@@ -1,0 +1,25 @@
+.photo-object-handles {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid #7137e8;
+  z-index: 4;
+  pointer-events: none;
+}
+.photo-object-handles button {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid #7137e8;
+  background: #fff;
+  pointer-events: auto;
+  touch-action: none;
+  transform: translate(-50%, -50%) scale(var(--object-handle-scale));
+}
+.photo-resize-handle.top-left { left: 0; top: 0; cursor: nwse-resize; }
+.photo-resize-handle.top-right { left: 100%; top: 0; cursor: nesw-resize; }
+.photo-resize-handle.bottom-left { left: 0; top: 100%; cursor: nesw-resize; }
+.photo-resize-handle.bottom-right { left: 100%; top: 100%; cursor: nwse-resize; }
+.photo-object-handles .photo-rotation-handle { left: 50%; top: -24px; border-radius: 50%; cursor: grab; }
+.photo-object-handles button:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }

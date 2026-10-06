@@ -21,6 +21,126 @@ application.
 - Help Center, support tickets, inbound customer email replies, and ticket
   notifications.
 
+### Photo Editor workspaces
+
+Inside a design, use the **Simple / Classic** selector in the editor's top bar.
+Simple is the default guided workspace; Classic exposes the existing traditional
+menus, tool dock, tool-options bar, and layers/property inspector. Both use the
+same document and editing engine: switching does not reset edits, selection,
+undo/redo history, or export settings. The home page and project management are
+unchanged, and the workspace preference is remembered in this browser separately
+from saved design files. If browser storage is unavailable, switching still
+works but the preference cannot be remembered.
+
+Classic is a layout for EchoAI's current tools, not CorelDRAW file compatibility
+or a complete vector-design suite.
+
+The Classic toolbox groups Pick, Crop & pixel editing, Navigation, Drawing,
+Geometric shapes, Text, Photo selections, and Fill. Arrow buttons open flyouts
+with tool descriptions and existing shortcuts. Use Up/Down or Home/End to
+navigate, Enter to choose, and Escape to dismiss. Each group remembers its last
+choice while the toolbox is open. Shape and text buttons insert editable objects
+immediately; photo selections operate on image pixels, not vector nodes.
+Pan moves only the canvas view with a left-button drag (Ctrl + right-button drag
+also remains available). Pick exposes object rotation and opacity in the top
+options bar; the inspector provides further properties. Vector node editing,
+Knife, advanced curve tools, and other unsupported features are not advertised
+as working controls.
+
+Classic's inspector has **Objects**, **Properties**, and **Canvas** views.
+Objects provides selection, renaming, visibility, stacking, and layer actions.
+Properties adds numeric position and shape dimensions in canvas pixels, image
+width with its aspect ratio preserved, text size, rotation, and opacity.
+Numeric geometry edits apply on blur or Enter and create one undo step; Escape
+cancels the draft. Invalid or empty values are rejected with a visible message.
+Positions refer to the existing object anchor, not the top-left bounding box.
+Center X/Y anchor actions position that anchor at the canvas midpoint.
+With Pick active and the canvas focused, arrow keys nudge by one canvas pixel
+(ten with Shift), independently of zoom. Canvas contains photo adjustments,
+export settings, and brand resources. Simple retains the combined inspector.
+
+With Classic Pick active, selected shapes, non-base images, and stickers have
+corner resize handles and a rotation handle. Resizing keeps the center fixed;
+image/sticker proportions are always preserved, and Shift preserves shape
+proportions. Shift while rotating snaps to 15-degree increments. Arrow Up/Down
+on a focused resize handle scales by 2%; Left/Right on the rotation handle
+rotates by one degree (15 with Shift). Each completed gesture is one undo step;
+Escape, pointer cancellation, or loss of window focus restores the initial
+geometry. Text uses its existing numeric size/rotation controls rather than
+vector-style handles. Handles are editing overlays and are not exported.
+Properties also includes six canvas-alignment actions based on the rendered,
+rotated object bounds, distinct from the center-anchor actions. Hidden objects
+cannot be aligned; oversized objects whose alignment would move their anchor
+outside the canvas produce a visible error.
+
+Classic supports multiple design-object selection with Shift-click in the
+canvas or Objects list. Pick selects visible members of a saved group; Alt-click
+selects one member. "Select all design objects" excludes the original photo and
+hidden objects; Ctrl+A continues to mean photo-pixel selection. Escape or Clear
+selection clears design-object selection. Groups are flat, non-destructive
+associations stored on the layers, preserving their properties and stacking
+order across project save/open. Group with Ctrl+G and ungroup with Ctrl+Shift+G;
+grouping an existing selection replaces its previous associations (no nested
+groups). Ungroup removes the association from all members, including hidden
+ones. Simple remains single-object editing and preserves saved associations.
+
+Selected objects can be dragged/nudged, duplicated, deleted, or moved through
+the stack together, with one undo step per operation. Movement clamps the
+selection as a unit at canvas-anchor boundaries to preserve relative spacing.
+Multi-object alignment matches rendered edges/centers to the last picked
+reference object, accounting for rotation and zoom. Hidden objects and the
+original photo cannot participate in group movement/alignment. Duplicate
+selection creates independent group IDs; Delete preserves the existing rule
+requiring at least one layer. Individual transform handles and properties are
+hidden for multi-selection; Alt-click a member to edit it independently.
+
+Copy/Paste (Ctrl+C/Ctrl+V in Classic) preserves multi-object content and creates
+independent group IDs when pasted. Clipboard Cut, Rename, and Merge Down remain
+single-object commands and are disabled for multi-selection; Alt-click a member
+to use them. Clipboard failures are reported, and Cut only removes an object
+after the clipboard write succeeds.
+If the document changes while clipboard access is pending, Cut/Paste reports
+the conflict rather than applying an edit to stale document state.
+
+With Classic Pick/Move active, drag on empty canvas to select objects whose
+rendered bounds are fully inside the box. Shift-drag adds to the selection;
+Alt-drag picks individual group members instead of expanding groups. Dragging
+in either direction works at zoom/pan. A blank click clears selection, and
+Escape or a canceled pointer gesture cancels the box without changing selection.
+Hidden objects and the original photo are excluded.
+
+The Objects list and layer context menu can lock/unlock design objects; the
+selection panel can lock/unlock a whole selection. Locks are saved in projects
+and undoable. Locked objects remain selectable, inspectable, and hideable, but
+cannot be moved, resized, edited, deleted, regrouped, merged, or reordered in
+either workspace. Pixel editing of locked image objects is blocked, and
+flattening requires unlocking all objects first. Copies/pastes are unlocked.
+Simple also exposes Unlock in the inspector for locked objects. Locks protect
+object content/geometry, not global canvas settings, photo effects, or document
+replacement. The original photo uses its existing separate controls.
+
+For three or more visible, unlocked design objects, the selection panel offers
+horizontal/vertical distribution by centers or equal edge gaps. Measurements
+account for rotation and zoom; the two outer objects remain fixed and a complete
+distribution is one undo step. Equal gaps reject insufficient space rather than
+overlapping objects or partially applying the operation.
+
+Classic's **Snap** toggle (on by default for the editor session) snaps Pick/Move
+drags to canvas and visible object edges/centers within six screen pixels.
+Dashed magenta guides show the active horizontal/vertical alignment and disappear
+when the drag finishes or is canceled. Multi-object selections snap using their
+combined rendered bounds, preserving relative spacing. Rotated objects, zoom,
+and pan are accounted for. Hidden objects, the original photo, and moving
+objects are not targets; locked design objects can still serve as references.
+Hold Alt **during** a drag to bypass snapping; Alt at the start still picks an
+individual group member. Turn Snap off for unrestricted dragging. Snapping does
+not change arrow-key nudges, numeric properties, resize/rotation handles, Simple
+editing, or exported output, and the preference is not part of the document.
+
+Run the workspace browser regression checks with
+`node --test tests/photoEditorWorkspace.browser.test.js` (requires Playwright's
+Chromium browser).
+
 ## Social Platforms
 
 Publishing adapters currently available:

@@ -42,3 +42,30 @@ test('invalid project payloads fail with a useful message', () => {
   assert.throws(() => parsePhotoProject(JSON.stringify({ filters: {} })), /not a valid EchoAI photo project/)
   assert.throws(() => parsePhotoProject(JSON.stringify({ filters: {}, layers: [{ id: 1 }] })), /invalid layer/)
 })
+
+test('groups preserve metadata through project round trips and reject malformed IDs', () => {
+  const grouped = { ...state, layers: [
+    { ...state.layers[0], objectGroupId: 'group-1' },
+    { id: 'shape-1', type: 'shape', objectGroupId: 'group-1', x: 40, y: 50 },
+  ] }
+  assert.deepEqual(parsePhotoProject(JSON.stringify(createPhotoProject(grouped))).layers, grouped.layers)
+  for (const objectGroupId of [42, {}, '', '  ']) {
+    assert.throws(() => parsePhotoProject(JSON.stringify(createPhotoProject({
+      ...state, layers: [{ ...state.layers[0], objectGroupId }],
+    }))), /invalid object group/)
+  }
+})
+
+test('object locks survive save/open, preserve legacy objects, and reject invalid lock metadata', () => {
+  const locked = { ...state, layers: [{ ...state.layers[0], locked: true }, { id: 'shape', type: 'shape', locked: false }] }
+  assert.deepEqual(parsePhotoProject(JSON.stringify(createPhotoProject(locked))).layers, locked.layers)
+  for (const value of ['true', 1, {}, null]) {
+    assert.throws(() => parsePhotoProject(JSON.stringify(createPhotoProject({
+      ...state, layers: [{ ...state.layers[0], locked: value }],
+    }))), /invalid object lock/)
+  }
+  assert.throws(() => parsePhotoProject(JSON.stringify(createPhotoProject({
+    ...state, layers: [{ id: 'base', type: 'image', isBaseImage: true, locked: true }],
+  }))), /invalid object lock/)
+  assert.equal(parsePhotoProject(JSON.stringify(createPhotoProject(state))).layers[0].locked, undefined)
+})

@@ -11,6 +11,7 @@ import {
   Minus,
   MousePointer2,
   Move,
+  Hand,
   Paintbrush,
   PaintBucket,
   PanelRightOpen,
@@ -21,6 +22,7 @@ import {
   Type,
   Upload,
   ZoomIn,
+  ZoomOut,
   Images,
   Sparkles,
   Wand,
@@ -53,12 +55,22 @@ import {
   Palette,
   Expand,
   Layers3,
+  Lock,
+  Unlock,
   Folder,
   MoreVertical,
 } from 'lucide-react'
 import { StockLibrary } from './StockLibrary'
 import { PhotoHueSaturationDialog } from './PhotoHueSaturationDialog'
 import { PhotoShortcutsOverlay } from './PhotoShortcutsOverlay'
+import { PhotoClassicToolbox } from './PhotoClassicToolbox'
+import { PhotoObjectProperties } from './PhotoObjectProperties'
+import { PhotoObjectHandles } from './PhotoObjectHandles'
+import { PhotoObjectSelectionPanel } from './PhotoObjectSelectionPanel'
+import { PhotoObjectBoxSelection } from './PhotoObjectBoxSelection'
+import { pickObjectIds, toggleObjectIds, translateObjectSelection, selectionAlignmentPatches, distributionPatches } from '../services/photoObjectSelection'
+import { objectAlignmentPatch } from '../services/photoObjectTransforms'
+import { snapObjectTranslation } from '../services/photoObjectSnapping'
 import { DesignSchool } from './DesignSchool'
 import { EditorFocusToggle } from './EditorFocusMode'
 import { useEditorFocusMode } from './useEditorFocusMode'
@@ -123,6 +135,15 @@ const readPhotoWorkspaceView = () => {
     return ['home', 'editor', 'projects', 'school'].includes(value) ? value : 'home'
   } catch {
     return 'home'
+  }
+}
+
+const readPhotoEditorWorkspace = () => {
+  try {
+    return localStorage.getItem('echoai-photo-editor-workspace') === 'classic' ? 'classic' : 'simple'
+  } catch (error) {
+    console.warn('Could not read the photo editor workspace preference.', error)
+    return 'simple'
   }
 }
 
@@ -273,6 +294,7 @@ const IMAGE_LAYER_SHAPES = {
 const TOOLS = {
   select: 'Move / select',
   move: 'Move',
+  pan: 'Pan',
   heal: 'Healing brush',
   brush: 'Brush',
   eraser: 'Eraser',
@@ -362,6 +384,48 @@ const KRITA_TOOL_GROUPS = [
       { key: 'polygon', label: 'Polygonal lasso', shortcut: 'Shift+L', icon: PenTool },
     ],
   },
+]
+
+const dockTools = Object.fromEntries(KRITA_TOOL_GROUPS.flatMap((group) => group.tools).map((tool) => [tool.key, tool]))
+const classicTool = (key, description, label) => ({
+  ...dockTools[key],
+  description,
+  action: ['zoom', 'line', 'rectangle', 'ellipse', 'triangle'].includes(key),
+  ...(label ? { label } : {}),
+})
+const CLASSIC_TOOL_GROUPS = [
+  { id: 'pick', label: 'Pick', tools: [classicTool('select', 'Select and move editable objects.', 'Pick / move objects')] },
+  { id: 'crop', label: 'Crop & pixel editing', tools: [
+    classicTool('crop', 'Drag the crop handles to frame the design.'),
+    classicTool('eraser', 'Erase image pixels with a brush.', 'Pixel eraser'),
+    classicTool('heal', 'Repair image areas with a healing brush.'),
+  ] },
+  { id: 'navigation', label: 'Navigation', tools: [
+    { key: 'pan', label: 'Pan', icon: Hand, description: 'Drag to move the canvas view, not objects.' },
+    classicTool('zoom', 'Increase the canvas view by 10%.'),
+    { key: 'zoom-out', label: 'Zoom out', icon: ZoomOut, action: true, description: 'Decrease the canvas view by 10%.' },
+    { key: 'reset-view', label: 'Reset view', icon: Expand, action: true, description: 'Reset zoom to 100% and center the view.' },
+  ] },
+  { id: 'drawing', label: 'Drawing', tools: [
+    classicTool('brush', 'Paint freehand strokes; this is not a vector path.'),
+    classicTool('line', 'Insert an editable straight-line object.', 'Add line'),
+  ] },
+  { id: 'shapes', label: 'Geometric shapes', tools: [
+    classicTool('rectangle', 'Insert an editable rectangle.', 'Add rectangle'),
+    classicTool('ellipse', 'Insert an editable ellipse.', 'Add ellipse'),
+    classicTool('triangle', 'Insert an editable triangle.', 'Add triangle'),
+  ] },
+  { id: 'text', label: 'Text', tools: [
+    { key: 'text', label: 'Add text', shortcut: 'T', icon: Type, action: true, description: 'Insert a text layer; edit it in the inspector.' },
+  ] },
+  { id: 'selection', label: 'Photo selections', tools: [
+    classicTool('object-select', 'Select the main subject in a photo.', 'Photo subject selection'),
+    classicTool('magic-wand', 'Select similarly colored image pixels.'),
+    classicTool('rect-select', 'Drag a rectangle to select image pixels.'),
+    classicTool('lasso', 'Draw a freehand selection of image pixels.'),
+    classicTool('polygon', 'Click corners to select image pixels.'),
+  ] },
+  { id: 'fill', label: 'Fill', tools: [classicTool('fill', 'Fill image pixels or the canvas background.')] },
 ]
 
 const SHAPES = {
@@ -1153,6 +1217,8 @@ export function PhotoEditor({
   const [autosavedProject, setAutosavedProject] = useState(readPhotoAutosave)
   const startingProject = initialProject || autosavedProject
   const [workspaceView, setWorkspaceView] = useState(initialProject ? 'editor' : readPhotoWorkspaceView)
+  const [editorWorkspace, setEditorWorkspace] = useState(readPhotoEditorWorkspace)
+  const classicWorkspace = editorWorkspace === 'classic'
   const [projectsFolderId, setProjectsFolderId] = useState('')
   const [projectsSearch, setProjectsSearch] = useState('')
   const [projectsTypeFilter, setProjectsTypeFilter] = useState('all')
@@ -1164,6 +1230,7 @@ export function PhotoEditor({
   const projectIdRef = useRef(startingProject?.projectId || `design_${Date.now()}`)
   const projectsUploadInputRef = useRef(null)
   const [editorPanel, setEditorPanel] = useState('main')
+  const [classicInspectorPanel, setClassicInspectorPanel] = useState('objects')
   const [saveStatus, setSaveStatus] = useState(autosavedProject ? 'Autosaved' : 'Autosave on')
   const [schoolPractice, setSchoolPractice] = useState(null)
   const [schoolCourseId, setSchoolCourseId] = useState('')
@@ -1209,15 +1276,41 @@ export function PhotoEditor({
   const [layers, setLayers] = useState(() => startingProject?.layers?.length
     ? ensureBaseImageLayer(startingProject.layers, startingProject.imageSrc)
     : (initialProject ? projectLayers(initialProject) : []))
-  const [activeLayerId, setActiveLayerId] = useState(startingProject?.layers?.[0]?.id || (initialProject ? 'headline' : ''))
+  const clipboardDocumentRef = useRef({ layers, workspaceView })
+  useEffect(() => {
+    clipboardDocumentRef.current = { layers, workspaceView }
+  }, [layers, workspaceView])
+  const [activeLayerId, setActiveLayerIdState] = useState(startingProject?.layers?.[0]?.id || (initialProject ? 'headline' : ''))
+  const [objectSelection, setObjectSelection] = useState(null)
+  const setActiveLayerId = (id) => {
+    setActiveLayerIdState(id)
+    setObjectSelection(null)
+  }
   const [notice, setNotice] = useState(startingProject ? 'Saved project ready. Every layer remains editable.' : 'Blank workspace ready for upload.')
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
-  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(true)
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(!classicWorkspace)
   const [compactMode, setCompactMode] = useState(false)
   const [canvasZoom, setCanvasZoom] = useState(100)
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 })
+  const [objectSnapping, setObjectSnapping] = useState(true)
+  const [objectSnapGuides, setObjectSnapGuides] = useState([])
   const [openMenu, setOpenMenu] = useState(null)
   const [menuHost, setMenuHost] = useState(null)
+  const legacyToolsVisible = classicWorkspace || editorPanel === 'advanced'
+  const switchEditorWorkspace = (workspace) => {
+    if (workspace === editorWorkspace) return
+    setEditorWorkspace(workspace)
+    setOpenMenu(null)
+    setLeftSidebarCollapsed(false)
+    if (workspace === 'classic') setRightSidebarCollapsed(false)
+    try {
+      localStorage.setItem('echoai-photo-editor-workspace', workspace)
+      setNotice(`${workspace === 'classic' ? 'Classic' : 'Simple'} workspace selected. Your design is unchanged.`)
+    } catch (error) {
+      console.warn('Could not save the photo editor workspace preference.', error)
+      setNotice('Workspace switched, but your browser could not remember the preference. Your design is unchanged.')
+    }
+  }
   useEffect(() => {
     try {
       localStorage.setItem('echoai-photo-workspace-view', workspaceView)
@@ -1246,6 +1339,7 @@ export function PhotoEditor({
   const paintCanvasRef = useRef(null)
   const erasePreviewRef = useRef(null)
   const dragRef = useRef(null)
+  useEffect(() => () => dragRef.current?.cancel?.(), [workspaceView, editorWorkspace])
   const cropDragRef = useRef(null)
   const removeDragRef = useRef(null)
   const brushStrokeRef = useRef(null)
@@ -1288,11 +1382,32 @@ export function PhotoEditor({
         css: `${customCanvasSize.width} / ${customCanvasSize.height}`,
       }
     : (ASPECT_RATIOS[aspectRatio] ?? ASPECT_RATIOS['4:5']), [aspectRatio, customCanvasSize])
-  const resolvedActiveLayerId = layers.some((layer) => layer.id === activeLayerId)
+  const resolvedActiveLayerId = classicWorkspace && objectSelection?.primaryId === '' && objectSelection.ids.length === 0 ? '' : layers.some((layer) => layer.id === activeLayerId)
     ? activeLayerId
     : (layers[0]?.id ?? '')
   const activeTextLayer = layers.find((layer) => layer.id === resolvedActiveLayerId && layer.type === 'text') ?? null
   const activeLayer = layers.find((layer) => layer.id === resolvedActiveLayerId) ?? null
+  const selectedObjectIds = classicWorkspace
+    ? (objectSelection?.primaryId === activeLayerId
+        ? objectSelection.ids.filter((id) => layers.some((layer) => layer.id === id))
+        : activeLayer ? pickObjectIds(layers, activeLayer) : [])
+    : activeLayer ? [activeLayer.id] : []
+  const selectedObjects = layers.filter((layer) => selectedObjectIds.includes(layer.id))
+  const multipleObjectsSelected = classicWorkspace && selectedObjects.length > 1
+  const selectDesignObject = (layer, event = {}) => {
+    if (!classicWorkspace) {
+      setActiveLayerId(layer.id)
+      setActiveTool('select')
+      return [layer.id]
+    }
+    const picked = pickObjectIds(layers, layer, event.altKey)
+    const ids = event.shiftKey ? toggleObjectIds(selectedObjectIds, picked) : picked
+    const primaryId = ids.includes(layer.id) ? layer.id : ids.at(-1) || ''
+    setActiveLayerIdState(primaryId)
+    setObjectSelection({ ids, primaryId })
+    setActiveTool('select')
+    return ids
+  }
   const stageClipPath =
     maskShape === 'circle'
       ? 'circle(44% at 50% 50%)'
@@ -1324,7 +1439,46 @@ export function PhotoEditor({
   }, [aspect, compactMode, stageViewportSize])
 
   const updateLayer = (layerId, patch) => {
+    if (layers.find((layer) => layer.id === layerId)?.locked) {
+      setNotice('Unlock the object before editing it.')
+      return
+    }
     setLayers((prev) => prev.map((layer) => (layer.id === layerId ? { ...layer, ...patch } : layer)))
+  }
+
+  const alignActiveObject = (alignment) => {
+    if (!activeLayer || activeLayer.hidden || activeLayer.locked || activeLayer.isBaseImage || !stageRef.current) {
+      setNotice('Select a visible, unlocked design object to align.')
+      return
+    }
+    const element = [...stageRef.current.querySelectorAll('.photo-layer')].find((object) => object.dataset.layerId === activeLayer.id)
+    if (!element) {
+      setNotice('The selected object is not available on the canvas.')
+      return
+    }
+    const rect = stageRef.current.getBoundingClientRect()
+    const scaleX = rect.width / stageRef.current.offsetWidth
+    const scaleY = rect.height / stageRef.current.offsetHeight
+    try {
+      const patch = objectAlignmentPatch({
+        layer: activeLayer,
+        bounds: element.getBoundingClientRect(),
+        canvasBounds: {
+          left: rect.left + stageRef.current.clientLeft * scaleX,
+          top: rect.top + stageRef.current.clientTop * scaleY,
+          width: stageRef.current.clientWidth * scaleX,
+          height: stageRef.current.clientHeight * scaleY,
+        },
+        alignment,
+      })
+      if (Object.entries(patch).some(([key, value]) => Math.abs(activeLayer[key] - value) > 0.0001)) {
+        commitHistory()
+        updateLayer(activeLayer.id, patch)
+      }
+      setNotice(`Object aligned to canvas: ${alignment}.`)
+    } catch (error) {
+      setNotice(error.message)
+    }
   }
 
   const syncBaseImageLayer = (src, label = 'Original photo') => {
@@ -1338,6 +1492,8 @@ export function PhotoEditor({
 
   const buildSnapshot = () => ({
     layers,
+    activeLayerId,
+    objectSelection,
     filters,
     brushStrokes,
     selection,
@@ -1356,6 +1512,8 @@ export function PhotoEditor({
 
   const applySnapshot = (snapshot) => {
     setLayers(snapshot.layers)
+    setActiveLayerIdState(snapshot.activeLayerId ?? '')
+    setObjectSelection(snapshot.objectSelection ?? null)
     setFilters(snapshot.filters)
     setBrushStrokes(snapshot.brushStrokes)
     setSelection(snapshot.selection ?? null)
@@ -1408,7 +1566,9 @@ export function PhotoEditor({
 
   // --- Layer operations ----------------------------------------------------
   const nextLayerId = (kind) => {
-    layerIdRef.current += 1
+    do {
+      layerIdRef.current += 1
+    } while (layers.some((layer) => layer.id === `${kind}-${layerIdRef.current}`))
     return `${kind}-${layerIdRef.current}`
   }
 
@@ -1416,6 +1576,148 @@ export function PhotoEditor({
     commitHistory()
     setLayers((prev) => [...prev, layer])
     setActiveLayerId(layer.id)
+  }
+
+  const applyObjectPatches = (patches) => {
+    if (patches.some((patch) => layers.find((layer) => layer.id === patch.id)?.locked)) {
+      setNotice('Unlock all affected objects before editing them.')
+      return
+    }
+    if (!patches.some(({ id, ...patch }) => {
+      const layer = layers.find((item) => item.id === id)
+      return layer && Object.entries(patch).some(([key, value]) => layer[key] !== value)
+    })) return
+    commitHistory()
+    setLayers((current) => current.map((layer) => {
+      const patch = patches.find((item) => item.id === layer.id)
+      return patch ? { ...layer, ...patch } : layer
+    }))
+  }
+
+  const copyDesignObjects = (objects, offset = 0) => {
+    const moved = translateObjectSelection(objects, offset, offset)
+    const groups = new Map()
+    return objects.map((layer) => {
+      if (layer.objectGroupId && !groups.has(layer.objectGroupId)) groups.set(layer.objectGroupId, `group_${crypto.randomUUID()}`)
+      return {
+        ...layer, ...moved.find((item) => item.id === layer.id),
+        id: nextLayerId(layer.type), label: `${layer.label} copy`, locked: false,
+        objectGroupId: layer.objectGroupId ? groups.get(layer.objectGroupId) : null,
+      }
+    })
+  }
+
+  const groupSelectedObjects = () => {
+    if (selectedObjects.length < 2 || selectedObjects.some((layer) => layer.hidden || layer.locked || layer.isBaseImage)) {
+      setNotice('Select at least two visible, unlocked design objects to group.')
+      return
+    }
+    const objectGroupId = `group_${crypto.randomUUID()}`
+    applyObjectPatches(selectedObjects.map((layer) => ({ id: layer.id, objectGroupId })))
+    setNotice(`Grouped ${selectedObjects.length} objects without flattening.`)
+  }
+
+  const ungroupSelectedObjects = () => {
+    const groupIds = new Set(selectedObjects.map((layer) => layer.objectGroupId).filter(Boolean))
+    if (!groupIds.size) {
+      setNotice('Select a grouped object to ungroup.')
+      return
+    }
+    if (layers.some((layer) => groupIds.has(layer.objectGroupId) && layer.locked)) {
+      setNotice('Unlock every member of the group before ungrouping.')
+      return
+    }
+    applyObjectPatches(layers.filter((layer) => groupIds.has(layer.objectGroupId)).map((layer) => ({ id: layer.id, objectGroupId: null })))
+    setNotice('Objects ungrouped.')
+  }
+
+  const duplicateSelectedObjects = () => {
+    if (!selectedObjects.length || selectedObjects.some((layer) => layer.isBaseImage)) {
+      setNotice('Select design objects to duplicate; the original photo cannot be duplicated as a group.')
+      return
+    }
+    const copies = copyDesignObjects(selectedObjects, 4)
+    commitHistory()
+    setLayers((current) => [...current, ...copies])
+    const primaryId = copies.at(-1).id
+    setActiveLayerIdState(primaryId)
+    setObjectSelection({ ids: copies.map((layer) => layer.id), primaryId })
+    setNotice(`Duplicated ${copies.length} objects.`)
+  }
+
+  const deleteSelectedObjects = () => {
+    if (selectedObjects.some((layer) => layer.locked)) {
+      setNotice('Unlock selected objects before deleting them.')
+      return
+    }
+    if (!selectedObjects.length || selectedObjects.some((layer) => layer.isBaseImage)) {
+      setNotice('Select design objects to delete; remove the original photo separately.')
+      return
+    }
+    if (selectedObjects.length === layers.length) {
+      setNotice('Keep at least one layer on the canvas.')
+      return
+    }
+    commitHistory()
+    setLayers((current) => current.filter((layer) => !selectedObjectIds.includes(layer.id)))
+    setActiveLayerId('')
+    setNotice(`Deleted ${selectedObjects.length} objects.`)
+  }
+
+  const measureSelectedObjects = () => {
+    const stage = stageRef.current
+    if (!stage) throw new Error('The canvas is not available for object positioning.')
+    const scaleX = stage.getBoundingClientRect().width / stage.offsetWidth
+    const scaleY = stage.getBoundingClientRect().height / stage.offsetHeight
+    return {
+      width: stage.clientWidth, height: stage.clientHeight,
+      objects: selectedObjects.map((layer) => {
+        const element = [...stage.querySelectorAll('.photo-layer')].find((item) => item.dataset.layerId === layer.id)
+        if (!element) throw new Error('A selected object is not available on the canvas.')
+        const bounds = element.getBoundingClientRect()
+        return { layer, bounds: { left: bounds.left / scaleX, top: bounds.top / scaleY, width: bounds.width / scaleX, height: bounds.height / scaleY } }
+      }),
+    }
+  }
+
+  const alignSelectedObjects = (alignment) => {
+    if (selectedObjects.length < 2 || selectedObjects.some((layer) => layer.hidden || layer.locked || layer.isBaseImage)) {
+      setNotice('Select at least two visible, unlocked design objects to align.')
+      return
+    }
+    try {
+      const { objects, width, height } = measureSelectedObjects()
+      applyObjectPatches(selectionAlignmentPatches(objects, resolvedActiveLayerId, alignment, width, height))
+      setNotice('Selected objects aligned to the last picked object.')
+    } catch (error) {
+      setNotice(error.message)
+    }
+  }
+
+  const setObjectsLocked = (ids, locked) => {
+    const targets = layers.filter((layer) => ids.includes(layer.id))
+    if (!targets.length || targets.some((layer) => layer.isBaseImage)) {
+      setNotice('Select design objects to lock; the original photo uses separate editing controls.')
+      return
+    }
+    if (!targets.some((layer) => Boolean(layer.locked) !== locked)) return
+    commitHistory()
+    setLayers((current) => current.map((layer) => ids.includes(layer.id) ? { ...layer, locked } : layer))
+    setNotice(locked ? 'Objects locked. Unlock them to edit or delete.' : 'Objects unlocked.')
+  }
+
+  const distributeSelectedObjects = (axis, mode) => {
+    if (selectedObjects.some((layer) => layer.hidden || layer.locked || layer.isBaseImage)) {
+      setNotice('Select visible, unlocked design objects to distribute.')
+      return
+    }
+    try {
+      const { objects, width, height } = measureSelectedObjects()
+      applyObjectPatches(distributionPatches(objects, axis, mode, width, height))
+      setNotice(`Objects distributed with equal ${axis} ${mode}.`)
+    } catch (error) {
+      setNotice(error.message)
+    }
   }
 
   const addTextLayer = () => {
@@ -1470,6 +1772,7 @@ export function PhotoEditor({
   }
 
   const duplicateLayer = (layerId) => {
+    if (multipleObjectsSelected && selectedObjectIds.includes(layerId)) return duplicateSelectedObjects()
     const source = layers.find((layer) => layer.id === layerId)
     if (!source) return
     const copy = {
@@ -1479,6 +1782,8 @@ export function PhotoEditor({
       x: clamp(source.x + 4, 0, 100),
       y: clamp(source.y + 4, 0, 100),
       isBaseImage: false,
+      objectGroupId: null,
+      locked: false,
     }
     commitHistory()
     setLayers((prev) => [...prev, copy])
@@ -1487,7 +1792,9 @@ export function PhotoEditor({
   }
 
   const deleteLayer = (layerId) => {
+    if (multipleObjectsSelected && selectedObjectIds.includes(layerId)) return deleteSelectedObjects()
     const layer = layers.find((item) => item.id === layerId)
+    if (layer?.locked) { setNotice('Unlock the object before deleting it.'); return }
     if (layer?.isBaseImage) {
       commitHistory()
       setGeneratedImageSrc('')
@@ -1508,6 +1815,26 @@ export function PhotoEditor({
   }
 
   const moveLayerOrder = (layerId, direction) => {
+    if (layers.find((layer) => layer.id === layerId)?.locked || (multipleObjectsSelected && selectedObjects.some((layer) => layer.locked))) {
+      setNotice('Unlock selected objects before changing their stacking order.')
+      return
+    }
+    if (multipleObjectsSelected && selectedObjectIds.includes(layerId)) {
+      const next = [...layers]
+      const indices = next.map((layer, index) => selectedObjectIds.includes(layer.id) ? index : -1).filter((index) => index >= 0)
+      if (direction > 0) indices.reverse()
+      for (const index of indices) {
+        const target = index + direction
+        if (target < 0 || target >= next.length || selectedObjectIds.includes(next[target].id)) continue
+        const neighbor = next[target]
+        next[target] = next[index]
+        next[index] = neighbor
+      }
+      if (next.every((layer, index) => layer.id === layers[index].id)) return
+      commitHistory()
+      setLayers(next)
+      return
+    }
     const index = layers.findIndex((layer) => layer.id === layerId)
     const target = index + direction
     if (index < 0 || target < 0 || target >= layers.length) return
@@ -1905,6 +2232,7 @@ export function PhotoEditor({
   }
 
   const flattenImage = () => {
+    if (layers.some((layer) => layer.locked)) { setNotice('Unlock design objects before flattening the image.'); return }
     setOpenMenu(null)
     withBusy('Flattening…', async () => {
       const canvas = document.createElement('canvas')
@@ -2052,46 +2380,73 @@ export function PhotoEditor({
   }
 
   // EDIT MENU
-  const handleEditCut = () => {
-    if (resolvedActiveLayerId) {
-      navigator.clipboard.writeText(JSON.stringify(layers.find((l) => l.id === resolvedActiveLayerId)))
-      deleteLayer(resolvedActiveLayerId)
-      setNotice('Layer cut to clipboard.')
-    }
+  const handleEditCut = async () => {
     setOpenMenu(null)
-  }
-
-  const handleEditCopy = () => {
-    if (resolvedActiveLayerId) {
-      navigator.clipboard.writeText(JSON.stringify(layers.find((l) => l.id === resolvedActiveLayerId)))
-      setNotice('Layer copied to clipboard.')
+    if (activeLayer?.locked) { setNotice('Unlock the object before cutting it.'); return }
+    if (multipleObjectsSelected) {
+      setOpenMenu(null)
+      setNotice('Use Duplicate selection or Delete selection for multiple objects. Clipboard Cut currently supports one object; Alt-click a group member first.')
+      return
     }
-    setOpenMenu(null)
-  }
-
-  const handleEditPaste = () => {
-    navigator.clipboard.readText().then((text) => {
+    if (resolvedActiveLayerId) {
       try {
-        const layer = JSON.parse(text)
-        if (layer.id && layer.type) {
-          commitHistory()
-          layer.id = nextLayerId(layer.type)
-          setLayers((prev) => [...prev, layer])
-          setActiveLayerId(layer.id)
-          setNotice('Layer pasted.')
+        await navigator.clipboard.writeText(JSON.stringify({ ...activeLayer, objectGroupId: null }))
+        if (clipboardDocumentRef.current.layers !== layers || clipboardDocumentRef.current.workspaceView !== workspaceView) {
+          setNotice('Object copied, but the design changed during clipboard access. Nothing was cut; try again.')
+          return
         }
-      } catch {
-        setNotice('Could not paste. Clipboard does not contain a valid layer.')
+        deleteLayer(resolvedActiveLayerId)
+      } catch (error) {
+        setNotice(`Could not cut to clipboard: ${error.message}`)
       }
-    })
+    }
+  }
+
+  const handleEditCopy = async () => {
     setOpenMenu(null)
+    if (resolvedActiveLayerId) {
+      try {
+        const payload = multipleObjectsSelected
+          ? { format: 'echoai-object-selection', layers: selectedObjects }
+          : { ...activeLayer, objectGroupId: null }
+        await navigator.clipboard.writeText(JSON.stringify(payload))
+        setNotice(multipleObjectsSelected ? 'Selected objects copied to clipboard.' : 'Layer copied to clipboard.')
+      } catch (error) {
+        setNotice(`Could not copy to clipboard: ${error.message}`)
+      }
+    } else {
+      setNotice('Select a design object to copy.')
+    }
+  }
+
+  const handleEditPaste = async () => {
+    setOpenMenu(null)
+    try {
+      const payload = JSON.parse(await navigator.clipboard.readText())
+      if (clipboardDocumentRef.current.layers !== layers || clipboardDocumentRef.current.workspaceView !== workspaceView) {
+        throw new Error('The design changed during clipboard access. Try pasting again.')
+      }
+      const objects = payload?.format === 'echoai-object-selection' ? payload.layers : [payload]
+      const validated = parsePhotoProject(JSON.stringify({ layers: objects, filters: {} })).layers
+      if (!validated.length || validated.some((layer) => layer.isBaseImage || !['text', 'shape', 'image', 'sticker'].includes(layer.type)
+        || !Number.isFinite(layer.x) || !Number.isFinite(layer.y))) {
+        throw new Error('Clipboard must contain positioned design objects, not the original photo.')
+      }
+      const copies = copyDesignObjects(validated)
+      commitHistory()
+      setLayers((current) => [...current, ...copies])
+      const primaryId = copies.at(-1).id
+      setActiveLayerIdState(primaryId)
+      setObjectSelection({ ids: copies.map((layer) => layer.id), primaryId })
+      setNotice(`Pasted ${copies.length} design objects.`)
+    } catch (error) {
+      setNotice(`Could not paste objects: ${error.message}`)
+    }
   }
 
   const handleEditClear = () => {
     if (resolvedActiveLayerId) {
-      commitHistory()
       deleteLayer(resolvedActiveLayerId)
-      setNotice('Layer cleared.')
     }
     setOpenMenu(null)
   }
@@ -2151,6 +2506,11 @@ export function PhotoEditor({
   }
 
   const handleLayerMergeDown = () => {
+    if (multipleObjectsSelected) {
+      setNotice('Merge Down supports one object. Alt-click a group member to select it individually.')
+      setOpenMenu(null)
+      return
+    }
     const index = layers.findIndex((layer) => layer.id === resolvedActiveLayerId)
     if (index <= 0) {
       setNotice('Select a layer with another layer beneath it to merge down.')
@@ -2159,6 +2519,7 @@ export function PhotoEditor({
     }
     const lower = layers[index - 1]
     const upper = layers[index]
+    if (lower.locked || upper.locked) { setNotice('Unlock both objects before merging them.'); setOpenMenu(null); return }
     withBusy('Merging layers…', async () => {
       const canvas = document.createElement('canvas')
       canvas.width = aspect.canvasWidth
@@ -2436,6 +2797,7 @@ export function PhotoEditor({
   }
 
   const handleLayerRenameActive = () => {
+    if (activeLayer?.locked) { setNotice('Unlock the object before renaming it.'); setOpenMenu(null); return }
     if (resolvedActiveLayerId) {
       const newName = prompt('Enter new layer name:')
       if (newName) {
@@ -2576,7 +2938,7 @@ export function PhotoEditor({
       const target = event.target
       if (target instanceof HTMLElement) {
         const tag = target.tagName.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable) {
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable || target.closest('.photo-classic-flyout')) {
           return
         }
       }
@@ -2591,6 +2953,10 @@ export function PhotoEditor({
       }
 
       if (mod) {
+        if (classicWorkspace && code === 'KeyG') return run(event.shiftKey ? ungroupSelectedObjects : groupSelectedObjects)
+        if (classicWorkspace && code === 'KeyC') return run(handleEditCopy)
+        if (classicWorkspace && code === 'KeyX') return run(handleEditCut)
+        if (classicWorkspace && code === 'KeyV') return run(handleEditPaste)
         if (code === 'KeyZ') return run(() => (event.shiftKey ? redo() : undo()))
         if (code === 'KeyY') return run(redo)
         if (code === 'KeyJ') return run(() => resolvedActiveLayerId && duplicateLayer(resolvedActiveLayerId))
@@ -2611,9 +2977,36 @@ export function PhotoEditor({
         setLassoPoints([])
         setMarquee(null)
         setLayerMenu(null)
+        if (classicWorkspace) {
+          setActiveLayerIdState('')
+          setObjectSelection({ primaryId: '', ids: [] })
+        }
         return
       }
       if (event.key === 'Enter' && activeTool === 'polygon' && lassoPoints.length >= 3) return run(() => closePolygon(selectionMode))
+      if (classicWorkspace && !event.altKey && (activeTool === 'select' || activeTool === 'move') && activeLayer && !activeLayer.isBaseImage
+        && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
+        && (target === document.body || (target instanceof Element && target.closest('.photo-stage')))) {
+        return run(() => {
+          const step = event.shiftKey ? 10 : 1
+          const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
+          const key = horizontal ? 'x' : 'y'
+          const direction = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1
+          const movable = selectedObjects.filter((layer) => !layer.hidden && !layer.locked && !layer.isBaseImage)
+          if (movable.length !== selectedObjects.length) {
+            setNotice('Select visible, unlocked design objects to move.')
+            return
+          }
+          const delta = direction * step / (horizontal ? aspect.canvasWidth : aspect.canvasHeight) * 100
+          const patches = translateObjectSelection(movable, horizontal ? delta : 0, horizontal ? 0 : delta)
+          if (!patches.some((patch) => patch[key] !== movable.find((layer) => layer.id === patch.id)[key])) return
+          if (!event.repeat) commitHistory()
+          setLayers((current) => current.map((layer) => {
+            const patch = patches.find((item) => item.id === layer.id)
+            return patch ? { ...layer, ...patch } : layer
+          }))
+        })
+      }
       if (event.key === '[') return run(() => setBrushSize((value) => clamp(value - 4, 4, 96)))
       if (event.key === ']') return run(() => setBrushSize((value) => clamp(value + 4, 4, 96)))
 
@@ -2661,9 +3054,101 @@ export function PhotoEditor({
 
   const beginDrag = (layer, event) => {
     if (activeTool !== 'select' && activeTool !== 'move') return
+    if (event.button !== 0) return
     if (!stageRef.current) return
+    if (layer.locked) {
+      if (classicWorkspace && event.shiftKey) return
+      if (!classicWorkspace || !selectedObjectIds.includes(layer.id) || event.altKey) selectDesignObject(layer, event)
+      setNotice('Unlock the object before moving it.')
+      return
+    }
+    if (classicWorkspace) {
+      if (event.shiftKey) return
+      event.preventDefault()
+      const ids = selectedObjectIds.includes(layer.id) && !event.altKey ? selectedObjectIds : selectDesignObject(layer, event)
+      const moving = layers.filter((item) => ids.includes(item.id))
+      if (moving.some((item) => item.hidden || item.locked || item.isBaseImage)) {
+        setNotice('Select visible, unlocked design objects to move.')
+        return
+      }
+      const rect = stageRef.current.getBoundingClientRect()
+      const scaleX = rect.width / stageRef.current.offsetWidth
+      const scaleY = rect.height / stageRef.current.offsetHeight
+      const startX = event.clientX
+      const startY = event.clientY
+      const pointerId = event.pointerId
+      const stage = stageRef.current
+      const width = stage.clientWidth
+      const height = stage.clientHeight
+      const objects = [...stage.querySelectorAll('.photo-layer')].map((element) => {
+        const bounds = element.getBoundingClientRect()
+        return {
+          layer: layers.find((item) => item.id === element.dataset.layerId),
+          bounds: {
+            left: (bounds.left - rect.left) / scaleX - stage.clientLeft,
+            top: (bounds.top - rect.top) / scaleY - stage.clientTop,
+            width: bounds.width / scaleX, height: bounds.height / scaleY,
+          },
+        }
+      }).filter((object) => object.layer)
+      const movingObjects = objects.filter((object) => ids.includes(object.layer.id))
+      if (movingObjects.length !== moving.length) { setNotice('A selected object is not available on the canvas.'); return }
+      let changed = false
+      const cleanup = () => {
+        window.removeEventListener('pointermove', move)
+        window.removeEventListener('pointerup', finish)
+        window.removeEventListener('pointercancel', cancelPointer)
+        window.removeEventListener('keydown', keyDown, true)
+        window.removeEventListener('blur', cancel)
+        dragRef.current = null
+        setObjectSnapGuides([])
+      }
+      const restore = () => setLayers((current) => current.map((item) => {
+        const original = moving.find((object) => object.id === item.id)
+        return original ? { ...item, x: original.x, y: original.y } : item
+      }))
+      const cancel = () => { cleanup(); restore() }
+      const cancelPointer = (pointerEvent) => { if (pointerEvent.pointerId === pointerId) cancel() }
+      const move = (pointerEvent) => {
+        if (pointerEvent.pointerId !== pointerId) return
+        const { patches, guides } = snapObjectTranslation({
+          moving: movingObjects, targets: objects,
+          deltaX: (pointerEvent.clientX - startX) / scaleX / width * 100,
+          deltaY: (pointerEvent.clientY - startY) / scaleY / height * 100,
+          width, height, scaleX, scaleY, enabled: objectSnapping && !pointerEvent.altKey,
+        })
+        setObjectSnapGuides(guides)
+        changed = patches.some((patch) => {
+          const original = moving.find((item) => item.id === patch.id)
+          return patch.x !== original.x || patch.y !== original.y
+        })
+        setLayers((current) => current.map((item) => {
+          const patch = patches.find((object) => object.id === item.id)
+          return patch ? { ...item, ...patch } : item
+        }))
+      }
+      const finish = (pointerEvent) => {
+        if (pointerEvent.pointerId !== pointerId) return
+        cleanup()
+        if (changed) commitHistory()
+      }
+      const keyDown = (keyEvent) => {
+        if (keyEvent.key !== 'Escape') return
+        keyEvent.preventDefault()
+        keyEvent.stopPropagation()
+        cancel()
+      }
+      dragRef.current = { cancel }
+      window.addEventListener('pointermove', move)
+      window.addEventListener('pointerup', finish)
+      window.addEventListener('pointercancel', cancelPointer)
+      window.addEventListener('keydown', keyDown, true)
+      window.addEventListener('blur', cancel)
+      return
+    }
     event.preventDefault()
-    commitHistory()
+    setActiveLayerId(layer.id)
+    if (!classicWorkspace) commitHistory()
     const stageRect = stageRef.current.getBoundingClientRect()
     const currentX = (layer.x / 100) * stageRect.width
     const currentY = (layer.y / 100) * stageRect.height
@@ -2672,6 +3157,7 @@ export function PhotoEditor({
       layerId: layer.id,
       offsetX: event.clientX - stageRect.left - currentX,
       offsetY: event.clientY - stageRect.top - currentY,
+      historyCommitted: !classicWorkspace,
     }
 
     const handleMove = (moveEvent) => {
@@ -2680,10 +3166,15 @@ export function PhotoEditor({
       const rect = stageRef.current.getBoundingClientRect()
       const nextX = ((moveEvent.clientX - rect.left - drag.offsetX) / rect.width) * 100
       const nextY = ((moveEvent.clientY - rect.top - drag.offsetY) / rect.height) * 100
+      if (!drag.historyCommitted) {
+        if (Math.abs(nextX - layer.x) < 0.01 && Math.abs(nextY - layer.y) < 0.01) return
+        commitHistory()
+        drag.historyCommitted = true
+      }
       setLayers((prev) =>
         prev.map((item) =>
           item.id === drag.layerId
-            ? { ...item, x: clamp(nextX, 4, 92), y: clamp(nextY, 6, 88) }
+            ? { ...item, x: clamp(nextX, classicWorkspace ? 0 : 4, classicWorkspace ? 100 : 92), y: clamp(nextY, classicWorkspace ? 0 : 6, classicWorkspace ? 100 : 88) }
             : item,
         ),
       )
@@ -2726,6 +3217,7 @@ export function PhotoEditor({
     const targetLayer = event.target instanceof Element ? event.target.closest('.photo-layer') : null
     const targetImage = targetLayer ? layers.find((layer) => layer.id === targetLayer.dataset.layerId && layer.type === 'image') : null
     const imageLayer = targetImage
+    if (targetImage?.locked) { setNotice('Unlock the image object before editing its pixels.'); return }
     if (targetImage) setActiveLayerId(targetImage.id)
     const stroke = {
       id: nextLayerId('stroke'),
@@ -2914,7 +3406,8 @@ export function PhotoEditor({
   }
 
   const startCanvasPan = (event) => {
-    if (!event.ctrlKey || event.button !== 2) return
+    if (!(event.ctrlKey && event.button === 2) && !(activeTool === 'pan' && event.button === 0)) return
+    if (event.target instanceof Element && event.target.closest('.canvas-controls, input, select')) return
     event.preventDefault()
     event.stopPropagation()
     canvasPanRef.current = {
@@ -2947,6 +3440,20 @@ export function PhotoEditor({
   const resetCanvasView = () => {
     setCanvasZoom(100)
     setCanvasPan({ x: 0, y: 0 })
+  }
+
+  const selectClassicTool = (key) => {
+    setOpenMenu(null)
+    if (key === 'zoom') setCanvasZoom((value) => clamp(value + 10, 25, 400))
+    else if (key === 'zoom-out') setCanvasZoom((value) => clamp(value - 10, 25, 400))
+    else if (key === 'reset-view') resetCanvasView()
+    else if (key === 'text' || Object.hasOwn(SHAPES, key)) {
+      selectTool('select')
+      setRightSidebarCollapsed(false)
+      if (key === 'text') addTextLayer()
+      else addShapeLayer(key)
+    }
+    else selectTool(key)
   }
 
   useEffect(() => {
@@ -4057,7 +4564,7 @@ export function PhotoEditor({
 
   return (
     <section
-      className={`photo-creator-shell photo-modern-editor-shell ${compactMode ? 'compact' : ''} ${focusMode.focused ? 'editor-focus' : ''}`}
+      className={`photo-creator-shell photo-modern-editor-shell ${classicWorkspace ? 'photo-classic-editor-shell' : ''} ${compactMode ? 'compact' : ''} ${focusMode.focused ? 'editor-focus' : ''}`}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault()
@@ -4071,6 +4578,10 @@ export function PhotoEditor({
           <button type="button" className="photo-topbar-icon" onClick={undo} disabled={historyCounts.past === 0} title="Undo (Ctrl+Z)" aria-label="Undo"><RotateCcw size={18} /></button>
           <button type="button" className="photo-topbar-icon" onClick={redo} disabled={historyCounts.future === 0} title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><RotateCcw size={18} className="rotate-right" /></button>
           <EditorFocusToggle focused={focusMode.focused} onToggle={focusMode.toggle} fullscreen={focusMode.fullscreen} onToggleFullscreen={focusMode.toggleFullscreen} label="photo editor" />
+          <div className="photo-workspace-toggle" role="group" aria-label="Editor workspace">
+            <button type="button" aria-pressed={!classicWorkspace} onClick={() => switchEditorWorkspace('simple')} title="Guided editing with visual tool panels">Simple</button>
+            <button type="button" aria-pressed={classicWorkspace} onClick={() => switchEditorWorkspace('classic')} title="Traditional menus, tool dock, and inspector">Classic</button>
+          </div>
         </div>
         <div className="photo-topbar-title"><strong>{headline || prompt || 'Untitled design'}</strong><span>{aspect.canvasWidth} × {aspect.canvasHeight}px</span></div>
         <div className="photo-topbar-actions">
@@ -4082,7 +4593,7 @@ export function PhotoEditor({
         </div>
       </header>
 
-      <div ref={setMenuHost} className={`editor-menu-host ${editorPanel === 'advanced' ? 'legacy-menu-visible' : ''}`} />
+      <div ref={setMenuHost} className={`editor-menu-host ${legacyToolsVisible ? 'legacy-menu-visible' : ''}`} />
 
       <div className="editor-options-bar" aria-label="Tool options">
         <div className="option-group">
@@ -4134,6 +4645,24 @@ export function PhotoEditor({
                 <span>Contiguous</span>
               </label>
             </>
+          ) : classicWorkspace && activeTool === 'pan' ? (
+            <>
+              <span>Drag the canvas to pan</span>
+              <label>Zoom
+                <input type="number" min="25" max="400" value={canvasZoom} onChange={(event) => setCanvasZoom(clamp(Number(event.target.value) || 25, 25, 400))} />
+              </label>
+              <button type="button" onClick={resetCanvasView}>Reset view</button>
+            </>
+          ) : classicWorkspace && (activeTool === 'select' || activeTool === 'move') ? (
+            multipleObjectsSelected ? <span>{selectedObjects.length} objects selected — use Objects or Properties for group actions</span> : activeLayer && !activeLayer.isBaseImage ? <>
+              <span>{activeLayer.label}</span>
+              <label>Rotation
+                <input disabled={activeLayer.locked} type="number" min="-180" max="180" value={activeLayer.rotation ?? 0} onFocus={commitHistory} onChange={(event) => updateLayer(activeLayer.id, { rotation: clamp(Number(event.target.value) || 0, -180, 180) })} />
+              </label>
+              <label>Object opacity
+                <input disabled={activeLayer.locked} type="number" min="0" max="100" value={activeLayer.opacity ?? 100} onFocus={commitHistory} onChange={(event) => updateLayer(activeLayer.id, { opacity: clamp(Number(event.target.value) || 0, 0, 100) })} />
+              </label>
+            </> : <span>{activeLayer?.isBaseImage ? 'Use Crop to frame the original photo' : 'Select an object to edit its properties'}</span>
           ) : (
             <>
               <label title="Brush color">
@@ -4171,10 +4700,10 @@ export function PhotoEditor({
         </div>
       </div>
 
-      <div className={`photo-creator-grid modern-editor ${compactMode ? 'compact' : ''} ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${rightSidebarCollapsed ? 'right-collapsed' : ''}`}>
-        <aside className={`photo-sidebar photo-sidebar-left ${leftSidebarCollapsed ? 'collapsed' : ''} ${editorPanel === 'advanced' ? 'legacy-tools-active' : 'modern-tools-active'}`}>
+      <div className={`photo-creator-grid modern-editor ${classicWorkspace ? 'classic-editor' : ''} ${compactMode ? 'compact' : ''} ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${rightSidebarCollapsed ? 'right-collapsed' : ''}`}>
+        <aside className={`photo-sidebar photo-sidebar-left ${leftSidebarCollapsed ? 'collapsed' : ''} ${legacyToolsVisible ? 'legacy-tools-active' : 'modern-tools-active'}`}>
           {modernToolPanel}
-          {editorPanel === 'advanced' && <button type="button" className="modern-return-button" onClick={() => { setEditorPanel('main'); setLeftSidebarCollapsed(false) }}><ArrowLeft size={16} /> Back to easy tools</button>}
+          {!classicWorkspace && editorPanel === 'advanced' && <button type="button" className="modern-return-button" onClick={() => { setEditorPanel('main'); setLeftSidebarCollapsed(false) }}><ArrowLeft size={16} /> Back to easy tools</button>}
           {/* Compact Menu Bar in Sidebar */}
           {menuHost && createPortal(<div className="sidebar-menu-bar" aria-label="Main menu">
             {/* FILE MENU */}
@@ -4210,7 +4739,7 @@ export function PhotoEditor({
                   <button onClick={undo} disabled={historyCounts.past === 0}>Undo</button>
                   <button onClick={redo} disabled={historyCounts.future === 0}>Redo</button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleEditCut}>Cut</button>
+                  <button onClick={handleEditCut} disabled={multipleObjectsSelected || activeLayer?.locked} title={multipleObjectsSelected ? 'Cut supports one object; Alt-click a group member' : undefined}>Cut</button>
                   <button onClick={handleEditCopy}>Copy</button>
                   <button onClick={handleEditPaste}>Paste</button>
                   <button onClick={handleEditClear}>Clear</button>
@@ -4292,15 +4821,19 @@ export function PhotoEditor({
               {openMenu === 'Layer' && (
                 <div className="menu-dropdown menu-dropdown-compact">
                   <button onClick={handleLayerNew}>New text layer <kbd>T</kbd></button>
-                  <button onClick={handleLayerRenameActive} disabled={!resolvedActiveLayerId}>Rename</button>
+                  <button onClick={handleLayerRenameActive} disabled={!resolvedActiveLayerId || multipleObjectsSelected || activeLayer?.locked}>Rename</button>
                   <button onClick={handleLayerDuplicate} disabled={!resolvedActiveLayerId}>Duplicate <kbd>Ctrl+J</kbd></button>
+                  {classicWorkspace && <>
+                    <button onClick={() => { groupSelectedObjects(); setOpenMenu(null) }} disabled={selectedObjects.length < 2}>Group objects <kbd>Ctrl+G</kbd></button>
+                    <button onClick={() => { ungroupSelectedObjects(); setOpenMenu(null) }} disabled={!selectedObjects.some((layer) => layer.objectGroupId)}>Ungroup objects <kbd>Ctrl+Shift+G</kbd></button>
+                  </>}
                   <button onClick={handleLayerDelete} disabled={layers.length <= 1}>Delete</button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={() => { addLayerMaskFromSelection(); setOpenMenu(null) }} disabled={!selection}>Add layer mask</button>
                   <button onClick={() => { toggleLayerMask(); setOpenMenu(null) }} disabled={!layerMask}>{layerMask?.enabled === false ? 'Enable' : 'Disable'} layer mask</button>
                   <button onClick={() => { deleteLayerMask(); setOpenMenu(null) }} disabled={!layerMask}>Delete layer mask</button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={handleLayerMergeDown} disabled={layers.findIndex((layer) => layer.id === resolvedActiveLayerId) <= 0}>Merge Down</button>
+                  <button onClick={handleLayerMergeDown} disabled={multipleObjectsSelected || layers.findIndex((layer) => layer.id === resolvedActiveLayerId) <= 0}>Merge Down</button>
                   <button onClick={handleImageFlatten}>Flatten image</button>
                 </div>
               )}
@@ -4374,6 +4907,7 @@ export function PhotoEditor({
           ) : (
             <>
               <div className="tool-dock-shell">
+                {classicWorkspace ? <PhotoClassicToolbox groups={CLASSIC_TOOL_GROUPS} activeTool={activeTool} onSelect={selectClassicTool} /> : <>
                 {KRITA_TOOL_GROUPS.map((group) => (
                   <div key={group.heading} className="tool-group">
                     <div className="tool-group-label">{group.heading}</div>
@@ -4431,6 +4965,7 @@ export function PhotoEditor({
                     </details>
                   </div>
                 </div>
+                </>}
               </div>
 
               <div className="dock-actions" aria-label="Image source actions">
@@ -4459,6 +4994,7 @@ export function PhotoEditor({
               <p className="muted">{notice}</p>
             </div>
             <div className="canvas-controls" aria-label="Canvas controls">
+              {classicWorkspace && <button type="button" className="chip" aria-pressed={objectSnapping} title="Snap moving objects to canvas and object edges/centers. Hold Alt while dragging to bypass." onClick={() => { setObjectSnapping((value) => !value); setObjectSnapGuides([]) }}>Snap</button>}
               <button type="button" className="chip" onClick={() => setCanvasZoom((value) => clamp(value - 10, 25, 400))}>−</button>
               <span>{canvasZoom}%</span>
               <button type="button" className="chip" onClick={() => setCanvasZoom((value) => clamp(value + 10, 25, 400))}>+</button>
@@ -4494,8 +5030,9 @@ export function PhotoEditor({
                 aspectRatio: aspect.css,
                 background: canvasBackground === 'transparent' ? undefined : canvasBackground,
                 transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${canvasZoom / 100})`,
+                touchAction: classicWorkspace && (activeTool === 'select' || activeTool === 'move') ? 'none' : undefined,
                 cursor:
-                  activeTool === 'eraser' || activeTool === 'brush' ? 'none' : activeTool === 'heal' || SELECTION_TOOLS.has(activeTool)
+                  activeTool === 'pan' ? 'grab' : activeTool === 'eraser' || activeTool === 'brush' ? 'none' : activeTool === 'heal' || SELECTION_TOOLS.has(activeTool)
                     ? 'crosshair'
                     : activeTool === 'remove'
                       ? 'crosshair'
@@ -4541,6 +5078,12 @@ export function PhotoEditor({
               )}
 
               {showGrid && <div className="photo-stage-grid-overlay" aria-hidden="true" />}
+              {classicWorkspace && objectSnapGuides.map((guide) => <div
+                key={guide.axis}
+                className={`photo-object-snap-guide photo-object-snap-guide-${guide.axis}`}
+                aria-hidden="true"
+                style={guide.axis === 'x' ? { left: `${guide.position}%` } : { top: `${guide.position}%` }}
+              />)}
               {showGuides && (
                 <div className="photo-stage-guides-overlay" aria-hidden="true">
                   <span className="photo-stage-guide-vertical" />
@@ -4632,6 +5175,16 @@ export function PhotoEditor({
                 </svg>
               )}
               {busy && <div className="photo-busy" role="status"><span className="photo-busy-spinner" />{busy}</div>}
+              {classicWorkspace && !busy && (activeTool === 'select' || activeTool === 'move') && <PhotoObjectBoxSelection
+                stageRef={stageRef}
+                layers={layers}
+                selectedIds={selectedObjectIds}
+                onSelect={(ids) => {
+                  const primaryId = ids.at(-1) || ''
+                  setActiveLayerIdState(primaryId)
+                  setObjectSelection({ ids, primaryId })
+                }}
+              />}
               {(activeTool === 'eraser' || activeTool === 'brush') && brushCursor && (
                 <div className="photo-eraser-cursor" aria-hidden="true" style={{ left: `${brushCursor.x}%`, top: `${brushCursor.y}%`, width: brushSize, height: brushSize }} />
               )}
@@ -4641,7 +5194,7 @@ export function PhotoEditor({
                   key={layer.id}
                   data-layer-id={layer.id}
                   type="button"
-                  className={layer.id === resolvedActiveLayerId ? 'photo-layer active' : 'photo-layer'}
+                  className={selectedObjectIds.includes(layer.id) ? 'photo-layer active' : 'photo-layer'}
                   style={{
                     left: `${layer.x}%`,
                     top: `${layer.y}%`,
@@ -4659,7 +5212,11 @@ export function PhotoEditor({
                     } rotate(${layer.rotation || 0}deg)`,
                   }}
                   onPointerDown={(event) => beginDrag(layer, event)}
-                  onClick={() => { if (activeTool !== 'eraser') { setActiveLayerId(layer.id); setActiveTool('select') } }}
+                  onClick={(event) => {
+                    if (activeTool === 'eraser' || activeTool === 'pan') return
+                    if (classicWorkspace && selectedObjectIds.includes(layer.id) && !event.shiftKey && !event.altKey) return
+                    selectDesignObject(layer, event)
+                  }}
                 >
                   {layer.type === 'image' ? (
                     <img
@@ -4677,8 +5234,9 @@ export function PhotoEditor({
                     <span
                       style={{
                         display: 'block',
-                        width: `${(layer.width / 100) * stageDisplaySize.width}px`,
-                        height: `${(layer.height / 100) * stageDisplaySize.height}px`,
+                        width: `${(layer.width / 100) * (stageRef.current?.clientWidth || stageDisplaySize.width - 2)}px`,
+                        height: `${(layer.height / 100) * (stageRef.current?.clientHeight || stageDisplaySize.height - 2)}px`,
+                        maxWidth: 'none',
                         background: layer.filled === false ? 'transparent' : layer.color,
                         border: layer.strokeWidth > 0 ? `${layer.strokeWidth}px solid ${layer.strokeColor}` : 'none',
                         borderRadius:
@@ -4712,12 +5270,33 @@ export function PhotoEditor({
                   )}
                 </button>
               ))}
+              {classicWorkspace && !multipleObjectsSelected && !busy && activeLayer && !activeLayer.hidden && !activeLayer.locked && !activeLayer.isBaseImage && (activeTool === 'select' || activeTool === 'move') && (
+                <PhotoObjectHandles
+                  key={activeLayer.id}
+                  layer={activeLayer}
+                  stageRef={stageRef}
+                  displaySize={stageDisplaySize}
+                  canvasWidth={aspect.canvasWidth}
+                  canvasHeight={aspect.canvasHeight}
+                  zoom={canvasZoom}
+                  onPreview={updateLayer}
+                  onFinish={(patch) => {
+                    if (patch && !Object.entries(patch).some(([key, value]) => Math.abs(value - (activeLayer[key] ?? 0)) > 0.0001)) return
+                    commitHistory()
+                    if (patch) updateLayer(activeLayer.id, patch)
+                  }}
+                  onCancel={(original) => updateLayer(original.id, {
+                    width: original.width, height: original.height,
+                    fontSize: original.fontSize, rotation: original.rotation,
+                  })}
+                />
+              )}
             </div>
           </div>
 
         </div>
 
-        <aside className={`photo-sidebar photo-sidebar-right ${rightSidebarCollapsed ? 'collapsed' : ''}`}>
+        <aside className={`photo-sidebar photo-sidebar-right ${rightSidebarCollapsed ? 'collapsed' : ''} ${classicWorkspace ? `classic-inspector classic-inspector-${classicInspectorPanel}` : ''}`}>
           <div className="photo-sidebar-toolbar">
             <p className="section-label">Inspector</p>
             <button type="button" className="ghost-button" onClick={() => setRightSidebarCollapsed((prev) => !prev)}>
@@ -4731,6 +5310,23 @@ export function PhotoEditor({
             </button>
           ) : (
             <>
+          {classicWorkspace && <div className="classic-inspector-switcher" role="group" aria-label="Inspector panels">
+            {['objects', 'properties', 'canvas'].map((panel) => (
+              <button key={panel} type="button" aria-pressed={classicInspectorPanel === panel} onClick={() => setClassicInspectorPanel(panel)}>{panel[0].toUpperCase() + panel.slice(1)}</button>
+            ))}
+          </div>}
+          {classicWorkspace && selectedObjects.length > 0 && (multipleObjectsSelected || selectedObjects.some((layer) => layer.objectGroupId)) && <PhotoObjectSelectionPanel
+            objects={selectedObjects}
+            primaryId={resolvedActiveLayerId}
+            onGroup={groupSelectedObjects}
+            onUngroup={ungroupSelectedObjects}
+            onAlign={alignSelectedObjects}
+            onDistribute={distributeSelectedObjects}
+            onLock={() => setObjectsLocked(selectedObjectIds, !selectedObjects.every((layer) => layer.locked))}
+            onDuplicate={duplicateSelectedObjects}
+            onDelete={deleteSelectedObjects}
+            onClear={() => { setActiveLayerIdState(''); setObjectSelection({ ids: [], primaryId: '' }) }}
+          />}
           {schoolPractice && (
             <div className="panel-block photo-practice-guide">
               <div className="photo-practice-heading"><span>Guided practice</span><strong>{schoolPractice.title}</strong></div>
@@ -4744,17 +5340,29 @@ export function PhotoEditor({
           )}
           <div className="panel-block photo-layers-panel">
             <div className="photo-sidebar-toolbar">
-              <p className="section-label">Layers</p>
+              <p className="section-label">{classicWorkspace ? 'Objects' : 'Layers'}</p>
               <span className="muted">Top is in front · right-click for options</span>
             </div>
-            {activeLayer && (
+            {classicWorkspace && <button type="button" className="ghost-button" disabled={!activeLayer} onClick={() => setClassicInspectorPanel('properties')}>Edit selected object properties</button>}
+            {classicWorkspace && <div className="classic-object-selection-actions" role="group" aria-label="Design object selection">
+              <button type="button" className="ghost-button" onClick={() => {
+                const ids = layers.filter((layer) => !layer.hidden && !layer.isBaseImage).map((layer) => layer.id)
+                if (!ids.length) { setNotice('No visible design objects to select.'); return }
+                const primaryId = ids.at(-1)
+                setActiveLayerIdState(primaryId)
+                setObjectSelection({ ids, primaryId })
+                setActiveTool('select')
+              }}>Select all design objects</button>
+              <button type="button" className="ghost-button" onClick={() => { setActiveLayerIdState(''); setObjectSelection({ ids: [], primaryId: '' }) }}>Clear selection</button>
+            </div>}
+            {activeLayer && !multipleObjectsSelected && (
               <div className="photo-layers-props">
-                <select aria-label="Blend mode" title="Blend mode" value={activeLayer.blendMode || 'source-over'} onChange={(event) => { commitHistory(); updateLayer(activeLayer.id, { blendMode: event.target.value }) }}>
+                <select disabled={activeLayer.locked} aria-label="Blend mode" title="Blend mode" value={activeLayer.blendMode || 'source-over'} onChange={(event) => { commitHistory(); updateLayer(activeLayer.id, { blendMode: event.target.value }) }}>
                   {Object.entries(BLEND_MODES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                 </select>
                 <label>
                   <span>Opacity</span>
-                  <input type="number" min="0" max="100" value={activeLayer.opacity ?? 100} onFocus={commitHistory} onChange={(event) => updateLayer(activeLayer.id, { opacity: clamp(Number(event.target.value) || 0, 0, 100) })} />
+                  <input disabled={activeLayer.locked} type="number" min="0" max="100" value={activeLayer.opacity ?? 100} onFocus={commitHistory} onChange={(event) => updateLayer(activeLayer.id, { opacity: clamp(Number(event.target.value) || 0, 0, 100) })} />
                 </label>
               </div>
             )}
@@ -4762,18 +5370,21 @@ export function PhotoEditor({
               {[...layers].reverse().map((layer) => (
                 <li
                   key={`manage-${layer.id}`}
-                  className={`${layer.id === resolvedActiveLayerId ? 'active' : ''} ${layer.hidden ? 'is-hidden' : ''}`}
-                  onClick={() => { setActiveLayerId(layer.id); setActiveTool('select') }}
-                  onDoubleClick={() => setRenamingLayerId(layer.id)}
+                  className={`${selectedObjectIds.includes(layer.id) ? 'active' : ''} ${layer.hidden ? 'is-hidden' : ''}`}
+                  onClick={(event) => selectDesignObject(layer, event)}
+                  onDoubleClick={() => { if (layer.locked) setNotice('Unlock the object before renaming it.'); else setRenamingLayerId(layer.id) }}
                   onContextMenu={(event) => {
                     event.preventDefault()
-                    setActiveLayerId(layer.id)
+                    selectDesignObject(layer, event)
                     setLayerMenu({ x: event.clientX, y: event.clientY, layerId: layer.id })
                   }}
                 >
                   <button type="button" className="photo-layer-eye" title={layer.hidden ? 'Show layer' : 'Hide layer'} aria-label={layer.hidden ? `Show ${layer.label}` : `Hide ${layer.label}`} onClick={(event) => { event.stopPropagation(); toggleLayerVisibility(layer.id) }}>
                     {layer.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
+                  {!layer.isBaseImage && (classicWorkspace || layer.locked) && <button type="button" className="photo-object-lock" aria-label={`${layer.locked ? 'Unlock' : 'Lock'} ${layer.label}`} title={layer.locked ? 'Unlock object' : 'Lock object'} onClick={(event) => { event.stopPropagation(); setObjectsLocked([layer.id], !layer.locked) }}>
+                    {layer.locked ? <Lock size={13} aria-hidden="true" /> : <Unlock size={13} aria-hidden="true" />}
+                  </button>}
                   <span className="photo-layer-thumb" aria-hidden="true">
                     {layer.type === 'image' ? <img src={layer.src} alt="" /> : layer.type === 'shape' ? <span style={{ background: layer.color, borderRadius: layer.shape === 'ellipse' ? '50%' : 3 }} /> : layer.type === 'sticker' ? layer.value : <strong style={{ color: normalizeColorInputValue(layer.color, '#0f172a') }}>T</strong>}
                   </span>
@@ -4797,7 +5408,7 @@ export function PhotoEditor({
                       }}
                     />
                   ) : (
-                    <span className="photo-layer-name" title="Double-click to rename">{layer.label}</span>
+                    classicWorkspace ? <button type="button" className="photo-layer-name classic-object-select" aria-pressed={selectedObjectIds.includes(layer.id)} onClick={(event) => { event.stopPropagation(); selectDesignObject(layer, event) }} title="Select object; Shift adds/removes; Alt selects one group member; double-click to rename">{layer.label}{layer.objectGroupId && <small className="classic-object-group-badge"> Group</small>}</button> : <span className="photo-layer-name" title="Double-click to rename">{layer.label}</span>
                   )}
                   {layer.blendMode && layer.blendMode !== 'source-over' && <small className="photo-layer-blend">{BLEND_MODES[layer.blendMode]}</small>}
                 </li>
@@ -4824,7 +5435,24 @@ export function PhotoEditor({
             </div>
           </div>
 
-          <div className="panel-block">
+          {classicWorkspace && !multipleObjectsSelected && <PhotoObjectProperties
+            key={resolvedActiveLayerId}
+            layer={activeLayer}
+            canvasWidth={aspect.canvasWidth}
+            canvasHeight={aspect.canvasHeight}
+            onCommit={(patch) => {
+              if (activeLayer?.locked) { setNotice('Unlock the object before editing it.'); return }
+              if (!activeLayer || !Object.entries(patch).some(([key, value]) => activeLayer[key] !== value)) return
+              commitHistory()
+              updateLayer(activeLayer.id, patch)
+            }}
+            onError={setNotice}
+            onDuplicate={() => activeLayer && duplicateLayer(activeLayer.id)}
+            onDelete={() => activeLayer && deleteLayer(activeLayer.id)}
+            onAlign={alignActiveObject}
+            onUnlock={() => activeLayer && setObjectsLocked([activeLayer.id], false)}
+          />}
+          <div className={`panel-block photo-detailed-properties ${multipleObjectsSelected ? 'multiple-objects-selected' : ''}`}>
             <p className="section-label">Inspector</p>
             <label>
               Aspect ratio
@@ -4851,7 +5479,7 @@ export function PhotoEditor({
               <select
                 value={activeTextLayer?.effect ?? 'none'}
                 onChange={(event) => updateTextEffect({ effect: event.target.value })}
-                disabled={!activeTextLayer}
+                disabled={!activeTextLayer || activeTextLayer.locked}
               >
                 {Object.entries(TEXT_EFFECTS).map(([key, value]) => (
                   <option key={key} value={key}>{value}</option>
@@ -4860,11 +5488,12 @@ export function PhotoEditor({
             </label>
             {layers.map((layer) =>
               layer.id === resolvedActiveLayerId ? (
-                <div key={layer.id} className="layer-inspector">
+                <fieldset key={layer.id} className="layer-inspector" disabled={layer.locked}>
                   <label>
                     Content
                     <input
                       value={layer.value ?? layer.label ?? ''}
+                      onFocus={commitHistory}
                       onChange={(event) => updateLayer(layer.id, { value: event.target.value })}
                     />
                   </label>
@@ -4876,6 +5505,7 @@ export function PhotoEditor({
                         min="16"
                         max="96"
                         value={layer.fontSize}
+                        onPointerDown={commitHistory}
                         onChange={(event) => updateLayer(layer.id, { fontSize: Number(event.target.value) })}
                       />
                     </label>
@@ -5085,11 +5715,12 @@ export function PhotoEditor({
                   <button type="button" className="ghost-button full-width" onClick={() => deleteLayer(layer.id)}>
                     Remove layer
                   </button>
-                </div>
+                </fieldset>
               ) : null,
             )}
           </div>
 
+          <div className="photo-canvas-properties">
           <div className="panel-block">
             <div className="photo-sidebar-toolbar">
               <p className="section-label">Adjustments</p>
@@ -5239,6 +5870,7 @@ export function PhotoEditor({
               <small>Preset: {preset.label}</small>
             </div>
           </div>
+          </div>
             </>
           )}
         </aside>
@@ -5271,7 +5903,8 @@ export function PhotoEditor({
             ) : menuLayer ? (
               <>
                 <button type="button" role="menuitem" onClick={() => runMenuAction(() => duplicateLayer(menuLayer.id))}>Duplicate layer <kbd>Ctrl+J</kbd></button>
-                <button type="button" role="menuitem" onClick={() => runMenuAction(() => setRenamingLayerId(menuLayer.id))}>Rename layer…</button>
+                <button type="button" role="menuitem" disabled={menuLayer.locked} onClick={() => runMenuAction(() => setRenamingLayerId(menuLayer.id))}>Rename layer…</button>
+                {!menuLayer.isBaseImage && <button type="button" role="menuitem" onClick={() => runMenuAction(() => setObjectsLocked([menuLayer.id], !menuLayer.locked))}>{menuLayer.locked ? 'Unlock object' : 'Lock object'}</button>}
                 <button type="button" role="menuitem" onClick={() => runMenuAction(() => toggleLayerVisibility(menuLayer.id))}>{menuLayer.hidden ? 'Show' : 'Hide'} layer</button>
                 <hr />
                 <button type="button" role="menuitem" onClick={() => runMenuAction(() => moveLayerOrder(menuLayer.id, 1))}>Bring forward</button>

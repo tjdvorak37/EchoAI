@@ -1,0 +1,18 @@
+.photo-object-properties h3 { margin: 0; font-size: .9rem; }
+.photo-object-edit-fields { display: grid; gap: .65rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.photo-object-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+.photo-object-fields label { display: grid; gap: .3rem; font-size: .7rem; }
+.photo-object-fields input { width: 100%; box-sizing: border-box; min-height: 32px; }
+.photo-object-position-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.photo-object-position-actions button {
+  min-height: 32px;
+  padding: .35rem .5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #334155;
+  background: #fff;
+  font-size: .7rem;
+  cursor: pointer;
+}
+.photo-object-position-actions button:hover { background: #ede9fe; }
+.photo-object-position-actions button:focus-visible { outline: 2px solid #7137e8; outline-offset: 2px; }
