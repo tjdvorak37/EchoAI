@@ -146,13 +146,17 @@ Chromium browser).
 Classic uses a compact desktop hierarchy: menu row, command toolbar, page setup,
 then active-tool options. Desktop toolbox buttons are 30 px high with 17 px
 icons, toolbar controls are 26–28 px high, and touch devices retain larger targets.
-Simple and the shared landing page retain their existing layout.
+Document-wide commands stay separate from active-tool options, and blank-page
+upload/stock shortcuts sit outside the artwork. Simple and the shared landing
+page retain their existing layout.
 
 Page setup and Custom size creation support pixels, inches, and millimeters with
 an explicit 36–1200 PPI resolution. New Print/Docs presets default to 300 PPI;
 existing projects without measurement metadata remain pixel documents at 96 PPI.
 Physical dimensions convert to whole pixels; page dimensions must resolve to
-40–8192 pixels per side. Unit switches preserve pixel dimensions. Applying a
+40–8192 pixels per side. Unit switches immediately update rulers and object
+properties without resizing the artwork or applying unfinished size/resolution
+edits. Size and resolution changes still require Apply page setup. Applying a
 different resolution while using physical units changes the output pixel size;
 in pixel units, resolution changes physical interpretation without resampling.
 Page setup changes are undoable and saved through autosave/project save/open.

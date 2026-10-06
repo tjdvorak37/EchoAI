@@ -3961,6 +3961,13 @@ export function PhotoEditor({
     setMeasurements(settings)
     setNotice(`Page setup applied: ${width} × ${height} px at ${settings.ppi} PPI. Existing objects keep their relative positions and sizes.`)
   }
+  const changeDocumentUnit = (unit) => {
+    if (unit === measurements.unit) return
+    const next = validatePhotoMeasurements({ ...measurements, unit })
+    commitHistory()
+    setMeasurements(next)
+    setNotice(`Document units changed to ${unit}. Rulers and object properties updated; artwork pixel dimensions are unchanged.`)
+  }
 
   const applyPhotoTemplate = (template) => {
     resetDocument(`${template.title} template loaded.`)
@@ -4602,6 +4609,7 @@ export function PhotoEditor({
         importImageFile(event.dataTransfer.files?.[0])
       }}
     >
+      <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleUpload} hidden />
       <header className="photo-creator-header photo-editor-topbar">
         <div className="photo-topbar-left">
           <button type="button" className="photo-topbar-text" onClick={() => { commitSave(); setWorkspaceView('home') }}>Cancel</button>
@@ -4616,6 +4624,17 @@ export function PhotoEditor({
         </div>
         <div className="photo-topbar-title"><strong>{headline || prompt || 'Untitled design'}</strong><span>{aspect.canvasWidth} × {aspect.canvasHeight}px</span></div>
         <div className="photo-topbar-actions">
+          {classicWorkspace && <div className="photo-classic-command-actions" role="group" aria-label="Document commands">
+            {[
+              ['Library', Images, useLibraryImage, 'Use an image from the library'],
+              ['Remove background', Wand, removeBackground, 'Select the subject and mask its background'],
+              ['Hue/Sat', SlidersHorizontal, openHueSat, 'Hue/Saturation (Ctrl+U)'],
+              ['Clear image', Eraser, clearBaseImage, 'Clear the original photo'],
+              ['New canvas', Plus, resetEditor, 'Reset to a new canvas'],
+              ['Keyboard shortcuts', Keyboard, () => setShortcutsOpen(true), 'Keyboard shortcuts (?)'],
+            ].map(([label, Icon, action, title]) => <button key={label} type="button" className="photo-topbar-icon" aria-label={label} title={title} onClick={action}><Icon size={17} aria-hidden="true" /></button>)}
+            <button type="button" className="photo-topbar-icon" aria-label={compactMode ? 'Comfortable' : 'Compact'} title={compactMode ? 'Comfortable workspace spacing' : 'Compact workspace spacing'} aria-pressed={compactMode} onClick={() => setCompactMode((value) => !value)}><PanelsTopLeft size={17} aria-hidden="true" /></button>
+          </div>}
           <span className={`photo-save-status ${saveStatus.toLowerCase()}`}>{saveStatus}</span>
           <button type="button" className="photo-topbar-icon" onClick={exportCanvas} title={`Download ${EXPORT_FORMATS[exportFormat]?.label ?? 'PNG'}`} aria-label="Download design"><Download size={19} /></button>
           <button type="button" className="photo-create-design-button" onClick={() => { setWorkspaceView('home'); setCreateDialogOpen(true) }}><Plus size={17} /> Create design</button>
@@ -4627,9 +4646,9 @@ export function PhotoEditor({
       <div ref={setMenuHost} className={`editor-menu-host ${legacyToolsVisible ? 'legacy-menu-visible' : ''}`} />
 
       {classicWorkspace && <PhotoPageSetup
-        key={`${aspect.canvasWidth}-${aspect.canvasHeight}-${measurements.unit}-${measurements.ppi}`}
+        key={`${aspect.canvasWidth}-${aspect.canvasHeight}-${measurements.ppi}`}
         width={aspect.canvasWidth} height={aspect.canvasHeight} settings={measurements}
-        onApply={applyPageSetup} onError={setNotice}
+        onApply={applyPageSetup} onUnitChange={changeDocumentUnit} onError={setNotice}
       />}
       <div className="editor-options-bar" aria-label="Tool options">
         <div className="option-group">
@@ -4718,7 +4737,7 @@ export function PhotoEditor({
           )}
         </div>
 
-        <div className="option-group editor-actions">
+        {!classicWorkspace && <div className="option-group editor-actions">
           <button type="button" onClick={removeBackground} title="Select the subject and hide the background with a layer mask">Remove background</button>
           <button type="button" onClick={openHueSat} title="Hue/Saturation (Ctrl+U)"><SlidersHorizontal size={13} aria-hidden="true" /> Hue/Sat</button>
           <button type="button" onClick={useLibraryImage}>Library</button>
@@ -4728,7 +4747,7 @@ export function PhotoEditor({
             {compactMode ? 'Comfortable' : 'Compact'}
           </button>
           <button type="button" onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><Keyboard size={14} aria-hidden="true" /></button>
-        </div>
+        </div>}
       </div>
 
       <div className={`photo-creator-grid modern-editor ${classicWorkspace ? 'classic-editor' : ''} ${compactMode ? 'compact' : ''} ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${rightSidebarCollapsed ? 'right-collapsed' : ''}`}>
@@ -4922,8 +4941,8 @@ export function PhotoEditor({
             </div>
 
             {/* Collapse button */}
-            <button type="button" className="menu-item-compact menu-tools-toggle" title="Collapse tools" onClick={() => setLeftSidebarCollapsed((prev) => !prev)}>
-              Hide tools
+            <button type="button" className="menu-item-compact menu-tools-toggle" title={leftSidebarCollapsed ? 'Expand tools' : 'Collapse tools'} onClick={() => setLeftSidebarCollapsed((prev) => !prev)}>
+              {leftSidebarCollapsed ? 'Show tools' : 'Hide tools'}
             </button>
           </div>, menuHost)}
 
@@ -5000,11 +5019,10 @@ export function PhotoEditor({
               </div>
 
               <div className="dock-actions" aria-label="Image source actions">
-                <label className="photo-upload-chip compact-upload">
+                <button type="button" className="photo-upload-chip compact-upload" title="Upload an image" onClick={() => uploadInputRef.current?.click()}>
                   <Upload size={17} aria-hidden="true" />
                   <span>Upload</span>
-                  <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleUpload} />
-                </label>
+                </button>
                 <button type="button" className="photo-upload-chip compact-upload photo-stock-chip" onClick={() => setStockLibraryOpen(true)} title="Free stock photos, illustrations, and vectors">
                   <Images size={17} aria-hidden="true" />
                   <span>Stock images</span>
@@ -5022,7 +5040,7 @@ export function PhotoEditor({
             </div>
             <div className="stage-status">
               <span className="status-pill">{activeTool.toUpperCase()}</span>
-              <p className="muted">{notice}</p>
+              <p className="muted" title={notice} role="status">{notice}</p>
             </div>
             <div className="canvas-controls" aria-label="Canvas controls">
               {classicWorkspace && <button type="button" className="chip" aria-pressed={objectSnapping} title="Snap moving objects to canvas and object edges/centers. Hold Alt while dragging to bypass." onClick={() => { setObjectSnapping((value) => !value); setObjectSnapGuides([]) }}>Snap</button>}
@@ -5090,7 +5108,7 @@ export function PhotoEditor({
                     }}
                   />
                 ) : null
-              ) : layers.length === 0 && brushStrokes.length === 0 ? (
+              ) : !classicWorkspace && layers.length === 0 && brushStrokes.length === 0 ? (
                 <div className="photo-stage-empty photo-stage-onboarding">
                   <p className="small-title">Start with your own media</p>
                   <ol>
@@ -5325,6 +5343,11 @@ export function PhotoEditor({
             </div>
             {classicWorkspace && showRulers && <PhotoRulers stageRef={stageRef} viewportRef={stageViewportRef} width={aspect.canvasWidth} height={aspect.canvasHeight} settings={measurements} zoom={canvasZoom} pan={canvasPan} />}
           </div>
+          {classicWorkspace && !selectedImageSrc && layers.length === 0 && brushStrokes.length === 0 && <div className="photo-classic-empty-actions" role="group" aria-label="Blank page actions">
+            <span>Blank page</span>
+            <button type="button" onClick={() => uploadInputRef.current?.click()}><Upload size={14} aria-hidden="true" /> Upload a photo</button>
+            <button type="button" onClick={() => setStockLibraryOpen(true)}><Images size={14} aria-hidden="true" /> Browse stock images</button>
+          </div>}
 
         </div>
 

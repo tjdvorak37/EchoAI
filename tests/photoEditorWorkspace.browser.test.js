@@ -82,11 +82,27 @@ test('photo editor workspace switching', async (t) => {
     assert.equal((await page.getByRole('button', { name: 'Save', exact: true }).boundingBox()).height, 28)
     assert.equal((await page.getByRole('button', { name: 'Select all design objects', exact: true }).boundingBox()).height, 28)
     assert.equal((await page.getByRole('button', { name: /Focus on editing/ }).boundingBox()).height, 28)
+    assert.equal(await page.locator('.editor-focus-button').evaluate((button) => {
+      const outer = button.getBoundingClientRect()
+      const inner = button.querySelector('.editor-focus-button-inner').getBoundingClientRect()
+      return inner.top >= outer.top && inner.bottom <= outer.bottom && inner.left >= outer.left && inner.right <= outer.right
+    }), true, 'Focus button content fits without clipping')
+    assert.equal(await page.getByRole('group', { name: 'Document commands', exact: true }).isVisible(), true)
+    assert.equal(await page.locator('.editor-options-bar .editor-actions').count(), 0)
+    await page.getByRole('button', { name: /Focus on editing/ }).click()
+    assert.equal(await page.getByRole('button', { name: /Restore site/ }).getAttribute('aria-pressed'), 'true')
+    assert.equal(await page.locator('.editor-focus-button').evaluate((button) => {
+      const outer = button.getBoundingClientRect()
+      const inner = button.querySelector('.editor-focus-button-inner').getBoundingClientRect()
+      return inner.top >= outer.top && inner.bottom <= outer.bottom
+    }), true)
+    await page.getByRole('button', { name: /Restore site/ }).click()
     const viewport = await page.locator('.photo-stage-wrap').boundingBox()
     assert.ok(viewport.width > 800, 'compact toolbox and dock leave most width to the drawing workspace')
     await toggle.getByRole('button', { name: 'Simple', exact: true }).click()
     assert.equal(await page.getByRole('form', { name: 'Page setup', exact: true }).count(), 0)
     assert.equal(await page.locator('.photo-document-rulers').count(), 0)
+    await page.waitForFunction((height) => document.querySelector('.photo-save-button').getBoundingClientRect().height === height, simpleSave.height)
     assert.equal((await page.getByRole('button', { name: 'Save', exact: true }).boundingBox()).height, simpleSave.height)
     for (const width of [800, 375]) {
       await page.setViewportSize({ width, height: 1000 })
@@ -199,6 +215,102 @@ test('photo editor workspace switching', async (t) => {
     await page.getByRole('button', { name: /Rulers/ }).click()
     assert.equal(await page.locator('.photo-document-rulers').count(), 0)
     assert.deepEqual(errors, [])
+  })
+
+  await t.test('document unit switches immediately without applying pending page edits and survives undo and reload', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => { window.__usePhotoAutosave = true })
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const setup = page.getByRole('form', { name: 'Page setup', exact: true })
+    await setup.getByLabel('Document units').selectOption('in')
+    await setup.getByLabel('Page width', { exact: true }).fill('8.5')
+    await setup.getByLabel('Page height', { exact: true }).fill('11')
+    await setup.getByLabel('Resolution (PPI)', { exact: true }).fill('300')
+    await setup.getByRole('button', { name: 'Apply page setup', exact: true }).click()
+    await page.getByLabel('Document rulers in in', { exact: true }).waitFor()
+    const position = Number(await page.getByLabel('Tool Position X (in)', { exact: true }).inputValue())
+    const inchLabels = await page.locator('.photo-document-rulers text').allTextContents()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.canvasSize?.width === 2550)
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document)
+    await setup.getByLabel('Page width', { exact: true }).fill('9')
+    await setup.getByLabel('Resolution (PPI)', { exact: true }).fill('150')
+    await setup.getByLabel('Document units').selectOption('mm')
+    await page.getByLabel('Document rulers in mm', { exact: true }).waitFor()
+    assert.notDeepEqual(await page.locator('.photo-document-rulers text').allTextContents(), inchLabels)
+    assert.ok(Math.abs(Number(await page.getByLabel('Tool Position X (mm)', { exact: true }).inputValue()) - position * 25.4) < .0002)
+    await page.getByRole('button', { name: 'Properties', exact: true }).click()
+    assert.ok(Math.abs(Number(await page.getByLabel('Position X (mm)', { exact: true }).inputValue()) - position * 25.4) < .0002)
+    assert.equal(Number(await setup.getByLabel('Page width', { exact: true }).inputValue()), 228.6)
+    assert.equal(await setup.getByLabel('Resolution (PPI)', { exact: true }).inputValue(), '150')
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.measurements.unit === 'mm')
+    const after = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document)
+    assert.deepEqual(after.canvasSize, before.canvasSize)
+    assert.deepEqual(after.layers, before.layers)
+    assert.deepEqual(after.measurements, { unit: 'mm', ppi: 300 })
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.getByLabel('Document rulers in in', { exact: true }).waitFor()
+    assert.equal(Number(await setup.getByLabel('Page width', { exact: true }).inputValue()), 9)
+    assert.equal(await setup.getByLabel('Resolution (PPI)', { exact: true }).inputValue(), '150')
+    await page.getByRole('button', { name: 'Redo', exact: true }).click()
+    await page.getByLabel('Document rulers in mm', { exact: true }).waitFor()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.measurements.unit === 'mm')
+    await page.reload()
+    await page.getByLabel('Document rulers in mm', { exact: true }).waitFor()
+    assert.equal(Number(await setup.getByLabel('Page width', { exact: true }).inputValue()), 215.9)
+    assert.equal(await setup.getByLabel('Resolution (PPI)', { exact: true }).inputValue(), '300')
+    await setup.getByLabel('Page width', { exact: true }).fill('')
+    await setup.getByLabel('Document units').selectOption('px')
+    assert.equal(await setup.getByLabel('Document units').inputValue(), 'mm')
+    assert.equal(await page.getByText('Enter a positive page width and height.', { exact: true }).isVisible(), true)
+    await setup.getByLabel('Page width', { exact: true }).fill('215.9')
+    await setup.getByLabel('Document units').selectOption('px')
+    await page.getByLabel('Document rulers in px', { exact: true }).waitFor()
+    assert.equal(await setup.getByLabel('Page width', { exact: true }).inputValue(), '2550')
+  })
+
+  await t.test('Classic blank workspace keeps artwork clear and commands contained at desktop and narrow sizes', async (t) => {
+    const context = await browser.newContext()
+    t.after(() => context.close())
+    for (const viewport of [{ width: 1615, height: 736 }, { width: 1440, height: 1000 }, { width: 800, height: 1000 }, { width: 375, height: 812 }]) {
+      const page = await context.newPage()
+      await page.setViewportSize(viewport)
+      await page.addInitScript(() => { window.__photoTestLayers = [] })
+      await page.goto(url)
+      await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+      await page.getByRole('button', { name: 'New canvas', exact: true }).click()
+      await page.getByRole('group', { name: 'Blank page actions', exact: true }).waitFor()
+      assert.equal(await page.locator('.photo-stage .photo-stage-onboarding').count(), 0)
+      assert.equal(await page.locator('.photo-sidebar-left > .photo-sidebar-toolbar').isVisible(), false)
+      const layout = await page.evaluate(() => {
+        const shell = document.querySelector('.photo-classic-editor-shell').getBoundingClientRect()
+        const buttons = [...document.querySelectorAll('.photo-editor-topbar button')]
+        const headings = [...document.querySelectorAll('.photo-sidebar-right .section-label')]
+        return {
+          buttonsFit: buttons.filter((button) => button.getBoundingClientRect().width > 0).every((button) => {
+            const rect = button.getBoundingClientRect()
+            return rect.left >= shell.left && rect.right <= shell.right
+          }),
+          headingsFit: headings.every((heading) => heading.scrollWidth <= heading.clientWidth),
+        }
+      })
+      assert.equal(layout.buttonsFit, true, `Toolbar overflows at ${viewport.width}px`)
+      assert.equal(layout.headingsFit, true, `Inspector headings overflow at ${viewport.width}px`)
+      if (viewport.width === 1615) await page.screenshot({ path: '/home/codespace/.copilot/session-state/b4bb868c-9596-4d47-a3d5-eac962444037/files/classic-layout-corrections.png', fullPage: true })
+      await page.getByRole('button', { name: 'Hide tools', exact: true }).click()
+      const [chooser] = await Promise.all([
+        page.waitForEvent('filechooser'),
+        page.getByRole('button', { name: 'Upload a photo', exact: true }).click(),
+      ])
+      assert.equal(chooser.isMultiple(), false)
+      await page.getByRole('button', { name: 'Show tools', exact: true }).click()
+      assert.equal(await page.getByRole('group', { name: 'Classic toolbox', exact: true }).isVisible(), true)
+      await page.getByRole('button', { name: 'Browse stock images', exact: true }).click()
+      await page.getByRole('dialog', { name: 'Stock library', exact: true }).waitFor()
+      await page.close()
+    }
   })
 
   await t.test('switches existing tools without resetting document, selection, or history', async (t) => {
