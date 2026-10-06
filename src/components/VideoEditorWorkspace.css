@@ -1,0 +1,502 @@
+/* Scoped workspace chrome leaves media rendering and other editors untouched. */
+.video-editor {
+  --video-border: #d7e1f1;
+  --video-ink: #172033;
+  --video-muted: #64748b;
+  --video-accent: #7137e8;
+  font-family: inherit;
+  color: var(--video-ink);
+  background: linear-gradient(145deg, #f4f8ff, #fff8fc);
+}
+
+.video-editor .video-editor-intro {
+  flex-wrap: wrap;
+  padding: 8px;
+  border: 1px solid var(--video-border);
+  background: #fff;
+}
+
+.video-editor .video-editor-intro .small-title {
+  color: var(--video-ink);
+  font-size: 13px;
+}
+
+.video-editor .video-editor-intro .panel-note,
+.video-editor .muted,
+.video-editor .video-brief-bar span {
+  color: var(--video-muted);
+  font-size: 12px;
+}
+
+.video-editor .video-document-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.video-editor .editor-toolbar {
+  gap: 6px;
+  padding: 6px 8px;
+  border-color: var(--video-border);
+  background: #fff;
+}
+
+.video-editor .toolbar-buttons,
+.video-editor .toolbar-groups {
+  gap: 4px;
+  min-width: 0;
+}
+
+.video-editor .toolbar-buttons {
+  width: 100%;
+}
+
+.video-editor .toolbar-groups {
+  padding-top: 6px;
+  border-top: 1px solid var(--video-border);
+}
+
+.video-editor :is(.toolbar-btn, .toolbar-group-btn, .tool-button, .rec-btn, .add-track-btn) {
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 1px solid var(--video-border);
+  border-radius: 4px;
+  color: #334155;
+  background: #fff;
+  font-size: 12px;
+  line-height: 18px;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+
+.video-editor :is(.toolbar-btn, .toolbar-group-btn, .tool-button, .rec-btn, .add-track-btn):hover:not(:disabled) {
+  color: #6d28d9;
+  border-color: #a78bfa;
+  background: #f3e8ff;
+  transform: none;
+}
+
+.video-editor :is(.toolbar-btn, .toolbar-group-btn, .tool-button).active,
+.video-editor .properties-tabs button.active {
+  color: #fff;
+  border-color: var(--video-accent);
+  background: var(--video-accent);
+  box-shadow: none;
+}
+
+.video-editor :is(.toolbar-btn, .toolbar-group-btn, .tool-button).active:hover:not(:disabled) {
+  color: #fff;
+  background: #6026cc;
+  border-color: #6026cc;
+}
+
+.video-editor .toolbar-history-btn {
+  width: 28px;
+  flex-basis: 28px;
+  padding: 3px;
+}
+
+.video-editor .toolbar-btn-export,
+.video-editor .editor-footer .primary-button {
+  margin-left: 0;
+  color: #fff;
+  background: var(--video-accent);
+  border-color: var(--video-accent);
+  box-shadow: none;
+}
+
+.video-editor .toolbar-btn-export:hover:not(:disabled),
+.video-editor .editor-footer .primary-button:hover:not(:disabled) {
+  color: #fff;
+  background: #6026cc;
+  border-color: #6026cc;
+  box-shadow: none;
+  transform: none;
+}
+
+.video-editor .editor-focus-button {
+  display: inline-flex;
+  align-items: stretch;
+  height: 28px;
+  min-height: 28px;
+  padding: 2px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+}
+
+.video-editor .editor-focus-button-inner {
+  box-sizing: border-box;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.video-editor .editor-fullscreen-button {
+  height: 28px;
+  min-height: 28px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.video-editor .screen-record-bar,
+.video-editor .video-brief-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+  border-color: var(--video-border);
+  background: #f8fafc;
+}
+
+.video-editor .rec-title {
+  color: #1d4ed8;
+  font-size: 11px;
+}
+
+.video-editor .time-display {
+  min-width: 90px;
+  color: #334155;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-editor .zoom-slider {
+  width: 90px;
+}
+
+.video-editor .video-editor-status {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+.video-editor .editor-layout {
+  grid-template-columns: 240px minmax(0, 1fr) 272px;
+}
+
+.video-editor :is(.editor-panel, .editor-properties) {
+  min-width: 0;
+  padding: 8px;
+  gap: 8px;
+  border-color: var(--video-border);
+  background: #fff;
+}
+
+.video-editor .tool-panel {
+  min-width: 0;
+  gap: 8px;
+}
+
+.video-editor label.tool-item {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.video-editor label.tool-item input:not([type='range']) {
+  width: 100%;
+}
+
+.video-editor :is(.tool-panel h3, .properties-heading h3) {
+  color: var(--video-ink);
+  font-size: 13px;
+}
+
+.video-editor :is(.properties-heading span, .video-media-item small, .video-direct-upload span,
+  .prop-section, .prop-grid label, .prop-section label, .property-toggle, .video-generation-label) {
+  color: #475569;
+  font-size: 12px;
+}
+
+.video-editor :is(.properties-stack, .prop-grid) {
+  gap: 8px;
+}
+
+.video-editor .properties-tabs {
+  gap: 4px;
+  border: 0;
+}
+
+.video-editor .properties-tabs button {
+  min-height: 28px;
+  padding: 3px;
+  border: 1px solid var(--video-border);
+  border-radius: 4px;
+  color: #334155;
+  background: #fff;
+  font-size: 11px;
+}
+
+.video-editor :is(.prop-section, .video-media-item, .video-generation-result) {
+  padding: 8px;
+  border: 1px solid var(--video-border);
+  border-radius: 4px;
+  background: #f8fafc;
+}
+
+.video-editor :is(.video-media-item, .track-name) {
+  color: var(--video-ink);
+  font-size: 12px;
+}
+
+.video-editor :is(.video-direct-upload, .video-generation-modes button, .video-generation-references button) {
+  color: #334155;
+  border-color: var(--video-border);
+  background: #f8fafc;
+}
+
+.video-editor .video-direct-upload {
+  border-color: #a78bfa;
+  background: #faf7ff;
+  font-size: 12px;
+}
+
+.video-editor :is(.video-generation-modes button, .video-generation-references button).active {
+  color: #6d28d9;
+  border-color: #a78bfa;
+  background: #f3e8ff;
+}
+
+.video-editor :is(.editor-panel, .editor-properties) :is(input:not([type='range']):not([type='checkbox']), select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: var(--video-ink);
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.video-editor :is(.editor-panel, .editor-properties) :is(input:not([type='range']):not([type='checkbox']), select) {
+  min-height: 28px;
+  padding: 3px 6px;
+}
+
+.video-editor input[type='range'],
+.video-editor input[type='checkbox'] {
+  accent-color: var(--video-accent);
+}
+
+.video-editor :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid #8b5cf6;
+  outline-offset: 2px;
+}
+
+.video-editor .preview-area {
+  min-height: 360px;
+  padding: 12px;
+  background: #eef3fb;
+  border-color: var(--video-border);
+}
+
+.video-editor .preview-stage-shell {
+  border-radius: 4px;
+  box-shadow: 3px 3px 0 #0f172a26;
+}
+
+.video-editor .preview-stage-toolbar {
+  inset: 6px 8px auto;
+  color: #475569;
+  font-size: 11px;
+}
+
+.video-editor .preview-stage-toolbar span {
+  max-width: 40%;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: #ffffffdb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-editor .preview-controls {
+  top: 6px;
+  padding: 2px;
+  border-color: var(--video-border);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 2px 6px #0f172a26;
+}
+
+.video-editor .preview-controls button {
+  color: #334155;
+}
+
+.video-editor .preview-controls button:hover {
+  color: #6d28d9;
+  background: #f3e8ff;
+}
+
+.video-editor .preview-placeholder {
+  padding: 40px 12px 12px;
+  color: #64748b;
+}
+
+.video-editor .preview-placeholder p {
+  color: var(--video-ink);
+}
+
+.video-editor .preview-empty-icon {
+  width: 44px;
+  height: 44px;
+  border-color: #ddd6fe;
+  border-radius: 8px;
+  color: #7137e8;
+  background: #f3e8ff;
+  box-shadow: none;
+}
+
+.video-editor .preview-generate-button {
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  background: var(--video-accent);
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.video-editor .track-header {
+  padding: 6px;
+  gap: 4px;
+  background: #f8fafc;
+}
+
+.video-editor .track-btn {
+  color: #475569;
+  border-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.video-editor .track-btn:hover {
+  color: #6d28d9;
+  background: #f3e8ff;
+}
+
+.video-editor .timeline-header {
+  background: #f8fafc;
+}
+
+.video-editor .timeline-tick {
+  color: #475569;
+  border-color: var(--video-border);
+  font-size: 11px;
+}
+
+.video-editor .clip {
+  border-color: #a78bfa;
+  background: #7137e8;
+  transition: background-color .15s, box-shadow .15s;
+}
+
+.video-editor .clip.selected {
+  background: #6026cc;
+  box-shadow: 0 0 0 2px #c4b5fd;
+}
+
+.video-editor .clip-audio {
+  border-color: #5eead4;
+  background: #0f766e;
+}
+
+.video-editor .clip-audio.selected {
+  background: #115e59;
+  box-shadow: 0 0 0 2px #5eead4;
+}
+
+.video-editor .playhead {
+  background: #d97706;
+  box-shadow: none;
+}
+
+.video-editor .track-add,
+.video-editor .editor-footer {
+  gap: 6px;
+  padding: 8px;
+  border-color: var(--video-border);
+  background: #f8fafc;
+}
+
+.video-editor .editor-footer .primary-button {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+@media (min-width: 769px) and (max-width: 1200px) {
+  .video-editor .editor-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .video-editor .editor-properties {
+    display: flex;
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--video-border);
+  }
+
+  .video-editor .audio-clip-in-panel {
+    display: none;
+  }
+
+  .video-editor .audio-clip-pointer {
+    display: block;
+  }
+}
+
+@media (max-width: 900px) {
+  .video-editor :is(.toolbar-btn, .toolbar-group-btn, .tool-button, .rec-btn, .add-track-btn,
+    .properties-tabs button, .preview-generate-button, .editor-footer .primary-button,
+    .editor-focus-button, .editor-fullscreen-button) {
+    min-height: 40px;
+    height: auto;
+  }
+
+  .video-editor .toolbar-history-btn {
+    width: 40px;
+    flex-basis: 40px;
+  }
+}
+
+@media (max-width: 768px) {
+  .video-editor .video-editor-intro {
+    align-items: flex-start;
+  }
+
+  .video-editor .toolbar-buttons,
+  .video-editor .toolbar-groups {
+    flex-wrap: wrap;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+
+  .video-editor .editor-layout {
+    display: flex;
+  }
+
+  .video-editor .editor-properties {
+    display: flex;
+  }
+
+  .video-editor .preview-area {
+    min-height: 240px;
+    padding: 8px;
+  }
+
+  .video-editor .preview-stage-shell:has(.preview-placeholder) {
+    min-height: 240px;
+  }
+
+  .video-editor .screen-record-bar,
+  .video-editor .video-brief-bar {
+    flex-direction: row;
+  }
+
+  .video-editor .editor-footer {
+    gap: 8px;
+  }
+}
