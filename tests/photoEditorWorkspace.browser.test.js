@@ -116,6 +116,64 @@ test('photo editor workspace switching', async (t) => {
     }
   })
 
+  await t.test('Classic Focus retains the spinning rainbow, hover and focused colors without clipping or reduced-motion animation', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    const focus = page.locator('.editor-focus-button')
+    const appearance = () => focus.evaluate((button) => {
+      const rim = getComputedStyle(button, '::before')
+      const inner = button.querySelector('.editor-focus-button-inner')
+      const content = getComputedStyle(inner)
+      const outerBounds = button.getBoundingClientRect()
+      const innerBounds = inner.getBoundingClientRect()
+      return {
+        rainbow: rim.backgroundImage, animation: rim.animationName, duration: rim.animationDuration,
+        transform: rim.transform, background: content.backgroundImage, color: content.color,
+        clipped: innerBounds.top < outerBounds.top || innerBounds.bottom > outerBounds.bottom || innerBounds.left < outerBounds.left || innerBounds.right > outerBounds.right,
+        overflow: getComputedStyle(button).overflow, height: outerBounds.height,
+      }
+    })
+    await page.mouse.move(0, 0)
+    const simple = await appearance()
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const classic = await appearance()
+    assert.equal(classic.rainbow, simple.rainbow)
+    assert.match(classic.rainbow, /conic-gradient/)
+    assert.equal(classic.animation, 'editor-focus-spin')
+    assert.equal(classic.duration, '4s')
+    assert.equal(classic.background, simple.background)
+    assert.equal(classic.color, 'rgb(255, 255, 255)')
+    assert.equal(classic.clipped, false)
+    assert.equal(classic.height, 28)
+    assert.equal(classic.overflow, 'hidden')
+    await page.waitForTimeout(150)
+    assert.notEqual((await appearance()).transform, classic.transform, 'Rainbow rim actually rotates')
+    await focus.hover()
+    const hovered = await appearance()
+    assert.equal(hovered.duration, '1.4s')
+    assert.notEqual(hovered.background, classic.background)
+    await focus.click()
+    await page.mouse.move(0, 0)
+    assert.equal(await focus.getAttribute('aria-pressed'), 'true')
+    assert.notEqual((await appearance()).background, classic.background)
+    assert.equal((await appearance()).clipped, false)
+    await focus.click()
+    await page.mouse.move(0, 0)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    assert.equal((await appearance()).animation, 'none')
+    assert.equal((await appearance()).rainbow, classic.rainbow)
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    assert.equal((await appearance()).animation, 'editor-focus-spin')
+    for (const width of [800, 375]) {
+      await page.setViewportSize({ width, height: 1000 })
+      assert.equal((await appearance()).clipped, false)
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.screenshot({ path: '/home/codespace/.copilot/session-state/b4bb868c-9596-4d47-a3d5-eac962444037/files/classic-focus-rainbow.png', fullPage: true })
+  })
+
   await t.test('print presets use 300 PPI and touch controls retain usable targets', async (t) => {
     const context = await browser.newContext({ viewport: { width: 800, height: 1100 }, hasTouch: true })
     t.after(() => context.close())
@@ -124,6 +182,12 @@ test('photo editor workspace switching', async (t) => {
     await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
     assert.equal((await page.locator('.classic-tool-primary').first().boundingBox()).height, 40)
     assert.equal((await page.getByRole('button', { name: 'Save', exact: true }).boundingBox()).height, 40)
+    assert.equal((await page.locator('.editor-focus-button').boundingBox()).height, 40)
+    assert.equal(await page.locator('.editor-focus-button').evaluate((button) => {
+      const outer = button.getBoundingClientRect()
+      const inner = button.querySelector('.editor-focus-button-inner').getBoundingClientRect()
+      return inner.top >= outer.top && inner.bottom <= outer.bottom
+    }), true)
     assert.equal((await page.getByRole('form', { name: 'Page setup', exact: true }).getByLabel('Page width', { exact: true }).boundingBox()).height, 40)
     await page.getByRole('button', { name: 'Create design', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Create a design', exact: true })

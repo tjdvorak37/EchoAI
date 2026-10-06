@@ -3102,11 +3102,8 @@
 .photo-classic-editor-shell .editor-focus-button,
 .photo-classic-editor-shell .editor-fullscreen-button { height: 28px; min-height: 28px; padding: 3px 6px; border-radius: 3px; font-size: 12px; }
 .photo-classic-editor-shell .editor-fullscreen-button { width: 28px; min-width: 28px; }
-.photo-classic-editor-shell .editor-focus-button { display: inline-flex; align-items: center; overflow: visible; border: 1px solid #cbd5e1; background: #f8fafc; }
-.photo-classic-editor-shell .editor-focus-button::before { content: none; animation: none; }
-.photo-classic-editor-shell .editor-focus-button.is-focused { border-color: #7137e8; background: #ede9fe; }
-.photo-classic-editor-shell .editor-focus-button .editor-focus-button-inner { gap: 4px; padding: 0; border-radius: 0; color: #334155; background: transparent; box-shadow: none; font-size: 12px; line-height: 18px; }
-.photo-classic-editor-shell .editor-focus-button kbd { color: inherit; border-color: #cbd5e1; }
+.photo-classic-editor-shell .editor-focus-button { display: inline-flex; align-items: stretch; padding: 2px; overflow: hidden; border: 0; border-radius: 4px; background: transparent; }
+.photo-classic-editor-shell .editor-focus-button .editor-focus-button-inner { box-sizing: border-box; align-items: center; gap: 4px; padding: 0 6px; border-radius: 2px; font-size: 12px; line-height: 18px; }
 .photo-classic-editor-shell .photo-sidebar-right .panel-block button,
 .photo-classic-editor-shell .photo-sidebar-right .photo-sidebar-toolbar button { min-height: 28px; padding: 3px 6px; border-radius: 3px; font-size: 12px; }
 .photo-classic-editor-shell .photo-sidebar-right .panel-block input:not([type='range']):not([type='checkbox']),

@@ -146,6 +146,9 @@ Chromium browser).
 Classic uses a compact desktop hierarchy: menu row, command toolbar, page setup,
 then active-tool options. Desktop toolbox buttons are 30 px high with 17 px
 icons, toolbar controls are 26–28 px high, and touch devices retain larger targets.
+Focus on editing keeps the shared rotating rainbow rim and dark pill colors in
+both workspaces, with compact sizing in Classic and no rotation when reduced
+motion is requested.
 Document-wide commands stay separate from active-tool options, and blank-page
 upload/stock shortcuts sit outside the artwork. Simple and the shared landing
 page retain their existing layout.
