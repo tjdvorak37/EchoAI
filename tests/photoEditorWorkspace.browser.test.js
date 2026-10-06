@@ -1,0 +1,1107 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { chromium } from 'playwright'
+import { createServer } from 'vite'
+
+const fixturePath = '/__photo-workspace-test'
+const fixtureModule = 'virtual:photo-workspace-fixture'
+const fixture = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0"><div id="root"></div>
+<script type="module" src="/@id/${fixtureModule}"></script></body></html>`
+const fixtureCode = `
+  import React from 'react'
+  import { createRoot } from 'react-dom/client'
+  import { PhotoEditor } from '/src/components/PhotoEditor.jsx'
+  import { parsePhotoProject } from '/src/services/photoProject.js'
+  createRoot(document.getElementById('root')).render(React.createElement(PhotoEditor, {
+    assets: [],
+    onExport: () => {},
+    initialProject: window.__usePhotoAutosave && localStorage.getItem('echoai-photo-autosave') ? parsePhotoProject(localStorage.getItem('echoai-photo-autosave')) : {
+      projectId: 'workspace-test',
+      headline: 'Workspace test',
+      aspectRatio: '1:1',
+      layers: window.__photoTestLayers || [{ id: 'original-text', type: 'text', label: 'Original text',
+        value: 'Original text', x: 20, y: 20, fontSize: 34, color: '#111111' }]
+    }
+  }))
+`
+
+test('photo editor workspace switching', async (t) => {
+  const server = await createServer({
+    server: { host: '127.0.0.1', port: 0 },
+    plugins: [{
+      name: 'photo-workspace-test-fixture',
+      resolveId(id) {
+        if (id === fixtureModule) return id
+      },
+      load(id) {
+        if (id === fixtureModule) return fixtureCode
+      },
+      configureServer(vite) {
+        vite.middlewares.use(async (req, res, next) => {
+          if (req.url !== fixturePath) return next()
+          try {
+            res.setHeader('Content-Type', 'text/html')
+            res.end(await vite.transformIndexHtml(fixturePath, fixture))
+          } catch (error) {
+            next(error)
+          }
+        })
+      },
+    }],
+  })
+  t.after(() => server.close())
+  await server.listen()
+  const browser = await chromium.launch({ headless: true })
+  t.after(() => browser.close())
+  const url = `${server.resolvedUrls.local[0].replace(/\/$/, '')}${fixturePath}`
+
+  await t.test('switches existing tools without resetting document, selection, or history', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    page.setDefaultTimeout(10000)
+    const errors = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto(url)
+    const toggle = page.getByRole('group', { name: 'Editor workspace' })
+    await toggle.locator('button[aria-pressed="true"]', { hasText: 'Simple' }).waitFor()
+    assert.equal(await page.locator('.editor-menu-host').isVisible(), false)
+    await page.getByRole('button', { name: 'Text & shapes', exact: true }).click()
+    await page.locator('.photo-modern-tools').getByRole('button', { name: /^Add text/ }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 2)
+    const saved = await page.evaluate(() => localStorage.getItem('echoai-photo-autosave'))
+    await page.getByRole('button', { name: 'Open inspector', exact: true }).click()
+    const activeLayer = await page.locator('.photo-layers-list li.active').textContent()
+    await toggle.getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.locator('.classic-editor').waitFor()
+    assert.equal(await page.locator('.editor-menu-host').isVisible(), true)
+    assert.equal(await page.locator('.editor-options-bar').isVisible(), true)
+    assert.equal(await page.locator('.tool-dock-shell').isVisible(), true)
+    assert.equal(await page.locator('.photo-layers-panel').isVisible(), true)
+    assert.equal(await page.locator('.photo-layers-list li.active').textContent(), activeLayer)
+    assert.equal(await page.evaluate(() => localStorage.getItem('echoai-photo-autosave')), saved)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 1)
+    await toggle.getByRole('button', { name: 'Simple', exact: true }).click()
+    assert.equal(await page.locator('.modern-context-heading strong').innerText(), 'Text & shapes')
+    await page.getByRole('button', { name: 'Redo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 2)
+    await toggle.getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.reload()
+    await toggle.locator('button[aria-pressed="true"]', { hasText: 'Classic' }).waitFor()
+    assert.equal(await page.locator('.tool-dock-shell').isVisible(), true)
+    await page.getByRole('button', { name: 'Close editor', exact: true }).click()
+    assert.equal(await toggle.count(), 0)
+    assert.deepEqual(errors, [])
+  })
+
+  await t.test('toggle and classic inspector stay reachable on tablet and mobile', async (t) => {
+    const context = await browser.newContext()
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    for (const width of [1280, 800, 375]) {
+      await page.setViewportSize({ width, height: 900 })
+      const toggle = page.getByRole('group', { name: 'Editor workspace' })
+      await toggle.getByRole('button', { name: 'Classic', exact: true }).click()
+      const bounds = await toggle.boundingBox()
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width, `toggle fits at ${width}px`)
+      assert.equal(await page.locator('.photo-layers-panel').isVisible(), true)
+      await page.getByRole('button', { name: 'File', exact: true }).click()
+      assert.equal(await page.getByRole('button', { name: 'Open Project', exact: true }).isVisible(), true)
+      await page.getByRole('group', { name: 'Inspector panels' }).getByRole('button', { name: 'Properties', exact: true }).click()
+      const position = page.getByLabel('Position X (px)', { exact: true })
+      await position.scrollIntoViewIfNeeded()
+      const propertyBounds = await position.boundingBox()
+      assert.ok(propertyBounds.width > 0 && propertyBounds.x >= 0 && propertyBounds.x + propertyBounds.width <= width, `position field fits at ${width}px`)
+      await page.getByRole('group', { name: 'Inspector panels' }).getByRole('button', { name: 'Objects', exact: true }).click()
+      await toggle.getByRole('button', { name: 'Simple', exact: true }).click()
+      assert.equal(await page.getByRole('button', { name: 'Open Project', exact: true }).isVisible(), false)
+    }
+  })
+
+  await t.test('unknown preferences default to Simple and keyboard changes are remembered', async (t) => {
+    const context = await browser.newContext()
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      if (!localStorage.getItem('echoai-photo-editor-workspace')) {
+        localStorage.setItem('echoai-photo-editor-workspace', 'unknown')
+      }
+    })
+    const page = await context.newPage()
+    await page.goto(url)
+    const toggle = page.getByRole('group', { name: 'Editor workspace' })
+    await toggle.locator('button[aria-pressed="true"]', { hasText: 'Simple' }).waitFor()
+    await toggle.getByRole('button', { name: 'Classic', exact: true }).focus()
+    await page.keyboard.press('Enter')
+    await toggle.locator('button[aria-pressed="true"]', { hasText: 'Classic' }).waitFor()
+    await toggle.getByRole('button', { name: 'Simple', exact: true }).click()
+    assert.equal(await page.evaluate(() => localStorage.getItem('echoai-photo-editor-workspace')), 'simple')
+    await page.reload()
+    await toggle.locator('button[aria-pressed="true"]', { hasText: 'Simple' }).waitFor()
+    assert.equal(await page.locator('.tool-dock-shell').isVisible(), false)
+  })
+
+  await t.test('classic flyouts insert editable objects and expose contextual properties', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const toolbox = page.getByRole('group', { name: 'Classic toolbox' })
+    const shapes = toolbox.getByRole('button', { name: 'Geometric shapes tools', exact: true })
+    await shapes.click()
+    const menu = page.getByRole('menu', { name: 'Geometric shapes tools', exact: true })
+    assert.equal(await menu.getByRole('menuitem').count(), 3)
+    await page.keyboard.press('ArrowDown')
+    assert.match(await page.locator(':focus').innerText(), /Add ellipse/)
+    await page.keyboard.press('Enter')
+    assert.equal(await menu.count(), 0)
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.some((layer) => layer.shape === 'ellipse'))
+    assert.equal(await toolbox.getByRole('button', { name: 'Add ellipse', exact: true }).count(), 1)
+    await toolbox.getByRole('button', { name: 'Add ellipse', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 3)
+    await toolbox.getByRole('button', { name: 'Add text', exact: true }).click()
+    await page.getByLabel('Rotation', { exact: true }).fill('45')
+    await page.getByLabel('Object opacity', { exact: true }).fill('60')
+    await page.getByLabel('Object opacity', { exact: true }).blur()
+    await page.waitForFunction(() => {
+      const layers = JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers
+      return layers?.length === 4 && layers[3].rotation === 45 && layers[3].opacity === 60
+    })
+    await toolbox.getByRole('button', { name: 'Photo selections tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Magic wand/ }).click()
+    assert.equal(await page.locator('.option-group-title').textContent(), 'Magic wand')
+    assert.equal(await page.getByLabel(/Tolerance/).count(), 1)
+    await toolbox.getByRole('button', { name: 'Crop & pixel editing tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Pixel eraser/ }).click()
+    assert.equal(await page.locator('.option-group-title').textContent(), 'Eraser')
+    assert.equal(await toolbox.getByRole('button', { name: 'Pixel eraser', exact: true }).getAttribute('aria-pressed'), 'true')
+    await page.keyboard.press('b')
+    assert.equal(await toolbox.getByRole('button', { name: 'Brush', exact: true }).getAttribute('aria-pressed'), 'true')
+  })
+
+  await t.test('flyouts dismiss safely and remain inside mobile viewport', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 375, height: 800 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const toolbox = page.getByRole('group', { name: 'Classic toolbox' })
+    const trigger = toolbox.getByRole('button', { name: 'Photo selections tools', exact: true })
+    await trigger.scrollIntoViewIfNeeded()
+    await trigger.focus()
+    await page.keyboard.press('ArrowDown')
+    const menu = page.getByRole('menu', { name: 'Photo selections tools', exact: true })
+    await menu.waitFor()
+    const bounds = await menu.boundingBox()
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 375)
+    assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 800)
+    await page.keyboard.press('End')
+    assert.match(await page.locator(':focus').innerText(), /Polygonal lasso/)
+    await page.keyboard.press('Escape')
+    assert.equal(await menu.count(), 0)
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'false')
+    assert.equal(await trigger.evaluate((element) => element === document.activeElement), true)
+    await trigger.click()
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Simple', exact: true }).click()
+    assert.equal(await menu.count(), 0)
+    assert.equal(await toolbox.count(), 0)
+  })
+
+  await t.test('pan and zoom change only the view, not document objects or history', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.waitForFunction(() => localStorage.getItem('echoai-photo-autosave'))
+    const before = await page.evaluate(() => localStorage.getItem('echoai-photo-autosave'))
+    const toolbox = page.getByRole('group', { name: 'Classic toolbox' })
+    await toolbox.getByRole('button', { name: 'Pan', exact: true }).click()
+    const stage = page.locator('.photo-stage')
+    const bounds = await stage.boundingBox()
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + bounds.width / 2 + 40, bounds.y + bounds.height / 2 + 30, { steps: 5 })
+    await page.mouse.up()
+    assert.match(await stage.getAttribute('style'), /translate\(40px, 30px\)/)
+    assert.equal(await toolbox.getByRole('button', { name: 'Pan', exact: true }).getAttribute('aria-pressed'), 'true')
+    await toolbox.getByRole('button', { name: 'Navigation tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Zoom in/ }).click()
+    assert.match(await stage.getAttribute('style'), /scale\(1.1\)/)
+    await toolbox.getByRole('button', { name: 'Zoom in', exact: true }).click()
+    assert.match(await stage.getAttribute('style'), /scale\(1.2\)/)
+    await toolbox.getByRole('button', { name: 'Navigation tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Reset view/ }).click()
+    assert.match(await stage.getAttribute('style'), /translate\(0px, 0px\) scale\(1\)/)
+    assert.equal(await page.evaluate(() => localStorage.getItem('echoai-photo-autosave')), before)
+    assert.equal(await page.getByRole('button', { name: 'Undo', exact: true }).isDisabled(), true)
+    await toolbox.getByRole('button', { name: 'Navigation tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Pan/ }).click()
+    await toolbox.getByRole('button', { name: 'Add rectangle', exact: true }).click()
+    assert.equal(await page.locator('.option-group-title').textContent(), 'Move / select')
+    assert.equal(await page.getByLabel('Object opacity', { exact: true }).isVisible(), true)
+  })
+
+  await t.test('storage failures are reported but do not prevent switching', async (t) => {
+    const context = await browser.newContext()
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      Storage.prototype.getItem = () => { throw new Error('Storage unavailable') }
+      Storage.prototype.setItem = () => { throw new Error('Storage unavailable') }
+    })
+    const page = await context.newPage()
+    await page.goto(url)
+    const toggle = page.getByRole('group', { name: 'Editor workspace' })
+    await toggle.getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.getByText('Workspace switched, but your browser could not remember the preference. Your design is unchanged.', { exact: true }).waitFor()
+    assert.equal(await page.locator('.tool-dock-shell').isVisible(), true)
+  })
+
+  await t.test('object properties apply precise geometry with undo, validation, and separate panels', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.getByRole('group', { name: 'Classic toolbox' }).getByRole('button', { name: 'Add rectangle', exact: true }).click()
+    const panels = page.getByRole('group', { name: 'Inspector panels' })
+    await page.getByRole('button', { name: 'Edit selected object properties', exact: true }).click()
+    assert.equal(await panels.getByRole('button', { name: 'Properties', exact: true }).getAttribute('aria-pressed'), 'true')
+    assert.equal(await page.locator('.photo-layers-panel').isVisible(), false)
+    const geometry = page.getByRole('region', { name: 'Object geometry' })
+    const width = geometry.getByLabel('Object width (px)', { exact: true })
+    await width.fill('480')
+    await width.press('Enter')
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1]?.width === 40)
+    const shapeWidth = await page.locator('.photo-stage .photo-layer').last().locator('span').first().evaluate((element) => element.getBoundingClientRect().width)
+    const canvasWidth = await page.locator('.photo-stage').evaluate((element) => element.clientWidth)
+    assert.ok(Math.abs(shapeWidth / canvasWidth - 0.4) < 0.005, `480px shape uses 40% of the canvas: ${shapeWidth}/${canvasWidth}`)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    assert.equal(await width.inputValue(), '360')
+    await page.getByRole('button', { name: 'Redo', exact: true }).click()
+    assert.equal(await width.inputValue(), '480')
+    const position = geometry.getByLabel('Position X (px)', { exact: true })
+    await position.fill('123.45')
+    await position.press('Enter')
+    assert.equal(await position.inputValue(), '123.45')
+    await geometry.getByLabel('Object height (px)', { exact: true }).fill('360')
+    await geometry.getByLabel('Object height (px)', { exact: true }).press('Enter')
+    await width.fill('9999')
+    await width.press('Enter')
+    assert.equal(await width.inputValue(), '480')
+    await page.getByText('Object width (px) must be between 24 and 1200.', { exact: true }).waitFor()
+    await position.fill('')
+    await position.press('Enter')
+    assert.equal(await position.inputValue(), '123.45')
+    await position.fill('200')
+    await position.press('Escape')
+    assert.equal(await position.inputValue(), '123.45')
+    await geometry.getByRole('button', { name: 'Center X anchor', exact: true }).click()
+    assert.equal(await position.inputValue(), '600')
+    await geometry.getByRole('button', { name: 'Duplicate object', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 3)
+    assert.equal(await width.inputValue(), '480')
+    await geometry.getByRole('button', { name: 'Delete object', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 2)
+    await panels.getByRole('button', { name: 'Canvas', exact: true }).click()
+    assert.equal(await page.locator('.photo-canvas-properties').isVisible(), true)
+    assert.equal(await geometry.isVisible(), false)
+    await panels.getByRole('button', { name: 'Objects', exact: true }).click()
+    await page.locator('.photo-layers-list').getByRole('button', { name: 'Original text', exact: true }).click()
+    await panels.getByRole('button', { name: 'Properties', exact: true }).click()
+    assert.equal(await geometry.getByLabel('Text size', { exact: true }).isVisible(), true)
+    assert.equal(await width.count(), 0)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Simple', exact: true }).click()
+    assert.equal(await panels.count(), 0)
+    assert.equal(await page.locator('.photo-layers-panel').isVisible(), true)
+    assert.equal(await page.locator('.photo-detailed-properties').isVisible(), true)
+    assert.equal(await page.locator('.photo-canvas-properties').isVisible(), true)
+  })
+
+  await t.test('Pick nudges in canvas pixels at different zoom levels and dragging is undoable', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const layer = page.locator('.photo-stage .photo-layer').first()
+    await layer.click()
+    assert.equal(await page.getByRole('button', { name: 'Undo', exact: true }).isDisabled(), true)
+    await layer.focus()
+    await page.keyboard.press('ArrowRight')
+    await page.waitForFunction(() => Math.abs(JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x - (20 + 100 / 1200)) < 1e-6)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x === 20)
+    const toolbox = page.getByRole('group', { name: 'Classic toolbox' })
+    await toolbox.getByRole('button', { name: 'Navigation tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Zoom in/ }).click()
+    await layer.focus()
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.waitForFunction(() => Math.abs(JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].y - (20 + 1000 / 1200)) < 1e-6)
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers[0])
+    const bounds = await layer.boundingBox()
+    await page.mouse.move(bounds.x + 10, bounds.y + 10)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + 50, bounds.y + 40, { steps: 5 })
+    await page.mouse.up()
+    await page.waitForFunction((original) => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x !== original.x, before)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction((original) => {
+      const layer = JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0]
+      return layer.x === original.x && layer.y === original.y
+    }, before)
+    await page.getByRole('group', { name: 'Inspector panels' }).getByRole('button', { name: 'Properties', exact: true }).click()
+    const position = page.getByLabel('Position X (px)', { exact: true })
+    await position.fill('12')
+    await position.press('ArrowRight')
+    assert.equal(await position.inputValue(), '12')
+    await position.press('Enter')
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x === 1)
+  })
+
+  await t.test('Objects supports keyboard selection, rename, stacking, and visibility with undo', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.getByRole('group', { name: 'Classic toolbox' }).getByRole('button', { name: 'Add rectangle', exact: true }).click()
+    const objects = page.locator('.photo-layers-panel')
+    const original = objects.getByRole('button', { name: 'Original text', exact: true })
+    await original.focus()
+    await page.keyboard.press('Enter')
+    assert.equal(await original.getAttribute('aria-pressed'), 'true')
+    await objects.getByTitle('Bring forward', { exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1]?.label === 'Original text')
+    await objects.getByRole('button', { name: 'Hide Original text', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1]?.hidden === true)
+    assert.equal(await page.locator('.photo-stage .photo-layer').count(), 1)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1]?.hidden !== true)
+    assert.equal(await page.locator('.photo-stage .photo-layer').count(), 2)
+    await original.dblclick()
+    await page.locator('.photo-layer-rename').fill('Renamed object')
+    await page.locator('.photo-layer-rename').press('Enter')
+    await objects.getByRole('button', { name: 'Renamed object', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await original.waitFor()
+  })
+
+  await t.test('resize and rotation handles preserve geometry rules and one-step undo', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.getByRole('group', { name: 'Classic toolbox' }).getByRole('button', { name: 'Add rectangle', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 2)
+    const stage = page.locator('.photo-stage')
+    const layer = page.locator('.photo-stage .photo-layer').last()
+    const resize = page.getByRole('button', { name: 'Resize bottom-right', exact: true })
+    const handleBounds = await resize.boundingBox()
+    const stageWidth = await stage.evaluate((element) => element.clientWidth)
+    await page.mouse.move(handleBounds.x + handleBounds.width / 2, handleBounds.y + handleBounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(handleBounds.x + handleBounds.width / 2 + stageWidth * 0.05, handleBounds.y + handleBounds.height / 2, { steps: 5 })
+    await page.mouse.up()
+    await page.waitForFunction(() => Math.abs(JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].width - 40) < 0.2)
+    let transformed = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers[1])
+    assert.equal(transformed.x, 50)
+    assert.equal(transformed.y, 50)
+    assert.ok(Math.abs(transformed.height - 20) < 0.2)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].width === 30)
+    await resize.focus()
+    await page.keyboard.press('ArrowUp')
+    await page.waitForFunction(() => Math.abs(JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].width - 30.6) < 1e-6)
+    transformed = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers[1])
+    assert.ok(Math.abs(transformed.width / transformed.height - 1.5) < 1e-6)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    const rotate = page.getByRole('button', { name: 'Rotate object', exact: true })
+    const rotationBounds = await rotate.boundingBox()
+    const objectBounds = await layer.boundingBox()
+    const center = { x: objectBounds.x + objectBounds.width / 2, y: objectBounds.y + objectBounds.height / 2 }
+    const radius = center.y - (rotationBounds.y + rotationBounds.height / 2)
+    await page.mouse.move(rotationBounds.x + rotationBounds.width / 2, rotationBounds.y + rotationBounds.height / 2)
+    await page.mouse.down()
+    await page.keyboard.down('Shift')
+    await page.mouse.move(center.x + radius, center.y, { steps: 5 })
+    await page.mouse.up()
+    await page.keyboard.up('Shift')
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].rotation === 90)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].rotation === 0)
+    await rotate.focus()
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].rotation === 15)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    const before = await page.evaluate(() => localStorage.getItem('echoai-photo-autosave'))
+    const cancelBounds = await resize.boundingBox()
+    await page.mouse.move(cancelBounds.x + cancelBounds.width / 2, cancelBounds.y + cancelBounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(cancelBounds.x + 40, cancelBounds.y + 30, { steps: 5 })
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].width === 30)
+    assert.deepEqual(
+      await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers),
+      JSON.parse(before).document.layers,
+    )
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 1)
+    assert.equal(await resize.count(), 0)
+  })
+
+  await t.test('alignment uses actual object bounds for rotated shapes and text at zoom', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const toolbox = page.getByRole('group', { name: 'Classic toolbox' })
+    await toolbox.getByRole('button', { name: 'Add rectangle', exact: true }).click()
+    await page.getByRole('button', { name: 'Rotate object', exact: true }).focus()
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.getByRole('group', { name: 'Inspector panels' }).getByRole('button', { name: 'Properties', exact: true }).click()
+    const alignment = page.getByRole('group', { name: 'Align object to canvas' })
+    const canvasBounds = () => page.locator('.photo-stage').evaluate((element) => {
+      const bounds = element.getBoundingClientRect()
+      const scale = bounds.width / element.offsetWidth
+      return { left: bounds.left + element.clientLeft * scale, top: bounds.top + element.clientTop * scale, width: element.clientWidth * scale, height: element.clientHeight * scale }
+    })
+    for (const [name, edge] of [['Align left', 'left'], ['Align right', 'right'], ['Align top', 'top'], ['Align bottom', 'bottom']]) {
+      await alignment.getByRole('button', { name, exact: true }).click()
+      const object = await page.locator('.photo-stage .photo-layer').last().boundingBox()
+      const canvas = await canvasBounds()
+      const actual = edge === 'left' ? object.x : edge === 'right' ? object.x + object.width : edge === 'top' ? object.y : object.y + object.height
+      const expected = edge === 'left' ? canvas.left : edge === 'right' ? canvas.left + canvas.width : edge === 'top' ? canvas.top : canvas.top + canvas.height
+      assert.ok(Math.abs(actual - expected) < 1.5, `${name}: ${actual} vs ${expected}`)
+    }
+    await toolbox.getByRole('button', { name: 'Navigation tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Zoom in/ }).click()
+    await page.getByRole('group', { name: 'Inspector panels' }).getByRole('button', { name: 'Objects', exact: true }).click()
+    await page.locator('.photo-layers-list').getByRole('button', { name: 'Original text', exact: true }).click()
+    await page.getByRole('group', { name: 'Inspector panels' }).getByRole('button', { name: 'Properties', exact: true }).click()
+    await alignment.getByRole('button', { name: 'Align horizontal center', exact: true }).click()
+    await alignment.getByRole('button', { name: 'Align vertical center', exact: true }).click()
+    const text = await page.locator('.photo-stage [data-layer-id="original-text"]').boundingBox()
+    const canvas = await canvasBounds()
+    assert.ok(Math.abs(text.x + text.width / 2 - (canvas.left + canvas.width / 2)) < 1.5)
+    assert.ok(Math.abs(text.y + text.height / 2 - (canvas.top + canvas.height / 2)) < 1.5)
+    assert.equal(await page.getByRole('button', { name: 'Rotate object', exact: true }).count(), 0)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Simple', exact: true }).click()
+    assert.equal(await page.locator('.photo-object-handles').count(), 0)
+  })
+
+  await t.test('image resize retains aspect ratio and pointer cancellation restores geometry at zoom', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      window.__photoTestLayers = [{
+        id: 'test-image', type: 'image', label: 'Test image',
+        src: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="red"/></svg>'),
+        width: 30, x: 50, y: 50, rotation: 90, opacity: 100,
+      }]
+    })
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const resize = page.getByRole('button', { name: 'Resize bottom-right', exact: true })
+    await resize.focus()
+    await page.keyboard.press('ArrowUp')
+    await page.waitForFunction(() => Math.abs(JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].width - 30.6) < 1e-6)
+    const beforeZoom = await page.locator('.photo-stage .photo-layer img').evaluate((image) => ({ width: image.clientWidth, height: image.clientHeight }))
+    assert.ok(Math.abs(beforeZoom.width / beforeZoom.height - 2) < 0.02)
+    await page.getByRole('group', { name: 'Classic toolbox' }).getByRole('button', { name: 'Navigation tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Zoom in/ }).click()
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers[0])
+    const bounds = await resize.boundingBox()
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x - 20, bounds.y + 40, { steps: 5 })
+    await page.mouse.up()
+    await page.waitForFunction((original) => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].width > original.width, before)
+    const imageSize = await page.locator('.photo-stage .photo-layer img').evaluate((image) => ({ width: image.clientWidth, height: image.clientHeight }))
+    assert.ok(Math.abs(imageSize.width / imageSize.height - 2) < 0.02)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction((original) => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].width === original.width, before)
+    const cancelBounds = await resize.boundingBox()
+    await resize.dispatchEvent('pointerdown', {
+      button: 0, pointerId: 19, clientX: cancelBounds.x + 7, clientY: cancelBounds.y + 7,
+    })
+    await page.evaluate(({ x, y }) => {
+      window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 19, clientX: x - 30, clientY: y + 30 }))
+      window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 19 }))
+    }, { x: cancelBounds.x + 7, y: cancelBounds.y + 7 })
+    await page.waitForFunction((original) => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].width === original.width, before)
+    assert.equal(await page.getByRole('button', { name: 'Redo', exact: true }).isEnabled(), true)
+    const handleSize = await resize.boundingBox()
+    assert.ok(Math.abs(handleSize.width - 14) < 1, 'handle stays usable at zoom')
+  })
+
+  await t.test('multi-selection grouping, duplication, deletion, and undo preserve independent groups', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => { window.__usePhotoAutosave = true })
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const toolbox = page.getByRole('group', { name: 'Classic toolbox' })
+    await toolbox.getByRole('button', { name: 'Add rectangle', exact: true }).click()
+    await page.locator('.photo-layers-list').getByRole('button', { name: 'Original text', exact: true }).click({ modifiers: ['Shift'] })
+    const selected = page.getByRole('region', { name: 'Selected objects', exact: true })
+    await selected.getByText('2 objects selected', { exact: true }).waitFor()
+    assert.equal(await page.locator('.photo-stage .photo-layer.active').count(), 2)
+    assert.equal(await page.locator('.photo-object-handles').count(), 0)
+    await selected.getByRole('button', { name: 'Group objects', exact: true }).click()
+    await page.waitForFunction(() => {
+      const layers = JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers
+      return layers?.length === 2 && layers[0].objectGroupId && layers[0].objectGroupId === layers[1].objectGroupId
+    })
+    const groupId = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers[0].objectGroupId)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => !JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].objectGroupId)
+    await selected.getByText('2 objects selected', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Redo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].objectGroupId)
+    await page.reload()
+    await selected.getByText('2 objects selected', { exact: true }).waitFor()
+    await selected.getByRole('button', { name: 'Duplicate selection', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 4)
+    const layers = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    assert.equal(layers[0].objectGroupId, groupId)
+    assert.equal(layers[2].objectGroupId, layers[3].objectGroupId)
+    assert.notEqual(layers[2].objectGroupId, groupId)
+    assert.equal(new Set(layers.map((layer) => layer.id)).size, 4)
+    await selected.getByRole('button', { name: 'Delete selection', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 2)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await selected.getByText('2 objects selected', { exact: true }).waitFor()
+    await selected.getByRole('button', { name: 'Ungroup objects', exact: true }).click()
+    await page.waitForFunction(() => {
+      const layers = JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers
+      return layers?.length === 4 && !layers[2].objectGroupId && !layers[3].objectGroupId && layers[0].objectGroupId
+    })
+    await selected.getByRole('button', { name: 'Clear object selection', exact: true }).click()
+    assert.equal(await page.locator('.photo-stage .photo-layer.active').count(), 0)
+    await page.locator('.photo-layers-list').getByRole('button', { name: 'Original text Group', exact: true }).click({ modifiers: ['Alt'] })
+    assert.equal(await page.locator('.photo-stage .photo-layer.active').count(), 1)
+    await page.locator('.photo-layers-list').getByRole('button', { name: 'Original text Group', exact: true }).click()
+    assert.equal(await page.locator('.photo-stage .photo-layer.active').count(), 2)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Simple', exact: true }).click()
+    assert.equal(await selected.count(), 0)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    await selected.getByText('2 objects selected', { exact: true }).waitFor()
+  })
+
+  await t.test('selection drag, nudge, and alignment retain shared spacing and one-step undo', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      window.__photoTestLayers = [
+        { id: 'left', type: 'shape', label: 'Left rectangle', shape: 'rectangle', x: 20, y: 30, width: 20, height: 20, color: '#ff0000' },
+        { id: 'right', type: 'shape', label: 'Right rectangle', shape: 'rectangle', x: 70, y: 60, width: 10, height: 10, color: '#0000ff', rotation: 30 },
+      ]
+    })
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.locator('.photo-layers-list').getByRole('button', { name: 'Right rectangle', exact: true }).click({ modifiers: ['Shift'] })
+    const selected = page.getByRole('region', { name: 'Selected objects', exact: true })
+    await selected.getByText('2 objects selected', { exact: true }).waitFor()
+    await page.waitForFunction(() => localStorage.getItem('echoai-photo-autosave'))
+    const original = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    const layer = page.locator('.photo-stage [data-layer-id="left"]')
+    await layer.focus()
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x > 20)
+    let layers = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    assert.ok(Math.abs(layers[1].x - layers[0].x - 50) < 1e-6)
+    assert.ok(Math.abs(layers[0].x - 20 - 1000 / 1200) < 1e-6)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x === 20)
+    const bounds = await layer.boundingBox()
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + bounds.width / 2 + 40, bounds.y + bounds.height / 2 + 30, { steps: 5 })
+    await page.mouse.up()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].y > 30)
+    layers = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    assert.ok(Math.abs(layers[1].x - layers[0].x - 50) < 1e-6)
+    assert.ok(Math.abs(layers[1].y - layers[0].y - 30) < 1e-6)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x === 20)
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers), original)
+    await selected.getByRole('button', { name: 'Match left edges', exact: true }).click()
+    const left = await layer.boundingBox()
+    const right = await page.locator('.photo-stage [data-layer-id="right"]').boundingBox()
+    assert.ok(Math.abs(left.x - right.x) < 1.5)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x === 20)
+    await selected.getByRole('button', { name: 'Group objects', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].objectGroupId)
+    await page.locator('.photo-layers-list').getByRole('button', { name: 'Right rectangle Group', exact: true }).click()
+    assert.equal(await page.locator('.photo-stage .photo-layer.active').count(), 2)
+    await layer.focus()
+    await page.keyboard.press('Control+Shift+g')
+    await page.waitForFunction(() => !JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].objectGroupId)
+    await page.keyboard.press('Control+g')
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].objectGroupId)
+    await selected.getByRole('button', { name: 'Delete selection', exact: true }).click()
+    await page.getByText('Keep at least one layer on the canvas.', { exact: true }).waitFor()
+    assert.equal(await page.locator('.photo-stage .photo-layer').count(), 2)
+  })
+
+  await t.test('Classic snapping shows exact guides, respects zoom/Alt/toggle, and preserves drag undo', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1200 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      window.__photoTestLayers = [
+        { id: 'a', type: 'shape', label: 'A', shape: 'rectangle', x: 20, y: 25, width: 10, height: 10 },
+        { id: 'b', type: 'shape', label: 'B', shape: 'rectangle', x: 80, y: 75, width: 10, height: 10, locked: true },
+        { id: 'hidden', type: 'shape', label: 'Hidden', shape: 'rectangle', x: 40, y: 25, width: 10, height: 10, hidden: true },
+      ]
+    })
+    const page = await context.newPage()
+    const errors = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto(url)
+    const toggle = page.getByRole('group', { name: 'Editor workspace' })
+    await toggle.getByRole('button', { name: 'Classic', exact: true }).click()
+    const snap = page.getByRole('button', { name: 'Snap', exact: true })
+    assert.equal(await snap.getAttribute('aria-pressed'), 'true')
+    const stage = page.locator('.photo-stage')
+    const layer = stage.locator('[data-layer-id="a"]')
+    const guides = stage.locator('.photo-object-snap-guide')
+    const begin = async () => {
+      const metrics = await stage.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return { width: element.clientWidth * rect.width / element.offsetWidth, height: element.clientHeight * rect.height / element.offsetHeight }
+      })
+      const bounds = await layer.boundingBox()
+      const start = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+      await layer.dispatchEvent('pointerdown', { pointerId: 81, button: 0, clientX: start.x, clientY: start.y })
+      return { ...metrics, ...start }
+    }
+    const move = async (start, percentX, percentY = 0, altKey = false) => {
+      await page.evaluate(({ start, percentX, percentY, altKey }) => {
+        window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 81, clientX: start.x + start.width * percentX / 100, clientY: start.y + start.height * percentY / 100, altKey }))
+      }, { start, percentX, percentY, altKey })
+    }
+    const finish = () => page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 81 })))
+    const undo = async () => {
+      await page.getByRole('button', { name: 'Undo', exact: true }).click()
+      await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x === 20)
+    }
+    let start = await begin()
+    await move(start, 30 - 4 / start.width * 100)
+    await stage.locator('.photo-object-snap-guide-x').waitFor()
+    const aligned = await layer.boundingBox()
+    const canvas = await stage.boundingBox()
+    assert.ok(Math.abs(aligned.x + aligned.width / 2 - canvas.x - canvas.width / 2) < 0.1)
+    await finish()
+    assert.equal(await guides.count(), 0)
+    const expectedCenterX = 20 + (canvas.x + canvas.width / 2 - start.x) / start.width * 100
+    await page.waitForFunction((x) => Math.abs(JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x - x) < 1e-6, expectedCenterX)
+    await undo()
+    await page.getByRole('group', { name: 'Classic toolbox' }).getByRole('button', { name: 'Navigation tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Zoom in/ }).click()
+    start = await begin()
+    await move(start, 60 - 4 / start.width * 100, 50 - 4 / start.height * 100)
+    await stage.locator('.photo-object-snap-guide-x').waitFor()
+    assert.equal(await guides.count(), 2)
+    const targetBounds = await stage.locator('[data-layer-id="b"]').boundingBox()
+    const snappedBounds = await layer.boundingBox()
+    assert.ok(Math.abs(targetBounds.x - snappedBounds.x) < 0.1)
+    assert.ok(Math.abs(targetBounds.y - snappedBounds.y) < 0.1)
+    // Alt can release the current snap without changing which objects are moving.
+    await move(start, 60 - 4 / start.width * 100, 50 - 4 / start.height * 100, true)
+    assert.equal(await guides.count(), 0)
+    const released = await layer.boundingBox()
+    assert.ok(Math.abs(targetBounds.x - released.x - 4) < 0.1)
+    await move(start, 60 - 4 / start.width * 100, 50 - 4 / start.height * 100)
+    await page.keyboard.press('Escape')
+    assert.equal(await guides.count(), 0)
+    await finish()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x === 20)
+    assert.equal(await page.getByRole('button', { name: 'Redo', exact: true }).isEnabled(), true)
+    await snap.click()
+    assert.equal(await snap.getAttribute('aria-pressed'), 'false')
+    start = await begin()
+    const rawX = 50 - 4 / start.width * 100
+    await move(start, rawX - 20)
+    assert.equal(await guides.count(), 0)
+    await finish()
+    await page.waitForFunction((x) => Math.abs(JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x - x) < 1e-6, rawX)
+    await undo()
+    await snap.click()
+    start = await begin()
+    await move(start, 30 - 7 / start.width * 100)
+    assert.equal(await guides.count(), 0, 'no snap beyond the six-screen-pixel threshold')
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 81 })))
+    assert.equal(await guides.count(), 0)
+    await toggle.getByRole('button', { name: 'Simple', exact: true }).click()
+    assert.equal(await snap.count(), 0)
+    await toggle.getByRole('button', { name: 'Classic', exact: true }).click()
+    assert.equal(await snap.getAttribute('aria-pressed'), 'true')
+    assert.deepEqual(errors, [])
+  })
+
+  await t.test('snapping treats rotated grouped objects as one selection at pan and zoom', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1200 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      window.__photoTestLayers = [
+        { id: 'a', type: 'shape', label: 'A', shape: 'rectangle', x: 20, y: 25, width: 10, height: 10, rotation: 30, objectGroupId: 'g' },
+        { id: 'b', type: 'shape', label: 'B', shape: 'rectangle', x: 40, y: 40, width: 10, height: 10, objectGroupId: 'g' },
+        { id: 'c', type: 'shape', label: 'C', shape: 'rectangle', x: 80, y: 75, width: 12, height: 10, rotation: -25 },
+      ]
+    })
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.getByRole('group', { name: 'Classic toolbox' }).getByRole('button', { name: 'Navigation tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Zoom in/ }).click()
+    const stage = page.locator('.photo-stage')
+    await stage.scrollIntoViewIfNeeded()
+    const stageBounds = await stage.boundingBox()
+    await page.mouse.move(stageBounds.x + stageBounds.width / 2, stageBounds.y + stageBounds.height / 2)
+    await page.keyboard.down('Control')
+    await page.mouse.down({ button: 'right' })
+    await page.mouse.move(stageBounds.x + stageBounds.width / 2 + 20, stageBounds.y + stageBounds.height / 2 + 15)
+    await page.mouse.up({ button: 'right' })
+    await page.keyboard.up('Control')
+    const a = stage.locator('[data-layer-id="a"]')
+    const b = stage.locator('[data-layer-id="b"]')
+    const c = stage.locator('[data-layer-id="c"]')
+    const originalA = await a.boundingBox()
+    const originalB = await b.boundingBox()
+    const target = await c.boundingBox()
+    const unionRight = Math.max(originalA.x + originalA.width, originalB.x + originalB.width)
+    const dx = target.x - unionRight - 4
+    const start = { x: originalA.x + originalA.width / 2, y: originalA.y + originalA.height / 2 }
+    await a.dispatchEvent('pointerdown', { pointerId: 82, button: 0, clientX: start.x, clientY: start.y })
+    await page.evaluate(({ start, dx }) => window.dispatchEvent(new PointerEvent('pointermove', {
+      pointerId: 82, clientX: start.x + dx, clientY: start.y,
+    })), { start, dx })
+    await stage.locator('.photo-object-snap-guide-x').waitFor()
+    const movedA = await a.boundingBox()
+    const movedB = await b.boundingBox()
+    assert.ok(Math.abs(Math.max(movedA.x + movedA.width, movedB.x + movedB.width) - target.x) < 0.1)
+    assert.ok(Math.abs(movedB.x - movedA.x - (originalB.x - originalA.x)) < 0.1)
+    const guide = await stage.locator('.photo-object-snap-guide-x').boundingBox()
+    assert.ok(Math.abs(guide.x - target.x) < 0.1, 'guide matches the actual rotated target edge')
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 82 })))
+    assert.equal(await stage.locator('.photo-object-snap-guide').count(), 0)
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x > 20)
+    const layers = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    assert.ok(Math.abs(layers[1].x - layers[0].x - 20) < 1e-6)
+    assert.equal(layers[0].rotation, 30)
+    assert.equal(layers[2].x, 80)
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x === 20)
+  })
+
+  await t.test('box selection supports reverse drag, group expansion, modifiers, zoom, and cancellation', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1200 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      window.__photoTestLayers = [
+        { id: 'a', type: 'shape', label: 'A', shape: 'rectangle', x: 20, y: 20, width: 10, height: 10, objectGroupId: 'g', locked: true },
+        { id: 'b', type: 'shape', label: 'B', shape: 'rectangle', x: 45, y: 45, width: 10, height: 10, objectGroupId: 'g' },
+        { id: 'c', type: 'shape', label: 'C', shape: 'rectangle', x: 75, y: 70, width: 10, height: 10 },
+        { id: 'hidden', type: 'shape', label: 'Hidden', shape: 'rectangle', x: 20, y: 20, width: 10, height: 10, hidden: true },
+      ]
+    })
+    const page = await context.newPage()
+    const errors = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const stage = page.locator('.photo-stage')
+    const selectedIds = () => stage.locator('.photo-layer.active').evaluateAll((elements) => elements.map((element) => element.dataset.layerId))
+    const dragBox = async (bounds, modifiers = {}, reverse = false) => {
+      const from = { x: bounds.x - 3, y: bounds.y - 3 }
+      const to = { x: bounds.x + bounds.width + 3, y: bounds.y + bounds.height + 3 }
+      await stage.dispatchEvent('pointerdown', { button: 0, pointerId: 77, clientX: reverse ? to.x : from.x, clientY: reverse ? to.y : from.y, ...modifiers })
+      await page.evaluate(({ end }) => {
+        window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 77, clientX: end.x, clientY: end.y }))
+      }, { end: reverse ? from : to })
+      await page.locator('.photo-design-selection-box').waitFor()
+      // A parent render must not tear down the ongoing pointer gesture.
+      await page.keyboard.press('[')
+      assert.equal(await page.locator('.photo-design-selection-box').count(), 1)
+      await page.evaluate(({ end }) => {
+        window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 77, clientX: end.x, clientY: end.y }))
+      }, { end: reverse ? from : to })
+    }
+    const a = await stage.locator('[data-layer-id="a"]').boundingBox()
+    await dragBox(a, {}, true)
+    assert.deepEqual(await selectedIds(), ['a', 'b'])
+    await dragBox(a, { altKey: true })
+    assert.deepEqual(await selectedIds(), ['a'])
+    const c = await stage.locator('[data-layer-id="c"]').boundingBox()
+    await dragBox(c, { shiftKey: true })
+    assert.deepEqual(await selectedIds(), ['a', 'c'])
+    await dragBox({ ...c, width: c.width / 2 })
+    assert.deepEqual(await selectedIds(), [])
+    await dragBox(a, { altKey: true })
+    await stage.dispatchEvent('pointerdown', { button: 0, pointerId: 78, clientX: a.x - 5, clientY: a.y - 5 })
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 78, clientX: 800, clientY: 800 })))
+    await page.keyboard.press('Escape')
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 78, clientX: 800, clientY: 800 })))
+    assert.deepEqual(await selectedIds(), ['a'])
+    assert.equal(await page.locator('.photo-design-selection-box').count(), 0)
+    await stage.dispatchEvent('pointerdown', { button: 0, pointerId: 79, clientX: a.x - 5, clientY: a.y - 5 })
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 79 })))
+    assert.deepEqual(await selectedIds(), ['a'])
+    await page.getByRole('group', { name: 'Classic toolbox' }).getByRole('button', { name: 'Navigation tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Zoom in/ }).click()
+    const panStart = await stage.boundingBox()
+    await page.mouse.move(panStart.x + 10, panStart.y + 10)
+    await page.keyboard.down('Control')
+    await page.mouse.down({ button: 'right' })
+    await page.mouse.move(panStart.x + 30, panStart.y + 25, { steps: 3 })
+    await page.mouse.up({ button: 'right' })
+    await page.keyboard.up('Control')
+    const zoomed = await stage.locator('[data-layer-id="c"]').boundingBox()
+    await page.mouse.move(zoomed.x - 4, zoomed.y - 4)
+    await page.mouse.down()
+    await page.mouse.move(zoomed.x + zoomed.width + 4, zoomed.y + zoomed.height + 4, { steps: 5 })
+    await page.mouse.up()
+    assert.deepEqual(await selectedIds(), ['c'])
+    await stage.scrollIntoViewIfNeeded()
+    const blank = await stage.boundingBox()
+    await page.mouse.click(blank.x + blank.width / 2, blank.y + blank.height * 0.8)
+    assert.deepEqual(await selectedIds(), [])
+    assert.deepEqual(errors, [])
+  })
+
+  await t.test('object locks persist and prevent edits in both workspaces without denied-operation history', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      window.__usePhotoAutosave = true
+      window.__photoTestLayers = [
+        { id: 'a', type: 'shape', label: 'A', shape: 'rectangle', x: 20, y: 30, width: 10, height: 10, color: '#ff0000' },
+        { id: 'b', type: 'shape', label: 'B', shape: 'rectangle', x: 70, y: 70, width: 10, height: 10 },
+      ]
+    })
+    const page = await context.newPage()
+    await page.goto(url)
+    const toggle = page.getByRole('group', { name: 'Editor workspace' })
+    await toggle.getByRole('button', { name: 'Classic', exact: true }).click()
+    await page.getByRole('button', { name: 'Lock A', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].locked)
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    const lockedBounds = await page.locator('.photo-stage [data-layer-id="a"]').boundingBox()
+    await page.keyboard.down('Shift')
+    await page.mouse.click(lockedBounds.x + lockedBounds.width / 2, lockedBounds.y + lockedBounds.height / 2)
+    await page.keyboard.up('Shift')
+    assert.equal(await page.locator('.photo-stage .photo-layer.active').count(), 0)
+    await page.locator('.photo-layers-list').getByRole('button', { name: 'A', exact: true }).click()
+    assert.equal(await page.locator('.photo-object-handles').count(), 0)
+    await page.getByRole('group', { name: 'Inspector panels' }).getByRole('button', { name: 'Properties', exact: true }).click()
+    assert.equal(await page.getByLabel('Position X (px)', { exact: true }).isDisabled(), true)
+    await page.getByRole('group', { name: 'Inspector panels' }).getByRole('button', { name: 'Objects', exact: true }).click()
+    const layer = page.locator('.photo-stage [data-layer-id="a"]')
+    await layer.focus()
+    await page.keyboard.press('ArrowRight')
+    await page.getByText('Select visible, unlocked design objects to move.', { exact: true }).waitFor()
+    await page.keyboard.press('Delete')
+    await page.getByText('Unlock the object before deleting it.', { exact: true }).waitFor()
+    await page.locator('.photo-layers-panel').getByTitle('Bring forward', { exact: true }).click()
+    await page.getByText('Unlock selected objects before changing their stacking order.', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Image', exact: true }).click()
+    await page.getByRole('button', { name: /^Flatten image/ }).click()
+    await page.getByText('Unlock design objects before flattening the image.', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => !JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].locked)
+    await page.getByRole('button', { name: 'Redo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].locked)
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers), before)
+    await page.reload()
+    await page.getByRole('button', { name: 'Unlock A', exact: true }).waitFor()
+    await toggle.getByRole('button', { name: 'Simple', exact: true }).click()
+    const bounds = await layer.boundingBox()
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + bounds.width / 2 + 40, bounds.y + bounds.height / 2 + 30, { steps: 3 })
+    await page.mouse.up()
+    await page.getByText('Unlock the object before moving it.', { exact: true }).waitFor()
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers), before)
+    if (await page.getByRole('button', { name: 'Open inspector', exact: true }).count()) {
+      await page.getByRole('button', { name: 'Open inspector', exact: true }).click()
+    }
+    assert.equal(await page.getByRole('button', { name: 'Unlock A', exact: true }).isVisible(), true)
+    await page.locator('.photo-layers-panel').getByTitle('Duplicate layer (Ctrl+J)', { exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 3)
+    const copied = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    assert.equal(copied[2].locked, false)
+    assert.equal(copied[0].locked, true)
+    await page.getByRole('button', { name: 'Unlock A', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].locked === false)
+  })
+
+  await t.test('locked image pixel erasure is blocked and locked groups cannot merge or ungroup', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      window.__photoTestLayers = [
+        { id: 'a', type: 'shape', label: 'A', shape: 'rectangle', x: 20, y: 20, width: 10, height: 10, objectGroupId: 'g' },
+        { id: 'image', type: 'image', label: 'Locked image', x: 60, y: 60, width: 30, objectGroupId: 'g', locked: true,
+          src: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="red"/></svg>') },
+      ]
+    })
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const selection = page.getByRole('region', { name: 'Selected objects', exact: true })
+    assert.equal(await selection.getByRole('button', { name: 'Ungroup objects', exact: true }).isDisabled(), true)
+    await page.locator('.photo-layers-list').getByRole('button', { name: 'Locked image Group', exact: true }).click({ modifiers: ['Alt'] })
+    await page.getByRole('button', { name: 'Layer', exact: true }).click()
+    await page.getByRole('button', { name: 'Merge Down', exact: true }).click()
+    await page.getByText('Unlock both objects before merging them.', { exact: true }).waitFor()
+    await page.waitForFunction(() => localStorage.getItem('echoai-photo-autosave'))
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    const toolbox = page.getByRole('group', { name: 'Classic toolbox' })
+    await toolbox.getByRole('button', { name: 'Crop & pixel editing tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Pixel eraser/ }).click()
+    const image = page.locator('.photo-stage [data-layer-id="image"]')
+    const bounds = await image.boundingBox()
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + bounds.width / 2 + 20, bounds.y + bounds.height / 2 + 20)
+    await page.mouse.up()
+    await page.getByText('Unlock the image object before editing its pixels.', { exact: true }).waitFor()
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers), before)
+    assert.equal(await page.getByRole('button', { name: 'Undo', exact: true }).isEnabled(), false)
+  })
+
+  await t.test('distribution uses rotated bounds at zoom, preserves endpoints, and undoes atomically', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1200 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      window.__photoTestLayers = [
+        { id: 'a', type: 'shape', label: 'A', shape: 'rectangle', x: 15, y: 15, width: 10, height: 10 },
+        { id: 'b', type: 'shape', label: 'B', shape: 'rectangle', x: 35, y: 45, width: 15, height: 14, rotation: 30 },
+        { id: 'c', type: 'shape', label: 'C', shape: 'rectangle', x: 80, y: 80, width: 10, height: 10 },
+      ]
+    })
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const toolbox = page.getByRole('group', { name: 'Classic toolbox' })
+    await toolbox.getByRole('button', { name: 'Navigation tools', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Zoom in/ }).click()
+    await page.getByRole('button', { name: 'Select all design objects', exact: true }).click()
+    const selection = page.getByRole('region', { name: 'Selected objects', exact: true })
+    await page.waitForFunction(() => localStorage.getItem('echoai-photo-autosave'))
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    for (const [name, axis, mode] of [
+      ['Distribute horizontal centers', 'x', 'centers'], ['Distribute vertical centers', 'y', 'centers'],
+      ['Equal horizontal gaps', 'x', 'gaps'], ['Equal vertical gaps', 'y', 'gaps'],
+    ]) {
+      await selection.getByRole('button', { name, exact: true }).click()
+      await page.getByText(`Objects distributed with equal ${axis === 'x' ? 'horizontal' : 'vertical'} ${mode}.`, { exact: true }).waitFor()
+      const bounds = await page.locator('.photo-stage .photo-layer').evaluateAll((elements) => elements.map((element) => {
+        const rect = element.getBoundingClientRect()
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      }))
+      const size = axis === 'x' ? 'width' : 'height'
+      const distances = mode === 'centers'
+        ? [bounds[1][axis] + bounds[1][size] / 2 - bounds[0][axis] - bounds[0][size] / 2, bounds[2][axis] + bounds[2][size] / 2 - bounds[1][axis] - bounds[1][size] / 2]
+        : [bounds[1][axis] - bounds[0][axis] - bounds[0][size], bounds[2][axis] - bounds[1][axis] - bounds[1][size]]
+      assert.ok(Math.abs(distances[0] - distances[1]) < 0.1, `${name}: ${distances}`)
+      await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].x !== 35 || JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].y !== 45)
+      const changed = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+      assert.deepEqual(changed[0], before[0])
+      assert.deepEqual(changed[2], before[2])
+      await page.getByRole('button', { name: 'Undo', exact: true }).click()
+      await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].x === 35 && JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[1].y === 45)
+      assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers), before)
+    }
+    await selection.getByRole('button', { name: 'Lock selection', exact: true }).click()
+    assert.equal(await selection.getByRole('button', { name: 'Equal horizontal gaps', exact: true }).isDisabled(), true)
+    assert.equal(await selection.getByRole('button', { name: 'Group objects', exact: true }).isDisabled(), true)
+    await selection.getByRole('button', { name: 'Unlock selection', exact: true }).click()
+    assert.equal(await selection.getByRole('button', { name: 'Equal horizontal gaps', exact: true }).isEnabled(), true)
+  })
+
+  await t.test('selection clipboard, stacking, and cancellation do not split groups or lose objects', async (t) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+    t.after(() => context.close())
+    await context.addInitScript(() => {
+      window.__photoTestLayers = [
+        { id: 'a', type: 'shape', label: 'A', shape: 'rectangle', x: 20, y: 30, width: 10, height: 10, color: '#ff0000', objectGroupId: 'original-group' },
+        { id: 'b', type: 'shape', label: 'B', shape: 'rectangle', x: 40, y: 50, width: 10, height: 10, color: '#0000ff', objectGroupId: 'original-group' },
+        { id: 'c', type: 'text', label: 'C', value: 'C', x: 60, y: 60, fontSize: 34, color: '#000000' },
+      ]
+      let text = ''
+      Object.defineProperty(navigator, 'clipboard', { value: {
+        writeText: async (value) => {
+          if (window.__clipboardFailure) throw new Error('Permission denied')
+          if (window.__delayClipboard) await new Promise((resolve) => { window.__finishClipboard = resolve })
+          text = value
+        },
+        readText: async () => text,
+      } })
+    })
+    const page = await context.newPage()
+    await page.goto(url)
+    await page.getByRole('group', { name: 'Editor workspace' }).getByRole('button', { name: 'Classic', exact: true }).click()
+    const selected = page.getByRole('region', { name: 'Selected objects', exact: true })
+    await selected.getByText('2 objects selected', { exact: true }).waitFor()
+    const objects = page.locator('.photo-layers-panel')
+    await objects.getByTitle('Bring forward', { exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.map((layer) => layer.id).join(',') === 'c,a,b')
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.map((layer) => layer.id).join(',') === 'a,b,c')
+    const layer = page.locator('.photo-stage [data-layer-id="a"]')
+    await layer.focus()
+    await page.keyboard.press('Control+c')
+    await page.getByText('Selected objects copied to clipboard.', { exact: true }).waitFor()
+    assert.equal(JSON.parse(await page.evaluate(() => navigator.clipboard.readText())).layers.length, 2)
+    await page.keyboard.press('Control+v')
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 5)
+    const pasted = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    assert.equal(pasted[3].objectGroupId, pasted[4].objectGroupId)
+    assert.notEqual(pasted[3].objectGroupId, 'original-group')
+    await selected.getByRole('button', { name: 'Delete selection', exact: true }).click()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers.length === 3)
+    await objects.getByRole('button', { name: 'A Group', exact: true }).click()
+    await page.getByRole('button', { name: 'Edit', exact: true }).click()
+    assert.equal(await page.getByRole('button', { name: 'Cut', exact: true }).isDisabled(), true)
+    await page.getByRole('button', { name: 'Edit', exact: true }).click()
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers)
+    const bounds = await layer.boundingBox()
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + bounds.width / 2 + 30, bounds.y + bounds.height / 2 + 20, { steps: 5 })
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('echoai-photo-autosave'))?.document.layers[0].x === 20)
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('echoai-photo-autosave')).document.layers), before)
+    await objects.getByRole('button', { name: 'A Group', exact: true }).click({ modifiers: ['Alt'] })
+    await page.evaluate(() => { window.__clipboardFailure = true })
+    await page.getByRole('button', { name: 'Edit', exact: true }).click()
+    await page.getByRole('button', { name: 'Cut', exact: true }).click()
+    await page.getByText('Could not cut to clipboard: Permission denied', { exact: true }).waitFor()
+    assert.equal(await page.locator('.photo-stage .photo-layer').count(), 3)
+    await page.evaluate(() => { window.__clipboardFailure = false; window.__delayClipboard = true })
+    await objects.getByRole('button', { name: 'C', exact: true }).click()
+    await page.getByRole('button', { name: 'Edit', exact: true }).click()
+    await page.getByRole('button', { name: 'Cut', exact: true }).click()
+    await page.waitForFunction(() => typeof window.__finishClipboard === 'function')
+    await page.getByRole('group', { name: 'Classic toolbox' }).getByRole('button', { name: 'Add rectangle', exact: true }).click()
+    await page.evaluate(() => window.__finishClipboard())
+    await page.getByText('Object copied, but the design changed during clipboard access. Nothing was cut; try again.', { exact: true }).waitFor()
+    assert.equal(await page.locator('.photo-stage .photo-layer').count(), 4)
+    assert.equal(await page.locator('.photo-stage [data-layer-id="c"]').count(), 1)
+  })
+})

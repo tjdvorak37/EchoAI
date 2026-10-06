@@ -1290,7 +1290,7 @@
 .photo-editor-topbar {
   min-height: 58px;
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(220px, auto) minmax(400px, 1fr);
+  grid-template-columns: minmax(420px, 1fr) minmax(160px, auto) minmax(400px, 1fr);
   gap: .75rem;
   padding: .55rem .8rem;
   border: 0;
@@ -1311,6 +1311,111 @@
 .photo-create-design-button,.photo-save-button { min-height: 38px; display: inline-flex; align-items: center; gap: .35rem; padding: .45rem .75rem; border: 1px solid #d6dae2; border-radius: 7px; color: #303640; background: #fff; font-weight: 750; cursor: pointer; }
 .photo-save-button { border-color: #7137e8; color: #fff; background: #7137e8; }
 .rotate-right { transform: scaleX(-1); }
+
+.photo-workspace-toggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #d6dae2;
+  border-radius: 7px;
+  background: #f1f3f7;
+}
+
+.photo-workspace-toggle button {
+  min-height: 30px;
+  padding: .3rem .55rem;
+  border: 0;
+  border-radius: 4px;
+  color: #475569;
+  background: transparent;
+  font-size: .72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.photo-workspace-toggle button[aria-pressed='true'] {
+  color: #fff;
+  background: #7137e8;
+}
+
+.photo-workspace-toggle button:focus-visible {
+  outline: 2px solid #7137e8;
+  outline-offset: 2px;
+}
+
+.photo-classic-editor-shell > .editor-options-bar { display: flex; border-radius: 0; }
+.photo-creator-grid.modern-editor.classic-editor {
+  --photo-left-width: 72px;
+  --photo-right-width: 300px;
+  grid-template-columns: var(--photo-left-width) minmax(0, 1fr) var(--photo-right-width);
+}
+.photo-creator-grid.classic-editor.left-collapsed { --photo-left-width: 48px; }
+.photo-creator-grid.classic-editor.right-collapsed { --photo-right-width: 68px; }
+.photo-creator-grid.classic-editor .dock-actions { display: flex; flex-direction: column; gap: 6px; }
+.photo-creator-grid.classic-editor .compact-upload { padding: 6px 2px; font-size: .6rem; }
+.photo-classic-editor-shell .option-group input[type='number'] {
+  width: 4.5rem;
+  min-height: 26px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #334155;
+  background: #fff;
+}
+.classic-inspector-switcher {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  border-bottom: 1px solid #d7e1f1;
+}
+.classic-inspector-switcher button {
+  flex: 1;
+  min-height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #334155;
+  background: #fff;
+  font-size: .7rem;
+  cursor: pointer;
+}
+.classic-inspector-switcher button[aria-pressed='true'] { color: #fff; background: #7137e8; border-color: #7137e8; }
+.classic-inspector-switcher button:focus-visible { outline: 2px solid #7137e8; outline-offset: 2px; }
+.classic-inspector:not(.classic-inspector-objects) > .photo-layers-panel,
+.classic-inspector:not(.classic-inspector-properties) > .photo-object-properties,
+.classic-inspector:not(.classic-inspector-properties) > .photo-detailed-properties,
+.classic-inspector:not(.classic-inspector-canvas) > .photo-canvas-properties { display: none; }
+.classic-inspector-canvas > .photo-object-selection-panel,
+.photo-detailed-properties.multiple-objects-selected { display: none; }
+.classic-object-selection-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
+.classic-object-group-badge { color: #6d28d9 !important; font-size: .6rem; }
+.layer-inspector { min-width: 0; margin: 0; padding: 0; border: 0; }
+.photo-object-lock { display: grid; place-items: center; padding: 3px; border: 0; color: #64748b; background: transparent; cursor: pointer; }
+.photo-design-selection-box { position: fixed; z-index: 1100; pointer-events: none; box-sizing: border-box; border: 1px solid #7137e8; background: #7137e81a; }
+.photo-object-snap-guide { position: absolute; z-index: 30; pointer-events: none; }
+.photo-object-snap-guide-x { top: 0; bottom: 0; border-left: 1px dashed #c026d3; }
+.photo-object-snap-guide-y { left: 0; right: 0; border-top: 1px dashed #c026d3; }
+.canvas-controls button[aria-pressed="true"] { color: #6d28d9; border-color: #8b5cf6; background: #f3e8ff; }
+.photo-canvas-properties { display: grid; gap: .55rem; }
+.classic-object-select {
+  min-width: 0;
+  padding: 4px 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.classic-object-select:focus-visible { outline: 2px solid #7137e8; }
+
+@media (max-width: 1200px) {
+  .photo-editor-topbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .photo-editor-topbar .photo-topbar-title { display: none; }
+  .photo-topbar-left { flex-wrap: wrap; }
+}
 
 .photo-creator-grid.modern-editor { --photo-left-width: 300px; --photo-right-width: 360px; grid-template-columns: var(--photo-left-width) minmax(420px, 1fr) var(--photo-right-width); gap: 0; min-height: 720px; }
 .photo-creator-grid.modern-editor .photo-sidebar-left { padding: 0; border: 0; border-right: 1px solid #dfe3ea; border-radius: 0; background: #fff; overflow: hidden; }
@@ -1355,11 +1460,16 @@
 @media (max-width: 900px) {
   .photo-editor-topbar { grid-template-columns: 1fr auto; }.photo-topbar-title { display: none; }.photo-topbar-actions { grid-column: 2; }.photo-save-status,.photo-create-design-button { display: none; }
   .photo-creator-grid.modern-editor { grid-template-columns: minmax(250px,300px) minmax(0,1fr); }.photo-creator-grid.modern-editor .photo-sidebar-right { display: none; }
+  .photo-creator-grid.modern-editor.classic-editor { grid-template-columns: var(--photo-left-width) minmax(0, 1fr); }
+  .photo-creator-grid.classic-editor .photo-sidebar-right { display: block; grid-column: 1 / -1; max-height: 460px; }
 }
 
 @media (max-width: 620px) {
   .photo-modern-editor-shell { overflow: visible; }.photo-editor-topbar { position: sticky; top: 0; z-index: 100; grid-template-columns: 1fr auto; }.photo-topbar-left .editor-focus-toggle,.photo-topbar-text,.photo-topbar-divider { display: none; }
   .photo-creator-grid.modern-editor { display: flex; flex-direction: column; }.photo-creator-grid.modern-editor .photo-sidebar-left { order: 2; width: 100%; min-height: 420px; border-right: 0; border-top: 1px solid #dfe3ea; }.photo-creator-grid.modern-editor .photo-stage-panel { order: 1; min-height: 440px; }.photo-modern-tools { max-height: 560px; }.modern-tool-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
+  .photo-editor-topbar { display: flex; flex-wrap: wrap; }
+  .photo-topbar-actions { flex-wrap: wrap; margin-left: auto; }
+  .photo-creator-grid.classic-editor .photo-sidebar-right { order: 3; }
 }
 
 /* Keep the full editor reachable in the application shell. The canvas keeps

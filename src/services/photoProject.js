@@ -44,6 +44,12 @@ export const parsePhotoProject = (text) => {
   if (document.layers.some((layer) => !isRecord(layer) || typeof layer.id !== 'string' || typeof layer.type !== 'string')) {
     throw new Error('The project contains an invalid layer.')
   }
+  if (document.layers.some((layer) => layer.objectGroupId != null && (typeof layer.objectGroupId !== 'string' || !layer.objectGroupId.trim()))) {
+    throw new Error('The project contains an invalid object group.')
+  }
+  if (document.layers.some((layer) => (layer.locked !== undefined && typeof layer.locked !== 'boolean') || (layer.isBaseImage && layer.locked))) {
+    throw new Error('The project contains an invalid object lock.')
+  }
   if (document.imageSrc && typeof document.imageSrc !== 'string') {
     throw new Error('The project image is invalid.')
   }
