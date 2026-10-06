@@ -78,3 +78,12 @@ test('document measurements round-trip, legacy documents retain pixels, and inva
     assert.throws(() => parsePhotoProject(JSON.stringify({ filters: {}, layers: [], measurements })), /Document measurements/)
   }
 })
+
+test('polygon and star geometry, fill, outline, and transparency survive project round trips', () => {
+  const layers = ['hexagon', 'star'].map((shape) => ({
+    id: shape, type: 'shape', shape, x: 45, y: 60, width: 30, height: 20,
+    rotation: 35, color: '#ff0000', strokeColor: '#000000', strokeWidth: 4,
+    filled: true, opacity: 70,
+  }))
+  assert.deepEqual(parsePhotoProject(JSON.stringify(createPhotoProject({ ...state, layers }))).layers, layers)
+})

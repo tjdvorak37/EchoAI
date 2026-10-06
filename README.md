@@ -150,6 +150,22 @@ Document-wide commands stay separate from active-tool options, and blank-page
 upload/stock shortcuts sit outside the artwork. Simple and the shared landing
 page retain their existing layout.
 
+The quick toolbar provides New/Open image/Open project/Save project, object
+Cut/Copy/Paste, photo commands, numeric zoom (25–400%), Fit, and Rulers/Grid/Guides/
+Snap toggles. Grid and center guides are visual aids; Snap targets page/object
+edges and centers, not grid intersections. The unit-aware Nudge field sets the
+Classic arrow-key distance (default 1 canvas pixel, Shift multiplies it by ten);
+switching units preserves that distance. Zoom, nudge, and view toggles are
+workspace settings, not artwork changes or document undo steps.
+
+The left toolbox gives direct rectangle and ellipse access, grouped line/brush
+and polygon/star/triangle tools, plus shortcuts to object fill/outline and
+transparency properties. Polygon currently inserts a six-sided polygon; Star
+inserts a five-point star. Both remain editable, support fill/outline/opacity,
+and use shared geometry for preview and raster export. Advanced node editing,
+Bézier paths, mesh fills, and dimension-line objects are not implemented or
+represented by nonfunctional buttons.
+
 Page setup and Custom size creation support pixels, inches, and millimeters with
 an explicit 36–1200 PPI resolution. New Print/Docs presets default to 300 PPI;
 existing projects without measurement metadata remain pixel documents at 96 PPI.

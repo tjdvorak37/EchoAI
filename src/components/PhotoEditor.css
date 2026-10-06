@@ -3054,9 +3054,10 @@
 
 .photo-classic-editor-shell > .editor-menu-host { order: 0; min-height: 26px; }
 .photo-classic-editor-shell > .photo-editor-topbar { order: 1; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; min-height: 34px; padding: 3px 6px; border-radius: 0; }
-.photo-classic-editor-shell > .photo-page-setup { order: 2; flex-shrink: 0; }
-.photo-classic-editor-shell > .editor-options-bar { order: 3; min-height: 32px; padding: 3px 8px; }
-.photo-classic-editor-shell > .classic-editor { order: 4; }
+.photo-classic-editor-shell > .photo-classic-quick-toolbar { order: 2; }
+.photo-classic-editor-shell > .photo-page-setup { order: 3; flex-shrink: 0; }
+.photo-classic-editor-shell > .editor-options-bar { order: 4; min-height: 32px; padding: 3px 8px; }
+.photo-classic-editor-shell > .classic-editor { order: 5; }
 .photo-classic-editor-shell button { transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
 .photo-classic-editor-shell .sidebar-menu-bar { min-height: 26px; padding: 0 4px; gap: 2px; }
 .photo-classic-editor-shell .menu-item-compact { min-height: 26px; padding: 3px 7px; font-size: 12px; border-radius: 2px; }
@@ -3071,7 +3072,6 @@
 .photo-classic-editor-shell .photo-topbar-title span { font-size: 10px; }
 .photo-classic-editor-shell .photo-topbar-left,
 .photo-classic-editor-shell .photo-topbar-actions { gap: 4px; }
-.photo-classic-command-actions { display: flex; align-items: center; gap: 2px; padding-right: 6px; margin-right: 2px; border-right: 1px solid #d7dbe0; }
 .photo-classic-editor-shell .photo-topbar-title { overflow: hidden; }
 .photo-classic-editor-shell .photo-topbar-title strong { width: 100%; max-width: 100%; text-align: center; }
 .photo-classic-editor-shell .photo-topbar-left > *,
@@ -3112,6 +3112,7 @@
 .photo-classic-editor-shell .photo-sidebar-right .panel-block input:not([type='range']):not([type='checkbox']),
 .photo-classic-editor-shell .photo-sidebar-right .panel-block select { height: 28px; min-height: 28px; padding: 3px 6px; border-radius: 3px; font-size: 12px; }
 .photo-classic-editor-shell .photo-layer { border-radius: 0; transition: none; }
+.photo-polygon-shape { overflow: visible; pointer-events: none; }
 .photo-classic-empty-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 6px; color: #64748b; font-size: 11px; }
 .photo-classic-empty-actions button { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 3px; color: #334155; background: #fff; font-size: 12px; }
 .photo-classic-editor-shell .photo-topbar-icon:hover,
