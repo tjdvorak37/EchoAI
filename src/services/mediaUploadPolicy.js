@@ -96,3 +96,25 @@ export const getVideoPostError = ({ media = [], channels = [], supabaseConfigure
   }
   return ''
 }
+
+export const getImagePostError = ({ media = [], channels = [], supabaseConfigured = false }) => {
+  const images = media.filter((item) => item.type === 'image')
+  if (!images.length) return ''
+
+  const unsupported = channels.filter((channel) => !['facebook', 'instagram'].includes(channel))
+  if (unsupported.length) {
+    return `Image publishing is available for Facebook and Instagram. Remove image media or deselect ${unsupported.join(', ')}.`
+  }
+  if (images.length > 1) {
+    return 'Facebook and Instagram currently support one image per post. Remove extra image attachments or publish them separately.'
+  }
+  if (supabaseConfigured && channels.some((channel) => {
+    const image = images[0]
+    return channel === 'facebook'
+      ? !image.storagePath
+      : channel === 'instagram' && !image.storagePath && !image.webUrl
+  })) {
+    return 'Re-upload the image to workspace storage before scheduling it.'
+  }
+  return ''
+}

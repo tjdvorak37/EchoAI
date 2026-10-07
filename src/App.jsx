@@ -49,7 +49,7 @@ import { isEmployee } from './services/employeeNotificationService'
 import { UpgradeDialog } from './components/UpgradeDialog'
 import { removeStoredAsset } from './services/mediaAssets'
 import { createTrimmedVideoClip, getVideoDuration, makeMediaPreview, uploadMediaFile, validateMediaFile, MAX_MEDIA_FILE_BYTES, VIDEO_MAX_DURATION_SECONDS } from './services/mediaUploadService'
-import { getVideoPostError, getVideoTrimForChannel, SOCIAL_VIDEO_CLIP_LIMITS } from './services/mediaUploadPolicy'
+import { getImagePostError, getVideoPostError, getVideoTrimForChannel, SOCIAL_VIDEO_CLIP_LIMITS } from './services/mediaUploadPolicy'
 
 const AI_PROMPT_IDEAS = [
   'Create 3 Instagram captions for a weekend sale with urgency and energy.',
@@ -1603,9 +1603,18 @@ function App() {
     }))
   }
 
-  const validateVideoPostDestinations = () => {
-    const media = getComposerMedia()
-    const message = getVideoPostError({ media, channels: composer.channels, supabaseConfigured: isSupabaseConfigured })
+  const getMediaPostValidationError = (media, channels) => getVideoPostError({
+    media,
+    channels,
+    supabaseConfigured: isSupabaseConfigured,
+  }) || getImagePostError({
+    media,
+    channels,
+    supabaseConfigured: isSupabaseConfigured,
+  })
+
+  const validateMediaPostDestinations = () => {
+    const message = getMediaPostValidationError(getComposerMedia(), composer.channels)
     if (!message) return true
     setSchedulerError(message)
     return false
@@ -1619,7 +1628,7 @@ function App() {
       setSchedulerError('Write a caption or add an image brief, select at least one channel, and set a deployment date and time.')
       return
     }
-    if (!validateVideoPostDestinations()) return
+    if (!validateMediaPostDestinations()) return
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
@@ -1669,7 +1678,7 @@ function App() {
       setSchedulerError('Write a caption or add an image brief, and select at least one channel before queuing to the next slot.')
       return
     }
-    if (!validateVideoPostDestinations()) return
+    if (!validateMediaPostDestinations()) return
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
@@ -1724,7 +1733,7 @@ function App() {
       setSchedulerError('Write a caption or add an image brief, and select at least one channel before posting.')
       return
     }
-    if (!validateVideoPostDestinations()) return
+    if (!validateMediaPostDestinations()) return
 
     const invalidSelectedChannels = composer.channels.filter((channel) => {
       const linkedAccount = resolveChannelAccount(channel, composer.channelAccounts)
@@ -1769,6 +1778,11 @@ function App() {
     const channels = post.channels || []
     if (!channels.length) {
       setSchedulerError('Select at least one connected channel before reposting.')
+      return
+    }
+    const mediaValidationError = getMediaPostValidationError(post.media || [], channels)
+    if (mediaValidationError) {
+      setSchedulerError(mediaValidationError)
       return
     }
 
@@ -2022,20 +2036,50 @@ function App() {
     }
   }
 
-  const handlePhotoExport = (project) => {
-    const exportedAsset = {
-      id: `asset_${Date.now()}`,
-      name: project.exportName || 'photo-creator-export.png',
-      type: 'image',
-      mime: 'image/png',
-      size: project.sizeBytes || Math.max(300000, Math.round((project.dataUrl?.length || 0) * 0.72)),
-      folderId: selectedFolderId,
-      createdAt: new Date().toISOString(),
-      previewUrl: project.dataUrl,
-      summary: project.summary || 'Exported from the photo creator',
+  const handlePhotoExport = async (project) => {
+    const response = await fetch(project.dataUrl)
+    if (!response.ok) throw new Error('Could not read the exported image.')
+    const blob = await response.blob()
+    const mime = project.mime || blob.type
+    if (!mime || blob.type !== mime) throw new Error('The exported image format does not match its file metadata.')
+    const file = new File([blob], project.exportName || 'photo-creator-export.png', { type: mime })
+    const availableQuotaBytes = Math.max(0, (storageQuotaMb - storageUsedMb) * 1024 * 1024)
+    setMediaUploadProgress({ fileName: file.name, percent: 0, index: 0, total: 1 })
+    let uploadedAsset
+    try {
+      uploadedAsset = await uploadMediaToWorkspace(file, {
+        availableQuotaBytes,
+        onProgress: (fraction) => setMediaUploadProgress({
+          fileName: file.name,
+          percent: Math.round(fraction * 100),
+          index: 0,
+          total: 1,
+        }),
+      })
+    } finally {
+      setMediaUploadProgress(null)
     }
-
+    if (!uploadedAsset.storagePath) {
+      throw new Error('Workspace media storage is not connected, so this export could not be saved as a durable asset. The image was still downloaded.')
+    }
+    const exportedAsset = {
+      ...uploadedAsset,
+      summary: project.summary || 'Exported from the photo creator',
+      headline: project.headline || '',
+      caption: project.caption || '',
+      width: project.width,
+      height: project.height,
+    }
     setWorkspaceAssets((prev) => [exportedAsset, ...prev])
+    const exportCopy = [project.headline?.trim(), project.caption?.trim()].filter(Boolean).join('\n\n')
+    setComposer((previous) => ({
+      ...previous,
+      message: [previous.message.trim(), exportCopy].filter(Boolean).join('\n\n'),
+      imageIdea: '',
+      mediaAssetIds: [...new Set([...(previous.mediaAssetIds || []), exportedAsset.id])],
+    }))
+    setSchedulerError('')
+    setActiveTab('scheduler')
   }
 
   const handleSavePhotoProject = (project) => {

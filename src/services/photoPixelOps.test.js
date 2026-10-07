@@ -3,11 +3,13 @@ import assert from 'node:assert/strict'
 import { stagePointToImage } from './photoCanvasOps.js'
 import {
   applyHueSaturation,
+  applyTonalAdjustments,
   combineMasks,
   defaultHueSat,
   featherMask,
   hslToRgb,
   invertMask,
+  isNeutralTonalAdjustments,
   magicWandMask,
   maskCoverage,
   paintBucket,
@@ -80,6 +82,51 @@ test('colorize tints by luminance', () => {
   const image = makeImage(1, 1, () => [128, 128, 128])
   applyHueSaturation(image, { ...defaultHueSat(), colorize: true, colorizeHue: 240, colorizeSaturation: 50 })
   assert.ok(image.data[2] > image.data[0], 'blue tint')
+})
+
+test('tonal correction independently lifts shadows and highlights', () => {
+  const darkImage = makeImage(1, 1, () => [32, 32, 32])
+  const brightImage = makeImage(1, 1, () => [224, 224, 224])
+  applyTonalAdjustments(darkImage, { shadows: 100 })
+  applyTonalAdjustments(brightImage, { shadows: 100 })
+  assert.ok(darkImage.data[0] > 80, `dark pixels lift: ${darkImage.data[0]}`)
+  assert.equal(brightImage.data[0], 224, 'bright pixels are protected from shadow adjustment')
+
+  const highlightImage = makeImage(1, 1, () => [224, 224, 224])
+  const protectedShadow = makeImage(1, 1, () => [32, 32, 32])
+  applyTonalAdjustments(highlightImage, { highlights: 100 })
+  applyTonalAdjustments(protectedShadow, { highlights: 100 })
+  assert.ok(highlightImage.data[0] > 245, `bright pixels lift: ${highlightImage.data[0]}`)
+  assert.equal(protectedShadow.data[0], 32, 'dark pixels are protected from highlight adjustment')
+})
+
+test('white balance temperature and tint shift opposite color channels', () => {
+  const warm = makeImage(1, 1, () => [128, 128, 128])
+  applyTonalAdjustments(warm, { temperature: 100 })
+  assert.ok(warm.data[0] > warm.data[2], 'positive temperature warms the image')
+
+  const cool = makeImage(1, 1, () => [128, 128, 128])
+  applyTonalAdjustments(cool, { temperature: -100 })
+  assert.ok(cool.data[2] > cool.data[0], 'negative temperature cools the image')
+
+  const magenta = makeImage(1, 1, () => [128, 128, 128])
+  applyTonalAdjustments(magenta, { tint: 100 })
+  assert.ok(magenta.data[0] > magenta.data[1] && magenta.data[2] > magenta.data[1], 'positive tint shifts away from green')
+
+  const green = makeImage(1, 1, () => [128, 128, 128])
+  applyTonalAdjustments(green, { tint: -100 })
+  assert.ok(green.data[1] > green.data[0] && green.data[1] > green.data[2], 'negative tint shifts toward green')
+})
+
+test('neutral tonal correction is a no-op and preserves transparent pixels', () => {
+  const image = makeImage(2, 1, (x) => (x === 0 ? [80, 110, 150] : [240, 10, 30]))
+  image.data[7] = 0
+  const before = [...image.data]
+  assert.equal(isNeutralTonalAdjustments({ highlights: 0, shadows: 0, temperature: 0, tint: 0 }), true)
+  assert.equal(applyTonalAdjustments(image, { highlights: 0, shadows: 0, temperature: 0, tint: 0 }), image)
+  assert.deepEqual([...image.data], before)
+  applyTonalAdjustments(image, { temperature: 80, tint: -60, shadows: 50 })
+  assert.deepEqual([...image.data.slice(4)], before.slice(4), 'transparent pixels are unchanged')
 })
 
 test('select subject separates a subject from a plain backdrop', () => {

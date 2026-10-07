@@ -5,6 +5,7 @@ import {
   VIDEO_MAX_DURATION_SECONDS,
   INSTAGRAM_REELS_MAX_DURATION_SECONDS,
   getVideoTrimForChannel,
+  getImagePostError,
   getVideoPostError,
   validateMediaFile,
 } from './mediaUploadPolicy.js'
@@ -105,4 +106,42 @@ test('automatically caps Instagram trims while still accepting an eight-minute s
     supabaseConfigured: true,
   })
   assert.match(unsupportedError, /Facebook video posts, Instagram Reels, and YouTube/)
+})
+
+test('allows stored images for Facebook and Instagram only', () => {
+  const image = { type: 'image', storagePath: 'user/photo.webp', mime: 'image/webp' }
+  assert.equal(getImagePostError({
+    media: [image],
+    channels: ['facebook', 'instagram'],
+    supabaseConfigured: true,
+  }), '')
+  assert.match(getImagePostError({
+    media: [image],
+    channels: ['x'],
+    supabaseConfigured: true,
+  }), /available for Facebook and Instagram/)
+  assert.match(getImagePostError({
+    media: [image],
+    channels: ['youtube'],
+    supabaseConfigured: true,
+  }), /available for Facebook and Instagram/)
+})
+
+test('requires a publisher-readable image source and rejects multiple images', () => {
+  const image = { type: 'image', previewUrl: 'blob:photo', mime: 'image/jpeg' }
+  assert.match(getImagePostError({
+    media: [image],
+    channels: ['facebook'],
+    supabaseConfigured: true,
+  }), /Re-upload the image/)
+  assert.equal(getImagePostError({
+    media: [image],
+    channels: ['instagram'],
+    supabaseConfigured: true,
+  }).includes('Re-upload'), true)
+  assert.match(getImagePostError({
+    media: [{ ...image, storagePath: 'user/one.jpg' }, { ...image, storagePath: 'user/two.jpg' }],
+    channels: ['instagram'],
+    supabaseConfigured: true,
+  }), /one image per post/)
 })

@@ -1,6 +1,6 @@
-import { applyHueSaturation, isNeutralHueSat, maskEdges } from './photoPixelOps.js'
+import { applyHueSaturation, applyTonalAdjustments, isNeutralHueSat, isNeutralTonalAdjustments, maskEdges } from './photoPixelOps.js'
 
-// Pixel work runs at this size; exports scale from it. 2048px keeps Select Subject fast on 12MP photos.
+// Interactive selections use this limit for responsiveness; source-preserving edits/export use original pixels.
 export const WORK_MAX = 2048
 
 export const loadImageElement = (src) =>
@@ -67,11 +67,12 @@ export const dataUrlToMask = async (src, width, height) => {
 }
 
 // Original pixels -> Hue/Saturation -> layer mask. Returns a canvas at work resolution.
-export const renderProcessedBase = async ({ work, hueSat, layerMask }) => {
+export const renderProcessedBase = async ({ work, hueSat, adjustments, layerMask }) => {
   const canvas = makeCanvas(work.width, work.height)
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: !isNeutralHueSat(hueSat) || !isNeutralTonalAdjustments(adjustments) })
   const pixels = cloneImageData(work.imageData)
   if (!isNeutralHueSat(hueSat)) applyHueSaturation(pixels, hueSat)
+  applyTonalAdjustments(pixels, adjustments)
   ctx.putImageData(pixels, 0, 0)
   if (layerMask?.src && layerMask.enabled !== false) {
     const maskImage = await loadImageElement(layerMask.src)
@@ -79,6 +80,32 @@ export const renderProcessedBase = async ({ work, hueSat, layerMask }) => {
     ctx.drawImage(maskImage, 0, 0, work.width, work.height)
     ctx.globalCompositeOperation = 'source-over'
   }
+  return canvas
+}
+
+export const renderProcessedBaseAtSize = async ({ src, width, height, hueSat, adjustments, layerMask }) => {
+  const image = await loadImageElement(src)
+  const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight)
+  const outputWidth = Math.max(1, Math.round(image.naturalWidth * scale))
+  const outputHeight = Math.max(1, Math.round(image.naturalHeight * scale))
+  const canvas = makeCanvas(outputWidth, outputHeight)
+  const ctx = canvas.getContext('2d', { willReadFrequently: !isNeutralHueSat(hueSat) || !isNeutralTonalAdjustments(adjustments) })
+  ctx.drawImage(image, 0, 0, outputWidth, outputHeight)
+
+  if (!isNeutralHueSat(hueSat) || !isNeutralTonalAdjustments(adjustments)) {
+    const pixels = ctx.getImageData(0, 0, outputWidth, outputHeight)
+    if (!isNeutralHueSat(hueSat)) applyHueSaturation(pixels, hueSat)
+    applyTonalAdjustments(pixels, adjustments)
+    ctx.putImageData(pixels, 0, 0)
+  }
+
+  if (layerMask?.src && layerMask.enabled !== false) {
+    const maskImage = await loadImageElement(layerMask.src)
+    ctx.globalCompositeOperation = 'destination-in'
+    ctx.drawImage(maskImage, 0, 0, outputWidth, outputHeight)
+    ctx.globalCompositeOperation = 'source-over'
+  }
+
   return canvas
 }
 
