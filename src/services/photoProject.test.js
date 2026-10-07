@@ -87,3 +87,23 @@ test('polygon and star geometry, fill, outline, and transparency survive project
   }))
   assert.deepEqual(parsePhotoProject(JSON.stringify(createPhotoProject({ ...state, layers }))).layers, layers)
 })
+
+test('independent image layer masks survive project round trips', () => {
+  const layers = [
+    { id: 'photo-1', type: 'image', src: 'data:image/png;base64,cGhvdG8=', mask: { id: 7, src: 'data:image/png;base64,bWFzaw==', enabled: false } },
+    { id: 'photo-2', type: 'image', src: 'data:image/png;base64,cGhvdG8y', mask: { id: 8, src: 'data:image/png;base64,bWFzazI=', enabled: true } },
+  ]
+  const selection = { src: 'data:image/png;base64,c2VsZWN0aW9u', width: 20, height: 20, imageSrc: layers[1].src }
+  const loaded = parsePhotoProject(JSON.stringify(createPhotoProject({ ...state, layers, selection })))
+  assert.deepEqual(loaded.layers, layers)
+  assert.deepEqual(loaded.selection, selection)
+})
+
+test('per-image corrections survive project round trips without changing other layers', () => {
+  const layers = [
+    { id: 'photo-1', type: 'image', src: 'data:image/png;base64,cGhvdG8=', adjustments: { brightness: 125, contrast: 90, vignette: 30, highlights: 24, shadows: -18, temperature: 36, tint: -12 }, hueSat: { colorize: false, ranges: { master: { hue: 14, saturation: -8 } } } },
+    { id: 'photo-2', type: 'image', src: 'data:image/png;base64,cGhvdG8y' },
+  ]
+  const loaded = parsePhotoProject(JSON.stringify(createPhotoProject({ ...state, layers })))
+  assert.deepEqual(loaded.layers, layers)
+})

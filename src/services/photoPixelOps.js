@@ -154,6 +154,43 @@ export const applyHueSaturation = (image, settings) => {
   return image
 }
 
+export const isNeutralTonalAdjustments = (settings) => (
+  !settings
+  || (!settings.highlights && !settings.shadows && !settings.temperature && !settings.tint)
+)
+
+const smoothstep = (start, end, value) => {
+  const position = Math.max(0, Math.min(1, (value - start) / (end - start)))
+  return position * position * (3 - 2 * position)
+}
+
+export const applyTonalAdjustments = (image, settings) => {
+  if (isNeutralTonalAdjustments(settings)) return image
+  const { data } = image
+  const highlights = Math.max(-100, Math.min(100, settings.highlights ?? 0)) / 100
+  const shadows = Math.max(-100, Math.min(100, settings.shadows ?? 0)) / 100
+  const temperature = Math.max(-100, Math.min(100, settings.temperature ?? 0)) / 100
+  const tint = Math.max(-100, Math.min(100, settings.tint ?? 0)) / 100
+  const temperatureShift = temperature * 55
+  const tintShift = tint * 42
+
+  for (let index = 0; index < data.length; index += 4) {
+    if (data[index + 3] === 0) continue
+    const red = data[index]
+    const green = data[index + 1]
+    const blue = data[index + 2]
+    const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255
+    const highlightWeight = smoothstep(0.34, 0.88, luminance)
+    const shadowWeight = 1 - smoothstep(0.12, 0.62, luminance)
+    const toneShift = (highlights * highlightWeight + shadows * shadowWeight) * 72
+
+    data[index] = Math.max(0, Math.min(255, red + toneShift + temperatureShift + tintShift * 0.42))
+    data[index + 1] = Math.max(0, Math.min(255, green + toneShift - tintShift))
+    data[index + 2] = Math.max(0, Math.min(255, blue + toneShift - temperatureShift + tintShift * 0.42))
+  }
+  return image
+}
+
 const colorDistance = (data, index, r, g, b) => {
   const dr = data[index] - r
   const dg = data[index + 1] - g

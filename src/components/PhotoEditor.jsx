@@ -94,7 +94,10 @@ import {
   defaultHueSat,
   featherMask,
   invertMask,
+  applyHueSaturation,
+  applyTonalAdjustments,
   isNeutralHueSat,
+  isNeutralTonalAdjustments,
   magicWandMask,
   maskCoverage,
   paintBucket,
@@ -112,6 +115,7 @@ import {
   loadWorkImage,
   maskToDataUrl,
   renderProcessedBase,
+  renderProcessedBaseAtSize,
   selectionOverlayUrls,
   stagePointToImage,
   transformImageSrc,
@@ -521,7 +525,13 @@ const NEUTRAL_FILTERS = {
   shadowY: 0,
   shadowBlur: 0,
   shadowColor: '#000000',
+  highlights: 0,
+  shadows: 0,
+  temperature: 0,
+  tint: 0,
 }
+
+const NEUTRAL_HUE_SAT = defaultHueSat()
 
 // Preview and export must agree, so both read this one string.
 const buildFilterString = (filters) =>
@@ -1085,7 +1095,6 @@ const renderComposition = async ({
 
   const width = canvas.width
   const height = canvas.height
-
   ctx.clearRect(0, 0, width, height)
   if (backgroundColor !== 'transparent') {
     ctx.fillStyle = backgroundColor || preset.base
@@ -1157,9 +1166,13 @@ const renderComposition = async ({
       .filter((layer) => layer.type === 'image' && layer.src && !layer.hidden && !layer.isBaseImage)
       .map(async (layer) => {
         try {
-          logoImages.set(layer.id, await loadImage(layer.src))
-        } catch {
-          // A logo that will not decode is skipped rather than failing the export.
+          const image = await loadImage(layer.src)
+          const mask = layer.mask?.src && layer.mask.enabled !== false
+            ? await loadImage(layer.mask.src)
+            : null
+          logoImages.set(layer.id, { image, mask })
+        } catch (error) {
+          throw new Error(`Could not render image layer "${layer.label || layer.id}": ${error.message}`, { cause: error })
         }
       }),
   )
@@ -1172,13 +1185,69 @@ const renderComposition = async ({
     ctx.globalCompositeOperation = layer.blendMode || 'source-over'
 
     if (layer.type === 'image') {
-      const image = logoImages.get(layer.id)
-      if (!image) return
+      const imageLayer = logoImages.get(layer.id)
+      if (!imageLayer) return
+      const { image, mask } = imageLayer
 
       const drawWidth = (layer.width / 100) * width
       const drawHeight = drawWidth * (image.height / image.width)
+      let renderedImage = image
+      const adjustments = { ...NEUTRAL_FILTERS, ...layer.adjustments }
+      const hueSat = layer.hueSat || defaultHueSat()
+      if (mask
+        || adjustments.vignette > 0
+        || adjustments.grain > 0
+        || !isNeutralHueSat(hueSat)
+        || !isNeutralTonalAdjustments(adjustments)) {
+        const imageCanvas = document.createElement('canvas')
+        imageCanvas.width = Math.max(1, Math.ceil(drawWidth))
+        imageCanvas.height = Math.max(1, Math.ceil(drawHeight))
+        const imageContext = imageCanvas.getContext('2d', {
+          willReadFrequently: !isNeutralHueSat(hueSat) || !isNeutralTonalAdjustments(adjustments),
+        })
+        if (!imageContext) throw new Error(`Could not process image layer "${layer.label || layer.id}".`)
+        imageContext.drawImage(image, 0, 0, imageCanvas.width, imageCanvas.height)
+        if (!isNeutralHueSat(hueSat) || !isNeutralTonalAdjustments(adjustments)) {
+          const pixels = imageContext.getImageData(0, 0, imageCanvas.width, imageCanvas.height)
+          if (!isNeutralHueSat(hueSat)) applyHueSaturation(pixels, hueSat)
+          applyTonalAdjustments(pixels, adjustments)
+          imageContext.putImageData(pixels, 0, 0)
+        }
+        if (adjustments.vignette > 0) {
+          const vignette = imageContext.createRadialGradient(
+            imageCanvas.width / 2, imageCanvas.height / 2, imageCanvas.width * 0.18,
+            imageCanvas.width / 2, imageCanvas.height / 2, imageCanvas.width * 0.72,
+          )
+          vignette.addColorStop(0, 'rgba(0, 0, 0, 0)')
+          vignette.addColorStop(1, `rgba(2, 6, 23, ${(0.62 * Math.min(100, adjustments.vignette)) / 100})`)
+          imageContext.globalCompositeOperation = 'source-atop'
+          imageContext.fillStyle = vignette
+          imageContext.fillRect(0, 0, imageCanvas.width, imageCanvas.height)
+          imageContext.globalCompositeOperation = 'source-over'
+        }
+        if (adjustments.grain > 0) {
+          const gridSize = Math.max(1, imageCanvas.width * 0.05)
+          const lineWidth = Math.max(0.5, gridSize * 0.055)
+          imageContext.globalCompositeOperation = 'source-atop'
+          imageContext.fillStyle = `rgba(255, 255, 255, ${0.05 * clamp(adjustments.grain / 80, 0, 0.22)})`
+          for (let x = 0; x < imageCanvas.width; x += gridSize) {
+            imageContext.fillRect(x, 0, lineWidth, imageCanvas.height)
+          }
+          for (let y = 0; y < imageCanvas.height; y += gridSize) {
+            imageContext.fillRect(0, y, imageCanvas.width, lineWidth)
+          }
+          imageContext.globalCompositeOperation = 'source-over'
+        }
+        if (mask) {
+          imageContext.globalCompositeOperation = 'destination-in'
+          imageContext.drawImage(mask, 0, 0, imageCanvas.width, imageCanvas.height)
+          imageContext.globalCompositeOperation = 'source-over'
+        }
+        renderedImage = imageCanvas
+      }
 
       ctx.save()
+      ctx.filter = buildFilterString(adjustments)
       ctx.globalAlpha = (layer.opacity ?? 100) / 100
       ctx.translate(x, y)
       ctx.rotate(((layer.rotation || 0) * Math.PI) / 180)
@@ -1186,9 +1255,9 @@ const renderComposition = async ({
         ctx.translate(-drawWidth / 2, -drawHeight / 2)
         buildMaskPath(ctx, layer.clipShape, drawWidth, drawHeight)
         ctx.clip()
-        ctx.drawImage(image, 0, 0, drawWidth, drawHeight)
+        ctx.drawImage(renderedImage, 0, 0, drawWidth, drawHeight)
       } else {
-        ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
+        ctx.drawImage(renderedImage, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
       }
       ctx.restore()
       return
@@ -1419,6 +1488,21 @@ export function PhotoEditor({
     : (layers[0]?.id ?? '')
   const activeTextLayer = layers.find((layer) => layer.id === resolvedActiveLayerId && layer.type === 'text') ?? null
   const activeLayer = layers.find((layer) => layer.id === resolvedActiveLayerId) ?? null
+  const activePixelLayer = activeLayer?.type === 'image' && !activeLayer.isBaseImage
+    ? activeLayer
+    : layers.find((layer) => layer.isBaseImage) ?? null
+  const activePixelImageSrc = activePixelLayer?.src || selectedImageSrc
+  const activeImageMask = activePixelLayer?.isBaseImage ? layerMask : activePixelLayer?.mask || null
+  const activeImageAdjustments = useMemo(() => (activePixelLayer?.isBaseImage
+    ? { ...NEUTRAL_FILTERS, ...filters }
+    : { ...NEUTRAL_FILTERS, ...activePixelLayer?.adjustments }), [activePixelLayer, filters])
+  const activeImageHueSat = activePixelLayer?.isBaseImage
+    ? hueSat
+    : activePixelLayer?.hueSat || NEUTRAL_HUE_SAT
+  const activePhotoSelection = selection && (
+    selection.imageSrc === activePixelImageSrc
+    || (!selection.imageSrc && activePixelLayer?.isBaseImage)
+  ) ? selection : null
   const selectedObjectIds = classicWorkspace
     ? (objectSelection?.primaryId === activeLayerId
         ? objectSelection.ids.filter((id) => layers.some((layer) => layer.id === id))
@@ -1938,17 +2022,45 @@ export function PhotoEditor({
     setNotice(uppercase ? 'Selected text changed to uppercase.' : 'Selected text changed to lowercase.')
   }
 
+  const canAdjustActiveImage = () => {
+    if (!activePixelLayer) {
+      setNotice('Select an image layer before changing photo corrections.')
+      return false
+    }
+    if (activePixelLayer.locked) {
+      setNotice('Unlock the image layer before changing its corrections.')
+      return false
+    }
+    return true
+  }
+
+  const updateActiveImageAdjustments = (patch) => {
+    if (!canAdjustActiveImage()) return
+    if (activePixelLayer.isBaseImage) {
+      setFilters((current) => ({ ...current, ...patch }))
+      return
+    }
+    setLayers((current) => current.map((layer) => layer.id === activePixelLayer.id
+      ? { ...layer, adjustments: { ...NEUTRAL_FILTERS, ...layer.adjustments, ...patch } }
+      : layer))
+  }
+
   const resetFilters = () => {
+    if (!canAdjustActiveImage()) return
     commitHistory()
-    setFilters(DEFAULT_FILTERS)
-    setNotice('Adjustments reset.')
+    if (activePixelLayer?.isBaseImage) {
+      setFilters(DEFAULT_FILTERS)
+    } else {
+      updateActiveImageAdjustments(NEUTRAL_FILTERS)
+    }
+    setNotice(`Adjustments reset on ${activePixelLayer?.label || 'photo'}.`)
   }
 
   // --- Pro editing: pixel pipeline, selections, layer mask ----------------
   useEffect(() => {
-    if (!selectedImageSrc) return undefined
+    if (!activePixelImageSrc) return undefined
     let cancelled = false
-    loadWorkImage(selectedImageSrc)
+    loadWorkImage(activePixelImageSrc)
       .then((next) => {
         if (!cancelled) setWork(next)
       })
@@ -1958,18 +2070,34 @@ export function PhotoEditor({
     return () => {
       cancelled = true
     }
-  }, [selectedImageSrc])
+  }, [activePixelImageSrc])
 
-  const activeWork = work?.src === selectedImageSrc ? work : null
-  const maskActive = Boolean(layerMask?.src && layerMask.enabled !== false)
-  const needsProcessing = Boolean(activeWork && (maskActive || !isNeutralHueSat(hueSat)))
-  const processKey = needsProcessing ? `${JSON.stringify(hueSat)}|${maskActive ? layerMask.id : 'none'}` : ''
+  const activeWork = work?.src === activePixelImageSrc ? work : null
+  const baseMaskActive = Boolean(layerMask?.src && layerMask.enabled !== false)
+  const needsProcessing = Boolean(activeWork && (
+    (activePixelLayer?.isBaseImage && baseMaskActive)
+    || !isNeutralHueSat(activeImageHueSat)
+    || !isNeutralTonalAdjustments(activeImageAdjustments)
+  ))
+  const processKey = needsProcessing
+    ? `${JSON.stringify(activeImageHueSat)}|${JSON.stringify([
+        activeImageAdjustments.highlights,
+        activeImageAdjustments.shadows,
+        activeImageAdjustments.temperature,
+        activeImageAdjustments.tint,
+      ])}|${activePixelLayer?.isBaseImage && baseMaskActive ? JSON.stringify(layerMask) : 'none'}`
+    : ''
 
   useEffect(() => {
     if (!needsProcessing || !activeWork) return undefined
     let cancelled = false
     const timer = setTimeout(() => {
-      renderProcessedBase({ work: activeWork, hueSat, layerMask: maskActive ? layerMask : null })
+      renderProcessedBase({
+        work: activeWork,
+        hueSat: activeImageHueSat,
+        adjustments: activeImageAdjustments,
+        layerMask: activePixelLayer?.isBaseImage && baseMaskActive ? layerMask : null,
+      })
         .then(canvasToObjectUrl)
         .then((url) => {
           if (cancelled) {
@@ -1981,27 +2109,48 @@ export function PhotoEditor({
             return { key: processKey, src: activeWork.src, url }
           })
         })
-        .catch(() => {})
+        .catch((error) => {
+          if (!cancelled) setNotice(`Could not preview image corrections: ${error.message}`)
+        })
     }, 40)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [activeWork, hueSat, layerMask, maskActive, needsProcessing, processKey])
+  }, [activeWork, activeImageHueSat, activeImageAdjustments, activePixelLayer?.isBaseImage, layerMask, baseMaskActive, needsProcessing, processKey])
 
   // While a new render is in flight keep showing the last one, never the unmasked original.
   const displayImageSrc = !needsProcessing
-    ? selectedImageSrc
-    : processed?.src === selectedImageSrc
+    ? activePixelImageSrc
+    : processed?.src === activePixelImageSrc && processed?.key === processKey
       ? processed.url
-      : maskActive ? '' : selectedImageSrc
-  const renderedImageSrc = baseImageLayer?.hidden ? '' : displayImageSrc
+      : activePixelLayer?.isBaseImage && baseMaskActive ? '' : activePixelImageSrc
+  const renderedImageSrc = baseImageLayer?.hidden
+    ? ''
+    : activePixelLayer?.isBaseImage ? displayImageSrc : selectedImageSrc
 
-  const imageFit = activeWork ? fitContain(activeWork.width, activeWork.height, stageDisplaySize.width, stageDisplaySize.height) : null
-  const stageToWork = (point) => ({
-    x: (((point.x / 100) * stageDisplaySize.width - imageFit.x) / imageFit.width) * activeWork.width,
-    y: (((point.y / 100) * stageDisplaySize.height - imageFit.y) / imageFit.height) * activeWork.height,
-  })
+  const imageFit = activeWork
+    ? activePixelLayer && !activePixelLayer.isBaseImage
+      ? (() => {
+          const width = stageDisplaySize.width * (activePixelLayer.width ?? 50) / 100
+          const height = width * activeWork.height / activeWork.width
+          return {
+            x: stageDisplaySize.width * activePixelLayer.x / 100 - width / 2,
+            y: stageDisplaySize.height * activePixelLayer.y / 100 - height / 2,
+            width,
+            height,
+          }
+        })()
+      : fitContain(activeWork.width, activeWork.height, stageDisplaySize.width, stageDisplaySize.height)
+    : null
+  const stageToWork = (point) => stagePointToImage(
+      point,
+      activeWork.width,
+      activeWork.height,
+      100,
+      100,
+      activePixelLayer && !activePixelLayer.isBaseImage ? activePixelLayer : null,
+    )
   const isInsideWork = (point) => point.x >= 0 && point.y >= 0 && point.x < activeWork.width && point.y < activeWork.height
 
   const withBusy = (label, task) => {
@@ -2044,7 +2193,7 @@ export function PhotoEditor({
   const commitSelection = (mask, mode, label) => {
     if (!activeWork) return
     const { width, height } = activeWork
-    const current = selection?.width === width && selection?.height === height ? selection.mask : null
+    const current = activePhotoSelection?.width === width && activePhotoSelection?.height === height ? activePhotoSelection.mask : null
     let next = combineMasks(current, mask, mode)
     if (selectionFeather > 0) next = featherMask(next, width, height, selectionFeather)
     const coverage = maskCoverage(next)
@@ -2054,7 +2203,7 @@ export function PhotoEditor({
       return
     }
     commitHistory()
-    setSelection({ mask: next, width, height, ...selectionOverlayUrls(next, width, height) })
+    setSelection({ mask: next, width, height, imageSrc: activePixelImageSrc, ...selectionOverlayUrls(next, width, height) })
     setNotice(`${label}: ${Math.max(1, Math.round(coverage * 100))}% of the photo selected.`)
   }
 
@@ -2095,11 +2244,11 @@ export function PhotoEditor({
   }
 
   const invertSelection = () => {
-    if (!selection) {
+    if (!activePhotoSelection) {
       setNotice('Make a selection first.')
       return
     }
-    commitSelection(invertMask(selection.mask), 'new', 'Inverse')
+    commitSelection(invertMask(activePhotoSelection.mask), 'new', 'Inverse')
   }
 
   const closePolygon = (mode, points = lassoPoints) => {
@@ -2185,24 +2334,34 @@ export function PhotoEditor({
   }
 
   const saveLayerMask = (mask, message) => {
+    if (!activePixelLayer || !activeWork) {
+      setNotice('Select a photo layer before applying a mask.')
+      return
+    }
+    if (activePixelLayer.locked) {
+      setNotice('Unlock the image layer before editing its mask.')
+      return
+    }
     commitHistory()
     maskIdRef.current += 1
-    setLayerMask({ id: maskIdRef.current, src: maskToDataUrl(mask, activeWork.width, activeWork.height), enabled: true })
+    const nextMask = { id: maskIdRef.current, src: maskToDataUrl(mask, activeWork.width, activeWork.height), enabled: true }
+    if (activePixelLayer.isBaseImage) setLayerMask(nextMask)
+    else updateLayer(activePixelLayer.id, { mask: nextMask })
     setRightSidebarCollapsed(false)
     setNotice(message)
   }
 
-  const currentMaskPixels = async () => (layerMask?.src && activeWork
-    ? dataUrlToMask(layerMask.src, activeWork.width, activeWork.height)
+  const currentMaskPixels = async () => (activeImageMask?.src && activeWork
+    ? dataUrlToMask(activeImageMask.src, activeWork.width, activeWork.height)
     : new Uint8Array(activeWork.width * activeWork.height).fill(255))
 
   const addLayerMaskFromSelection = () => {
     if (!requireWork()) return
-    if (!selection) {
+    if (!activePhotoSelection) {
       setNotice('Make a selection first (W selects the subject), then add the mask.')
       return
     }
-    saveLayerMask(selection.mask, 'Layer mask added. Everything outside the selection is hidden. Pick a Fill in the Layers panel.')
+    saveLayerMask(activePhotoSelection.mask, 'Layer mask added. Everything outside the selection is hidden.')
     setSelection(null)
   }
 
@@ -2225,28 +2384,32 @@ export function PhotoEditor({
   }
 
   const deleteSelectedArea = async () => {
+    if (!activePhotoSelection || !activeWork) return
     const current = await currentMaskPixels()
-    saveLayerMask(combineMasks(current, selection.mask, 'subtract'), 'Deleted the selected area. It is hidden by the layer mask, so you can bring it back by deleting the mask.')
+    saveLayerMask(combineMasks(current, activePhotoSelection.mask, 'subtract'), 'Deleted the selected area. It is hidden by the layer mask, so you can bring it back by deleting the mask.')
     setSelection(null)
   }
 
   const toggleLayerMask = () => {
-    if (!layerMask) return
+    if (!activeImageMask || !activePixelLayer) return
     commitHistory()
-    setLayerMask({ ...layerMask, enabled: layerMask.enabled === false })
-    setNotice(layerMask.enabled === false ? 'Layer mask enabled.' : 'Layer mask disabled. The full photo is showing.')
+    const nextMask = { ...activeImageMask, enabled: activeImageMask.enabled === false }
+    if (activePixelLayer.isBaseImage) setLayerMask(nextMask)
+    else updateLayer(activePixelLayer.id, { mask: nextMask })
+    setNotice(nextMask.enabled ? 'Layer mask enabled.' : 'Layer mask disabled. The full photo is showing.')
   }
 
   const invertLayerMask = async () => {
-    if (!layerMask || !requireWork()) return
+    if (!activeImageMask || !requireWork()) return
     saveLayerMask(invertMask(await currentMaskPixels()), 'Layer mask inverted.')
   }
 
   const deleteLayerMask = () => {
-    if (!layerMask) return
+    if (!activeImageMask || !activePixelLayer) return
     commitHistory()
-    setLayerMask(null)
-    setNotice('Layer mask deleted. The full photo is back.')
+    if (activePixelLayer.isBaseImage) setLayerMask(null)
+    else updateLayer(activePixelLayer.id, { mask: null })
+    setNotice('Layer mask deleted. The full image is back.')
   }
 
   const replaceBaseImage = (src, message) => {
@@ -2279,17 +2442,27 @@ export function PhotoEditor({
       setNotice('Filled the canvas background around the photo.')
       return
     }
-    withBusy('Filling…', () => {
-      const pixels = cloneImageData(activeWork.imageData)
-      const count = paintBucket(pixels, seed.x, seed.y, hexToRgb(brushColor), { tolerance: wandTolerance, contiguous: wandContiguous })
+    withBusy('Filling…', async () => {
+      const fullResolutionWork = await loadWorkImage(selectedImageSrc, Number.POSITIVE_INFINITY)
+      const pixels = cloneImageData(fullResolutionWork.imageData)
+      const scaleX = fullResolutionWork.width / activeWork.width
+      const scaleY = fullResolutionWork.height / activeWork.height
+      const count = paintBucket(
+        pixels,
+        seed.x * scaleX,
+        seed.y * scaleY,
+        hexToRgb(brushColor),
+        { tolerance: wandTolerance, contiguous: wandContiguous },
+      )
       replaceBaseImage(imageDataToDataUrl(pixels), `Filled ${count.toLocaleString()} pixels.`)
     })
   }
 
   const sharpenBase = () => {
     if (!requireWork()) return
-    withBusy('Sharpening…', () => {
-      const pixels = cloneImageData(activeWork.imageData)
+    withBusy('Sharpening…', async () => {
+      const fullResolutionWork = await loadWorkImage(selectedImageSrc, Number.POSITIVE_INFINITY)
+      const pixels = cloneImageData(fullResolutionWork.imageData)
       sharpen(pixels, 0.5)
       replaceBaseImage(imageDataToDataUrl(pixels), 'Sharpened the photo.')
     })
@@ -2349,25 +2522,61 @@ export function PhotoEditor({
   const openHueSat = () => {
     setOpenMenu(null)
     setLayerMenu(null)
-    if (!selectedImageSrc) {
+    if (!activePixelImageSrc) {
       setNotice('Add a photo first. Hue/Saturation adjusts the photo.')
       return
     }
-    setHueSatDialog({ initial: hueSat })
+    if (activePixelLayer?.locked) {
+      setNotice('Unlock the image layer before changing its corrections.')
+      return
+    }
+    setHueSatDialog({
+      initial: activeImageHueSat,
+      layerId: activePixelLayer?.isBaseImage ? null : activePixelLayer?.id,
+      initialLayerHueSat: activePixelLayer?.hueSat,
+      snapshot: buildSnapshot(),
+    })
+  }
+
+  const previewHueSat = (next) => {
+    if (!hueSatDialog?.layerId) {
+      setHueSat(next)
+      return
+    }
+    setLayers((current) => current.map((layer) => layer.id === hueSatDialog.layerId ? { ...layer, hueSat: next } : layer))
   }
 
   const applyHueSat = (next) => {
-    historyRef.current.past.push({ ...buildSnapshot(), hueSat: hueSatDialog.initial })
+    if (!hueSatDialog) return
+    historyRef.current.past.push(hueSatDialog.snapshot)
     if (historyRef.current.past.length > 60) historyRef.current.past.shift()
     historyRef.current.future = []
     syncHistoryCounts()
-    setHueSat(next)
+    if (hueSatDialog.layerId) {
+      setLayers((current) => current.map((layer) => layer.id === hueSatDialog.layerId ? { ...layer, hueSat: next } : layer))
+    } else {
+      setHueSat(next)
+    }
     setHueSatDialog(null)
-    setNotice(isNeutralHueSat(next) ? 'Hue/Saturation cleared.' : 'Hue/Saturation applied. Press Ctrl+U to adjust it again.')
+    setNotice(isNeutralHueSat(next)
+      ? `Hue/Saturation cleared on ${activePixelLayer?.label || 'photo'}.`
+      : `Hue/Saturation applied to ${activePixelLayer?.label || 'photo'}. Press Ctrl+U to adjust it again.`)
   }
 
   const cancelHueSat = () => {
-    setHueSat(hueSatDialog.initial)
+    if (hueSatDialog?.layerId) {
+      setLayers((current) => current.map((layer) => {
+        if (layer.id !== hueSatDialog.layerId) return layer
+        if (hueSatDialog.initialLayerHueSat === undefined) {
+          const restoredLayer = { ...layer }
+          delete restoredLayer.hueSat
+          return restoredLayer
+        }
+        return { ...layer, hueSat: hueSatDialog.initialLayerHueSat }
+      }))
+    } else if (hueSatDialog) {
+      setHueSat(hueSatDialog.initial)
+    }
     setHueSatDialog(null)
   }
 
@@ -2646,8 +2855,9 @@ export function PhotoEditor({
 
   // FILTER MENU
   const handleFilterBlur = () => {
+    if (!canAdjustActiveImage()) return
     commitHistory()
-    setFilters((prev) => ({ ...prev, blur: Math.min(prev.blur + 5, 20) }))
+    updateActiveImageAdjustments({ blur: Math.min(activeImageAdjustments.blur + 5, 20) })
     setNotice('Blur increased.')
     setOpenMenu(null)
   }
@@ -2655,8 +2865,9 @@ export function PhotoEditor({
   const handleFilterSharpen = () => sharpenBase()
 
   const handleFilterGrayscale = () => {
+    if (!canAdjustActiveImage()) return
     commitHistory()
-    setFilters((prev) => ({ ...prev, grayscale: prev.grayscale === 0 ? 100 : 0 }))
+    updateActiveImageAdjustments({ grayscale: activeImageAdjustments.grayscale === 0 ? 100 : 0 })
     setNotice('Grayscale toggled.')
     setOpenMenu(null)
   }
@@ -2684,9 +2895,14 @@ export function PhotoEditor({
     const [imageSrc, savedLayers] = await Promise.all([
       embedProjectImage(selectedImageSrc),
       Promise.all(layers.map(async (layer) => layer.type === 'image' && layer.src
-        ? { ...layer, src: await embedProjectImage(layer.src) }
+        ? {
+            ...layer,
+            src: await embedProjectImage(layer.src),
+            ...(layer.mask?.src ? { mask: { ...layer.mask, src: await embedProjectImage(layer.mask.src) } } : {}),
+          }
         : { ...layer })),
     ])
+    const selectedLayerId = layers.find((layer) => layer.src === selection?.imageSrc)?.id
     return JSON.stringify(createPhotoProject({
       imageSrc,
       prompt,
@@ -2704,7 +2920,12 @@ export function PhotoEditor({
       layerMask,
       brushStrokes,
       layers: savedLayers,
-      selection: selection ? { src: maskToDataUrl(selection.mask, selection.width, selection.height), width: selection.width, height: selection.height } : null,
+      selection: selection ? {
+        src: maskToDataUrl(selection.mask, selection.width, selection.height),
+        width: selection.width,
+        height: selection.height,
+        imageSrc: savedLayers.find((layer) => layer.id === selectedLayerId)?.src || imageSrc,
+      } : null,
       exportFormat,
       exportQuality,
     }))
@@ -2756,7 +2977,7 @@ export function PhotoEditor({
           let restoredSelection = null
           if (project.selection?.src) {
             const mask = await dataUrlToMask(project.selection.src, project.selection.width, project.selection.height)
-            restoredSelection = { mask, width: project.selection.width, height: project.selection.height, ...selectionOverlayUrls(mask, project.selection.width, project.selection.height) }
+            restoredSelection = { mask, width: project.selection.width, height: project.selection.height, imageSrc: project.selection.imageSrc || project.imageSrc || '', ...selectionOverlayUrls(mask, project.selection.width, project.selection.height) }
           }
           commitHistory()
           setLayers(ensureBaseImageLayer(project.layers, project.imageSrc))
@@ -2900,36 +3121,41 @@ export function PhotoEditor({
 
   // EXPANDED FILTERS MENU
   const handleFilterInvert = () => {
+    if (!canAdjustActiveImage()) return
     commitHistory()
-    setFilters((prev) => ({ ...prev, invert: prev.invert === 0 ? 100 : 0 }))
+    updateActiveImageAdjustments({ invert: activeImageAdjustments.invert === 0 ? 100 : 0 })
     setNotice('Inverted colors.')
     setOpenMenu(null)
   }
 
   const handleFilterSepia = () => {
+    if (!canAdjustActiveImage()) return
     commitHistory()
-    setFilters((prev) => ({ ...prev, sepia: prev.sepia === 0 ? 100 : 0 }))
+    updateActiveImageAdjustments({ sepia: activeImageAdjustments.sepia === 0 ? 100 : 0 })
     setNotice('Sepia filter toggled.')
     setOpenMenu(null)
   }
 
   const handleFilterBrightness = () => {
+    if (!canAdjustActiveImage()) return
     commitHistory()
-    setFilters((prev) => ({ ...prev, brightness: Math.min(prev.brightness + 20, 150) }))
+    updateActiveImageAdjustments({ brightness: Math.min(activeImageAdjustments.brightness + 20, 150) })
     setNotice('Brightness increased.')
     setOpenMenu(null)
   }
 
   const handleFilterContrast = () => {
+    if (!canAdjustActiveImage()) return
     commitHistory()
-    setFilters((prev) => ({ ...prev, contrast: Math.min(prev.contrast + 20, 150) }))
+    updateActiveImageAdjustments({ contrast: Math.min(activeImageAdjustments.contrast + 20, 150) })
     setNotice('Contrast increased.')
     setOpenMenu(null)
   }
 
   const handleFilterSaturation = () => {
+    if (!canAdjustActiveImage()) return
     commitHistory()
-    setFilters((prev) => ({ ...prev, saturation: Math.min(prev.saturation + 20, 150) }))
+    updateActiveImageAdjustments({ saturation: Math.min(activeImageAdjustments.saturation + 20, 150) })
     setNotice('Saturation increased.')
     setOpenMenu(null)
   }
@@ -3100,7 +3326,7 @@ export function PhotoEditor({
       if (event.key === ']') return run(() => setBrushSize((value) => clamp(value + 4, 4, 96)))
 
       if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (selection && activeWork) return run(deleteSelectedArea)
+        if (activePhotoSelection && activeWork) return run(deleteSelectedArea)
         if (resolvedActiveLayerId) return run(() => deleteLayer(resolvedActiveLayerId))
         return
       }
@@ -3327,22 +3553,24 @@ export function PhotoEditor({
     if (erase && stroke.imageSrc) {
       setErasePreviewId(stroke.imageLayerId || BASE_IMAGE_LAYER_ID)
       stroke.ready = (async () => {
-        const image = await loadWorkImage(stroke.imageSrc)
+        const image = await loadImage(stroke.imageSrc)
+        const imageWidth = image.naturalWidth || image.width
+        const imageHeight = image.naturalHeight || image.height
         await new Promise((resolve) => requestAnimationFrame(resolve))
         const preview = erasePreviewRef.current
         if (!preview) throw new Error('The eraser preview is unavailable.')
-        preview.width = image.width
-        preview.height = image.height
+        preview.width = imageWidth
+        preview.height = imageHeight
         const context = preview.getContext('2d')
         if (!context) throw new Error('The eraser is unavailable in this browser.')
-        context.putImageData(image.imageData, 0, 0)
+        context.drawImage(image, 0, 0, imageWidth, imageHeight)
         context.globalCompositeOperation = 'destination-out'
         context.globalAlpha = stroke.opacity
         context.lineCap = 'round'
         context.lineJoin = 'round'
         const stageWidth = stageRef.current?.clientWidth || stageDisplaySize.width
         const stageHeight = stageRef.current?.clientHeight || stageDisplaySize.height
-        stroke.mapPoint = (value) => stagePointToImage(value, image.width, image.height, stageWidth, stageHeight, stroke.imageLayer)
+        stroke.mapPoint = (value) => stagePointToImage(value, imageWidth, imageHeight, stageWidth, stageHeight, stroke.imageLayer)
         context.lineWidth = stroke.size * stroke.mapPoint(stroke.points[0]).pixelsPerStagePixel
         stroke.context = context
         stroke.canvas = preview
@@ -3802,43 +4030,87 @@ export function PhotoEditor({
       await document.fonts.ready
     }
 
-    const stageCanvas = document.createElement('canvas')
-    stageCanvas.width = stageMetrics.width
-    stageCanvas.height = stageMetrics.height
-    const stageDataUrl = await renderComposition({
-      canvas: stageCanvas,
-      imageSrc: renderedImageSrc,
-      maskShape,
-      filters,
-      preset,
-      backgroundColor: canvasBackground,
-      layers,
-      brushStrokes,
-      stageMetrics,
-      imageOpacity: baseImageLayer?.opacity,
-    })
-
+    const format = EXPORT_FORMATS[typeof formatKey === 'string' ? formatKey : exportFormat] ?? EXPORT_FORMATS.png
     const exportCanvasEl = document.createElement('canvas')
     exportCanvasEl.width = aspect.canvasWidth
     exportCanvasEl.height = aspect.canvasHeight
-    const exportCtx = exportCanvasEl.getContext('2d')
+    let exportImageSrc = renderedImageSrc
+    let processedExportUrl = ''
+    if (!baseImageLayer?.hidden && selectedImageSrc && (
+      baseMaskActive
+      || !isNeutralHueSat(hueSat)
+      || !isNeutralTonalAdjustments(filters)
+    )) {
+      try {
+        const processedCanvas = await renderProcessedBaseAtSize({
+          src: selectedImageSrc,
+          width: aspect.canvasWidth,
+          height: aspect.canvasHeight,
+          hueSat,
+          adjustments: filters,
+          layerMask: baseMaskActive ? layerMask : null,
+        })
+        processedExportUrl = await canvasToObjectUrl(processedCanvas)
+        exportImageSrc = processedExportUrl
+      } catch (error) {
+        setNotice(`Could not process the original photo for export: ${error.message}`)
+        return
+      }
+    }
+    try {
+      await renderComposition({
+        canvas: exportCanvasEl,
+        imageSrc: exportImageSrc,
+        maskShape,
+        filters,
+        preset,
+        backgroundColor: canvasBackground,
+        layers,
+        brushStrokes,
+        imageOpacity: baseImageLayer?.opacity,
+      })
+    } catch (error) {
+      setNotice(`Could not render export: ${error.message}`)
+      return
+    } finally {
+      if (processedExportUrl) URL.revokeObjectURL(processedExportUrl)
+    }
 
+    if (cropRect.x !== 0 || cropRect.y !== 0 || cropRect.w !== 100 || cropRect.h !== 100) {
+      const croppedCanvas = document.createElement('canvas')
+      croppedCanvas.width = aspect.canvasWidth
+      croppedCanvas.height = aspect.canvasHeight
+      const cropContext = croppedCanvas.getContext('2d')
+      if (!cropContext) {
+        setNotice('Canvas export is unavailable in this browser.')
+        return
+      }
+      cropContext.drawImage(
+        exportCanvasEl,
+        (cropRect.x / 100) * exportCanvasEl.width,
+        (cropRect.y / 100) * exportCanvasEl.height,
+        (cropRect.w / 100) * exportCanvasEl.width,
+        (cropRect.h / 100) * exportCanvasEl.height,
+        0,
+        0,
+        croppedCanvas.width,
+        croppedCanvas.height,
+      )
+      exportCanvasEl.width = croppedCanvas.width
+      exportCanvasEl.height = croppedCanvas.height
+      const resizedContext = exportCanvasEl.getContext('2d')
+      if (!resizedContext) {
+        setNotice('Canvas export is unavailable in this browser.')
+        return
+      }
+      resizedContext.drawImage(croppedCanvas, 0, 0)
+    }
+
+    const exportCtx = exportCanvasEl.getContext('2d')
     if (!exportCtx) {
       setNotice('Canvas export is unavailable in this browser.')
       return
     }
-
-    exportCtx.fillStyle = canvasBackground || preset.base
-    if (canvasBackground !== 'transparent') exportCtx.fillRect(0, 0, exportCanvasEl.width, exportCanvasEl.height)
-
-    const stageImage = await loadImage(stageDataUrl)
-    const sourceX = (cropRect.x / 100) * stageMetrics.width
-    const sourceY = (cropRect.y / 100) * stageMetrics.height
-    const sourceWidth = (cropRect.w / 100) * stageMetrics.width
-    const sourceHeight = (cropRect.h / 100) * stageMetrics.height
-    exportCtx.drawImage(stageImage, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, exportCanvasEl.width, exportCanvasEl.height)
-
-    const format = EXPORT_FORMATS[typeof formatKey === 'string' ? formatKey : exportFormat] ?? EXPORT_FORMATS.png
 
     // JPEG has no alpha, so anything transparent would render black without this.
     if (format.mime === 'image/jpeg') {
@@ -3849,27 +4121,49 @@ export function PhotoEditor({
     }
 
     const exportName = `${slugify(headline || prompt)}-${aspectRatio.replace(':', 'x')}.${format.extension}`
-    const dataUrl = format.lossy
-      ? exportCanvasEl.toDataURL(format.mime, clamp(exportQuality, 10, 100) / 100)
-      : exportCanvasEl.toDataURL(format.mime)
+    let dataUrl
+    try {
+      dataUrl = format.lossy
+        ? exportCanvasEl.toDataURL(format.mime, clamp(exportQuality, 10, 100) / 100)
+        : exportCanvasEl.toDataURL(format.mime)
+    } catch (error) {
+      setNotice(`Could not encode the export: ${error.message}`)
+      return
+    }
+    if (!dataUrl.startsWith(`data:${format.mime};`)) {
+      setNotice(`${format.label} export is not supported by this browser. Choose another format.`)
+      return
+    }
 
-    onExport?.({
-      exportName,
-      dataUrl,
-      prompt,
-      caption: subcopy,
-      headline,
-      palette: preset.label,
-      aspectRatio,
-      sizeBytes: Math.max(300000, Math.round(dataUrl.length * 0.72)),
-      summary: `Photo design exported from the ${preset.label} preset.`,
-    })
+    let savedToWorkspace = false
+    if (onExport) {
+      try {
+        await onExport({
+          exportName,
+          dataUrl,
+          mime: format.mime,
+          width: aspect.canvasWidth,
+          height: aspect.canvasHeight,
+          prompt,
+          caption: subcopy,
+          headline,
+          palette: preset.label,
+          aspectRatio,
+          sizeBytes: Math.round(dataUrl.length * 0.72),
+          summary: `Photo design exported from the ${preset.label} preset.`,
+        })
+        savedToWorkspace = true
+      } catch (error) {
+        setNotice(`Downloaded ${exportName}, but could not save it to your workspace: ${error.message}`)
+      }
+    }
 
     const link = document.createElement('a')
     link.href = dataUrl
     link.download = exportName
     link.click()
-    setNotice(`Exported ${exportName} and sent it to your workspace.`)
+    if (savedToWorkspace) setNotice(`Exported ${exportName} and saved it to your workspace.`)
+    else if (!onExport) setNotice(`Downloaded ${exportName}.`)
   }
 
   const handlePrint = () => {
@@ -4183,8 +4477,8 @@ export function PhotoEditor({
       command('Clear object selection', clearDesignObjectSelection, { disabled: !selectedObjects.length }),
       separator,
       command('Select all photo pixels', selectAll, { disabled: !activeWork, shortcut: 'Ctrl+A' }),
-      command('Deselect photo pixels', deselect, { disabled: !selection, shortcut: 'Ctrl+D' }),
-      command('Invert photo selection', invertSelection, { disabled: !selection, shortcut: 'Ctrl+Shift+I' }),
+      command('Deselect photo pixels', deselect, { disabled: !activePhotoSelection, shortcut: 'Ctrl+D' }),
+      command('Invert photo selection', invertSelection, { disabled: !activePhotoSelection, shortcut: 'Ctrl+Shift+I' }),
     ] },
     { label: 'View', items: [
       command('Zoom in', handleViewZoomIn, { disabled: canvasZoom >= 400, shortcut: 'Ctrl++' }),
@@ -4241,14 +4535,14 @@ export function PhotoEditor({
       command('Photo adjustments', () => openClassicInspector('canvas'), { description: 'Brightness, contrast, saturation, blur, and other photo controls.' }),
       command('Hue/Saturation...', openHueSat, { disabled: !activeWork, shortcut: 'Ctrl+U' }),
       separator,
-      command('Brightness +', handleFilterBrightness, { disabled: !selectedImageSrc }),
-      command('Contrast +', handleFilterContrast, { disabled: !selectedImageSrc }),
-      command('Saturation +', handleFilterSaturation, { disabled: !selectedImageSrc }),
-      command('Blur', handleFilterBlur, { disabled: !selectedImageSrc }),
-      command('Grayscale', handleFilterGrayscale, { disabled: !selectedImageSrc, checked: filters.grayscale > 0 }),
-      command('Invert', handleFilterInvert, { disabled: !selectedImageSrc, checked: filters.invert > 0 }),
-      command('Sepia', handleFilterSepia, { disabled: !selectedImageSrc, checked: filters.sepia > 0 }),
-      command('Reset photo adjustments', resetFilters, { disabled: !selectedImageSrc }),
+      command('Brightness +', handleFilterBrightness, { disabled: !activeWork || activePixelLayer?.locked }),
+      command('Contrast +', handleFilterContrast, { disabled: !activeWork || activePixelLayer?.locked }),
+      command('Saturation +', handleFilterSaturation, { disabled: !activeWork || activePixelLayer?.locked }),
+      command('Blur', handleFilterBlur, { disabled: !activeWork || activePixelLayer?.locked }),
+      command('Grayscale', handleFilterGrayscale, { disabled: !activeWork || activePixelLayer?.locked, checked: activeImageAdjustments.grayscale > 0 }),
+      command('Invert', handleFilterInvert, { disabled: !activeWork || activePixelLayer?.locked, checked: activeImageAdjustments.invert > 0 }),
+      command('Sepia', handleFilterSepia, { disabled: !activeWork || activePixelLayer?.locked, checked: activeImageAdjustments.sepia > 0 }),
+      command('Reset photo adjustments', resetFilters, { disabled: !activeWork || activePixelLayer?.locked }),
       separator,
       command('Text effects', () => openClassicInspector('properties'), { disabled: !activeTextLayer || multipleObjectsSelected }),
       command('Object transparency', () => selectClassicTool('object-opacity'), { disabled: !designSelection || multipleObjectsSelected }),
@@ -4263,9 +4557,10 @@ export function PhotoEditor({
       separator,
       command('Select subject', selectSubject, { disabled: !activeWork }),
       command('Remove background', removeBackground, { disabled: !activeWork }),
-      command('Add layer mask from selection', addLayerMaskFromSelection, { disabled: !selection }),
-      command(layerMask?.enabled === false ? 'Enable layer mask' : 'Disable layer mask', toggleLayerMask, { disabled: !layerMask }),
-      command('Delete layer mask', deleteLayerMask, { disabled: !layerMask }),
+      command('Add layer mask from selection', addLayerMaskFromSelection, { disabled: !activePhotoSelection || !activePixelLayer }),
+      command(activeImageMask?.enabled === false ? 'Enable layer mask' : 'Disable layer mask', toggleLayerMask, { disabled: !activeImageMask }),
+      command('Invert layer mask', invertLayerMask, { disabled: !activeImageMask }),
+      command('Delete layer mask', deleteLayerMask, { disabled: !activeImageMask }),
       separator,
       command('Merge Down', handleLayerMergeDown, { disabled: multipleObjectsSelected || layers.findIndex((layer) => layer.id === resolvedActiveLayerId) <= 0, description: 'Rasterizes the selected layer and the layer below; locked objects are protected.' }),
       command('Flatten image', handleImageFlatten, { shortcut: 'Ctrl+Shift+E', description: 'Rasterizes the composition; locked objects are protected.' }),
@@ -4345,14 +4640,16 @@ export function PhotoEditor({
   }
 
   const applyFilterPreset = (name, patch) => {
+    if (!canAdjustActiveImage()) return
     commitHistory()
-    setFilters({ ...NEUTRAL_FILTERS, ...patch })
+    updateActiveImageAdjustments({ ...NEUTRAL_FILTERS, ...patch })
     setNotice(`${name} filter applied.`)
   }
 
   const applyShadowPreset = (preset) => {
+    if (!canAdjustActiveImage()) return
     commitHistory()
-    setFilters((current) => ({ ...current, ...preset.patch }))
+    updateActiveImageAdjustments(preset.patch)
     setNotice(`${preset.label} shadow applied.`)
   }
 
@@ -4471,7 +4768,7 @@ export function PhotoEditor({
             <button type="button" onClick={() => openEditorPanel('draw', 'brush')}><span className="modern-tool-art draw"><Paintbrush size={23} /></span><small>Draw</small></button>
           </div></div>
           <div className="modern-tool-section"><div className="modern-section-heading"><strong>Filters</strong><button type="button" onClick={() => openEditorPanel('filters')}>See all</button></div><div className="modern-filter-strip">
-            {PHOTO_FILTER_PRESETS.slice(0, 3).map((preset) => <button key={preset.key} type="button" onClick={() => applyFilterPreset(preset.label, preset.patch)}><span style={{ backgroundImage: selectedImageSrc ? `url(${selectedImageSrc})` : undefined, filter: buildFilterString({ ...NEUTRAL_FILTERS, ...preset.patch }) }} />{preset.label}</button>)}
+            {PHOTO_FILTER_PRESETS.slice(0, 3).map((preset) => <button key={preset.key} type="button" disabled={activePixelLayer?.locked} onClick={() => applyFilterPreset(preset.label, preset.patch)}><span style={{ backgroundImage: activePixelImageSrc ? `url(${activePixelImageSrc})` : undefined, filter: buildFilterString({ ...NEUTRAL_FILTERS, ...preset.patch }) }} />{preset.label}</button>)}
             <button type="button" className="modern-strip-next" onClick={() => openEditorPanel('filters')} aria-label="See all filters"><ChevronRight size={18} /></button>
           </div></div>
           <div className="modern-tool-section"><div className="modern-section-heading"><strong>Shadows</strong><button type="button" onClick={() => openEditorPanel('shadows')}>See all</button></div><div className="modern-shadow-strip">
@@ -4484,11 +4781,11 @@ export function PhotoEditor({
         <>
           <div className="modern-context-heading"><button type="button" onClick={() => setEditorPanel('main')} aria-label="Back to all tools"><ArrowLeft size={18} /></button><strong>{{ crop: 'Crop', adjust: 'Adjust', filters: 'Filters', shadows: 'Shadows', erase: 'Erase & heal', select: 'Select', draw: 'Draw & fill', create: 'Text & shapes', layers: 'Layers' }[editorPanel] || 'Tools'}</strong></div>
           {editorPanel === 'crop' && <div className="modern-context-body"><button type="button" className="modern-smart-action" onClick={smartCrop}><Sparkles size={17} /> Smart crop</button><label className="modern-context-label">Aspect ratio</label><div className="modern-aspect-grid"><button type="button" onClick={() => setActiveTool('crop')}><Crop size={20} />Freeform</button><button type="button" onClick={() => { commitHistory(); setCropRect({ x: 0, y: 0, w: 100, h: 100 }); setActiveTool('crop') }}><ImageIcon size={20} />Original</button><button type="button" onClick={() => setCropAspect(1, 1)}><Square size={20} />1:1</button><button type="button" onClick={() => setCropAspect(4, 5)}><PanelsTopLeft size={20} />4:5</button></div><label className="modern-context-label">Rotate</label><div className="modern-action-pair"><button type="button" onClick={() => transformBase('rotate-ccw', 'Rotated 90° counter-clockwise.')}><RotateCcw size={16} /> Left</button><button type="button" onClick={() => transformBase('rotate-cw', 'Rotated 90° clockwise.')}><RotateCcw size={16} className="rotate-right" /> Right</button></div><label className="modern-context-label">Flip</label><div className="modern-action-pair"><button type="button" onClick={() => transformBase('flip-h', 'Flipped horizontally.')}>Horizontal</button><button type="button" onClick={() => transformBase('flip-v', 'Flipped vertically.')}>Vertical</button></div><div className="modern-context-footer"><button type="button" onClick={() => setCropRect({ x: 0, y: 0, w: 100, h: 100 })}>Reset</button><button type="button" onClick={() => { setActiveTool('select'); setEditorPanel('main'); setNotice('Crop applied to preview and export.') }}>Done</button></div></div>}
-          {editorPanel === 'adjust' && <div className="modern-context-body"><div className="modern-adjust-hero"><Palette size={28} /><span><strong>Color adjustments</strong><small>Preview and export stay in sync</small></span></div>{[['Brightness', 'brightness', 0, 200], ['Contrast', 'contrast', 0, 200], ['Saturation', 'saturation', 0, 200], ['Exposure', 'exposure', 50, 150], ['Hue', 'hue', -180, 180], ['Blur', 'blur', 0, 20]].map(([label, key, min, max]) => <label key={key} className="modern-slider"><span>{label}<b>{filters[key]}</b></span><input type="range" min={min} max={max} value={filters[key]} onPointerDown={commitHistory} onChange={(event) => setFilters((current) => ({ ...current, [key]: Number(event.target.value) }))} /></label>)}<div className="modern-context-footer"><button type="button" onClick={resetFilters}>Reset</button><button type="button" onClick={() => setEditorPanel('main')}>Done</button></div></div>}
-          {editorPanel === 'filters' && <div className="modern-context-body modern-gallery-body"><div className="modern-filter-gallery">{PHOTO_FILTER_PRESETS.map((preset) => <button key={preset.key} type="button" onClick={() => applyFilterPreset(preset.label, preset.patch)}><span style={{ backgroundImage: selectedImageSrc ? `url(${selectedImageSrc})` : undefined, filter: buildFilterString({ ...NEUTRAL_FILTERS, ...preset.patch }) }} /><strong>{preset.label}</strong></button>)}</div><button type="button" className="modern-remove-effect" onClick={resetFilters}>Remove filter</button></div>}
-          {editorPanel === 'shadows' && <div className="modern-context-body modern-gallery-body"><div className="modern-shadow-gallery">{PHOTO_SHADOW_PRESETS.map((preset) => <button key={preset.key} type="button" onClick={() => applyShadowPreset(preset)}><span style={{ filter: preset.patch.shadowBlur ? `drop-shadow(${preset.patch.shadowX}px ${preset.patch.shadowY}px ${preset.patch.shadowBlur}px ${preset.patch.shadowColor})` : 'none' }} /><strong>{preset.label}</strong></button>)}</div><label className="modern-slider"><span>Blur<b>{filters.shadowBlur}px</b></span><input type="range" min="0" max="40" value={filters.shadowBlur} onPointerDown={commitHistory} onChange={(event) => setFilters((current) => ({ ...current, shadowBlur: Number(event.target.value) }))} /></label><label className="modern-color-control"><span>Shadow color</span><input type="color" value={filters.shadowColor} onChange={(event) => setFilters((current) => ({ ...current, shadowColor: event.target.value }))} /></label></div>}
+          {editorPanel === 'adjust' && <div className="modern-context-body"><div className="modern-adjust-hero"><Palette size={28} /><span><strong>Color adjustments</strong><small>Non-destructive on {activePixelLayer?.label || 'photo'}</small></span></div>{[['Brightness', 'brightness', 0, 200], ['Contrast', 'contrast', 0, 200], ['Saturation', 'saturation', 0, 200], ['Exposure', 'exposure', 50, 150], ['Hue', 'hue', -180, 180], ['Blur', 'blur', 0, 20], ['Highlights', 'highlights', -100, 100], ['Shadows', 'shadows', -100, 100], ['Temperature', 'temperature', -100, 100], ['Tint', 'tint', -100, 100]].map(([label, key, min, max]) => <label key={key} className="modern-slider"><span>{label}<b>{activeImageAdjustments[key]}</b></span><input type="range" min={min} max={max} value={activeImageAdjustments[key]} disabled={activePixelLayer?.locked} onPointerDown={commitHistory} onChange={(event) => updateActiveImageAdjustments({ [key]: Number(event.target.value) })} /></label>)}<div className="modern-context-footer"><button type="button" onClick={resetFilters}>Reset</button><button type="button" onClick={() => setEditorPanel('main')}>Done</button></div></div>}
+          {editorPanel === 'filters' && <div className="modern-context-body modern-gallery-body"><div className="modern-filter-gallery">{PHOTO_FILTER_PRESETS.map((preset) => <button key={preset.key} type="button" disabled={activePixelLayer?.locked} onClick={() => applyFilterPreset(preset.label, preset.patch)}><span style={{ backgroundImage: activePixelImageSrc ? `url(${activePixelImageSrc})` : undefined, filter: buildFilterString({ ...NEUTRAL_FILTERS, ...preset.patch }) }} /><strong>{preset.label}</strong></button>)}</div><button type="button" className="modern-remove-effect" disabled={activePixelLayer?.locked} onClick={resetFilters}>Remove filter</button></div>}
+          {editorPanel === 'shadows' && <div className="modern-context-body modern-gallery-body"><div className="modern-shadow-gallery">{PHOTO_SHADOW_PRESETS.map((preset) => <button key={preset.key} type="button" disabled={activePixelLayer?.locked} onClick={() => applyShadowPreset(preset)}><span style={{ filter: preset.patch.shadowBlur ? `drop-shadow(${preset.patch.shadowX}px ${preset.patch.shadowY}px ${preset.patch.shadowBlur}px ${preset.patch.shadowColor})` : 'none' }} /><strong>{preset.label}</strong></button>)}</div><label className="modern-slider"><span>Blur<b>{activeImageAdjustments.shadowBlur}px</b></span><input type="range" min="0" max="40" value={activeImageAdjustments.shadowBlur} disabled={activePixelLayer?.locked} onPointerDown={commitHistory} onChange={(event) => updateActiveImageAdjustments({ shadowBlur: Number(event.target.value) })} /></label><label className="modern-color-control"><span>Shadow color</span><input type="color" value={activeImageAdjustments.shadowColor} disabled={activePixelLayer?.locked} onChange={(event) => updateActiveImageAdjustments({ shadowColor: event.target.value })} /></label></div>}
           {editorPanel === 'erase' && <div className="modern-context-body"><div className="modern-mode-switch"><button type="button" className={activeTool === 'eraser' ? 'active' : ''} onClick={() => setActiveTool('eraser')}><Eraser size={16} /> Erase</button><button type="button" className={activeTool === 'heal' ? 'active' : ''} onClick={() => setActiveTool('heal')}><Bandage size={16} /> Heal</button></div><label className="modern-slider"><span>Brush size<b>{brushSize}px</b></span><input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} /></label><label className="modern-slider"><span>Opacity<b>{Math.round(brushOpacity * 100)}%</b></span><input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} /></label><button type="button" className="modern-smart-action" onClick={() => { setActiveTool('remove'); setNotice('Drag over the area you want to remove.') }}><Sparkles size={17} /> Remove an area</button><div className="modern-context-footer"><button type="button" onClick={undo} disabled={!historyCounts.past}>Undo</button><button type="button" onClick={() => setEditorPanel('main')}>Done</button></div></div>}
-          {editorPanel === 'select' && <div className="modern-context-body"><div className="modern-selection-list"><button type="button" onClick={() => setActiveTool('object-select')}><Sparkles size={18} /><span><strong>Element</strong><small>Find the main subject</small></span></button><button type="button" onClick={() => setActiveTool('magic-wand')}><Wand size={18} /><span><strong>Magic wand</strong><small>Select matching colors</small></span></button><button type="button" onClick={() => setActiveTool('rect-select')}><BoxSelect size={18} /><span><strong>Area</strong><small>Drag a rectangular selection</small></span></button><button type="button" onClick={() => setActiveTool('lasso')}><LassoSelect size={18} /><span><strong>Lasso</strong><small>Draw around an area</small></span></button></div><button type="button" className="modern-smart-action" onClick={selectSubject}>Select subject</button>{selection && <><button type="button" className="modern-wide-action" onClick={invertSelection}>Invert selection</button><button type="button" className="modern-wide-action" onClick={addLayerMaskFromSelection}>Add layer mask</button><button type="button" className="modern-wide-action" onClick={deselect}>Deselect</button></>}</div>}
+          {editorPanel === 'select' && <div className="modern-context-body"><div className="modern-selection-list"><button type="button" onClick={() => setActiveTool('object-select')}><Sparkles size={18} /><span><strong>Element</strong><small>Find the main subject</small></span></button><button type="button" onClick={() => setActiveTool('magic-wand')}><Wand size={18} /><span><strong>Magic wand</strong><small>Select matching colors</small></span></button><button type="button" onClick={() => setActiveTool('rect-select')}><BoxSelect size={18} /><span><strong>Area</strong><small>Drag a rectangular selection</small></span></button><button type="button" onClick={() => setActiveTool('lasso')}><LassoSelect size={18} /><span><strong>Lasso</strong><small>Draw around an area</small></span></button></div><button type="button" className="modern-smart-action" onClick={selectSubject}>Select subject</button>{activePhotoSelection && <><button type="button" className="modern-wide-action" onClick={invertSelection}>Invert selection</button><button type="button" className="modern-wide-action" onClick={addLayerMaskFromSelection}>Add layer mask</button><button type="button" className="modern-wide-action" onClick={deselect}>Deselect</button></>}</div>}
           {editorPanel === 'draw' && <div className="modern-context-body"><div className="modern-mode-switch"><button type="button" className={activeTool === 'brush' ? 'active' : ''} onClick={() => setActiveTool('brush')}><Paintbrush size={16} /> Brush</button><button type="button" className={activeTool === 'fill' ? 'active' : ''} onClick={() => setActiveTool('fill')}><PaintBucket size={16} /> Fill</button></div><label className="modern-color-control"><span>Color</span><input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} /></label><label className="modern-slider"><span>Size<b>{brushSize}px</b></span><input type="range" min="4" max="96" value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} /></label><label className="modern-slider"><span>Opacity<b>{Math.round(brushOpacity * 100)}%</b></span><input type="range" min="0.1" max="1" step="0.05" value={brushOpacity} onChange={(event) => setBrushOpacity(Number(event.target.value))} /></label></div>}
           {editorPanel === 'create' && <div className="modern-context-body"><button type="button" className="modern-create-action" onClick={addTextLayer}><Type size={22} /><span><strong>Add text</strong><small>Create an editable text layer</small></span></button><div className="modern-shape-grid">{Object.entries(SHAPES).map(([shape, label]) => <button key={shape} type="button" onClick={() => addShapeLayer(shape)}>{shape === 'rectangle' ? <Square /> : shape === 'ellipse' ? <Circle /> : shape === 'triangle' ? <Triangle /> : shape === 'hexagon' ? <Hexagon /> : shape === 'star' ? <Star /> : <Minus />}<span>{label}</span></button>)}</div><label className="modern-context-label">Stickers</label><div className="modern-sticker-grid">{STICKERS.map((sticker) => <button key={sticker} type="button" onClick={() => addStickerLayer(sticker)}>{sticker}</button>)}</div></div>}
           {editorPanel === 'layers' && <div className="modern-context-body"><p className="modern-context-note">The layer inspector is open on the right. Select a layer there to edit content, color, size, blend mode, and order.</p><button type="button" className="modern-smart-action" onClick={addTextLayer}><Type size={17} /> Add text layer</button><button type="button" className="modern-wide-action" onClick={() => setRightSidebarCollapsed((value) => !value)}>{rightSidebarCollapsed ? 'Open layer inspector' : 'Hide layer inspector'}</button></div>}
@@ -4972,7 +5269,7 @@ export function PhotoEditor({
                 </>
               )}
               <button type="button" className="option-action" onClick={selectSubject}>Select subject</button>
-              {selection && (
+              {activePhotoSelection && (
                 <>
                   <button type="button" className="option-action" onClick={invertSelection}>Invert</button>
                   <button type="button" className="option-action" onClick={deselect}>Deselect</button>
@@ -5149,12 +5446,12 @@ export function PhotoEditor({
               {openMenu === 'Select' && (
                 <div className="menu-dropdown menu-dropdown-compact">
                   <button onClick={() => { selectAll(); setOpenMenu(null) }}>All <kbd>Ctrl+A</kbd></button>
-                  <button onClick={() => { deselect(); setOpenMenu(null) }} disabled={!selection}>Deselect <kbd>Ctrl+D</kbd></button>
-                  <button onClick={() => { invertSelection(); setOpenMenu(null) }} disabled={!selection}>Inverse <kbd>Ctrl+Shift+I</kbd></button>
+                  <button onClick={() => { deselect(); setOpenMenu(null) }} disabled={!activePhotoSelection}>Deselect <kbd>Ctrl+D</kbd></button>
+                  <button onClick={() => { invertSelection(); setOpenMenu(null) }} disabled={!activePhotoSelection}>Inverse <kbd>Ctrl+Shift+I</kbd></button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={() => { selectSubject(); setOpenMenu(null) }}>Subject</button>
                   <button onClick={() => { removeBackground(); setOpenMenu(null) }}>Remove background</button>
-                  <button onClick={() => { addLayerMaskFromSelection(); setOpenMenu(null) }} disabled={!selection}>Add layer mask from selection</button>
+                  <button onClick={() => { addLayerMaskFromSelection(); setOpenMenu(null) }} disabled={!activePhotoSelection}>Add layer mask from selection</button>
                 </div>
               )}
             </div>
@@ -5175,9 +5472,10 @@ export function PhotoEditor({
                   </>}
                   <button onClick={handleLayerDelete} disabled={layers.length <= 1}>Delete</button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
-                  <button onClick={() => { addLayerMaskFromSelection(); setOpenMenu(null) }} disabled={!selection}>Add layer mask</button>
-                  <button onClick={() => { toggleLayerMask(); setOpenMenu(null) }} disabled={!layerMask}>{layerMask?.enabled === false ? 'Enable' : 'Disable'} layer mask</button>
-                  <button onClick={() => { deleteLayerMask(); setOpenMenu(null) }} disabled={!layerMask}>Delete layer mask</button>
+                  <button onClick={() => { addLayerMaskFromSelection(); setOpenMenu(null) }} disabled={!activePhotoSelection}>Add layer mask</button>
+                  <button onClick={() => { toggleLayerMask(); setOpenMenu(null) }} disabled={!activeImageMask}>{activeImageMask?.enabled === false ? 'Enable' : 'Disable'} layer mask</button>
+                  <button onClick={() => { invertLayerMask(); setOpenMenu(null) }} disabled={!activeImageMask}>Invert layer mask</button>
+                  <button onClick={() => { deleteLayerMask(); setOpenMenu(null) }} disabled={!activeImageMask}>Delete layer mask</button>
                   <hr style={{ margin: '0.3rem 0', border: 'none', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }} />
                   <button onClick={handleLayerMergeDown} disabled={multipleObjectsSelected || layers.findIndex((layer) => layer.id === resolvedActiveLayerId) <= 0}>Merge Down</button>
                   <button onClick={handleImageFlatten}>Flatten image</button>
@@ -5492,7 +5790,7 @@ export function PhotoEditor({
                 </div>
               )}
 
-              {selection && imageFit && selection.width === activeWork?.width && (
+              {activePhotoSelection && imageFit && activePhotoSelection.width === activeWork?.width && (
                 <div
                   className="photo-selection"
                   aria-hidden="true"
@@ -5501,10 +5799,11 @@ export function PhotoEditor({
                     top: `${(imageFit.y / stageDisplaySize.height) * 100}%`,
                     width: `${(imageFit.width / stageDisplaySize.width) * 100}%`,
                     height: `${(imageFit.height / stageDisplaySize.height) * 100}%`,
+                    transform: activePixelLayer && !activePixelLayer.isBaseImage ? `rotate(${activePixelLayer.rotation || 0}deg)` : undefined,
                   }}
                 >
-                  <img src={selection.tintUrl} alt="" draggable={false} />
-                  <img className="photo-selection-ants" src={selection.edgeUrl} alt="" draggable={false} />
+                  <img src={activePhotoSelection.tintUrl} alt="" draggable={false} />
+                  <img className="photo-selection-ants" src={activePhotoSelection.edgeUrl} alt="" draggable={false} />
                 </div>
               )}
               {marquee && (
@@ -5563,17 +5862,66 @@ export function PhotoEditor({
                   }}
                 >
                   {layer.type === 'image' ? (
-                    <img
-                      src={layer.src}
-                      alt={layer.label}
-                      style={{
-                        display: 'block',
-                        width: `${(layer.width / 100) * (stageRef.current?.clientWidth || stageDisplaySize.width - 2)}px`,
-                        height: 'auto',
-                        clipPath: imageLayerClipPath(layer.clipShape),
-                        visibility: erasePreviewId === layer.id && erasePreviewReady ? 'hidden' : undefined,
-                      }}
-                    />
+                    <>
+                      <img
+                        src={layer.id === activePixelLayer?.id && processed?.src === layer.src && processed?.key === processKey && (
+                          !isNeutralHueSat(layer.hueSat || NEUTRAL_HUE_SAT)
+                          || !isNeutralTonalAdjustments(layer.adjustments)
+                        ) ? processed.url : layer.src}
+                        alt={layer.label}
+                        style={{
+                          display: 'block',
+                          width: `${(layer.width / 100) * (stageRef.current?.clientWidth || stageDisplaySize.width - 2)}px`,
+                          height: 'auto',
+                          filter: buildFilterString({ ...NEUTRAL_FILTERS, ...layer.adjustments }),
+                          clipPath: imageLayerClipPath(layer.clipShape),
+                          maskImage: layer.mask?.src && layer.mask.enabled !== false ? `url("${layer.mask.src}")` : undefined,
+                          maskSize: '100% 100%',
+                          maskRepeat: 'no-repeat',
+                          WebkitMaskImage: layer.mask?.src && layer.mask.enabled !== false ? `url("${layer.mask.src}")` : undefined,
+                          WebkitMaskSize: '100% 100%',
+                          WebkitMaskRepeat: 'no-repeat',
+                          visibility: erasePreviewId === layer.id && erasePreviewReady ? 'hidden' : undefined,
+                        }}
+                      />
+                      {layer.adjustments?.vignette > 0 && <i
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          pointerEvents: 'none',
+                          clipPath: imageLayerClipPath(layer.clipShape),
+                          opacity: clamp(layer.adjustments.vignette / 100, 0, 1),
+                          background: 'radial-gradient(circle at center, transparent 38%, rgba(2, 6, 23, 0.62) 100%)',
+                          mixBlendMode: 'multiply',
+                          maskImage: layer.mask?.src && layer.mask.enabled !== false ? `url("${layer.mask.src}")` : undefined,
+                          maskSize: '100% 100%',
+                          maskRepeat: 'no-repeat',
+                          WebkitMaskImage: layer.mask?.src && layer.mask.enabled !== false ? `url("${layer.mask.src}")` : undefined,
+                          WebkitMaskSize: '100% 100%',
+                          WebkitMaskRepeat: 'no-repeat',
+                        }}
+                      />}
+                      {layer.adjustments?.grain > 0 && <i
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          pointerEvents: 'none',
+                          clipPath: imageLayerClipPath(layer.clipShape),
+                          opacity: clamp(layer.adjustments.grain / 80, 0, 0.22),
+                          backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 0 5.5%, transparent 5.5% 100%), linear-gradient(90deg, rgba(255,255,255,0.05) 0 5.5%, transparent 5.5% 100%)',
+                          backgroundSize: '5% 5%',
+                          mixBlendMode: 'soft-light',
+                          maskImage: layer.mask?.src && layer.mask.enabled !== false ? `url("${layer.mask.src}")` : undefined,
+                          maskSize: '100% 100%',
+                          maskRepeat: 'no-repeat',
+                          WebkitMaskImage: layer.mask?.src && layer.mask.enabled !== false ? `url("${layer.mask.src}")` : undefined,
+                          WebkitMaskSize: '100% 100%',
+                          WebkitMaskRepeat: 'no-repeat',
+                        }}
+                      />}
+                    </>
                   ) : layer.type === 'shape' && polygonShapePoints(layer.shape) ? (
                     <svg className="photo-polygon-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" style={{
                       display: 'block',
@@ -5778,9 +6126,12 @@ export function PhotoEditor({
               </li>
             </ul>
             <div className="photo-layers-footer" aria-label="Layer actions">
-              <button type="button" title="Add layer mask from selection" onClick={addLayerMaskFromSelection} disabled={!selection}><span className="photo-mask-icon" aria-hidden="true" /></button>
+              <button type="button" title={`Add mask to ${activePixelLayer?.label || 'photo'} from selection`} onClick={addLayerMaskFromSelection} disabled={!activePhotoSelection || !activePixelLayer}><span className="photo-mask-icon" aria-hidden="true" /></button>
+              <button type="button" title={`${activeImageMask?.enabled === false ? 'Enable' : 'Disable'} mask on ${activePixelLayer?.label || 'photo'}`} onClick={toggleLayerMask} disabled={!activeImageMask}>{activeImageMask?.enabled === false ? '◉' : '◌'}</button>
+              <button type="button" title={`Invert mask on ${activePixelLayer?.label || 'photo'}`} onClick={invertLayerMask} disabled={!activeImageMask}>⇄</button>
+              <button type="button" title={`Delete mask on ${activePixelLayer?.label || 'photo'}`} onClick={deleteLayerMask} disabled={!activeImageMask}>✕</button>
               <button type="button" title="Remove background" onClick={removeBackground} disabled={!selectedImageSrc}><Sparkles size={14} /></button>
-              <button type="button" title="Hue/Saturation (Ctrl+U)" onClick={openHueSat} disabled={!selectedImageSrc}><SlidersHorizontal size={14} /></button>
+              <button type="button" title={`Hue/Saturation on ${activePixelLayer?.label || 'photo'} (Ctrl+U)`} onClick={openHueSat} disabled={!activePixelImageSrc || activePixelLayer?.locked}><SlidersHorizontal size={14} /></button>
               <button type="button" title="New text layer (T)" onClick={addTextLayer}><Type size={14} /></button>
               <button type="button" title="Bring forward" onClick={() => activeLayer && moveLayerOrder(activeLayer.id, 1)} disabled={!activeLayer}>↑</button>
               <button type="button" title="Send backward" onClick={() => activeLayer && moveLayerOrder(activeLayer.id, -1)} disabled={!activeLayer}>↓</button>
@@ -6073,8 +6424,8 @@ export function PhotoEditor({
           <div className="photo-canvas-properties">
           <div className="panel-block">
             <div className="photo-sidebar-toolbar">
-              <p className="section-label">Adjustments</p>
-              <button type="button" className="ghost-button" onClick={resetFilters}>Reset</button>
+              <p className="section-label">Adjustments · {activePixelLayer?.label || 'photo'}</p>
+              <button type="button" className="ghost-button" onClick={resetFilters} disabled={!activePixelLayer || activePixelLayer.locked}>Reset</button>
             </div>
             {[
               ['brightness', 'Brightness'],
@@ -6088,26 +6439,33 @@ export function PhotoEditor({
               ['blur', 'Blur'],
               ['vignette', 'Vignette'],
               ['grain', 'Grain'],
+              ['highlights', 'Highlights'],
+              ['shadows', 'Shadows'],
+              ['temperature', 'Temperature'],
+              ['tint', 'Tint'],
             ].map(([key, label]) => (
               <label key={key} className="slider-row">
                 <span>{label}</span>
                 <input
                   type="range"
-                  min={key === 'blur' ? 0 : key === 'hue' ? -45 : 0}
+                  min={['hue', 'highlights', 'shadows', 'temperature', 'tint'].includes(key) ? (key === 'hue' ? -45 : -100) : 0}
                   max={
                     key === 'blur'
                       ? 6
                       : key === 'hue'
                         ? 45
+                        : ['highlights', 'shadows', 'temperature', 'tint'].includes(key)
+                          ? 100
                         : ['sepia', 'grayscale', 'invert'].includes(key)
                           ? 100
                           : 200
                   }
                   step={key === 'blur' ? 0.1 : 1}
-                  value={filters[key]}
+                  value={activeImageAdjustments[key]}
+                  disabled={activePixelLayer?.locked}
                   // One undo step per drag, rather than one per pixel moved.
                   onPointerDown={commitHistory}
-                  onChange={(event) => setFilters((prev) => ({ ...prev, [key]: Number(event.target.value) }))}
+                  onChange={(event) => updateActiveImageAdjustments({ [key]: Number(event.target.value) })}
                 />
               </label>
             ))}
@@ -6230,7 +6588,7 @@ export function PhotoEditor({
         document.body,
       )}
       {hueSatDialog && createPortal(
-        <PhotoHueSaturationDialog initial={hueSatDialog.initial} onPreview={setHueSat} onApply={applyHueSat} onCancel={cancelHueSat} />,
+        <PhotoHueSaturationDialog initial={hueSatDialog.initial} onPreview={previewHueSat} onApply={applyHueSat} onCancel={cancelHueSat} />,
         document.body,
       )}
       {shortcutsOpen && createPortal(<PhotoShortcutsOverlay workspace={editorWorkspace} onClose={() => setShortcutsOpen(false)} />, document.body)}
@@ -6241,11 +6599,11 @@ export function PhotoEditor({
               <>
                 <button type="button" role="menuitem" onClick={() => runMenuAction(openHueSat)}>Hue/Saturation… <kbd>Ctrl+U</kbd></button>
                 <button type="button" role="menuitem" onClick={() => runMenuAction(removeBackground)}>Remove background</button>
-                <button type="button" role="menuitem" onClick={() => runMenuAction(addLayerMaskFromSelection)} disabled={!selection}>Add layer mask from selection</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(addLayerMaskFromSelection)} disabled={!activePhotoSelection}>Add layer mask from selection</button>
                 <hr />
-                <button type="button" role="menuitem" onClick={() => runMenuAction(toggleLayerMask)} disabled={!layerMask}>{layerMask?.enabled === false ? 'Enable' : 'Disable'} layer mask</button>
-                <button type="button" role="menuitem" onClick={() => runMenuAction(invertLayerMask)} disabled={!layerMask}>Invert layer mask</button>
-                <button type="button" role="menuitem" onClick={() => runMenuAction(deleteLayerMask)} disabled={!layerMask}>Delete layer mask</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(toggleLayerMask)} disabled={!activeImageMask}>{activeImageMask?.enabled === false ? 'Enable' : 'Disable'} layer mask</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(invertLayerMask)} disabled={!activeImageMask}>Invert layer mask</button>
+                <button type="button" role="menuitem" onClick={() => runMenuAction(deleteLayerMask)} disabled={!activeImageMask}>Delete layer mask</button>
                 <hr />
                 <button type="button" role="menuitem" onClick={() => runMenuAction(() => transformBase('flip-h', 'Flipped the photo horizontally.'))}>Flip horizontal</button>
                 <button type="button" role="menuitem" onClick={() => runMenuAction(flattenImage)}>Flatten image <kbd>Ctrl+Shift+E</kbd></button>
@@ -6256,6 +6614,16 @@ export function PhotoEditor({
                 <button type="button" role="menuitem" disabled={menuLayer.locked} onClick={() => runMenuAction(() => setRenamingLayerId(menuLayer.id))}>Rename layer…</button>
                 {!menuLayer.isBaseImage && <button type="button" role="menuitem" onClick={() => runMenuAction(() => setObjectsLocked([menuLayer.id], !menuLayer.locked))}>{menuLayer.locked ? 'Unlock object' : 'Lock object'}</button>}
                 <button type="button" role="menuitem" onClick={() => runMenuAction(() => toggleLayerVisibility(menuLayer.id))}>{menuLayer.hidden ? 'Show' : 'Hide'} layer</button>
+                {menuLayer.type === 'image' && !menuLayer.isBaseImage && (
+                  <>
+                    <hr />
+                    <button type="button" role="menuitem" onClick={() => runMenuAction(openHueSat)} disabled={menuLayer.locked}>Hue/Saturation… <kbd>Ctrl+U</kbd></button>
+                    <button type="button" role="menuitem" onClick={() => runMenuAction(addLayerMaskFromSelection)} disabled={!activePhotoSelection || menuLayer.locked}>Add layer mask from selection</button>
+                    <button type="button" role="menuitem" onClick={() => runMenuAction(toggleLayerMask)} disabled={!activeImageMask || menuLayer.locked}>{activeImageMask?.enabled === false ? 'Enable' : 'Disable'} layer mask</button>
+                    <button type="button" role="menuitem" onClick={() => runMenuAction(invertLayerMask)} disabled={!activeImageMask || menuLayer.locked}>Invert layer mask</button>
+                    <button type="button" role="menuitem" onClick={() => runMenuAction(deleteLayerMask)} disabled={!activeImageMask || menuLayer.locked}>Delete layer mask</button>
+                  </>
+                )}
                 <hr />
                 <button type="button" role="menuitem" onClick={() => runMenuAction(() => moveLayerOrder(menuLayer.id, 1))}>Bring forward</button>
                 <button type="button" role="menuitem" onClick={() => runMenuAction(() => moveLayerOrder(menuLayer.id, -1))}>Send backward</button>
