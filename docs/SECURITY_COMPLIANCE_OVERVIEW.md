@@ -177,7 +177,7 @@ The following repository locations contain implementation evidence:
 
 - [Project security notes](../README.md#security)
 - [Production auth configuration](../supabase/config.toml)
-- [Deployment security headers](../amplify.yml)
+- [Deployment security headers](../customHttp.yml)
 - [CI checks](../.github/workflows/ci.yml)
 - [Core identity and RLS migration](../supabase/migrations/20260812_core_identity.sql)
 - [MFA and secret hardening migration](../supabase/migrations/20260816_mfa_and_secret_hardening.sql)
