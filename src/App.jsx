@@ -457,12 +457,20 @@ function App() {
     await loadContactCard(user)
 
     if (isSupabaseConfigured) {
-      const [socialAccounts, savedPosts] = await Promise.all([
-        socialIntegrationService.listAccounts(),
-        platformService.listPosts(),
-      ])
-      setConnectedAccounts(socialAccounts)
-      setScheduledPosts(savedPosts)
+      setIntegrationError('')
+      const accountLoad = socialIntegrationService.listAccounts()
+        .then((socialAccounts) => {
+          setConnectedAccounts(socialAccounts)
+        })
+        .catch((error) => {
+          setConnectedAccounts([])
+          setIntegrationError(`Unable to load connected channels: ${error.message}`)
+        })
+      const postLoad = platformService.listPosts()
+        .then((savedPosts) => {
+          setScheduledPosts(savedPosts)
+        })
+      await Promise.all([accountLoad, postLoad])
       const nextAiAgentConfig = createDefaultAiAgentConfig()
       setAiAgentConfig(nextAiAgentConfig)
       setAiAgentDraft(nextAiAgentConfig)
@@ -4668,6 +4676,7 @@ function App() {
             <div className="split">
               <article className="sub-panel tone-ocean">
                 <h3>Connected channels</h3>
+                {integrationError && <p className="field-error" role="alert">{integrationError}</p>}
                 <div className="platform-cards">
                   {connectedAccounts.map((account) => {
                     const meta = getPlatformMeta(account.platform)

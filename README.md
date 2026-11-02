@@ -399,9 +399,9 @@ migrations or Edge Functions. Production backend changes therefore require an
 explicit `supabase db push` and function deployment using an appropriately
 scoped Supabase access token.
 
-The Amplify deployment in [amplify.yml](amplify.yml) builds `dist`, serves SPA
-deep links through `index.html`, and supplies HSTS, CSP, clickjacking,
-MIME-sniffing, referrer, and permissions policies.
+The Amplify deployment in [amplify.yml](amplify.yml) builds `dist` and serves
+SPA deep links through `index.html`. The root [customHttp.yml](customHttp.yml)
+sets cache behavior and security headers; redeploy Amplify after changing it.
 
 ## Security
 

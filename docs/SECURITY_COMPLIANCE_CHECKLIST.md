@@ -46,7 +46,7 @@ Risk levels: **Critical**, **High**, **Medium**, **Low**.
 |---|---|---|---|---|---|
 | AWS-01 | Confirm the production domain uses HTTPS only. | Amplify domain settings and browser | HTTP redirects to HTTPS and no mixed content is loaded. | High | Header capture and screenshot |
 | AWS-02 | Verify HSTS is present and includes subdomains. | `curl -I https://www.echoaipro.com` | `Strict-Transport-Security` is present with the approved policy. | High | Redacted header output |
-| AWS-03 | Verify CSP matches actual required origins. | `amplify.yml` and response headers | CSP is present, intentional, and blocks unapproved script/connect/frame sources. | High | Header capture and CSP review |
+| AWS-03 | Verify CSP matches actual required origins. | `customHttp.yml` and response headers | CSP is present, intentional, and blocks unapproved script/connect/frame sources. | High | Header capture and CSP review |
 | AWS-04 | Verify clickjacking protections. | Response headers | `X-Frame-Options: DENY` and equivalent frame ancestor policy are present. | Medium | Header capture |
 | AWS-05 | Review AWS IAM and deployment identities. | AWS IAM and Amplify service role | No developer or build identity has broader production access than required. | Critical | IAM access review |
 | AWS-06 | Confirm build logs and artifacts do not expose secrets. | Amplify logs and artifact storage | Logs redact environment values and artifacts contain no secret strings. | Critical | Redacted log review and scan |
