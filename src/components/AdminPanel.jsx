@@ -69,7 +69,7 @@ const STATUS_COLORS = {
   'not deployed': '#6b7280',
 }
 
-function StatusBadge({ value }) {
+function StatusBadge({ value, label }) {
   const color = STATUS_COLORS[value] || '#6b7280'
   return (
     <span style={{
@@ -82,7 +82,7 @@ function StatusBadge({ value }) {
       color,
       border: `1px solid ${color}44`,
     }}>
-      {value?.replace(/_/g, ' ')}
+      {label || value?.replace(/_/g, ' ')}
     </span>
   )
 }
@@ -224,7 +224,7 @@ export function AdminPanel({
   const [newUserDraft, setNewUserDraft] = useState({ fullName: '', email: '', company: '', role: 'it', profitSharePercent: '' })
   const [newUserStatus, setNewUserStatus] = useState({ saving: false, message: '', error: '' })
   const [profitShareDraft, setProfitShareDraft] = useState({ userId: '', value: '', saving: false, error: '' })
-  const [betaAiDraft, setBetaAiDraft] = useState({ userId: '', isBetaTester: false, saving: false, error: '' })
+  const [betaAccessStatus, setBetaAccessStatus] = useState({ userId: '', saving: false, error: '', message: '' })
   const [deletingUserId, setDeletingUserId] = useState('')
   const [, setQuotaEditingUserId] = useState(null)
   const [, setQuotaDraftMb] = useState('')
@@ -238,7 +238,25 @@ export function AdminPanel({
     setTemporaryPassword({ userId: nextId, value: '', saving: false, message: '', error: '' })
     setProfileDraft({ fullName: member.fullName || '', company: member.company || '', saving: false, error: '' })
     setProfitShareDraft({ userId: member.id, value: String(member.profitSharePercent || ''), saving: false, error: '' })
-    setBetaAiDraft({ userId: member.id, isBetaTester: member.isBetaTester === true, saving: false, error: '' })
+  }
+
+  const toggleBetaAccess = async (member) => {
+    const isBetaTester = member.isBetaTester !== true
+    const name = member.fullName || member.email
+    setBetaAccessStatus({ userId: member.id, saving: true, error: '', message: '' })
+    try {
+      await onAdminUserAction({
+        action: 'set-beta-ai-access',
+        userId: member.id,
+        email: member.email,
+        isBetaTester,
+        enabled: true,
+        note: '',
+      })
+      setBetaAccessStatus({ userId: member.id, saving: false, error: '', message: `Beta tester access ${isBetaTester ? 'added for' : 'removed from'} ${name}.` })
+    } catch (error) {
+      setBetaAccessStatus({ userId: member.id, saving: false, error: `Could not change beta tester access for ${name}: ${error.message}`, message: '' })
+    }
   }
 
   const loadVerification = async (member) => {
@@ -1477,6 +1495,9 @@ export function AdminPanel({
               </Section>
             )}
             <Section title="User management">
+              <p className="muted">Beta tester access is shown on every account. Administrators can add or remove it directly below, without opening Manage. Beta access includes Premium at no charge; removing it does not cancel a paid subscription.</p>
+              {betaAccessStatus.error && <p role="alert" className="auth-message auth-error">{betaAccessStatus.error}</p>}
+              {betaAccessStatus.message && <p role="status" className="auth-message">{betaAccessStatus.message}</p>}
               <p className="muted">New: under 7 days since signup. Long-term: 90+ days. Returning: at least two recorded sign-ins, which may overlap either age group. Earlier repeat visits are not inferred.</p>
               <div className="action-row it-user-groups" aria-label="User group shortcuts">
                 {USER_GROUPS.filter((group) => ['all', 'new', 'returning', 'long_term'].includes(group.id)).map((group) => (
@@ -1567,6 +1588,17 @@ export function AdminPanel({
                       <div>
                         <p style={{ fontWeight: 600 }}>{member.fullName} <StatusBadge value={member.role} /></p>
                         <span>{member.email} • {member.company || 'No company'}</span>
+                        <div className="it-user-beta-access">
+                          <StatusBadge value={member.isBetaTester ? 'beta' : 'non-beta'} label={member.isBetaTester ? 'Beta tester access: ON' : 'Beta tester access: OFF'} />
+                          {isFullAdmin && member.id !== currentUser?.id && !['admin', 'super_admin'].includes(normalizeRole(member.role)) && (
+                            <button type="button" className={member.isBetaTester ? 'ghost-button' : 'primary-button'}
+                              aria-label={`${member.isBetaTester ? 'Remove' : 'Add'} beta tester access ${member.isBetaTester ? 'from' : 'for'} ${member.fullName || member.email}`}
+                              disabled={adminLoading || betaAccessStatus.saving}
+                              onClick={() => toggleBetaAccess(member)}>
+                              {betaAccessStatus.saving && betaAccessStatus.userId === member.id ? 'Saving beta access...' : member.isBetaTester ? 'Remove beta access' : 'Add beta access'}
+                            </button>
+                          )}
+                        </div>
                         <p className="muted it-user-dates">
                           Signed up: {member.createdAt && Number.isFinite(Date.parse(member.createdAt)) ? formatDateTime(member.createdAt) : 'Unknown'}
                           {' • '}Last sign-in: {member.lastSignInAt ? formatDateTime(member.lastSignInAt) : 'Not recorded'}
@@ -1575,7 +1607,6 @@ export function AdminPanel({
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                         <StatusBadge value={getUserTenure(member, directoryNow)} />
                         {isReturningUser(member) && <StatusBadge value="returning" />}
-                        <StatusBadge value={member.isBetaTester ? 'beta' : 'non-beta'} />
                         <StatusBadge value={getDirectoryAccessStatus(member.accessStatus)} />
                         <StatusBadge value={hasPaidSubscription(member, licenses) ? 'paid' : 'free'} />
                         <button
@@ -1601,25 +1632,6 @@ export function AdminPanel({
                               <button type="button" className="ghost-button" onClick={() => handleToggleUserAccess(member)} disabled={adminLoading}>
                                 {member.accessStatus === 'deactivated' ? 'Reactivate' : 'Deactivate'}
                               </button>
-                            </div>}
-
-                            {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group">
-                              <span className="it-user-detail-label">Beta Premium access</span>
-                              <label className="toggle-row">
-                                <input type="checkbox" checked={betaAiDraft.userId === member.id ? betaAiDraft.isBetaTester : member.isBetaTester === true} onChange={(event) => setBetaAiDraft((current) => ({ ...current, userId: member.id, isBetaTester: event.target.checked }))} />
-                                Beta tester account
-                              </label>
-                              <small className="muted">Beta testers receive Premium access at no charge. Premium status is managed by this flag, not by their user role.</small>
-                              <button type="button" className="primary-button" disabled={betaAiDraft.saving} onClick={async () => {
-                                setBetaAiDraft((current) => ({ ...current, saving: true, error: '' }))
-                                try {
-                                  await onAdminUserAction({ action: 'set-beta-ai-access', userId: member.id, email: member.email, isBetaTester: betaAiDraft.isBetaTester, enabled: true, note: '' })
-                                  setBetaAiDraft((current) => ({ ...current, saving: false }))
-                                } catch (error) {
-                                  setBetaAiDraft((current) => ({ ...current, saving: false, error: error.message }))
-                                }
-                              }}>{betaAiDraft.saving ? 'Saving...' : 'Save beta access'}</button>
-                              {betaAiDraft.error && <small className="field-error">{betaAiDraft.error}</small>}
                             </div>}
 
                             {isFullAdmin && member.id !== currentUser?.id && <div className="it-user-detail-group it-user-detail-stack">
