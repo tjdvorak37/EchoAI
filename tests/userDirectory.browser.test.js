@@ -33,6 +33,13 @@ const fixtureCode = `
       licenses: [], tickets: [], purchaseHistory: [], companySeats: [], alerts: [],
       featureFlags: [], promoCodes: [], expenses: [], payroll: [], taxRecords: [],
       refunds: [], financialTasks: [], announcements: {},
+      onAdminUserAction: async (params) => {
+        window.__betaActions = [...(window.__betaActions || []), params]
+        if (window.__holdBetaSave) await new Promise((resolve) => { window.__finishBetaSave = resolve })
+        if (window.__betaSaveFails) throw new Error('Permission denied')
+        setTeamMembers((members) => members.map((member) => member.id === params.userId
+          ? { ...member, isBetaTester: params.isBetaTester } : member))
+      },
       onRefreshUsers: async () => {
         if (window.__refreshFails) throw new Error('Directory refresh unavailable')
         const users = [...initialUsers, user('Fresh-signup', 0)]
@@ -105,6 +112,38 @@ test('user directory grouping, search, pagination, refresh and responsive layout
   assert.match(await rows.first().innerText(), /Signed up: Unknown.*Last sign-in: Not recorded/)
 
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click()
+  await page.getByLabel('Search', { exact: true }).fill('new-01@example.test')
+  assert.match(await rows.first().innerText(), /Beta tester access: OFF/)
+  assert.equal(await page.locator('.it-user-detail').count(), 0)
+  await page.evaluate(() => { window.__holdBetaSave = true })
+  await page.getByRole('button', { name: 'Add beta tester access for New-01', exact: true }).click()
+  const saving = page.getByRole('button', { name: 'Add beta tester access for New-01', exact: true })
+  assert.equal(await saving.isDisabled(), true)
+  assert.match(await saving.innerText(), /Saving beta access/)
+  assert.match(await rows.first().innerText(), /Beta tester access: OFF/)
+  await page.evaluate(() => { window.__finishBetaSave(); window.__holdBetaSave = false })
+  await page.getByRole('status').filter({ hasText: 'Beta tester access added for New-01.' }).waitFor()
+  assert.match(await rows.first().innerText(), /Beta tester access: ON/)
+  assert.deepEqual(await page.evaluate(() => window.__betaActions), [{
+    action: 'set-beta-ai-access', userId: 'New-01', email: 'New-01@example.test',
+    isBetaTester: true, enabled: true, note: '',
+  }])
+  await page.getByRole('combobox', { name: /^Beta account/ }).selectOption('beta')
+  await page.evaluate(() => { window.__betaSaveFails = true })
+  await page.getByRole('button', { name: 'Remove beta tester access from New-01', exact: true }).click()
+  await page.getByRole('alert').filter({ hasText: 'Could not change beta tester access for New-01: Permission denied' }).waitFor()
+  assert.match(await rows.first().innerText(), /Beta tester access: ON/)
+  assert.equal(await page.getByRole('button', { name: 'Remove beta tester access from New-01', exact: true }).isEnabled(), true)
+  await page.evaluate(() => { window.__betaSaveFails = false })
+  await page.getByRole('button', { name: 'Remove beta tester access from New-01', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: 'Beta tester access removed from New-01.' }).waitFor()
+  assert.equal(await rows.count(), 0)
+  assert.equal(await page.getByRole('alert').count(), 0)
+  await page.getByRole('combobox', { name: /^Beta account/ }).selectOption('standard')
+  assert.match(await rows.first().innerText(), /Beta tester access: OFF/)
+  assert.equal(await page.locator('.it-user-detail').count(), 0)
+
+  await page.getByRole('button', { name: 'Clear filters', exact: true }).click()
   await page.getByRole('button', { name: 'Refresh users', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '1 newly listed account.' }).waitFor()
   assert.match(await rows.first().innerText(), /Fresh-signup/)
@@ -117,5 +156,6 @@ test('user directory grouping, search, pagination, refresh and responsive layout
   const filters = page.locator('.it-user-filters')
   assert.equal(await filters.evaluate((node) => getComputedStyle(node).gridTemplateColumns.split(' ').length), 1)
   assert.equal(await page.getByRole('combobox', { name: /^Beta account/ }).isVisible(), true)
+  assert.equal(await page.getByRole('button', { name: 'Add beta tester access for Fresh-signup', exact: true }).isVisible(), true)
   assert.deepEqual(errors, [])
 })

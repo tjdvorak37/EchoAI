@@ -4765,6 +4765,14 @@ button[type='submit']:hover {
   margin-bottom: 0.75rem;
 }
 
+.it-user-beta-access {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
 .it-user-groups [aria-pressed="true"] {
   border-color: var(--text);
   font-weight: 700;

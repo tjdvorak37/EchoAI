@@ -69,6 +69,15 @@ The directory loads all users in pages rather than stopping at the API row limit
 - **Returning**: at least two recorded sign-ins, independent of account age.
 - **Beta**: the existing Beta Premium account flag, not a separate subscription.
 
+Every row prominently shows **Beta tester access: ON/OFF**. Administrators can
+use **Add beta access** or **Remove beta access** directly on the row, without
+opening Manage or saving a separate form. Changes use the existing server-checked
+admin action and update badges, counts, and filters after success. Saving disables
+duplicate actions; failures are displayed without changing the displayed access.
+Granting beta includes Premium at no charge. Removing beta does not cancel any
+paid subscription. Self and administrator accounts retain their existing editing
+restrictions.
+
 Apply `supabase/migrations/202611030001_user_directory_activity.sql` before
 deploying this UI. It records auth-owned signup timestamps and sign-in activity
 in a staff-readable, client-read-only table. Existing accounts start with zero
