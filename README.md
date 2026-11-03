@@ -54,6 +54,36 @@ the app does not bundle or automatically download thousands of licensed files.
 - Help Center, support tickets, inbound customer email replies, and ticket
   notifications.
 
+### User directory organization
+
+In **Admin > People > Customer users**, combine name/email/company search, role, access status,
+user group, and beta/non-beta filters. Group shortcuts show directory-wide counts;
+returning users can also be new or long-term, so group counts overlap. Signup and
+last-sign-in dates appear on each row, and newest signups appear first by default.
+Use **Refresh users** to check for new accounts without reloading the application.
+The directory loads all users in pages rather than stopping at the API row limit.
+
+- **New**: signed up less than 7 days ago.
+- **Established**: signed up 7 to 89 days ago.
+- **Long-term**: signed up at least 90 days ago.
+- **Returning**: at least two recorded sign-ins, independent of account age.
+- **Beta**: the existing Beta Premium account flag, not a separate subscription.
+
+Apply `supabase/migrations/202611030001_user_directory_activity.sql` before
+deploying this UI. It records auth-owned signup timestamps and sign-in activity
+in a staff-readable, client-read-only table. Existing accounts start with zero
+or one known sign-in; historical repeat visits cannot be reconstructed, and
+returning status becomes available after another sign-in. Token refreshes do
+not count unless Auth changes the user's `last_sign_in_at`. These groups are
+organizational only and do not change permissions, billing, or beta entitlements.
+Redeploy `admin-user-actions` as well so newly invited staff include their signup
+date immediately.
+
+Directory regression checks: `node --test src/services/userDirectory.test.js
+tests/authDirectory.test.js tests/userDirectory.browser.test.js` (Chromium required).
+Run `psql -v ON_ERROR_STOP=1 -f tests/userDirectoryActivity.sql` only against a fresh,
+disposable PostgreSQL database to check activity tracking and access policies.
+
 ### Photo Editor workspaces
 
 Inside a design, use the **Simple / Classic** selector in the editor's top bar.

@@ -11,6 +11,7 @@ import { ProjectBoardPanel } from './ProjectBoardPanel'
 import { AiOperationsPanel } from './AiOperationsPanel'
 import { StockMediaKeyPanel } from './StockMediaKeyPanel'
 import { internalForumService } from '../services/internalForumService'
+import { USER_GROUPS, compareDirectoryUsers, getUserTenure, isReturningUser, matchesBetaFilter, matchesUserGroup } from '../services/userDirectory'
 import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
 
 const USERS_PER_PAGE = 25
@@ -49,6 +50,10 @@ const STATUS_COLORS = {
   confirmed: '#22c55e',
   open: '#3b82f6',
   new: '#3b82f6',
+  returning: '#8b5cf6',
+  long_term: '#0d9488',
+  existing: '#64748b',
+  beta: '#8b5cf6',
   triage: '#a78bfa',
   in_progress: '#f59e0b',
   waiting_customer: '#f97316',
@@ -184,6 +189,7 @@ export function AdminPanel({
   currentUser,
   notificationDestination,
   onAdminUserAction,
+  onRefreshUsers,
 }) {
   const [itTab, setItTab] = useState(() => notificationDestination ? (notificationDestination.destination === 'tickets' ? 'tickets' : 'forum') : ['admin', 'super_admin'].includes(normalizeRole(currentUser?.role)) ? 'overview' : 'integrations')
   const [openTabGroup, setOpenTabGroup] = useState(null)
@@ -205,7 +211,10 @@ export function AdminPanel({
   const [userSearch, setUserSearch] = useState('')
   const [userRoleFilter, setUserRoleFilter] = useState('all')
   const [userStatusFilter, setUserStatusFilter] = useState('all')
-  const [userSort, setUserSort] = useState('name-asc')
+  const [userGroupFilter, setUserGroupFilter] = useState('all')
+  const [userBetaFilter, setUserBetaFilter] = useState('all')
+  const [userSort, setUserSort] = useState('newest')
+  const [userRefresh, setUserRefresh] = useState({ loading: false, error: '', message: '' })
   const [userPage, setUserPage] = useState(1)
   const [expandedUserId, setExpandedUserId] = useState(null)
   const [verification, setVerification] = useState({ userId: null, summary: null, loading: false, error: '' })
@@ -557,6 +566,18 @@ export function AdminPanel({
   const filteredDirectoryMembers = itTab === 'employees'
     ? teamMembers.filter((member) => employeeRoles.includes(normalizeRole(member.role)))
     : teamMembers.filter((member) => !employeeRoles.includes(normalizeRole(member.role)))
+  const directoryNow = Date.now()
+  const refreshUsers = async () => {
+    setUserRefresh({ loading: true, error: '', message: '' })
+    try {
+      const members = await onRefreshUsers()
+      const knownIds = new Set(teamMembers.map((member) => member.id))
+      const added = members.filter((member) => !knownIds.has(member.id)).length
+      setUserRefresh({ loading: false, error: '', message: `Directory refreshed. ${added} newly listed account${added === 1 ? '' : 's'}.` })
+    } catch (error) {
+      setUserRefresh({ loading: false, error: error.message, message: '' })
+    }
+  }
   const filteredUsers = filteredDirectoryMembers.filter((member) => {
     const term = userSearch.trim().toLowerCase()
     const matchesSearch = !term
@@ -566,20 +587,11 @@ export function AdminPanel({
     const matchesRole = userRoleFilter === 'all' || normalizeRole(member.role) === normalizeRole(userRoleFilter)
     const matchesStatus = userStatusFilter === 'all' || getDirectoryAccessStatus(member.accessStatus) === userStatusFilter
     return matchesSearch && matchesRole && matchesStatus
+      && matchesUserGroup(member, userGroupFilter, directoryNow)
+      && matchesBetaFilter(member, userBetaFilter)
   })
 
-  const sortedUsers = [...filteredUsers].sort((left, right) => {
-    switch (userSort) {
-      case 'name-desc':
-        return (right.fullName || '').localeCompare(left.fullName || '')
-      case 'email-asc':
-        return (left.email || '').localeCompare(right.email || '')
-      case 'company-asc':
-        return (left.company || '').localeCompare(right.company || '')
-      default:
-        return (left.fullName || '').localeCompare(right.fullName || '')
-    }
-  })
+  const sortedUsers = [...filteredUsers].sort((left, right) => compareDirectoryUsers(left, right, userSort))
 
   const userPageCount = Math.max(1, Math.ceil(sortedUsers.length / USERS_PER_PAGE))
   // Filters can shrink the list under the current page while userPage still points past the end.
@@ -1465,6 +1477,20 @@ export function AdminPanel({
               </Section>
             )}
             <Section title="User management">
+              <p className="muted">New: under 7 days since signup. Long-term: 90+ days. Returning: at least two recorded sign-ins, which may overlap either age group. Earlier repeat visits are not inferred.</p>
+              <div className="action-row it-user-groups" aria-label="User group shortcuts">
+                {USER_GROUPS.filter((group) => ['all', 'new', 'returning', 'long_term'].includes(group.id)).map((group) => (
+                  <button type="button" className="ghost-button" key={group.id}
+                    aria-pressed={userGroupFilter === group.id}
+                    onClick={() => resetUserPaging(() => setUserGroupFilter(group.id))}>
+                    {group.label}: {filteredDirectoryMembers.filter((member) => matchesUserGroup(member, group.id, directoryNow)).length}
+                  </button>
+                ))}
+                <span className="muted">Beta: {filteredDirectoryMembers.filter((member) => member.isBetaTester === true).length} / Non-beta: {filteredDirectoryMembers.filter((member) => member.isBetaTester !== true).length}</span>
+                {onRefreshUsers && <button type="button" className="ghost-button" onClick={refreshUsers} disabled={userRefresh.loading || adminLoading}>{userRefresh.loading ? 'Refreshing...' : 'Refresh users'}</button>}
+              </div>
+              {userRefresh.error && <p role="alert" className="auth-message auth-error">{userRefresh.error}</p>}
+              {userRefresh.message && <p role="status" className="muted">{userRefresh.message}</p>}
               <div className="it-user-filters">
                 <label>
                   Search
@@ -1490,8 +1516,25 @@ export function AdminPanel({
                   </select>
                 </label>
                 <label>
+                  User group
+                  <select value={userGroupFilter} onChange={(e) => resetUserPaging(() => setUserGroupFilter(e.target.value))}>
+                    {USER_GROUPS.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Beta account
+                  <select value={userBetaFilter} onChange={(e) => resetUserPaging(() => setUserBetaFilter(e.target.value))}>
+                    <option value="all">All accounts</option>
+                    <option value="beta">Beta accounts</option>
+                    <option value="standard">Non-beta accounts</option>
+                  </select>
+                </label>
+                <label>
                   Sort
-                  <select value={userSort} onChange={(e) => setUserSort(e.target.value)}>
+                  <select value={userSort} onChange={(e) => resetUserPaging(() => setUserSort(e.target.value))}>
+                    <option value="newest">Newest signups first</option>
+                    <option value="oldest">Oldest signups first</option>
+                    <option value="last-sign-in">Most recent sign-in</option>
                     <option value="name-asc">Name A–Z</option>
                     <option value="name-desc">Name Z–A</option>
                     <option value="email-asc">Email A–Z</option>
@@ -1499,6 +1542,13 @@ export function AdminPanel({
                   </select>
                 </label>
               </div>
+              <button type="button" className="ghost-button" onClick={() => resetUserPaging(() => {
+                setUserSearch('')
+                setUserRoleFilter('all')
+                setUserStatusFilter('all')
+                setUserGroupFilter('all')
+                setUserBetaFilter('all')
+              })}>Clear filters</button>
 
               <p className="muted it-user-count">
                 {sortedUsers.length === filteredDirectoryMembers.length
@@ -1517,8 +1567,15 @@ export function AdminPanel({
                       <div>
                         <p style={{ fontWeight: 600 }}>{member.fullName} <StatusBadge value={member.role} /></p>
                         <span>{member.email} • {member.company || 'No company'}</span>
+                        <p className="muted it-user-dates">
+                          Signed up: {member.createdAt && Number.isFinite(Date.parse(member.createdAt)) ? formatDateTime(member.createdAt) : 'Unknown'}
+                          {' • '}Last sign-in: {member.lastSignInAt ? formatDateTime(member.lastSignInAt) : 'Not recorded'}
+                        </p>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <StatusBadge value={getUserTenure(member, directoryNow)} />
+                        {isReturningUser(member) && <StatusBadge value="returning" />}
+                        <StatusBadge value={member.isBetaTester ? 'beta' : 'non-beta'} />
                         <StatusBadge value={getDirectoryAccessStatus(member.accessStatus)} />
                         <StatusBadge value={hasPaidSubscription(member, licenses) ? 'paid' : 'free'} />
                         <button
