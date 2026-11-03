@@ -4755,9 +4755,26 @@ button[type='submit']:hover {
 
 .it-user-filters {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.75rem;
   margin-bottom: 0.75rem;
+}
+
+.it-user-groups {
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.it-user-groups [aria-pressed="true"] {
+  border-color: var(--text);
+  font-weight: 700;
+}
+
+.it-user-row .it-user-dates {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--text-soft);
+  margin-top: 0.35rem;
 }
 
 @media (max-width: 760px) {

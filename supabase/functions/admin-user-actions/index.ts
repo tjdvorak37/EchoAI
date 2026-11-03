@@ -16,7 +16,7 @@ const PRIVILEGED_ROLES = new Set([
 ])
 
 const PROFILE_ADMIN_FIELDS = 'id, full_name, email, company, role, is_board_member, profit_share_percent, access_status, is_beta_tester, ai_enabled, ai_access_note, trademark_edit_access, developer_app_edit_access, company_email_edit_access, license_edit_access, integrations_edit_access, ai_operations_edit_access, site_controls_edit_access, created_at'
-const PROFILE_CREATE_FIELDS = 'id, full_name, email, company, role, profit_share_percent, access_status, storage_quota_mb, trademark_edit_access, developer_app_edit_access, company_email_edit_access, license_edit_access, integrations_edit_access, ai_operations_edit_access, site_controls_edit_access'
+const PROFILE_CREATE_FIELDS = 'id, full_name, email, company, role, profit_share_percent, access_status, storage_quota_mb, trademark_edit_access, developer_app_edit_access, company_email_edit_access, license_edit_access, integrations_edit_access, ai_operations_edit_access, site_controls_edit_access, created_at'
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
   apiVersion: '2025-03-31.basil',
   httpClient: Stripe.createFetchHttpClient(),

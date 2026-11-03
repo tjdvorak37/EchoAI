@@ -2528,6 +2528,7 @@ function App() {
           company: result.profile.company,
           role: result.profile.role,
           accessStatus: result.profile.access_status,
+          createdAt: result.profile.created_at || null,
           storageQuotaMb: result.profile.storage_quota_mb,
           trademarkEditAccess: result.profile.trademark_edit_access === true,
           developerAppEditAccess: result.profile.developer_app_edit_access === true,
@@ -5814,6 +5815,11 @@ function App() {
               handleUpdateSupportTicket={handleUpdateSupportTicket}
               handleRefreshSupportTickets={handleRefreshSupportTickets}
               onAdminUserAction={handleAdminUserAction}
+              onRefreshUsers={async () => {
+                const members = await authService.getManagedUsers()
+                setTeamMembers(members)
+                return members
+              }}
               handleAssignCompanySeat={handleAssignCompanySeat}
               handleRevokeCompanySeat={handleRevokeCompanySeat}
               socialPlatformReadiness={socialPlatformReadiness}

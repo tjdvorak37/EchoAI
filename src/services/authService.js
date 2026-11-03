@@ -93,6 +93,7 @@ const normalizeMember = (record) => ({
   role: record.role,
   accessStatus: record.access_status,
   isBetaTester: record.is_beta_tester === true,
+  createdAt: record.created_at || null,
   aiEnabled: record.ai_enabled !== false,
   aiAccessNote: record.ai_access_note || '',
   trademarkEditAccess: record.trademark_edit_access === true,
@@ -537,16 +538,32 @@ export const authService = {
       })
     }
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('full_name', { ascending: true })
-
-    if (error) {
-      throw new Error(error.message)
+    const members = []
+    // Bound UUID filter URLs as well as result pages to avoid API request limits.
+    const pageSize = 100
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabase.from('profiles').select('*')
+        .order('id').range(offset, offset + pageSize - 1)
+      if (error) throw new Error(error.message)
+      const profiles = data ?? []
+      if (!profiles.length) break
+      const { data: activity, error: activityError } = await supabase.from('user_directory_activity')
+        .select('user_id, signed_up_at, last_sign_in_at, sign_in_count')
+        .in('user_id', profiles.map((profile) => profile.id))
+      if (activityError) throw new Error(`Could not load user activity. Apply the user directory activity migration and retry. ${activityError.message}`)
+      const activityById = new Map((activity ?? []).map((row) => [row.user_id, row]))
+      members.push(...profiles.map((profile) => {
+        const row = activityById.get(profile.id)
+        return {
+          ...normalizeMember(profile),
+          createdAt: row?.signed_up_at || profile.created_at || null,
+          lastSignInAt: row?.last_sign_in_at || null,
+          signInCount: Number(row?.sign_in_count ?? 0),
+        }
+      }))
+      if (profiles.length < pageSize) break
     }
-
-    return (data ?? []).map(normalizeMember)
+    return members.sort((left, right) => (left.fullName || '').localeCompare(right.fullName || ''))
   },
 
   async getCompanySeatData({ companyKey }) {
