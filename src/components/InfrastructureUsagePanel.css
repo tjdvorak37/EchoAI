@@ -1,0 +1,106 @@
+.infrastructure-panel {
+  min-width: 0;
+}
+
+.infrastructure-panel .it-section {
+  min-width: 0;
+}
+
+.infra-toolbar, .infra-form, .infra-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+}
+
+.infra-toolbar label, .infra-form label {
+  display: flex;
+  gap: 0.4rem;
+  flex-direction: column;
+}
+
+.infra-toolbar input[type="checkbox"] {
+  align-self: flex-start;
+}
+
+.infra-form {
+  margin-top: 1rem;
+}
+
+.infra-form input, .infra-form select, .infra-toolbar input[type="date"] {
+  padding: 0.55rem;
+  border: 1px solid #94a3b8;
+  border-radius: 0.4rem;
+  color: #0f172a;
+  background: #fff;
+  max-width: 100%;
+}
+
+.infra-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.infra-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.infra-good { color: #166534; background: #dcfce7; }
+.infra-warning { color: #854d0e; background: #fef9c3; }
+.infra-danger { color: #991b1b; background: #fee2e2; }
+.infra-unknown { color: #334155; background: #e2e8f0; }
+
+.infra-capacity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.infra-capacity h4 { margin: 0; }
+.infra-capacity progress { width: 100%; accent-color: #64748b; }
+.infra-capacity:has(.infra-good) progress { accent-color: #16a34a; }
+.infra-capacity:has(.infra-warning) progress { accent-color: #ca8a04; }
+.infra-capacity:has(.infra-danger) progress { accent-color: #dc2626; }
+
+.infra-table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.infra-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.infra-table th, .infra-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #cbd5e1;
+  vertical-align: top;
+}
+
+.infra-table small {
+  display: block;
+  margin-top: 0.35rem;
+}
+
+.infrastructure-panel li { margin-bottom: 0.65rem; }
+.infrastructure-panel summary { cursor: pointer; font-weight: 650; }
+.infra-links a { overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .infra-form, .infra-toolbar { align-items: stretch; }
+  .infra-form label, .infra-toolbar label { width: 100%; min-width: 0; }
+  .infra-form button, .infra-toolbar button { width: 100%; }
+}

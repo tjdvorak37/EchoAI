@@ -442,6 +442,72 @@ The Amplify deployment in [amplify.yml](amplify.yml) builds `dist` and serves
 SPA deep links through `index.html`. The root [customHttp.yml](customHttp.yml)
 sets cache behavior and security headers; redeploy Amplify after changing it.
 
+## Infrastructure & Usage
+
+Administrators and IT staff can open **IT / Management > Platform >
+Infrastructure & Usage**. Apply
+`supabase/migrations/202611100001_infrastructure_usage.sql` with `supabase db push`
+before deploying the frontend. No new Edge Function or browser credentials are
+required. The database rechecks the caller's role for every read and write;
+customers, accountants and other management roles cannot access this telemetry.
+
+The page refreshes database size, Storage object metadata, bucket inventory,
+account counts, publishing queue health and activity counters every 60 seconds
+while open, with manual refresh and a UTC day selector. Yellow starts at 70% of
+the configured allowance and red at 90%. Confirm the actual Supabase/AWS plans
+in the page; the initial Free Supabase assumption is explicitly unconfirmed.
+Changing these settings does not purchase or change a provider subscription.
+Provider plan auto-detection is not connected: after upgrading at the provider,
+confirm the new plan here. Refreshes immediately recalculate capacity limits,
+remaining amounts, percentages, warning levels and growth forecasts against the
+selected plan, including changes saved by another staff member. Usage is not
+zeroed by an upgrade or downgrade: current storage, database size, captured
+history and billing-period consumption remain real measurements. Expired
+billing-period readings are labeled previous-period data and require a new
+reading rather than assuming zero. Selecting AWS Paid removes Free-account
+shutdown warnings and assumed Free Tier capacity percentages; AWS Paid has no
+fixed hosting-capacity package, and credit expiration still affects charges.
+
+Server triggers capture unique finalized uploads, post creation/publication,
+and completed/failed/refunded Echo Creator AI jobs. Daily UTC aggregates and
+deduplicated events survive deletion of the source content. Migration backfill
+uses retained records only: history deleted before deployment cannot be
+reconstructed. Upload counts refer to unique Storage objects, not retries or
+overwrites; failed and refunded states count once per job. Published posts
+count once across all channels, with mixed media classified video before image.
+AI requests outside `echo_ai_jobs` and browser-only editing/export are not
+counted. These operational counters do not depend on optional navigation
+analytics consent and do not store prompts, file names or post content.
+
+Storage totals sum known object sizes across all buckets; incomplete/unknown
+metadata is reported separately. PostgreSQL size includes database overhead
+and may differ from provider billing. At most one capacity snapshot is updated
+per UTC day when the page loads. Net-growth forecasts require two snapshots
+on different days with positive growth, and are estimates, not guarantees.
+Daily database backups on Pro do not include uploaded media objects.
+
+**External billing is not automatically connected.** Supabase egress, cached
+egress, function invocations, monthly active users, and Amplify transfer/build/
+CDN storage usage must be read from the provider dashboards. Staff can save a
+timestamped reading and its billing period. Missing, out-of-period and older-
+than-24-hour readings display unknown rather than healthy. Period projections
+use the reading timestamp after at least one full day; MAU and point-in-time
+CDN storage are not extrapolated. AWS Free Tier figures are conditional cost
+allowances, not performance or capacity limits. Configure AWS Billing budgets
+and alerts separately; this page neither caps spending nor measures CPU,
+memory, live provider charges, or actual per-request latency.
+
+Validation:
+
+```bash
+node --test src/services/infrastructureUsage.test.js tests/infrastructureUsage.browser.test.js
+```
+
+Chromium is required for the browser checks. Run
+`psql -v ON_ERROR_STOP=1 -f tests/infrastructureUsage.sql` only against a fresh,
+disposable PostgreSQL database to check backfill, UTC dates, deduplication,
+deletion persistence, quota configuration, snapshots and role restrictions.
+
 ## Security
 
 EchoAI's detailed control summary is in

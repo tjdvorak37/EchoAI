@@ -10,6 +10,7 @@ import { InternalForumPanel } from './InternalForumPanel'
 import { ProjectBoardPanel } from './ProjectBoardPanel'
 import { AiOperationsPanel } from './AiOperationsPanel'
 import { StockMediaKeyPanel } from './StockMediaKeyPanel'
+import { InfrastructureUsagePanel } from './InfrastructureUsagePanel'
 import { internalForumService } from '../services/internalForumService'
 import { USER_GROUPS, compareDirectoryUsers, getUserTenure, isReturningUser, matchesBetaFilter, matchesUserGroup } from '../services/userDirectory'
 import { PLAN_ORDER, PLANS, SEAT_VOLUME_DISCOUNTS, getSeatQuote, getPlanCogsPerSeatYear, getPlanTierPrice, formatUsd, parseRequestedSeatsFromDetails, buildQuoteMessage, MINIMUM_HEALTHY_MARGIN_PCT } from '../data/seatPricing'
@@ -537,6 +538,7 @@ export function AdminPanel({
     {
       group: 'Platform',
       tabs: [
+        { id: 'infrastructure', label: 'Infrastructure & Usage', hint: 'Live capacity, daily processing, provider quotas, and upgrade planning' },
         ...visiblePlatformTabs,
         { id: 'ai-operations', label: '🤖 AI Operations', hint: 'Manage providers and AI cost controls' },
       ],
@@ -566,6 +568,7 @@ export function AdminPanel({
     {
       group: 'Platform',
       tabs: [
+        ...(normalizeRole(currentUser?.role) === 'it' ? [{ id: 'infrastructure', label: 'Infrastructure & Usage', hint: 'Live capacity, daily processing, provider quotas, and upgrade planning' }] : []),
         ...visiblePlatformTabs,
         { id: 'ai-operations', label: '🤖 AI Operations', hint: 'Manage providers and AI cost controls' },
       ],
@@ -861,6 +864,7 @@ export function AdminPanel({
       {adminError && <p className="auth-message auth-error">{adminError}</p>}
 
       <div className="it-content">
+        {itTab === 'infrastructure' && <InfrastructureUsagePanel />}
         {itTab === 'ai-operations' && <AiOperationsPanel />}
 
         {itTab === 'overview' && (
